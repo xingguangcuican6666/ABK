@@ -912,7 +912,7 @@ jobs:
           echo "应用补丁1: ntsync_base.patch..."
           patch -p1 --forward < /tmp/kernel_patches/common/ntsync/ntsync_base.patch || true
           # 匹配补丁2
-          PATCH_FILE="/tmp/kernel_patches/common/ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+          PATCH_FILE="/tmp/kernel_patches/common/ntsync/ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
           echo "→ 应用补丁2: ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
           patch -p1 --forward < "$PATCH_FILE" || true
           cat >> "$DEFCONFIG" << 'EOF'
