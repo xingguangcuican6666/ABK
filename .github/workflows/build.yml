@@ -924,22 +924,13 @@ jobs:
         if: ${{ inputs.use_networking }}
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
-          echo "==> 配置 Networking 增强选项 (BBRv3 + IPSet + Netfilter)"
+          echo "==> 配置 Networking 增强选项 (BBRv3失效 + IPSet + Netfilter)"
       
           # ==================== 1. 应用 BBRv3 补丁 ====================
-          if [ "${{ inputs.kernel_version }}" = "5.15" ]; then
-            # 匹配补丁
-            PATCH_FILE="/tmp/kernel_patches/bbr/bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
-            echo "→ 应用补丁: bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
-            patch -p1 --forward < "$PATCH_FILE" || true
-            # === 修复：解决 tcp.h 结构体冲突 ===
-            echo "→ 修复 tcp.h 结构体冲突..."
-            sed -i '/u32 in_flight:20,/d' include/net/tcp.h 2>/dev/null || true
-            # 修复 header 访问方式（5.15 老结构体没有 header）
-            sed -i 's/TCP_SKB_CB(skb)->header.h6.iif/TCP_SKB_CB(skb)->ip6.iif/g' include/net/tcp.h 2>/dev/null || true
-            sed -i 's/TCP_SKB_CB(skb)->header.h6.flags/TCP_SKB_CB(skb)->ip6.flags/g' include/net/tcp.h 2>/dev/null || true
-            sed -i 's/TCP_SKB_CB(skb)->header.h4.opt/TCP_SKB_CB(skb)->ip4.opt/g' include/net/tcp.h 2>/dev/null || true
-          fi   
+          #if [ "${{ inputs.kernel_version }}" = "5.15" ]; then
+            #PATCH_FILE="/tmp/kernel_patches/bbr/bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+            #echo "→ 应用补丁: bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+            #patch -p1 --forward < "$PATCH_FILE" || true
       
           # ==================== 2. 添加内核配置 ====================
           echo "→ 添加 Networking 配置到 defconfig..."
