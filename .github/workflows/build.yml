@@ -678,20 +678,14 @@ jobs:
           EOF
           echo "✓ 应用 NTsync 补丁完成"
           
-      - name: 配置 Networking 增强 (BBRv3 + IPSet)
+      - name: 应用 Networking 增强 (IPSet + BBR)
         if: ${{ inputs.use_networking }}
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
           if [ ! -d /tmp/kernel_patches ]; then
             git clone --depth=1 https://github.com/WildKernels/kernel_patches.git /tmp/kernel_patches
           fi
-          echo "配置 Networking 增强(BBR + IPSet)"
-          if [ "${{ inputs.kernel_version }}" = "6.1" ]; then
-            echo "应用 BBRv3 补丁(仅6.1)"
-            PATCH_FILE="/tmp/kernel_patches/bbr/bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
-            echo "→ 应用补丁: bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
-            patch -p1 --forward < "$PATCH_FILE" || true
-          fi
+          echo "应用 Networking 增强(BBR + IPSet)"
             
           echo " 添加IP SET & IPv6_NAT 支持"
           cat >> "$DEFCONFIG" << 'EOF'
@@ -718,8 +712,19 @@ jobs:
           CONFIG_IP6_NF_NAT=y
           CONFIG_IP6_NF_TARGET_MASQUERADE=y
           EOF
+          if [ "${{ inputs.kernel_version }}" = "5.10" ]; then
+            echo "→ 应用 5.10 特殊配置 "
+            sed -i 's/CONFIG_IP_SET_MAX/65534/g' net/netfilter/ipset/ip_set_core.c
+          fi
           
-          echo " 添加 TCP Congestion Control(BBR) 支持"
+          echo " 添加 TCP Congestion Control (BBR) 支持"
+          # 对 6.1 应用 BBRv3 补丁
+          if [ "${{ inputs.kernel_version }}" = "6.1" ]; then
+            echo "应用 BBRv3 补丁"
+            PATCH_FILE="/tmp/kernel_patches/bbr/bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+            echo "→ 应用补丁: bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+            patch -p1 --forward < "$PATCH_FILE" || true
+          fi
           cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_TCP_CONG_ADVANCED=y
           CONFIG_TCP_CONG_BBR=y
@@ -732,11 +737,6 @@ jobs:
           CONFIG_NET_SCH_FQ=y
           CONFIG_NET_SCH_FQ_CODEL=y
           EOF
-
-          if [ "${{ inputs.kernel_version }}" = "5.10" ]; then
-            echo "→ 应用 5.10 特殊配置 "
-            sed -i 's/CONFIG_IP_SET_MAX/65534/g' net/netfilter/ipset/ip_set_core.c
-          fi
 
           echo "✓ Networking配置完成"
       
