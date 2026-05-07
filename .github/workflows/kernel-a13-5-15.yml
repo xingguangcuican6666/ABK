@@ -26,6 +26,11 @@ on:
           - Dev(开发)
           - Other(其他/指定)
         default: Stable(标准)
+      sub_levels:
+        description: '要构建的小版本 (用逗号分隔，例如: 74,94,149,X)'
+        required: true
+        default: '149,167,X'
+        type: string
       version:
         description: "自定义版本名 (可选)"
         required: false
@@ -132,52 +137,65 @@ on:
         default: false
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: 生成构建矩阵
+        id: set-matrix
+        run: |
+          # 定义版本映射表
+          declare -A patch_map=(
+            ["74"]="2023-01"
+            ["78"]="2023-03"
+            ["94"]="2023-05"
+            ["104"]="2023-07"
+            ["119"]="2023-09"
+            ["123"]="2023-11"
+            ["137"]="2024-01"
+            ["144"]="2024-03"
+            ["148"]="2024-05"
+            ["149"]="2024-07"
+            ["151"]="2024-08"
+            ["153"]="2024-09"
+            ["167"]="2024-11"
+            ["170"]="2025-01"
+            ["178"]="2025-03"
+            ["180"]="2025-05"
+            ["185"]="2025-07"
+            ["189"]="2025-09"
+            ["194"]="2025-12"
+            ["X"]="lts"
+          )
+
+          IFS=',' read -ra selected <<< "${{ inputs.sub_levels }}"
+          items=()
+
+          for ver in "${selected[@]}"; do
+            ver=$(echo "$ver" | tr -d ' ')  # 去除空格
+            if [[ -n "${patch_map[$ver]}" ]]; then
+              patch="${patch_map[$ver]}"
+              items+=("{\"sub_level\":\"$ver\",\"os_patch_level\":\"$patch\"}")
+            else
+              echo "⚠️ 未知版本: $ver，已跳过"
+            fi
+          done
+
+          if [ ${#items[@]} -eq 0 ]; then
+            echo "❌ 没有有效的版本被选中！"
+            exit 1
+          fi
+
+          matrix=$(jq -n --argjson arr "[${items[*]}]" '{include: $arr}')
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+          echo "将构建以下版本：${items[*]}"
   build-kernels-a13-5-15:
     name: "5.15.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
+    needs: prepare
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - sub_level: "74"
-            os_patch_level: "2023-01"
-          - sub_level: "78"
-            os_patch_level: "2023-03"
-          - sub_level: "94"
-            os_patch_level: "2023-05"
-          - sub_level: "104"
-            os_patch_level: "2023-07"
-          - sub_level: "119"
-            os_patch_level: "2023-09"
-          - sub_level: "123"
-            os_patch_level: "2023-11"
-          - sub_level: "137"
-            os_patch_level: "2024-01"
-          - sub_level: "144"
-            os_patch_level: "2024-03"
-          - sub_level: "148"
-            os_patch_level: "2024-05"
-          - sub_level: "149"
-            os_patch_level: "2024-07"
-          - sub_level: "151"
-            os_patch_level: "2024-08"
-          - sub_level: "153"
-            os_patch_level: "2024-09"
-          - sub_level: "167"
-            os_patch_level: "2024-11"
-          - sub_level: "170"
-            os_patch_level: "2025-01"
-          - sub_level: "178"
-            os_patch_level: "2025-03"
-          - sub_level: "180"
-            os_patch_level: "2025-05"
-          - sub_level: "185"
-            os_patch_level: "2025-07"
-          - sub_level: "189"
-            os_patch_level: "2025-09"
-          - sub_level: "194"
-            os_patch_level: "2025-12"
-          - sub_level: "X"
-            os_patch_level: "lts"
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
