@@ -912,8 +912,8 @@ jobs:
           echo "应用补丁1: ntsync_base.patch..."
           patch -p1 --forward < /tmp/kernel_patches/common/ntsync/ntsync_base.patch || true
           # 匹配补丁2
-          PATCH_FILE="/tmp/kernel_patches/common/ntsync_compat_android${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
-          echo "→ 应用补丁2: ntsync_compat_android${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+          PATCH_FILE="/tmp/kernel_patches/common/ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+          echo "→ 应用补丁2: ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
           patch -p1 --forward < "$PATCH_FILE" || true
           cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_NTSYNC=y
@@ -927,11 +927,9 @@ jobs:
           echo "==> 配置 Networking 增强选项 (BBRv3 + IPSet + Netfilter)"
       
           # ==================== 1. 应用 BBRv3 补丁 ====================
-          echo "当前版本: android${{ inputs.android_version }}-${{ inputs.kernel_version }}"
-
           # 匹配补丁
-          PATCH_FILE="/tmp/kernel_patches/bbr/bbrv3-android${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
-          echo "→ 应用补丁: bbrv3-android${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+          PATCH_FILE="/tmp/kernel_patches/bbr/bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+          echo "→ 应用补丁: bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
           patch -p1 --forward < "$PATCH_FILE" || true
       
           # ==================== 2. 添加内核配置 ====================
