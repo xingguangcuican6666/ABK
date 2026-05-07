@@ -668,12 +668,10 @@ jobs:
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
           echo "启用 NTsync 补丁"
-          git clone --depth=1 https://github.com/WildKernels/kernel_patches.git /tmp/kernel_patches
-      
           echo "应用基础补丁: ntsync_base.patch..."
-          patch -p1 --forward < /tmp/kernel_patches/common/ntsync/ntsync_base.patch || true
+          patch -p1 --forward < $KERNEL_PATCHES/common/ntsync/ntsync_base.patch || true
           # 匹配补丁2
-          PATCH_FILE="/tmp/kernel_patches/common/ntsync/ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+          PATCH_FILE="$KERNEL_PATCHES/common/ntsync/ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
           echo "应用版本补丁: ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
           patch -p1 --forward < "$PATCH_FILE" || true
           cat >> "$DEFCONFIG" << 'EOF'
@@ -685,10 +683,6 @@ jobs:
         if: ${{ inputs.use_networking }}
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
-          if [ ! -d /tmp/kernel_patches ]; then
-            git clone --depth=1 https://github.com/WildKernels/kernel_patches.git /tmp/kernel_patches
-          fi
-            
           echo " 添加IP SET & IPv6_NAT 支持"
           cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_IP_SET=y
@@ -720,13 +714,14 @@ jobs:
           fi
           
           echo " 添加 TCP Congestion Control (BBR) 支持"
-          # 对 6.1 应用 BBRv3 补丁
+          # 应用 BBRv3 补丁
           if [ "${{ inputs.kernel_version }}" = "6.1" ]; then
             echo "应用 BBRv3 补丁"
-            PATCH_FILE="/tmp/kernel_patches/bbr/bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+            PATCH_FILE="$KERNEL_PATCHES/bbr/bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
             echo "→ 应用补丁: bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
             patch -p1 --forward < "$PATCH_FILE" || true
           fi
+          
           cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_TCP_CONG_ADVANCED=y
           CONFIG_TCP_CONG_BBR=y
