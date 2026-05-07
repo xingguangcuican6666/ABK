@@ -931,6 +931,7 @@ jobs:
             PATCH_FILE="/tmp/kernel_patches/bbr/bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
             echo "→ 应用补丁: bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
             patch -p1 --forward < "$PATCH_FILE" || true
+          fi
             
           echo "2. 添加IP SET & IPv6_NAT 支持"
           cat >> "$DEFCONFIG" << 'EOF'
