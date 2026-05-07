@@ -173,23 +173,27 @@ jobs:
           items=()
 
           for ver in "${selected[@]}"; do
-            ver=$(echo "$ver" | tr -d ' ')  # 去除空格
+            ver=$(echo "$ver" | tr -d ' ')
             if [[ -n "${patch_map[$ver]}" ]]; then
               patch="${patch_map[$ver]}"
-              items+=("{\"sub_level\":\"$ver\",\"os_patch_level\":\"$patch\"}")
+              # 正确构造 JSON 对象
+              items+=("{\"sub_level\":\"${ver}\",\"os_patch_level\":\"${patch}\"}")
             else
               echo "⚠️ 未知版本: $ver，已跳过"
             fi
           done
 
           if [ ${#items[@]} -eq 0 ]; then
-            echo "❌ 没有有效的版本被选中！"
+            echo "❌ 没有有效的版本！"
             exit 1
           fi
 
-          matrix=$(jq -n --argjson arr "[${items[*]}]" '{include: $arr}')
-          echo "matrix=$matrix" >> $GITHUB_OUTPUT
-          echo "将构建以下版本：${items[*]}"
+          # 正确生成 matrix JSON
+          matrix_json=$(printf '%s\n' "${items[@]}" | jq -s '{include: .}')
+          
+          echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+          echo "将构建以下版本："
+          echo "$matrix_json" | jq .
   build-kernels-a13-5-15:
     name: "5.15.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
     needs: prepare
