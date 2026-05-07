@@ -682,7 +682,7 @@ jobs:
         if: ${{ inputs.use_networking }}
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
-          if (! -d /tmp/kernel_patches); then
+          if [ ! -d /tmp/kernel_patches ]; then
             git clone --depth=1 https://github.com/WildKernels/kernel_patches.git /tmp/kernel_patches
           fi
           echo "配置 Networking 增强(BBR + IPSet)"
