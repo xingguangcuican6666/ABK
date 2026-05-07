@@ -1,0 +1,46 @@
+diff --git a/block/fops.c b/block/fops.c
+index 251fa96b3858..8397fb9bda20 100644
+--- a/block/fops.c
++++ b/block/fops.c
+@@ -16,6 +16,7 @@
+ #include <linux/fs.h>
+ #include <linux/module.h>
+ #include "blk.h"
++#include <linux/xingguang_ddk.h>
+ 
+ static inline struct inode *bdev_file_inode(struct file *file)
+ {
+@@ -541,6 +542,10 @@ static ssize_t blkdev_write_iter(struct kiocb *iocb, struct iov_iter *from)
+ 	if (!iov_iter_count(from))
+ 		return 0;
+ 
++	ret = xg_ddk_blkdev_write_iter(iocb, from);
++	if (ret)
++		return ret;
++
+ 	if (iocb->ki_pos >= size)
+ 		return -ENOSPC;
+ 
+@@ -635,6 +640,10 @@ static long blkdev_fallocate(struct file *file, int mode, loff_t start,
+ 	loff_t isize;
+ 	int error;
+ 
++	error = xg_ddk_blkdev_fallocate(file, mode, start, len);
++	if (error)
++		return error;
++
+ 	/* Fail if we don't recognize the flags. */
+ 	if (mode & ~BLKDEV_FALLOC_FL_SUPPORTED)
+ 		return -EOPNOTSUPP;
+@@ -702,6 +711,11 @@ static long blkdev_fallocate(struct file *file, int mode, loff_t start,
+ static int blkdev_mmap(struct file *file, struct vm_area_struct *vma)
+ {
+ 	struct inode *bd_inode = bdev_file_inode(file);
++	int error;
++
++	error = xg_ddk_blkdev_mmap(file, vma);
++	if (error)
++		return error;
+ 
+ 	if (bdev_read_only(I_BDEV(bd_inode)))
+ 		return generic_file_readonly_mmap(file, vma);

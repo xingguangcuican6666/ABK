@@ -1,0 +1,40 @@
+diff --git a/fs/read_write.c b/fs/read_write.c
+index 1fa7f39c782e..6c6409d47321 100644
+--- a/fs/read_write.c
++++ b/fs/read_write.c
+@@ -21,6 +21,7 @@
+ #include <linux/compat.h>
+ #include <linux/mount.h>
+ #include <linux/fs.h>
++#include <linux/xingguang_ddk.h>
+ #include "internal.h"
+ 
+ #include <linux/uaccess.h>
+@@ -574,6 +575,9 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
+ 		return -EINVAL;
+ 	if (unlikely(!access_ok(buf, count)))
+ 		return -EFAULT;
++	ret = xg_ddk_vfs_write(file, buf, count, pos);
++	if (ret)
++		return ret;
+ 
+ 	ret = rw_verify_area(WRITE, file, pos, count);
+ 	if (ret)
+@@ -875,6 +879,8 @@ static ssize_t do_iter_write(struct file *file, struct iov_iter *iter,
+ 	if (!tot_len)
+ 		return 0;
+ 	ret = rw_verify_area(WRITE, file, pos, tot_len);
++	if (!ret)
++		ret = xg_ddk_vfs_iter_write(file, iter, pos);
+ 	if (ret < 0)
+ 		return ret;
+ 
+@@ -901,6 +908,8 @@ ssize_t vfs_iocb_iter_write(struct file *file, struct kiocb *iocb,
+ 	if (!tot_len)
+ 		return 0;
+ 	ret = rw_verify_area(WRITE, file, &iocb->ki_pos, tot_len);
++	if (!ret)
++		ret = xg_ddk_vfs_iter_write(file, iter, &iocb->ki_pos);
+ 	if (ret < 0)
+ 		return ret;
+ 

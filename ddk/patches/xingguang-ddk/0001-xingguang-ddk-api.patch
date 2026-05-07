@@ -1,0 +1,92 @@
+diff --git a/include/linux/xingguang_ddk.h b/include/linux/xingguang_ddk.h
+new file mode 100644
+index 000000000000..1f8fc5a1a6a1
+--- /dev/null
++++ b/include/linux/xingguang_ddk.h
+@@ -0,0 +1,86 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++#ifndef _LINUX_XINGGUANG_DDK_H
++#define _LINUX_XINGGUANG_DDK_H
++
++#include <linux/compiler_types.h>
++#include <linux/types.h>
++
++struct block_device;
++struct file;
++struct iov_iter;
++struct kiocb;
++struct vm_area_struct;
++
++#ifdef CONFIG_XINGGUANG_DDK
++int xg_ddk_vfs_write(struct file *file, const char __user *buf, size_t count,
++		     loff_t *pos);
++int xg_ddk_vfs_iter_write(struct file *file, struct iov_iter *iter,
++			  loff_t *pos);
++int xg_ddk_blkdev_write_iter(struct kiocb *iocb, struct iov_iter *iter);
++int xg_ddk_blkdev_ioctl(struct block_device *bdev, unsigned int cmd);
++int xg_ddk_blkdev_fallocate(struct file *file, int mode, loff_t start,
++			    loff_t len);
++int xg_ddk_blkdev_mmap(struct file *file, struct vm_area_struct *vma);
++int xg_ddk_blkdev_issue_discard(struct block_device *bdev, sector_t sector,
++				sector_t nr_sects);
++int xg_ddk_blkdev_issue_zeroout(struct block_device *bdev, sector_t sector,
++				sector_t nr_sects);
++void xg_ddk_dm_target_add(const char *type);
++#else
++static inline int xg_ddk_vfs_write(struct file *file,
++				   const char __user *buf, size_t count,
++				   loff_t *pos)
++{
++	return 0;
++}
++
++static inline int xg_ddk_vfs_iter_write(struct file *file,
++					struct iov_iter *iter, loff_t *pos)
++{
++	return 0;
++}
++
++static inline int xg_ddk_blkdev_write_iter(struct kiocb *iocb,
++					   struct iov_iter *iter)
++{
++	return 0;
++}
++
++static inline int xg_ddk_blkdev_ioctl(struct block_device *bdev,
++				      unsigned int cmd)
++{
++	return 0;
++}
++
++static inline int xg_ddk_blkdev_fallocate(struct file *file, int mode,
++					  loff_t start, loff_t len)
++{
++	return 0;
++}
++
++static inline int xg_ddk_blkdev_mmap(struct file *file,
++				     struct vm_area_struct *vma)
++{
++	return 0;
++}
++
++static inline int xg_ddk_blkdev_issue_discard(struct block_device *bdev,
++					      sector_t sector,
++					      sector_t nr_sects)
++{
++	return 0;
++}
++
++static inline int xg_ddk_blkdev_issue_zeroout(struct block_device *bdev,
++					     sector_t sector,
++					     sector_t nr_sects)
++{
++	return 0;
++}
++
++static inline void xg_ddk_dm_target_add(const char *type)
++{
++}
++#endif
++
++#endif /* _LINUX_XINGGUANG_DDK_H */

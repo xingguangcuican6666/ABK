@@ -1,0 +1,20 @@
+diff --git a/drivers/md/dm-table.c b/drivers/md/dm-table.c
+--- a/drivers/md/dm-table.c
++++ b/drivers/md/dm-table.c
+@@ -18,6 +18,7 @@
+ #include <linux/mutex.h>
+ #include <linux/delay.h>
+ #include <linux/atomic.h>
++#include <linux/xingguang_ddk.h>
+ #include <linux/blk-mq.h>
+ #include <linux/mount.h>
+ #include <linux/dax.h>
+@@ -709,6 +710,8 @@ int dm_table_add_target(struct dm_table *t, const char *type,
+ 
+ 	t->highs[t->num_targets++] = ti->begin + ti->len - 1;
+ 
++	xg_ddk_dm_target_add(ti->type->name);
++
+ 	if (!ti->num_discard_bios && ti->discards_supported)
+ 		DMWARN("%s: %s: ignoring discards_supported because num_discard_bios is zero.",
+ 		       dm_device_name(t->md), type);

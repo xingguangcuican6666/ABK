@@ -1,0 +1,12 @@
+config XINGGUANG_DDK
+	bool "Xingguang DDK destructive action guard"
+	depends on SECURITY
+	depends on BLOCK
+	default n
+	help
+	  Enable the Xingguang DDK LSM guard.
+
+	  This guard registers early as an in-tree LSM and then arms protection
+	  in stages. Early boot audits sensitive block and write paths only;
+	  late init enables exec, gzexe, and ptrace tracking; root-manager or
+	  module-load activity switches the full raw block-device policy on.

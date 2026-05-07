@@ -1,0 +1,87 @@
+diff --git a/block/ioctl.c b/block/ioctl.c
+index 9c0502aa9065..490c2463c7f1 100644
+--- a/block/ioctl.c
++++ b/block/ioctl.c
+@@ -12,6 +12,7 @@
+ #include <linux/pr.h>
+ #include <linux/uaccess.h>
+ #include "blk.h"
++#include <linux/xingguang_ddk.h>
+ 
+ static int blkpg_do_ioctl(struct block_device *bdev,
+ 			  struct blkpg_partition __user *upart, int op)
+@@ -573,6 +574,10 @@ long blkdev_ioctl(struct file *file, unsigned cmd, unsigned long arg)
+ 	fmode_t mode = file->f_mode;
+ 	int ret;
+ 
++	ret = xg_ddk_blkdev_ioctl(bdev, cmd);
++	if (ret)
++		return ret;
++
+ 	/*
+ 	 * O_NDELAY can be altered using fcntl(.., F_SETFL, ..), so we have
+ 	 * to updated it before every ioctl.
+@@ -642,6 +647,10 @@ long compat_blkdev_ioctl(struct file *file, unsigned cmd, unsigned long arg)
+ 	struct gendisk *disk = bdev->bd_disk;
+ 	fmode_t mode = file->f_mode;
+ 
++	ret = xg_ddk_blkdev_ioctl(bdev, cmd);
++	if (ret)
++		return ret;
++
+ 	/*
+ 	 * O_NDELAY can be altered using fcntl(.., F_SETFL, ..), so we have
+ 	 * to updated it before every ioctl.
+diff --git a/block/blk-lib.c b/block/blk-lib.c
+index 742d99fc94f5..d223aa794547 100644
+--- a/block/blk-lib.c
++++ b/block/blk-lib.c
+@@ -6,6 +6,7 @@
+ #include <linux/blkdev.h>
+ #include <linux/scatterlist.h>
+ 
++#include <linux/xingguang_ddk.h>
+ #include "blk.h"
+ 
+ static sector_t bio_discard_limit(struct block_device *bdev, sector_t sector)
+@@ -39,6 +40,7 @@ int __blkdev_issue_discard(struct block_device *bdev, sector_t sector,
+ {
+ 	struct bio *bio = *biop;
+ 	sector_t bs_mask;
++	int ret;
+ 
+ 	if (bdev_read_only(bdev))
+ 		return -EPERM;
+@@ -46,6 +48,10 @@ int __blkdev_issue_discard(struct block_device *bdev, sector_t sector,
+ 	if (!bdev_max_discard_sectors(bdev))
+ 		return -EOPNOTSUPP;
+ 
++	ret = xg_ddk_blkdev_issue_discard(bdev, sector, nr_sects);
++	if (ret)
++		return ret;
++
+ 	/* In case the discard granularity isn't set by buggy device driver */
+ 	if (WARN_ON_ONCE(!bdev_discard_granularity(bdev))) {
+ 		pr_err_ratelimited("%pg: Error: discard_granularity is 0.\n",
+@@ -222,6 +228,10 @@ int __blkdev_issue_zeroout(struct block_device *bdev, sector_t sector,
+ 	int ret;
+ 	sector_t bs_mask;
+ 
++	ret = xg_ddk_blkdev_issue_zeroout(bdev, sector, nr_sects);
++	if (ret)
++		return ret;
++
+ 	bs_mask = (bdev_logical_block_size(bdev) >> 9) - 1;
+ 	if ((sector | nr_sects) & bs_mask)
+ 		return -EINVAL;
+@@ -265,6 +275,10 @@ int blkdev_issue_zeroout(struct block_device *bdev, sector_t sector,
+ 	struct blk_plug plug;
+ 	bool try_write_zeroes = !!bdev_write_zeroes_sectors(bdev);
+ 
++	ret = xg_ddk_blkdev_issue_zeroout(bdev, sector, nr_sects);
++	if (ret)
++		return ret;
++
+ 	bs_mask = (bdev_logical_block_size(bdev) >> 9) - 1;
+ 	if ((sector | nr_sects) & bs_mask)
+ 		return -EINVAL;

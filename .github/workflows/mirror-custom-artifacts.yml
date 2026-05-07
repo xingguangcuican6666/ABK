@@ -1,0 +1,136 @@
+name: 镜像自定义构建产物
+
+permissions:
+  contents: write
+  actions: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "自定义构建 run id（留空=最近一次成功的自定义构建）"
+        required: false
+        type: string
+        default: ""
+      artifact_names:
+        description: "需要镜像的 artifact 名称（逗号或换行分隔）"
+        required: true
+        type: string
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: 确定源构建
+        id: source
+        run: |
+          set -euo pipefail
+          SOURCE_RUN_ID="${{ inputs.source_run_id }}"
+          if [ -z "$SOURCE_RUN_ID" ]; then
+            SOURCE_RUN_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/kernel-custom.yml/runs?status=success&per_page=1" --jq '.workflow_runs[0].id // empty')"
+          fi
+          if [ -z "$SOURCE_RUN_ID" ]; then
+            echo "未找到可用的自定义构建 run id。" >&2
+            exit 1
+          fi
+          echo "source_run_id=$SOURCE_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "SOURCE_RUN_ID=$SOURCE_RUN_ID" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=mirror-custom-run-$SOURCE_RUN_ID" >> "$GITHUB_ENV"
+
+      - name: 解析目标产物
+        run: |
+          set -euo pipefail
+          cat > requested.raw <<'EOF'
+          ${{ inputs.artifact_names }}
+          EOF
+          tr ',' '\n' < requested.raw |
+            sed 's/^[[:space:]]*//;s/[[:space:]]*$//' |
+            awk 'NF' |
+            sort -u > requested.txt
+          if [ ! -s requested.txt ]; then
+            echo "artifact_names 为空。" >&2
+            exit 1
+          fi
+          echo "目标产物："
+          cat requested.txt
+
+      - name: 获取源构建产物
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" > artifacts.json
+          jq -r '.artifacts[] | "\(.id)\t\(.name)\t\(.expired)"' artifacts.json
+
+      - name: 下载匹配产物 zip
+        run: |
+          set -euo pipefail
+          mkdir -p mirror-release-assets
+          : > matched.txt
+          : > missing.txt
+
+          while IFS= read -r name; do
+            id="$(jq -r --arg n "$name" '.artifacts[] | select(.name == $n and (.expired | not)) | .id' artifacts.json | head -n 1)"
+            if [ -z "$id" ] || [ "$id" = "null" ]; then
+              echo "$name" >> missing.txt
+              continue
+            fi
+            archive_url="$(jq -r --argjson id "$id" '.artifacts[] | select(.id == $id) | .archive_download_url' artifacts.json | head -n 1)"
+            asset_path="mirror-release-assets/${name}.zip"
+            echo "下载 $name -> $asset_path"
+            curl -fsSL \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "$archive_url" \
+              -o "$asset_path"
+            echo "$name" >> matched.txt
+          done < requested.txt
+
+          if [ -s missing.txt ]; then
+            echo "以下产物未找到或已过期：" >&2
+            cat missing.txt >&2
+            exit 1
+          fi
+          if [ ! -s matched.txt ]; then
+            echo "没有匹配到任何产物。" >&2
+            exit 1
+          fi
+
+      - name: 创建或复用镜像 Release
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "ABK 自定义构建镜像 #${SOURCE_RUN_ID}" \
+              --notes "自定义构建 run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}"
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "ABK 自定义构建镜像 #${SOURCE_RUN_ID}" \
+              --notes "自定义构建 run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}"
+          fi
+
+      - name: 上传镜像产物
+        run: |
+          set -euo pipefail
+          for file in mirror-release-assets/*.zip; do
+            [ -f "$file" ] || continue
+            gh release upload "$RELEASE_TAG" "$file" --repo "$GITHUB_REPOSITORY" --clobber
+          done
+
+      - name: 构建摘要
+        run: |
+          {
+            echo "## 镜像 Release"
+            echo "- 源 run: ${SOURCE_RUN_ID}"
+            echo "- Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+            echo ""
+            echo "## Assets"
+            for file in mirror-release-assets/*.zip; do
+              [ -f "$file" ] || continue
+              base="$(basename "$file")"
+              echo "- https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${base}"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

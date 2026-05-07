@@ -1,0 +1,97 @@
+<resources>
+    <string name="app_name">AnyBase Kernel</string>
+    <string name="app_full_name">AnyBase Kernel</string>
+
+    <!-- Bottom nav -->
+    <string name="nav_status">当前状态</string>
+    <string name="nav_build">构建内核</string>
+    <string name="nav_flash">刷写</string>
+    <string name="nav_settings">设置</string>
+
+    <!-- Root -->
+    <string name="root_check_title">需要 Root 权限</string>
+    <string name="root_check_desc">ABK 需要 Root 权限才能正常工作，请授予权限后重试。</string>
+    <string name="grant_root">授予 Root 权限</string>
+    <string name="root_granted">Root 权限已授予</string>
+    <string name="root_denied">Root 权限被拒绝</string>
+
+    <!-- Auth -->
+    <string name="login_title">登录 GitHub</string>
+    <string name="login_desc">ABK 需要您的 GitHub 授权以管理 fork 仓库并触发内核构建工作流。</string>
+    <string name="login_github">使用 GitHub 登录</string>
+    <string name="logout">退出登录</string>
+    <string name="auth_code_title">设备验证</string>
+    <string name="auth_code_desc">请在浏览器中访问以下地址，输入验证码完成授权：</string>
+    <string name="open_browser">打开浏览器</string>
+    <string name="waiting_auth">等待授权中…</string>
+
+    <!-- Fork -->
+    <string name="fork_title">Fork 仓库</string>
+    <string name="fork_desc">检测到您尚未 Fork 本仓库，ABK 需要 Fork 后才能触发工作流。</string>
+    <string name="fork_action">Fork 仓库</string>
+    <string name="sync_title">仓库需要同步</string>
+    <string name="sync_desc">您的 Fork 仓库落后于上游，建议同步以获取最新构建配置。</string>
+    <string name="sync_action">立即同步</string>
+    <string name="skip">跳过</string>
+
+    <!-- Build -->
+    <string name="build_title">构建内核</string>
+    <string name="build_submit">提交构建</string>
+    <string name="build_running">构建进行中</string>
+    <string name="build_success">构建成功</string>
+    <string name="build_failed">构建失败</string>
+    <string name="build_queued">构建已排队</string>
+
+    <!-- Flash -->
+    <string name="flash_title">刷写 / 安装</string>
+    <string name="download_artifacts">下载构建产物</string>
+    <string name="flash_kernel">刷写内核</string>
+    <string name="install_module">安装模块</string>
+    <string name="flash_confirm">确认刷写</string>
+    <string name="flash_confirm_msg">刷写内核存在风险，请确保您了解后果。是否继续？</string>
+
+    <!-- Status -->
+    <string name="status_title">当前状态</string>
+    <string name="status_root">Root 状态</string>
+    <string name="status_login">登录状态</string>
+    <string name="status_fork">Fork 状态</string>
+    <string name="status_build">最近构建</string>
+    <string name="status_not_login">未登录</string>
+    <string name="status_no_fork">未 Fork</string>
+    <string name="status_no_build">暂无构建记录</string>
+
+    <!-- Settings -->
+    <string name="settings_title">设置</string>
+    <string name="settings_account">账户</string>
+    <string name="settings_build">构建</string>
+    <string name="settings_notification">通知</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_version">版本</string>
+    <string name="settings_source_repo">源仓库</string>
+    <string name="settings_auto_download">构建完成后自动下载</string>
+    <string name="settings_notify_build">构建状态通知</string>
+    <string name="settings_theme">主题</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
+
+    <!-- Notifications -->
+    <string name="notif_channel_build">内核构建</string>
+    <string name="notif_channel_download">文件下载</string>
+    <string name="notif_build_running">正在构建内核…</string>
+    <string name="notif_build_done">内核构建完成！</string>
+    <string name="notif_build_failed">内核构建失败</string>
+    <string name="notif_downloading">正在下载构建产物…</string>
+    <string name="notif_download_done">下载完成</string>
+
+    <!-- Common -->
+    <string name="confirm">确认</string>
+    <string name="cancel">取消</string>
+    <string name="close">关闭</string>
+    <string name="retry">重试</string>
+    <string name="loading">加载中…</string>
+    <string name="error_network">网络错误，请检查网络连接</string>
+    <string name="error_unknown">未知错误</string>
+    <string name="copy">复制</string>
+    <string name="copied">已复制</string>
+</resources>
