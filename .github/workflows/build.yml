@@ -106,6 +106,8 @@ jobs:
           echo "SUSFS 状态    : ${{ inputs.enable_susfs }}"
           echo "ZRAM 增强     : ${{ inputs.use_zram }}"
           echo "BBG 补丁      : ${{ inputs.use_bbg }}"
+          echo "NTsync 补丁   : ${{ inputs.use_ntsync }}"
+          echo "Networing 增强: ${{ inputs.use_networking }}"
           echo "KPM 功能      : ${{ inputs.use_kpm }}"
           echo "Re-Kernel     : ${{ inputs.use_rekernel }}"
           echo "Droidspaces   : ${{ inputs.droidspaces }}"
@@ -660,6 +662,7 @@ jobs:
               fi
             fi
           fi
+          
       - name: 应用 NTsync 补丁
         if: ${{ inputs.use_ntsync }}
         working-directory: ${{ env.KERNEL_ROOT }}/common
@@ -677,7 +680,7 @@ jobs:
           CONFIG_NTSYNC=y
           EOF
           echo "✓ 应用 NTsync 补丁完成"
-          
+
       - name: 应用 Networking 增强 (IPSet + BBR)
         if: ${{ inputs.use_networking }}
         working-directory: ${{ env.KERNEL_ROOT }}/common
@@ -685,7 +688,6 @@ jobs:
           if [ ! -d /tmp/kernel_patches ]; then
             git clone --depth=1 https://github.com/WildKernels/kernel_patches.git /tmp/kernel_patches
           fi
-          echo "应用 Networking 增强(BBR + IPSet)"
             
           echo " 添加IP SET & IPv6_NAT 支持"
           cat >> "$DEFCONFIG" << 'EOF'
@@ -713,7 +715,7 @@ jobs:
           CONFIG_IP6_NF_TARGET_MASQUERADE=y
           EOF
           if [ "${{ inputs.kernel_version }}" = "5.10" ]; then
-            echo "→ 应用 5.10 特殊配置 "
+            echo "应用 5.10 特殊配置 "
             sed -i 's/CONFIG_IP_SET_MAX/65534/g' net/netfilter/ipset/ip_set_core.c
           fi
           
@@ -739,7 +741,7 @@ jobs:
           EOF
 
           echo "✓ Networking配置完成"
-      
+
       - name: 克隆 Droidspaces 补丁仓库
         if: inputs.droidspaces != 'off'
         run: |
@@ -980,7 +982,7 @@ jobs:
           wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
           echo "CONFIG_BBG=y" >> common/arch/arm64/configs/gki_defconfig
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' common/security/Kconfig
-      
+
       - name: 应用 Re-Kernel
         if: inputs.use_rekernel
         working-directory: ${{ env.KERNEL_ROOT }}
