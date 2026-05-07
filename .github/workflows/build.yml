@@ -943,11 +943,9 @@ jobs:
           CONFIG_NETFILTER_XT_TARGET_LOG=y
           CONFIG_NETFILTER_XT_MATCH_RECENT=y
           CONFIG_NETFILTER_XT_SET=y
-      
           CONFIG_IP_NF_TARGET_TTL=y
           CONFIG_IP6_NF_TARGET_HL=y
           CONFIG_IP6_NF_MATCH_HL=y
-      
           CONFIG_IP_SET=y
           CONFIG_IP_SET_BITMAP_IP=y
           CONFIG_IP_SET_BITMAP_IPMAC=y
@@ -966,7 +964,6 @@ jobs:
           CONFIG_IP_SET_HASH_NETIFACE=y
           CONFIG_IP_SET_LIST_SET=y
           CONFIG_IP_SET_MAX=256
-      
           CONFIG_TCP_CONG_ADVANCED=y
           CONFIG_TCP_CONG_BBR=y
           CONFIG_TCP_CONG_CUBIC=y
