@@ -909,11 +909,11 @@ jobs:
           echo "启用 NTsync 补丁"
           git clone --depth=1 https://github.com/WildKernels/kernel_patches.git /tmp/kernel_patches
       
-          echo "应用补丁1: ntsync_base.patch..."
+          echo "应用基础补丁: ntsync_base.patch..."
           patch -p1 --forward < /tmp/kernel_patches/common/ntsync/ntsync_base.patch || true
           # 匹配补丁2
           PATCH_FILE="/tmp/kernel_patches/common/ntsync/ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
-          echo "→ 应用补丁2: ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+          echo "应用版本补丁: ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
           patch -p1 --forward < "$PATCH_FILE" || true
           cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_NTSYNC=y
@@ -924,29 +924,18 @@ jobs:
         if: ${{ inputs.use_networking }}
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
-          echo "==> 配置 Networking 增强选项 (BBRv3失效 + IPSet + Netfilter)"
-      
-          # ==================== 1. 应用 BBRv3 补丁 ====================
-          #if [ "${{ inputs.kernel_version }}" = "5.15" ]; then
-            #PATCH_FILE="/tmp/kernel_patches/bbr/bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
-            #echo "→ 应用补丁: bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
-            #patch -p1 --forward < "$PATCH_FILE" || true
-      
-          # ==================== 2. 添加内核配置 ====================
-          echo "→ 添加 Networking 配置到 defconfig..."
+          echo "配置 Networking 增强选项(BBR(失效) + IPSet + Netfilter)"
+          echo "1. 应用 BBRv3 补丁(仅6.1)"
+          # ====================  ====================
+          if [ "${{ inputs.kernel_version }}" = "6.1" ]; then
+            PATCH_FILE="/tmp/kernel_patches/bbr/bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+            echo "→ 应用补丁: bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+            patch -p1 --forward < "$PATCH_FILE" || true
+            
+          echo "2. 添加IP SET & IPv6_NAT 支持"
           cat >> "$DEFCONFIG" << 'EOF'
-          CONFIG_NETFILTER=y
-          CONFIG_NETFILTER_ADVANCED=y
-          CONFIG_NETFILTER_XTABLES=y
-          CONFIG_NF_CONNTRACK=y
-          CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
-          CONFIG_NETFILTER_XT_TARGET_LOG=y
-          CONFIG_NETFILTER_XT_MATCH_RECENT=y
-          CONFIG_NETFILTER_XT_SET=y
-          CONFIG_IP_NF_TARGET_TTL=y
-          CONFIG_IP6_NF_TARGET_HL=y
-          CONFIG_IP6_NF_MATCH_HL=y
           CONFIG_IP_SET=y
+          CONFIG_IP_SET_MAX=65534
           CONFIG_IP_SET_BITMAP_IP=y
           CONFIG_IP_SET_BITMAP_IPMAC=y
           CONFIG_IP_SET_BITMAP_PORT=y
@@ -963,7 +952,14 @@ jobs:
           CONFIG_IP_SET_HASH_NETPORT=y
           CONFIG_IP_SET_HASH_NETIFACE=y
           CONFIG_IP_SET_LIST_SET=y
-          CONFIG_IP_SET_MAX=256
+          CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
+          CONFIG_NETFILTER_XT_SET=y
+          CONFIG_IP6_NF_NAT=y
+          CONFIG_IP6_NF_TARGET_MASQUERADE=y
+          EOF
+          
+          echo "3. 添加 TCP Congestion Control(bbr) 支持"
+          cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_TCP_CONG_ADVANCED=y
           CONFIG_TCP_CONG_BBR=y
           CONFIG_TCP_CONG_CUBIC=y
@@ -973,15 +969,15 @@ jobs:
           CONFIG_DEFAULT_BBR=y
           CONFIG_DEFAULT_TCP_CONG="bbr"
           CONFIG_NET_SCH_FQ=y
+          CONFIG_NET_SCH_FQ_CODEL=y
           EOF
-      
-          echo "✓ Networking配置完成"
-      
-          # 5.10 内核特殊处理
+
           if [ "${{ inputs.kernel_version }}" = "5.10" ]; then
-            echo "→ 应用 5.10 IP_SET_MAX 修复..."
-            sed -i 's/CONFIG_IP_SET_MAX=.*$/CONFIG_IP_SET_MAX=256/' net/netfilter/ipset/ip_set_core.c 2>/dev/null || true
+            echo "→ 应用 5.10 特殊配置 "
+            sed -i 's/CONFIG_IP_SET_MAX/65534/g' net/netfilter/ipset/ip_set_core.c
           fi
+
+          echo "✓ Networking配置完成"
       
       - name: 应用 Re-Kernel
         if: inputs.use_rekernel
