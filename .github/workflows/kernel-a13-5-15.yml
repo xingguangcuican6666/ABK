@@ -136,50 +136,9 @@ on:
         type: boolean
         default: false
 
-jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - name: 生成构建版本号
-        id: set-matrix
-        run: |
-          declare -A patch_map=(
-            ["74"]="2023-01" ["78"]="2023-03" ["94"]="2023-05" ["104"]="2023-07"
-            ["119"]="2023-09" ["123"]="2023-11" ["137"]="2024-01" ["144"]="2024-03"
-            ["148"]="2024-05" ["149"]="2024-07" ["151"]="2024-08" ["153"]="2024-09"
-            ["167"]="2024-11" ["170"]="2025-01" ["178"]="2025-03" ["180"]="2025-05"
-            ["185"]="2025-07" ["189"]="2025-09" ["194"]="2025-12" ["X"]="lts"
-          )
-  
-          IFS=',' read -ra selected <<< "${{ inputs.sub_levels }}"
-          items=()
-  
-          for ver in "${selected[@]}"; do
-            ver=$(echo "$ver" | tr -d ' ')
-            if [[ -n "${patch_map[$ver]}" ]]; then
-              patch="${patch_map[$ver]}"
-              items+=("{\"sub_level\":\"${ver}\",\"os_patch_level\":\"${patch}\"}")
-            else
-              echo "⚠️ 未知版本: $ver，已跳过"
-            fi
-          done
-  
-          if [ ${#items[@]} -eq 0 ]; then
-            echo "❌ 没有有效的版本！"
-            exit 1
-          fi
-  
-          # 关键修复：使用 jq 生成紧凑单行 JSON
-          matrix_json=$(printf '%s\n' "${items[@]}" | jq -s -c '{include: .}')
-          
-          echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
-          echo "将构建以下版本：$matrix_json"
-        
+jobs:   
   build-kernels-a13-5-15:
     name: "5.15.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
-    needs: prepare
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
