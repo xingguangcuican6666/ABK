@@ -60,6 +60,16 @@ on:
         required: true
         type: boolean
         default: false
+      use_ntsync:
+        description: "启用 NTsync"
+        required: true
+        type: boolean
+        default: false
+      use_networking:
+        description: "启用 Networking增强"
+        required: true
+        type: boolean
+        default: false
       use_kpm:
         description: "启用 KPM 功能"
         required: true
@@ -115,6 +125,12 @@ on:
         required: false
         type: boolean
         default: false
+      use_ntsync:
+        required: true
+        type: boolean
+      use_networking:
+        required: true
+        type: boolean
       use_kpm:
         required: true
         type: boolean
@@ -153,7 +169,7 @@ jobs:
     name: "5.15.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
     strategy:
       fail-fast: false
-      matrix:
+      matrix: 
         include:
           - sub_level: "74"
             os_patch_level: "2023-01"
@@ -209,6 +225,8 @@ jobs:
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_ddk: ${{ inputs.use_ddk }}
+      use_ntsync: ${{ inputs.use_ntsync }}
+      use_networking: ${{ inputs.use_networking }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
       supp_op: false
