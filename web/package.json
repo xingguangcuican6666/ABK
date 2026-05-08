@@ -1,6 +1,6 @@
 {
   "name": "gki-kernel-web",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "private": true,
   "description": "GKI Kernel Versions Dashboard",
   "scripts": {

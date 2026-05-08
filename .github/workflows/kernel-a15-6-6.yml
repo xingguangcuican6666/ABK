@@ -35,6 +35,15 @@ on:
         required: false
         type: string
         default: "Sun Dec 01 08:10:00 UTC 2024"
+      use_kpm:
+        description: "KPM 功能（patched 尚不支持）"
+        required: true
+        type: choice
+        default: "disabled (关闭)"
+        options:
+          - "disabled (关闭)"
+          - "enabled (开启)"
+          - "patched (开启并修补，尚不支持)"
       droidspaces:
         description: "Droidspaces 容器支持"
         required: false
@@ -55,16 +64,6 @@ on:
         required: true
         type: boolean
         default: false
-      use_ddk:
-        description: "启用 DDK 防格机 LSM"
-        required: true
-        type: boolean
-        default: false
-      use_kpm:
-        description: "启用 KPM 功能"
-        required: true
-        type: boolean
-        default: false
       use_rekernel:
         description: "启用 Re-Kernel 驱动"
         required: false
@@ -80,21 +79,6 @@ on:
         required: false
         type: boolean
         default: false
-      zram_full_algo:
-        description: "启用 ZRAM 完整算法支持（LZO/LZ4/LZ4HC/LZ4K/LZ4KD/DEFLATE/842/ZSTD，默认 lzo-rle）"
-        required: false
-        type: boolean
-        default: false
-      zram_extra_algos:
-        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；仅在未启用完整算法时生效）"
-        required: false
-        type: string
-        default: ""
-      kpm_password:
-        description: "自定义 KPM 超级密码（留空=使用默认密码）"
-        required: false
-        type: string
-        default: ""
   workflow_call:
     inputs:
       kernelsu_variant:
@@ -116,14 +100,9 @@ on:
       use_bbg:
         required: true
         type: boolean
-      use_ddk:
-        required: false
-        type: boolean
-        default: false
       use_kpm:
         required: true
-        type: boolean
-        default: false
+        type: string
       use_rekernel:
         required: false
         type: boolean
@@ -138,18 +117,6 @@ on:
         required: false
         type: string
         default: "off"
-      zram_full_algo:
-        required: false
-        type: boolean
-        default: false
-      zram_extra_algos:
-        required: false
-        type: string
-        default: ""
-      kpm_password:
-        required: false
-        type: string
-        default: ""
       called_from_main:
         description: "是否从 main.yml 调用（内部使用）"
         required: false
@@ -206,15 +173,11 @@ jobs:
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
-      use_ddk: ${{ inputs.use_ddk }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
       supp_op: ${{ inputs.supp_op || false }}
       enable_susfs: ${{ !inputs.cancel_susfs }}
       droidspaces: ${{ inputs.droidspaces || 'off' }}
-      zram_full_algo: ${{ inputs.zram_full_algo || false }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
 
   # 仅在直接触发时运行，从 main.yml 调用时跳过
   get-ksu-manager:

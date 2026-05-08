@@ -3,14 +3,10 @@
 
 # Gemini
 .gemini/
-Gemini_Generated_Image_*.png
 
 # Development files
 hympfs-dev.diff
 .gitignore
-.secrets/
-*.jks
-*.keystore
 # IDE & Editors
 .idea/
 .vscode/
@@ -72,3 +68,4 @@ web/serve.sh
 web/dist/
 wild_kernel_comparison.md
 action_build_comparison.md
+

@@ -61,13 +61,20 @@ on:
         type: string
         default: "Sun Dec 01 08:10:00 UTC 2024"
         required: false
-      # ==================== Droidspaces 配置 ====================
+      # ==================== 选项配置 ====================
+      use_kpm:
+        description: "KPM 功能（patched 尚不支持）"
+        type: choice
+        default: "disabled (关闭)"
+        options:
+          - "disabled (关闭)"
+          - "enabled (开启)"
+          - "patched (开启并修补，尚不支持)"
       droidspaces:
         description: "Droidspaces 容器支持 (5.10~6.6: 槽位补丁, 6.12: 开/关)"
         type: choice
         options:
           - "off"
-          - "on"
           - "678"
           - "123"
           - "345"
@@ -82,14 +89,6 @@ on:
         description: "启用 BBG 防格机"
         type: boolean
         default: false
-      use_ddk:
-        description: "启用 DDK 防格机 LSM"
-        type: boolean
-        default: false
-      use_kpm:
-        description: "启用 KPM 功能"
-        type: boolean
-        default: false
       use_rekernel:
         description: "启用 Re-Kernel 驱动"
         type: boolean
@@ -98,24 +97,6 @@ on:
         description: "禁用 SUSFS"
         type: boolean
         default: false
-
-      # ==================== ZRAM 扩展选项 ====================
-      zram_full_algo:
-        description: "启用 ZRAM 完整算法支持（LZO/LZ4/LZ4HC/LZ4K/LZ4KD/DEFLATE/842/ZSTD，默认 lzo-rle）"
-        type: boolean
-        default: false
-      zram_extra_algos:
-        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；仅在未启用完整算法时生效）"
-        type: string
-        default: ""
-        required: false
-
-      # ==================== KPM 扩展选项 ====================
-      kpm_password:
-        description: "自定义 KPM 超级密码（留空=使用默认密码）"
-        type: string
-        default: ""
-        required: false
 
       # ==================== 构建版本选择 ====================
       build_a12_5_10:
@@ -139,7 +120,7 @@ on:
         type: boolean
         default: false
       build_all:
-        description: "构建全部版本（忽略上方单独版本选项）"
+        description: "构建全部版本"
         type: boolean
         default: true
 
@@ -164,14 +145,10 @@ jobs:
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
-      use_ddk: ${{ inputs.use_ddk }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
       droidspaces: ${{ inputs.droidspaces }}
-      zram_full_algo: ${{ inputs.zram_full_algo }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
       called_from_main: true
 
   # ==================== Android 13 - 5.15 构建 ====================
@@ -186,14 +163,10 @@ jobs:
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
-      use_ddk: ${{ inputs.use_ddk }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
       droidspaces: ${{ inputs.droidspaces }}
-      zram_full_algo: ${{ inputs.zram_full_algo }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
       called_from_main: true
 
   # ==================== Android 14 - 6.1 构建 ====================
@@ -208,14 +181,10 @@ jobs:
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
-      use_ddk: ${{ inputs.use_ddk }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
       droidspaces: ${{ inputs.droidspaces }}
-      zram_full_algo: ${{ inputs.zram_full_algo }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
       called_from_main: true
 
   # ==================== Android 15 - 6.6 构建 ====================
@@ -230,14 +199,10 @@ jobs:
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
-      use_ddk: ${{ inputs.use_ddk }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
       droidspaces: ${{ inputs.droidspaces }}
-      zram_full_algo: ${{ inputs.zram_full_algo }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
       called_from_main: true
 
   # ==================== Android 16 - 6.12 构建 ====================
@@ -252,14 +217,10 @@ jobs:
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
-      use_ddk: ${{ inputs.use_ddk }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
       droidspaces: ${{ inputs.droidspaces }}
-      zram_full_algo: ${{ inputs.zram_full_algo }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
       called_from_main: true
 
   # ==================== 收集补丁冲突文件 ====================
@@ -305,7 +266,7 @@ jobs:
   # 当 release_type 不是 Actions 时，创建 GitHub Release
   # 仅限原仓库运行，fork 仓库跳过此步骤
   release:
-    if: ${{ always() && !cancelled() && inputs.release_type != 'Actions' && github.repository == 'xingguangcuican6666/ABK' }}
+    if: ${{ always() && !cancelled() && inputs.release_type != 'Actions' && github.repository == 'zzh20188/GKI_KernelSU_SUSFS' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -347,8 +308,10 @@ jobs:
           # 功能开关显示
           echo "LZ4_STATUS=${{ inputs.use_zram && '开启' || '未开启' }}" >> $GITHUB_ENV
           echo "BBG_STATUS=${{ inputs.use_bbg && '支持' || '不支持' }}" >> $GITHUB_ENV
-          if [[ "${{ inputs.use_kpm }}" == "true" ]]; then
+          if [[ "${{ inputs.use_kpm }}" == enabled* ]]; then
             echo "KPM_STATUS=支持" >> $GITHUB_ENV
+          elif [[ "${{ inputs.use_kpm }}" == patched* ]]; then
+            echo "KPM_STATUS=支持（补丁尚不支持）" >> $GITHUB_ENV
           else
             echo "KPM_STATUS=未开启" >> $GITHUB_ENV
           fi
@@ -542,7 +505,6 @@ jobs:
           | \`*.img\` | boot、vendor_boot 等镜像文件 |
           | \`*.apk\` | KernelSU 管理器 |
           | \`susfs-*.zip\` | SUSFS 配套模块 |
-          ---
 
           > [!IMPORTANT]
           > 刷入前请备份原厂 Boot 镜像。
@@ -560,12 +522,6 @@ jobs:
           1. 恢复原厂 Boot 镜像
           2. 使用 KernelSU 管理器或 recovery 提取日志
           3. 提交到 [Issues](https://github.com/zzh20188/GKI_KernelSU_SUSFS/issues)，并附上设备型号、Android 版本、内核版本和刷入文件名
-          2. 使用 KernelSU 管理器提取内核日志
-          3. 将日志提交到 [Issues](https://github.com/xingguangcuican6666/ABK/issues) 或咨询专业人士
-
-          1. Restore stock boot image
-          2. Extract kernel logs using KernelSU Manager
-          3. Submit logs to [Issues](https://github.com/xingguangcuican6666/ABK/issues) or consult experts
 
           </details>
 

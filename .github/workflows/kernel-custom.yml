@@ -78,14 +78,22 @@ on:
         type: string
         default: "Sun Dec 01 08:10:00 UTC 2024"
 
-      # ==================== Droidspaces 配置 ====================
+      # ==================== 选项配置 ====================
+      use_kpm:
+        description: "KPM 功能（patched 尚不支持）"
+        required: true
+        type: choice
+        default: "disabled (关闭)"
+        options:
+          - "disabled (关闭)"
+          - "enabled (开启)"
+          - "patched (开启并修补，尚不支持)"
       droidspaces:
         description: "Droidspaces 容器支持 (5.10~6.6: 槽位补丁, 6.12: 开/关)"
         required: false
         type: choice
         options:
           - "off"
-          - "on"
           - "678"
           - "123"
           - "345"
@@ -99,16 +107,6 @@ on:
         default: false
       use_bbg:
         description: "启用 BBG 防格机"
-        required: true
-        type: boolean
-        default: false
-      use_ddk:
-        description: "启用 DDK 防格机 LSM"
-        required: true
-        type: boolean
-        default: false
-      use_kpm:
-        description: "启用 KPM 功能"
         required: true
         type: boolean
         default: false
@@ -128,37 +126,6 @@ on:
         type: boolean
         default: false
 
-      # ==================== ZRAM 扩展选项 ====================
-      zram_full_algo:
-        description: "启用 ZRAM 完整算法支持（LZO/LZ4/LZ4HC/LZ4K/LZ4KD/DEFLATE/842/ZSTD，默认 lzo-rle）"
-        required: false
-        type: boolean
-        default: false
-      zram_extra_algos:
-        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；仅在未启用完整算法时生效）"
-        required: false
-        type: string
-        default: ""
-
-      # ==================== KPM 扩展选项 ====================
-      kpm_password:
-        description: "自定义 KPM 超级密码（留空=使用默认密码）"
-        required: false
-        type: string
-        default: ""
-
-      # ==================== 自定义外部模块 ====================
-      use_custom_external_modules:
-        description: "启用自定义外部模块注入"
-        required: false
-        type: boolean
-        default: false
-      custom_external_modules:
-        description: "自定义外部模块（链接;阶段，用 | 分隔多个，如 https://github.com/user/mod;after_patch|https://github.com/user/mod2;before_build）"
-        required: false
-        type: string
-        default: ""
-
 jobs:
   build-custom-kernel:
     name: "${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}"
@@ -176,17 +143,11 @@ jobs:
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
-      use_ddk: ${{ inputs.use_ddk }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
       supp_op: ${{ inputs.supp_op || false }}
       enable_susfs: ${{ !inputs.cancel_susfs }}
       droidspaces: ${{ inputs.droidspaces || 'off' }}
-      zram_full_algo: ${{ inputs.zram_full_algo || false }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
-      use_custom_external_modules: ${{ inputs.use_custom_external_modules || false }}
-      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
 
   get-ksu-manager:
     uses: ./.github/workflows/get-manager.yml

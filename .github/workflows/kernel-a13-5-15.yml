@@ -26,6 +26,11 @@ on:
           - Dev(开发)
           - Other(其他/指定)
         default: Stable(标准)
+      sub_levels:
+        description: '要构建的小版本 (用逗号分隔，例如: 74,94,149,X)'
+        required: true
+        default: '149,167,X'
+        type: string
       version:
         description: "自定义版本名 (可选)"
         required: false
@@ -35,6 +40,15 @@ on:
         required: false
         type: string
         default: "Sun Dec 01 08:10:00 UTC 2024"
+      use_kpm:
+        description: "KPM 功能（patched 尚不支持）"
+        required: true
+        type: choice
+        default: "disabled (关闭)"
+        options:
+          - "disabled (关闭)"
+          - "enabled (开启)"
+          - "patched (开启并修补，尚不支持)"
       droidspaces:
         description: "Droidspaces 容器支持"
         required: false
@@ -55,26 +69,16 @@ on:
         required: true
         type: boolean
         default: false
-      use_ddk:
-        description: "启用 DDK 防格机 LSM"
-        required: true
-        type: boolean
-        default: false
       use_ntsync:
         description: "启用 NTsync"
         required: true
         type: boolean
-        default: false
+        default: true
       use_networking:
         description: "启用 Networking增强"
         required: true
         type: boolean
-        default: false
-      use_kpm:
-        description: "启用 KPM 功能"
-        required: true
-        type: boolean
-        default: false
+        default: true
       use_rekernel:
         description: "启用 Re-Kernel 驱动"
         required: false
@@ -85,21 +89,6 @@ on:
         required: true
         type: boolean
         default: false
-      zram_full_algo:
-        description: "启用 ZRAM 完整算法支持（LZO/LZ4/LZ4HC/LZ4K/LZ4KD/DEFLATE/842/ZSTD，默认 lzo-rle）"
-        required: false
-        type: boolean
-        default: false
-      zram_extra_algos:
-        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；仅在未启用完整算法时生效）"
-        required: false
-        type: string
-        default: ""
-      kpm_password:
-        description: "自定义 KPM 超级密码（留空=使用默认密码）"
-        required: false
-        type: string
-        default: ""
   workflow_call:
     inputs:
       kernelsu_variant:
@@ -121,10 +110,6 @@ on:
       use_bbg:
         required: true
         type: boolean
-      use_ddk:
-        required: false
-        type: boolean
-        default: false
       use_ntsync:
         required: true
         type: boolean
@@ -133,8 +118,7 @@ on:
         type: boolean
       use_kpm:
         required: true
-        type: boolean
-        default: false
+        type: string
       use_rekernel:
         required: false
         type: boolean
@@ -146,18 +130,6 @@ on:
         required: false
         type: string
         default: "off"
-      zram_full_algo:
-        required: false
-        type: boolean
-        default: false
-      zram_extra_algos:
-        required: false
-        type: string
-        default: ""
-      kpm_password:
-        required: false
-        type: string
-        default: ""
       called_from_main:
         description: "是否从 main.yml 调用（内部使用）"
         required: false
@@ -165,52 +137,52 @@ on:
         default: false
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: 生成构建版本号
+        id: set-matrix
+        run: |
+          declare -A patch_map=(
+            ["74"]="2023-01" ["78"]="2023-03" ["94"]="2023-05" ["104"]="2023-07"
+            ["119"]="2023-09" ["123"]="2023-11" ["137"]="2024-01" ["144"]="2024-03"
+            ["148"]="2024-05" ["149"]="2024-07" ["151"]="2024-08" ["153"]="2024-09"
+            ["167"]="2024-11" ["170"]="2025-01" ["178"]="2025-03" ["180"]="2025-05"
+            ["185"]="2025-07" ["189"]="2025-09" ["194"]="2025-12" ["X"]="lts"
+          )
+  
+          IFS=',' read -ra selected <<< "${{ inputs.sub_levels }}"
+          items=()
+  
+          for ver in "${selected[@]}"; do
+            ver=$(echo "$ver" | tr -d ' ')
+            if [[ -n "${patch_map[$ver]}" ]]; then
+              patch="${patch_map[$ver]}"
+              items+=("{\"sub_level\":\"${ver}\",\"os_patch_level\":\"${patch}\"}")
+            else
+              echo "⚠️ 未知版本: $ver，已跳过"
+            fi
+          done
+  
+          if [ ${#items[@]} -eq 0 ]; then
+            echo "❌ 没有有效的版本！"
+            exit 1
+          fi
+  
+          # 关键修复：使用 jq 生成紧凑单行 JSON
+          matrix_json=$(printf '%s\n' "${items[@]}" | jq -s -c '{include: .}')
+          
+          echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+          echo "将构建以下版本：$matrix_json"
+        
   build-kernels-a13-5-15:
     name: "5.15.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
+    needs: prepare
     strategy:
       fail-fast: false
-      matrix: 
-        include:
-          - sub_level: "74"
-            os_patch_level: "2023-01"
-          - sub_level: "78"
-            os_patch_level: "2023-03"
-          - sub_level: "94"
-            os_patch_level: "2023-05"
-          - sub_level: "104"
-            os_patch_level: "2023-07"
-          - sub_level: "119"
-            os_patch_level: "2023-09"
-          - sub_level: "123"
-            os_patch_level: "2023-11"
-          - sub_level: "137"
-            os_patch_level: "2024-01"
-          - sub_level: "144"
-            os_patch_level: "2024-03"
-          - sub_level: "148"
-            os_patch_level: "2024-05"
-          - sub_level: "149"
-            os_patch_level: "2024-07"
-          - sub_level: "151"
-            os_patch_level: "2024-08"
-          - sub_level: "153"
-            os_patch_level: "2024-09"
-          - sub_level: "167"
-            os_patch_level: "2024-11"
-          - sub_level: "170"
-            os_patch_level: "2025-01"
-          - sub_level: "178"
-            os_patch_level: "2025-03"
-          - sub_level: "180"
-            os_patch_level: "2025-05"
-          - sub_level: "185"
-            os_patch_level: "2025-07"
-          - sub_level: "189"
-            os_patch_level: "2025-09"
-          - sub_level: "194"
-            os_patch_level: "2025-12"
-          - sub_level: "X"
-            os_patch_level: "lts"
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
@@ -224,7 +196,6 @@ jobs:
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
-      use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync }}
       use_networking: ${{ inputs.use_networking }}
       use_kpm: ${{ inputs.use_kpm }}
@@ -232,9 +203,6 @@ jobs:
       supp_op: false
       enable_susfs: ${{ !inputs.cancel_susfs }}
       droidspaces: ${{ inputs.droidspaces || 'off' }}
-      zram_full_algo: ${{ inputs.zram_full_algo || false }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
 
   # 仅在直接触发时运行，从 main.yml 调用时跳过
   get-ksu-manager:
