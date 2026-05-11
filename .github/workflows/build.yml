@@ -5,6 +5,26 @@ permissions:
   actions: write
 
 on:
+  workflow_dispatch:
+    inputs:
+      android_version: { description: 'Android Version', required: true, type: string, default: '14' }
+      kernel_version: { description: 'Kernel Version', required: true, type: string, default: '6.1' }
+      sub_level: { description: 'Sub Level', required: false, type: string, default: 'X' }
+      os_patch_level: { description: 'OS Patch Level', required: false, type: string, default: 'lts' }
+      ksu_variant: { description: 'KernelSU Variant', required: false, type: string, default: 'none' }
+      ksu_branch: { description: 'KernelSU Branch', required: false, type: string, default: 'stable' }
+      use_zram: { description: 'Enable ZRAM', required: false, type: boolean, default: true }
+      use_bbg: { description: 'Enable BBG', required: false, type: boolean, default: false }
+      use_ddk: { description: 'Enable DDK', required: false, type: boolean, default: false }
+      use_ntsync: { description: 'Enable NTsync', required: false, type: boolean, default: true }
+      use_networking: { description: 'Enable Networking', required: false, type: boolean, default: true }
+      use_kpm: { description: 'Enable KPM', required: false, type: boolean, default: false }
+      use_rekernel: { description: 'Enable Re-Kernel', required: false, type: boolean, default: false }
+      enable_susfs: { description: 'Enable SUSFS', required: false, type: boolean, default: false }
+      supp_op: { description: 'Support OP', required: false, type: boolean, default: false }
+      virtualization_support: { description: 'Virtualization Support', required: false, type: string, default: 'off' }
+      use_custom_external_modules: { description: 'Use Custom Modules', required: false, type: boolean, default: false }
+      custom_external_modules: { description: 'Custom Modules', required: false, type: string, default: '' }
   workflow_call:
     inputs:
       # ==================== 基础配置 ====================
