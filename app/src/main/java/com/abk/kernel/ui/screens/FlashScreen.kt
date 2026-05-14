@@ -440,9 +440,7 @@ fun FlashScreen(
                         if (group.runId == PREBUILT_GKI_RUN_ID) {
                             "Local prebuilt GKI files will be deleted."
                         } else {
-                            "This will delete the artifact cache for this workflow in ABK and remove locally downloaded files.\n\nWorkflow ${"
-                                if (group.runNumber > 0) "#${group.runNumber}" else "#${group.runId}"
-                            }"
+                            "This will delete the artifact cache for this workflow in ABK and remove locally downloaded files.\n\nWorkflow ${if (group.runNumber > 0) "#${group.runNumber}" else "#${group.runId}"}"
                         }
                     )
                     if (group.runId > 0) {
