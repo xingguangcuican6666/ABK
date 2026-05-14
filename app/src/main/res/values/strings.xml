@@ -1,0 +1,97 @@
+<resources>
+    <string name="app_name">AnyBase Kernel</string>
+    <string name="app_full_name">AnyBase Kernel</string>
+
+    <!-- Bottom nav -->
+    <string name="nav_status">Status</string>
+    <string name="nav_build">Build Kernel</string>
+    <string name="nav_flash">Flash</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Root -->
+    <string name="root_check_title">Root Permission Required</string>
+    <string name="root_check_desc">ABK requires root access to function. Please grant permission and try again.</string>
+    <string name="grant_root">Grant Root Access</string>
+    <string name="root_granted">Root access granted</string>
+    <string name="root_denied">Root access denied</string>
+
+    <!-- Auth -->
+    <string name="login_title">Sign in with GitHub</string>
+    <string name="login_desc">ABK needs your GitHub authorization to manage forked repositories and trigger kernel build workflows.</string>
+    <string name="login_github">Sign in with GitHub</string>
+    <string name="logout">Sign out</string>
+    <string name="auth_code_title">Device Verification</string>
+    <string name="auth_code_desc">Open the link below in your browser and enter the verification code to complete authorization:</string>
+    <string name="open_browser">Open browser</string>
+    <string name="waiting_auth">Waiting for authorization…</string>
+
+    <!-- Fork -->
+    <string name="fork_title">Fork repository</string>
+    <string name="fork_desc">No fork detected. ABK needs a fork to trigger workflow builds.</string>
+    <string name="fork_action">Fork repository</string>
+    <string name="sync_title">Repository needs sync</string>
+    <string name="sync_desc">Your forked repository is behind upstream. Sync to get the latest build configuration.</string>
+    <string name="sync_action">Sync now</string>
+    <string name="skip">Skip</string>
+
+    <!-- Build -->
+    <string name="build_title">Build Kernel</string>
+    <string name="build_submit">Submit build</string>
+    <string name="build_running">Build in progress</string>
+    <string name="build_success">Build successful</string>
+    <string name="build_failed">Build failed</string>
+    <string name="build_queued">Build queued</string>
+
+    <!-- Flash -->
+    <string name="flash_title">Flash / Install</string>
+    <string name="download_artifacts">Download artifacts</string>
+    <string name="flash_kernel">Flash kernel</string>
+    <string name="install_module">Install module</string>
+    <string name="flash_confirm">Confirm flash</string>
+    <string name="flash_confirm_msg">Flashing the kernel is risky. Make sure you understand the consequences. Continue?</string>
+
+    <!-- Status -->
+    <string name="status_title">Status</string>
+    <string name="status_root">Root status</string>
+    <string name="status_login">Login status</string>
+    <string name="status_fork">Fork status</string>
+    <string name="status_build">Recent build</string>
+    <string name="status_not_login">Not signed in</string>
+    <string name="status_no_fork">Not forked</string>
+    <string name="status_no_build">No build history</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_account">Account</string>
+    <string name="settings_build">Build</string>
+    <string name="settings_notification">Notifications</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_source_repo">Source repository</string>
+    <string name="settings_auto_download">Auto-download after build</string>
+    <string name="settings_notify_build">Build status notifications</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_system">Follow system</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+
+    <!-- Notifications -->
+    <string name="notif_channel_build">Kernel Build</string>
+    <string name="notif_channel_download">File Download</string>
+    <string name="notif_build_running">Building kernel…</string>
+    <string name="notif_build_done">Kernel build complete!</string>
+    <string name="notif_build_failed">Kernel build failed</string>
+    <string name="notif_downloading">Downloading build artifacts…</string>
+    <string name="notif_download_done">Download complete</string>
+
+    <!-- Common -->
+    <string name="confirm">Confirm</string>
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="retry">Retry</string>
+    <string name="loading">Loading…</string>
+    <string name="error_network">Network error. Check your connection.</string>
+    <string name="error_unknown">Unknown error</string>
+    <string name="copy">Copy</string>
+    <string name="copied">Copied</string>
+</resources>
