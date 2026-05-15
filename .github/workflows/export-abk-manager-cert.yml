@@ -1,0 +1,72 @@
+name: Export ABK Manager Certificate
+
+on:
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Export certificate metadata
+        env:
+          ABK_RELEASE_KEYSTORE_BASE64: ${{ secrets.ABK_RELEASE_KEYSTORE_BASE64 }}
+          ABK_RELEASE_STORE_PASSWORD: ${{ secrets.ABK_RELEASE_STORE_PASSWORD }}
+          ABK_RELEASE_KEY_ALIAS: ${{ secrets.ABK_RELEASE_KEY_ALIAS }}
+          ABK_RELEASE_STORE_TYPE: ${{ secrets.ABK_RELEASE_STORE_TYPE }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${ABK_RELEASE_KEYSTORE_BASE64:-}" ] || \
+             [ -z "${ABK_RELEASE_STORE_PASSWORD:-}" ] || \
+             [ -z "${ABK_RELEASE_KEY_ALIAS:-}" ]; then
+            echo "::error::缺少 ABK release 签名 secrets，无法导出证书指纹。"
+            exit 1
+          fi
+
+          work="$RUNNER_TEMP/abk-manager-cert"
+          mkdir -p "$work" app/signing
+          store="$work/abk-release.jks"
+          cert="$work/abk-manager-cert.der"
+          printf '%s' "$ABK_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$store"
+
+          keytool -exportcert \
+            -keystore "$store" \
+            -storetype "${ABK_RELEASE_STORE_TYPE:-JKS}" \
+            -storepass "$ABK_RELEASE_STORE_PASSWORD" \
+            -alias "$ABK_RELEASE_KEY_ALIAS" \
+            -file "$cert"
+
+          size="$(wc -c < "$cert" | tr -d '[:space:]')"
+          hash="$(sha256sum "$cert" | awk '{print tolower($1)}')"
+          {
+            echo "# Official ABK release signing certificate metadata."
+            echo "# This is public certificate metadata, not a private signing key."
+            echo "ABK_MANAGER_PACKAGE=com.abk.kernel"
+            echo "ABK_MANAGER_CERT_SIZE=$size"
+            echo "ABK_MANAGER_CERT_SHA256=$hash"
+          } > app/signing/abk-manager-cert.generated.env
+
+          {
+            echo "### ABK manager certificate metadata"
+            echo
+            echo '```env'
+            cat app/signing/abk-manager-cert.generated.env
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload certificate metadata
+        uses: actions/upload-artifact@v6
+        with:
+          name: abk-manager-cert
+          path: app/signing/abk-manager-cert.generated.env

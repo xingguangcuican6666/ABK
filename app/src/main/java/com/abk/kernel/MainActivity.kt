@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -32,9 +34,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LibraryBooks
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -69,6 +75,10 @@ import coil.compose.AsyncImage
 import com.abk.kernel.ui.screens.AuthGateScreen
 import com.abk.kernel.ui.screens.BuildScreen
 import com.abk.kernel.ui.screens.FlashScreen
+import com.abk.kernel.ui.screens.InstalledModulesScreen
+import com.abk.kernel.ui.screens.ModuleRepositoryScreen
+import com.abk.kernel.ui.screens.RootAuthorizationScreen
+import com.abk.kernel.ui.screens.RuntimeHomeScreen
 import com.abk.kernel.ui.screens.SettingsScreen
 import com.abk.kernel.ui.screens.StatusScreen
 import com.abk.kernel.ui.theme.AbkTheme
@@ -83,8 +93,11 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { }
 
+    private var pendingModuleInstallUri by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingModuleInstallUri = extractModuleInstallUri(intent)?.toString()
 
         setContent {
             val vm: MainViewModel = viewModel()
@@ -117,11 +130,21 @@ class MainActivity : ComponentActivity() {
                             onDecline = { finishAffinity() }
                         )
                         state.authStep != AuthStep.READY -> AuthGateScreen(vm)
-                        else -> AbkMainScaffold(vm)
+                        else -> AbkMainScaffold(
+                            vm = vm,
+                            pendingModuleInstallUri = pendingModuleInstallUri,
+                            onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
+                        )
                     }
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingModuleInstallUri = extractModuleInstallUri(intent)?.toString()
     }
 }
 
@@ -273,48 +296,120 @@ private fun TermsText(text: String) {
 private enum class AbkTab(val label: String) {
     Status("当前状态"),
     Build("构建内核"),
+    Modules("模块仓库"),
     Flash("刷写"),
+    RuntimeHome("首页"),
+    InstalledModules("已安装模块"),
+    RootAuth("超级用户"),
     Settings("设置")
 }
 
 @Composable
-private fun AbkMainScaffold(vm: MainViewModel) {
+private fun AbkMainScaffold(
+    vm: MainViewModel,
+    pendingModuleInstallUri: String? = null,
+    onModuleInstallUriConsumed: () -> Unit = {}
+) {
     val state by vm.uiState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     var selectedTab by rememberSaveable { mutableStateOf(AbkTab.Status) }
     var flashDetailPageVisible by rememberSaveable { mutableStateOf(false) }
     var settingsThemePageVisible by rememberSaveable { mutableStateOf(false) }
     var buildPlanPageVisible by rememberSaveable { mutableStateOf(false) }
+    var moduleRepositoryPageVisible by rememberSaveable { mutableStateOf(false) }
+    var rootAuthDetailPageVisible by rememberSaveable { mutableStateOf(false) }
+    var managerPatchPageVisible by rememberSaveable { mutableStateOf(false) }
     var lastBackAt by remember { mutableStateOf(0L) }
-    val visibleTabs = AbkTab.entries
-    val activeTab = selectedTab
+    val runtimeNativeManagerActive = state.abkRuntimeStatus?.runtimeBackend?.backend == "native"
+    val visibleTabs = remember(state.runtimeNavigationEnabled, runtimeNativeManagerActive) {
+        if (state.runtimeNavigationEnabled) {
+            buildList {
+                add(AbkTab.RuntimeHome)
+                add(AbkTab.InstalledModules)
+                if (runtimeNativeManagerActive) add(AbkTab.RootAuth)
+                add(AbkTab.Settings)
+            }
+        } else {
+            listOf(AbkTab.Status, AbkTab.Build, AbkTab.Modules, AbkTab.Flash, AbkTab.Settings)
+        }
+    }
+    val activeTab = if (selectedTab in visibleTabs) selectedTab else visibleTabs.first()
     val motionScheme = MaterialTheme.motionScheme
     val hideBottomBar = when (activeTab) {
         AbkTab.Build -> buildPlanPageVisible
+        AbkTab.Modules -> moduleRepositoryPageVisible
         AbkTab.Flash -> flashDetailPageVisible
         AbkTab.Settings -> settingsThemePageVisible
+        AbkTab.RootAuth -> rootAuthDetailPageVisible
+        AbkTab.RuntimeHome -> managerPatchPageVisible
         else -> false
+    }
+
+    LaunchedEffect(pendingModuleInstallUri) {
+        if (!pendingModuleInstallUri.isNullOrBlank()) {
+            if (!state.runtimeNavigationEnabled) vm.setRuntimeNavigationEnabled(true)
+            selectedTab = AbkTab.InstalledModules
+        }
     }
 
     LaunchedEffect(activeTab) {
         when (activeTab) {
             AbkTab.Build -> {
+                moduleRepositoryPageVisible = false
                 flashDetailPageVisible = false
                 settingsThemePageVisible = false
+                rootAuthDetailPageVisible = false
+                managerPatchPageVisible = false
             }
             AbkTab.Flash -> {
                 buildPlanPageVisible = false
+                moduleRepositoryPageVisible = false
                 settingsThemePageVisible = false
+                rootAuthDetailPageVisible = false
+                managerPatchPageVisible = false
+            }
+            AbkTab.Modules -> {
+                buildPlanPageVisible = false
+                flashDetailPageVisible = false
+                settingsThemePageVisible = false
+                rootAuthDetailPageVisible = false
+                managerPatchPageVisible = false
             }
             AbkTab.Settings -> {
                 buildPlanPageVisible = false
+                moduleRepositoryPageVisible = false
                 flashDetailPageVisible = false
+                rootAuthDetailPageVisible = false
+                managerPatchPageVisible = false
+            }
+            AbkTab.RootAuth -> {
+                buildPlanPageVisible = false
+                moduleRepositoryPageVisible = false
+                flashDetailPageVisible = false
+                settingsThemePageVisible = false
+                managerPatchPageVisible = false
+            }
+            AbkTab.RuntimeHome -> {
+                buildPlanPageVisible = false
+                moduleRepositoryPageVisible = false
+                flashDetailPageVisible = false
+                settingsThemePageVisible = false
+                rootAuthDetailPageVisible = false
             }
             else -> {
                 buildPlanPageVisible = false
+                moduleRepositoryPageVisible = false
                 flashDetailPageVisible = false
                 settingsThemePageVisible = false
+                rootAuthDetailPageVisible = false
+                managerPatchPageVisible = false
             }
+        }
+    }
+
+    LaunchedEffect(visibleTabs, selectedTab, state.runtimeNavigationEnabled) {
+        if (selectedTab !in visibleTabs) {
+            selectedTab = if (state.runtimeNavigationEnabled) AbkTab.RuntimeHome else AbkTab.Status
         }
     }
 
@@ -362,7 +457,11 @@ private fun AbkMainScaffold(vm: MainViewModel) {
                                     imageVector = when (tab) {
                                         AbkTab.Status -> Icons.Default.Home
                                         AbkTab.Build -> Icons.Default.RocketLaunch
+                                        AbkTab.Modules -> Icons.Default.LibraryBooks
                                         AbkTab.Flash -> if (state.rootGranted) Icons.Default.FlashOn else Icons.Default.FolderOpen
+                                        AbkTab.RuntimeHome -> Icons.Default.Memory
+                                        AbkTab.InstalledModules -> Icons.Default.Extension
+                                        AbkTab.RootAuth -> Icons.Default.AdminPanelSettings
                                         AbkTab.Settings -> Icons.Default.Settings
                                     },
                                     contentDescription = tab.displayLabel(state.rootGranted)
@@ -398,21 +497,49 @@ private fun AbkMainScaffold(vm: MainViewModel) {
                 label = "abk-tab"
             ) { tab ->
                 when (tab) {
-                    AbkTab.Status -> StatusScreen(vm)
+                    AbkTab.Status -> StatusScreen(
+                        vm = vm,
+                        runtimeNavigationEnabled = state.runtimeNavigationEnabled,
+                        onToggleRuntimeNavigation = { vm.setRuntimeNavigationEnabled(true) }
+                    )
                     AbkTab.Build -> BuildScreen(
                         vm = vm,
                         outerPadding = contentPadding,
                         onPlanPageVisibleChange = { buildPlanPageVisible = it }
+                    )
+                    AbkTab.Modules -> ModuleRepositoryScreen(
+                        vm = vm,
+                        outerPadding = contentPadding,
+                        onRepositoryPageVisibleChange = { moduleRepositoryPageVisible = it }
                     )
                     AbkTab.Flash -> FlashScreen(
                         vm = vm,
                         outerPadding = contentPadding,
                         onDetailPageVisibleChange = { flashDetailPageVisible = it }
                     )
+                    AbkTab.RuntimeHome -> RuntimeHomeScreen(
+                        vm = vm,
+                        onSwitchToClassic = { vm.setRuntimeNavigationEnabled(false) },
+                        onManagerPatchPageVisibleChange = { managerPatchPageVisible = it }
+                    )
+                    AbkTab.InstalledModules -> InstalledModulesScreen(
+                        vm = vm,
+                        pendingModuleInstallUri = pendingModuleInstallUri,
+                        onPendingModuleInstallUriConsumed = onModuleInstallUriConsumed
+                    )
+                    AbkTab.RootAuth -> RootAuthorizationScreen(
+                        vm = vm,
+                        outerPadding = contentPadding,
+                        onDetailPageVisibleChange = { rootAuthDetailPageVisible = it }
+                    )
                     AbkTab.Settings -> SettingsScreen(
                         vm = vm,
                         outerPadding = contentPadding,
-                        onThemePageVisibleChange = { settingsThemePageVisible = it }
+                        onThemePageVisibleChange = { settingsThemePageVisible = it },
+                        onOpenInstalledModules = {
+                            if (!state.runtimeNavigationEnabled) vm.setRuntimeNavigationEnabled(true)
+                            selectedTab = AbkTab.InstalledModules
+                        }
                     )
                 }
             }
@@ -425,6 +552,42 @@ private fun AbkTab.displayLabel(rootGranted: Boolean): String = when (this) {
     else -> label
 }
 
+private fun extractModuleInstallUri(intent: Intent?): Uri? {
+    if (intent == null) return null
+    val uri = when (intent.action) {
+        Intent.ACTION_VIEW -> intent.data
+        Intent.ACTION_SEND -> intent.streamUri() ?: intent.firstClipUri()
+        Intent.ACTION_SEND_MULTIPLE -> intent.streamUris().firstOrNull() ?: intent.firstClipUri()
+        else -> null
+    } ?: return null
+    return uri.takeIf { isLikelyModuleZipIntent(intent.type, it) }
+}
+
+private fun Intent.streamUri(): Uri? =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+    } else {
+        @Suppress("DEPRECATION")
+        getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+    }
+
+private fun Intent.streamUris(): List<Uri> =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
+    } else {
+        @Suppress("DEPRECATION")
+        getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM).orEmpty()
+    }
+
+private fun Intent.firstClipUri(): Uri? =
+    clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+
+private fun isLikelyModuleZipIntent(mimeType: String?, uri: Uri): Boolean {
+    val cleanMime = mimeType?.lowercase().orEmpty()
+    val path = uri.toString().lowercase()
+    return cleanMime in MODULE_ZIP_MIME_TYPES || path.endsWith(".zip")
+}
+
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
@@ -432,3 +595,9 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 private const val EXIT_BACK_INTERVAL_MS = 2_000L
+private val MODULE_ZIP_MIME_TYPES = setOf(
+    "application/zip",
+    "application/x-zip",
+    "application/x-zip-compressed",
+    "application/octet-stream"
+)

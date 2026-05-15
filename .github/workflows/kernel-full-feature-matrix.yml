@@ -23,6 +23,7 @@ on:
         options:
           - Stable(标准)
           - Dev(开发)
+          - SUSFS(自动)
           - Other(其他/指定)
         default: Dev(开发)
       version:

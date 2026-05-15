@@ -145,6 +145,9 @@ https://github.com/user/module-a;after_patch|https://github.com/user/module-b;be
 | `BRANCH` | KernelSU setup 使用的分支参数，例如 `-s main`。 |
 | `KSU_LATEST_COMMIT_DATE` | 当前 KernelSU 仓库最新提交时间；未知时为 `未知`。 |
 | `SUSFS_LATEST_COMMIT_DATE` | 当前 SUSFS 仓库最新提交时间；禁用时为 `禁用`。 |
+| `ABK_MANAGER_PACKAGE` | 内核信任的 ABK 管理器包名，默认来自 `app/signing/abk-manager-cert.env`。 |
+| `ABK_MANAGER_CERT_SIZE` | 内核信任的 ABK 管理器签名证书 DER 大小。 |
+| `ABK_MANAGER_CERT_SHA256` | 内核信任的 ABK 管理器签名证书 SHA-256。 |
 | `AVBTOOL` / `MKBOOTIMG` / `UNPACK_BOOTIMG` / `BOOT_SIGN_KEY_PATH` | 后续打包/签名工具路径。 |
 | `CCACHE_DIR` | ccache 目录。 |
 
@@ -153,6 +156,12 @@ https://github.com/user/module-a;after_patch|https://github.com/user/module-b;be
 - `KSU_VERSION`：仅 KernelSU Official 分支会设置。
 - `KBUILD_BUILD_TIMESTAMP`、`KBUILD_BUILD_VERSION`：只在 `before_build` 阶段可用，因为它们在“设置自定义构建时间”步骤后才写入环境。
 - GitHub Actions 标准变量如 `GITHUB_REPOSITORY`、`GITHUB_REF`、`GITHUB_SHA`、`GITHUB_RUN_ID`、`RUNNER_OS`、`RUNNER_TEMP`、`HOME`、`PATH` 也可使用。
+
+ABK Control 管理器识别说明：
+
+- 如果使用 `ABK_control_module` 让 ABK 直接作为 KernelSU / SukiSU / ReSukiSU 管理器，建议同时配置 `after_patch` 和 `before_build` 两个阶段。
+- 手机上安装的 ABK APK 必须与内核构建日志中打印的 `ABK_MANAGER_PACKAGE` 和 `ABK_MANAGER_CERT_SHA256` 一致。默认 debug / 本地临时签名 APK 不会匹配仓库内的正式签名证书。
+- 构建会在编译前校验 ABK Control 桥接标记和 `CONFIG_ABK_CONTROL=y`；失败时优先检查是否遗漏 `before_build` 阶段，或是否使用了与 APK 不一致的证书元数据。
 
 最小模块结构：
 

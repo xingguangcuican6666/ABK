@@ -85,6 +85,13 @@ interface GitHubApiService {
         @Path("run_id") runId: Long
     ): Response<Unit>
 
+    @POST("repos/{owner}/{repo}/actions/runs/{run_id}/cancel")
+    suspend fun cancelWorkflowRun(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("run_id") runId: Long
+    ): Response<Unit>
+
     @GET("repos/{owner}/{repo}/actions/runs/{run_id}/jobs")
     suspend fun listRunJobs(
         @Path("owner") owner: String,

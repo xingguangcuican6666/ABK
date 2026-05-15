@@ -1,11 +1,7 @@
 package com.abk.kernel.utils
 
-import android.content.ActivityNotFoundException
-import android.content.ClipData
 import android.content.Context
-import android.content.Intent
 import android.os.Environment
-import androidx.core.content.FileProvider
 import com.abk.kernel.data.model.Artifact
 import com.abk.kernel.data.model.ArtifactCategory
 import com.abk.kernel.data.model.ArtifactType
@@ -345,49 +341,6 @@ object DownloadUtils {
             }
         }.getOrDefault(ArtifactType.OTHER)
     }
-
-    fun installApk(context: Context, filePath: String): Boolean {
-        val file = File(filePath)
-        if (!file.exists()) return false
-        return runCatching {
-            val uri = FileProvider.getUriForFile(
-                context, "${context.packageName}.fileprovider", file
-            )
-            val viewIntent = buildViewIntent(context, uri, "application/vnd.android.package-archive", file.name)
-            val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-                data = uri
-                clipData = ClipData.newUri(context.contentResolver, file.name, uri)
-                putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivitySafely(viewIntent) || context.startActivitySafely(installIntent)
-        }.getOrDefault(false)
-    }
-
-    private fun Context.startActivitySafely(intent: Intent): Boolean {
-        return try {
-            startActivity(intent)
-            true
-        } catch (_: ActivityNotFoundException) {
-            false
-        } catch (_: SecurityException) {
-            false
-        }
-    }
-
-    private fun buildViewIntent(
-        context: Context,
-        uri: android.net.Uri,
-        mimeType: String,
-        label: String
-    ): Intent =
-        Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, mimeType)
-            clipData = ClipData.newUri(context.contentResolver, label, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
 
     fun formatSize(bytes: Long): String {
         return when {

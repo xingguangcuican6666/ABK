@@ -45,6 +45,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.ContentCopy
@@ -92,6 +93,8 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -109,6 +112,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -135,6 +139,8 @@ import com.abk.kernel.data.model.KernelSupport
 import com.abk.kernel.data.model.PREBUILT_GKI_RUN_ID
 import com.abk.kernel.data.model.PrebuiltGkiAsset
 import com.abk.kernel.data.model.PrebuiltGkiRelease
+import com.abk.kernel.data.model.WorkflowRun
+import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.ExpressiveEmptyState
 import com.abk.kernel.ui.components.ExpressiveHeroCard
 import com.abk.kernel.ui.components.ExpressiveSectionCard
@@ -183,6 +189,7 @@ fun FlashScreen(
     var terminalRunning by remember { mutableStateOf(false) }
     var terminalLog by remember { mutableStateOf<List<String>>(emptyList()) }
     var terminalSuccess by remember { mutableStateOf<Boolean?>(null) }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val rootGranted = state.rootGranted
     val currentContentTab = if (state.prebuiltGkiEnabled) activeContentTab else FlashContentTab.Workflows
 
@@ -201,6 +208,7 @@ fun FlashScreen(
     val workflowGroups = remember(remoteArtifacts, workflowDownloadedArtifacts) {
         buildWorkflowGroups(remoteArtifacts, workflowDownloadedArtifacts)
     }
+    val recentRunById = remember(state.recentRuns) { state.recentRuns.associateBy { it.id } }
     val selectedGroup = selectedRunId?.let { id -> workflowGroups.firstOrNull { it.runId == id } }
     val selectedPrebuiltRelease = selectedPrebuiltReleaseId?.let { id ->
         state.prebuiltGkiReleases.firstOrNull { it.id == id }
@@ -269,17 +277,52 @@ fun FlashScreen(
         Toast.makeText(context, "已复制文件路径", Toast.LENGTH_SHORT).show()
     }
 
+    fun appendTerminalOutput(line: String) {
+        scope.launch(Dispatchers.Main.immediate) {
+            terminalLog = terminalLog + line
+        }
+    }
+
     fun installManager(item: DownloadedArtifact) {
-        val ok = DownloadUtils.installApk(context, item.filePath)
-        if (!ok) {
+        if (!rootGranted) {
             showFailure(
-                "无法安装 APK",
+                "Root 未授权",
                 listOf(
-                    "${'$'} install ${item.filePath}",
-                    "系统 APK 安装器不可用，或当前 ROM 阻止了外部 APK 安装请求。",
-                    "文件: ${item.name}"
+                    "${'$'} pm install -r ${item.name}",
+                    "当前处于部分激活状态，文件页只允许查看已下载文件。",
+                    "如需直接安装管理器应用，请先授予 Root 权限。"
                 )
             )
+            return
+        }
+        terminalTitle = "安装管理器 APK"
+        terminalCanReboot = false
+        terminalRunning = true
+        terminalSuccess = null
+        terminalLog = listOf(
+            "${'$'} pm install -r ${item.name}",
+            "file: ${item.filePath}",
+            "",
+            "等待 root shell 返回，请不要退出应用..."
+        )
+        showTerminal = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    RootUtils.installApk(context, item.filePath, ::appendTerminalOutput)
+                }.getOrElse { error ->
+                    RootUtils.ShellResult(false, listOf(error.message ?: error::class.java.simpleName))
+                }
+            }
+            terminalRunning = false
+            terminalSuccess = result.success
+            terminalLog = listOf(
+                "${'$'} pm install -r ${item.name}",
+                "file: ${item.filePath}",
+                ""
+            ) + result.output.ifEmpty {
+                listOf(if (result.success) "命令执行完成，无输出。" else "命令执行失败，但未返回日志。")
+            }
         }
     }
 
@@ -310,10 +353,10 @@ fun FlashScreen(
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     when (item.type) {
-                        ArtifactType.KERNEL_IMG -> RootUtils.flashImage(item.filePath)
-                        ArtifactType.ANYKERNEL3 -> RootUtils.flashAnyKernel3(context, item.filePath)
-                        ArtifactType.SUSFS_MODULE -> RootUtils.installModule(item.filePath)
-                        ArtifactType.KSU_MANAGER -> RootUtils.ShellResult(false, listOf("APK 请通过系统安装器安装"))
+                        ArtifactType.KERNEL_IMG -> RootUtils.flashImage(item.filePath, onOutput = ::appendTerminalOutput)
+                        ArtifactType.ANYKERNEL3 -> RootUtils.flashAnyKernel3(context, item.filePath, ::appendTerminalOutput)
+                        ArtifactType.SUSFS_MODULE -> RootUtils.installModule(item.filePath, ::appendTerminalOutput)
+                        ArtifactType.KSU_MANAGER -> RootUtils.installApk(context, item.filePath, ::appendTerminalOutput)
                         else -> RootUtils.ShellResult(false, listOf("不支持此文件类型的自动刷写"))
                     }
                 }.getOrElse { error ->
@@ -486,13 +529,19 @@ fun FlashScreen(
     fun FlashListContent() {
         Scaffold(
             containerColor = Color.Transparent,
-            topBar = { ExpressiveTopBar(title = if (rootGranted) stringResource(R.string.flash_title) else "文件") }
+            topBar = {
+                ExpressiveTopBar(
+                    title = if (rootGranted) stringResource(R.string.flash_title) else "文件",
+                    scrollBehavior = scrollBehavior
+                )
+            }
         ) { padding ->
             LazyColumn(
                 modifier = Modifier
                     .padding(padding)
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp),
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
+                    .padding(horizontal = AbkScreenHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(bottom = 96.dp)
             ) {
@@ -529,8 +578,11 @@ fun FlashScreen(
 
                         if (workflowGroups.isNotEmpty()) {
                             items(workflowGroups, key = { "workflow-${it.runId}" }) { group ->
+                                val run = recentRunById[group.runId]
                                 WorkflowRunCard(
                                     group = group,
+                                    active = run?.isActiveFlashRun() == true,
+                                    cancelling = group.runId in state.cancellingWorkflowRunIds,
                                     onClick = {
                                         selectedRunId = group.runId
                                         selectedPrebuiltReleaseId = null
@@ -540,7 +592,8 @@ fun FlashScreen(
                                     onDelete = {
                                         deleteWorkflowTarget = group
                                         deleteRemoteWorkflowRun = false
-                                    }
+                                    },
+                                    onCancel = { vm.cancelWorkflowRun(group.runId) }
                                 )
                             }
                         } else {
@@ -696,7 +749,7 @@ fun FlashScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .statusBarsPadding()
-                            .padding(horizontal = 16.dp),
+                            .padding(horizontal = AbkScreenHorizontalPadding),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(bottom = 32.dp)
                     ) {
@@ -825,7 +878,7 @@ fun FlashScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .statusBarsPadding()
-                            .padding(horizontal = 16.dp),
+                            .padding(horizontal = AbkScreenHorizontalPadding),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(bottom = 32.dp)
                     ) {
@@ -1782,9 +1835,12 @@ private fun prebuiltArtifactType(asset: PrebuiltGkiAsset): ArtifactType {
 @Composable
 private fun WorkflowRunCard(
     group: WorkflowArtifactGroup,
+    active: Boolean,
+    cancelling: Boolean,
     onClick: () -> Unit,
     onShowParameters: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onCancel: () -> Unit
 ) {
     val sourceCount = group.remote.size
     val downloadedCount = group.local.size
@@ -1829,6 +1885,19 @@ private fun WorkflowRunCard(
                 }
                 IconButton(onClick = onShowParameters) {
                     Icon(Icons.Default.Tune, contentDescription = "参数详情")
+                }
+                if (active) {
+                    IconButton(onClick = onCancel, enabled = !cancelling) {
+                        if (cancelling) {
+                            LoadingIndicator(Modifier.size(20.dp))
+                        } else {
+                            Icon(
+                                Icons.Default.Cancel,
+                                contentDescription = "取消工作流",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = "删除工作流")
@@ -2141,6 +2210,9 @@ private fun FlashTerminalDialog(
     }
     val terminalTextColor = colorScheme.onSurface
     val terminalCommandColor = colorScheme.primary
+    LaunchedEffect(logLines.size) {
+        terminalScroll.animateScrollTo(terminalScroll.maxValue)
+    }
     AlertDialog(
         onDismissRequest = { if (!running) onClose() },
         icon = {
@@ -2236,6 +2308,9 @@ private data class WorkflowArtifactGroup(
     val remote: List<BuildArtifact>,
     val local: List<DownloadedArtifact>
 )
+
+private fun WorkflowRun.isActiveFlashRun(): Boolean =
+    status in setOf("queued", "waiting", "requested", "pending", "in_progress")
 
 private fun artifactIcon(type: ArtifactType) = when (type) {
     ArtifactType.KERNEL_PACKAGE -> Icons.Default.Inventory2

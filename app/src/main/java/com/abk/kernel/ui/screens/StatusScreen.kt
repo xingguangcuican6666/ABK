@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.abk.kernel.ui.screens
 
 import android.content.Intent
@@ -15,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -26,6 +29,7 @@ import com.abk.kernel.BuildConfig
 import com.abk.kernel.R
 import com.abk.kernel.data.model.BuildStatus
 import com.abk.kernel.data.model.WorkflowRun
+import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.ExpressiveHeroCard
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
@@ -36,9 +40,14 @@ import com.abk.kernel.viewmodel.MainViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun StatusScreen(vm: MainViewModel) {
+fun StatusScreen(
+    vm: MainViewModel,
+    runtimeNavigationEnabled: Boolean = false,
+    onToggleRuntimeNavigation: () -> Unit = {}
+) {
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     LaunchedEffect(Unit) { vm.loadRecentRuns() }
 
@@ -46,7 +55,17 @@ fun StatusScreen(vm: MainViewModel) {
         containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surface),
         topBar = {
             ExpressiveTopBar(
-                title = stringResource(R.string.app_name)
+                title = stringResource(R.string.app_name),
+                compactTitle = true,
+                scrollBehavior = scrollBehavior,
+                actions = {
+                    IconButton(onClick = onToggleRuntimeNavigation) {
+                        Icon(
+                            imageVector = if (runtimeNavigationEnabled) Icons.Default.SwapHoriz else Icons.Default.Home,
+                            contentDescription = if (runtimeNavigationEnabled) "切换到完整导航" else "切换到运行态首页"
+                        )
+                    }
+                }
             )
         }
     ) { padding ->
@@ -54,8 +73,9 @@ fun StatusScreen(vm: MainViewModel) {
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp),
+                .padding(horizontal = AbkScreenHorizontalPadding),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             val ksuVersion = remember(state.rootGranted) {
@@ -68,7 +88,11 @@ fun StatusScreen(vm: MainViewModel) {
             ExpressiveHeroCard(
                 title = if (state.rootGranted) "工作中" else "部分激活",
                 subtitle = if (state.rootGranted) {
-                    state.currentRun?.let { "构建：#${it.runNumber}" } ?: "版本：${BuildConfig.VERSION_NAME}"
+                    when {
+                        state.activeBuildRuns.size > 1 -> "构建：${state.activeBuildRuns.size} 个工作流并行"
+                        state.currentRun != null -> state.currentRun?.let { "构建：#${it.runNumber}" }.orEmpty()
+                        else -> "版本：${BuildConfig.VERSION_NAME}"
+                    }
                 } else {
                     "版本：${BuildConfig.VERSION_NAME} · 构建和下载可用"
                 },
@@ -120,7 +144,15 @@ fun StatusScreen(vm: MainViewModel) {
             ) {
                 when (state.buildStatus) {
                     BuildStatus.IDLE -> StatusRow(Icons.Default.HourglassEmpty, "暂无进行中的构建", false)
-                    BuildStatus.QUEUED -> StatusRow(Icons.Default.Queue, "构建已排队，等待 Runner…", false)
+                    BuildStatus.QUEUED -> StatusRow(
+                        Icons.Default.Queue,
+                        if (state.activeBuildRuns.size > 1) {
+                            "${state.activeBuildRuns.size} 个工作流已排队，合并进度等待 Runner…"
+                        } else {
+                            "构建已排队，等待 Runner…"
+                        },
+                        false
+                    )
                     BuildStatus.IN_PROGRESS -> Row(verticalAlignment = Alignment.CenterVertically) {
                         LoadingIndicator(Modifier.size(24.dp))
                         Spacer(Modifier.width(8.dp))
@@ -147,22 +179,51 @@ fun StatusScreen(vm: MainViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                state.currentRun?.let { run ->
+                val showSingleRunAction = state.activeBuildRuns.size <= 1
+                state.currentRun?.takeIf { showSingleRunAction }?.let { run ->
                     Spacer(Modifier.height(4.dp))
-                    TextButton(
-                        onClick = {
-                            runCatching {
-                                context.startActivity(
-                                    Intent(Intent.ACTION_VIEW, Uri.parse(run.htmlUrl))
-                                )
-                            }
-                        },
-                        contentPadding = PaddingValues(0.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.OpenInBrowser, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("查看详情 #${run.runNumber}", style = MaterialTheme.typography.labelMedium)
+                        TextButton(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(run.htmlUrl))
+                                    )
+                                }
+                            },
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Icon(Icons.Default.OpenInBrowser, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("查看详情 #${run.runNumber}", style = MaterialTheme.typography.labelMedium)
+                        }
+                        if (run.isActiveStatusRun()) {
+                            TextButton(
+                                onClick = { vm.cancelWorkflowRun(run.id) },
+                                enabled = run.id !in state.cancellingWorkflowRunIds,
+                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                if (run.id in state.cancellingWorkflowRunIds) {
+                                    LoadingIndicator(Modifier.size(16.dp))
+                                } else {
+                                    Icon(Icons.Default.Cancel, null, modifier = Modifier.size(16.dp))
+                                }
+                                Spacer(Modifier.width(4.dp))
+                                Text(if (run.id in state.cancellingWorkflowRunIds) "取消中" else "取消")
+                            }
+                        }
                     }
+                }
+                if (state.activeBuildRuns.size > 1) {
+                    Text(
+                        "${state.activeBuildRuns.size} 个工作流正在并行，最近构建记录和队列页可分别查看或取消。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
@@ -209,8 +270,12 @@ fun StatusScreen(vm: MainViewModel) {
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         val visibleRuns = state.recentRuns.take(5)
-                        visibleRuns.forEachIndexed { index, run ->
-                            RunListItem(run)
+                        visibleRuns.forEach { run ->
+                            RunListItem(
+                                run = run,
+                                cancelling = run.id in state.cancellingWorkflowRunIds,
+                                onCancel = { vm.cancelWorkflowRun(run.id) }
+                            )
                         }
                     }
                 }
@@ -384,7 +449,11 @@ private fun StatusRow(icon: androidx.compose.ui.graphics.vector.ImageVector, tex
 }
 
 @Composable
-private fun RunListItem(run: WorkflowRun) {
+private fun RunListItem(
+    run: WorkflowRun,
+    cancelling: Boolean,
+    onCancel: () -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -406,6 +475,8 @@ private fun RunListItem(run: WorkflowRun) {
         val (color, label) = when {
             run.status == "completed" && run.conclusion == "success" ->
                 MaterialTheme.colorScheme.primary to "成功"
+            run.status == "completed" && run.conclusion == "cancelled" ->
+                MaterialTheme.colorScheme.outline to "已取消"
             run.status == "completed" ->
                 MaterialTheme.colorScheme.error to "失败"
             run.status == "in_progress" ->
@@ -415,8 +486,24 @@ private fun RunListItem(run: WorkflowRun) {
         Badge(containerColor = color.copy(alpha = 0.15f)) {
             Text(label, color = color, style = MaterialTheme.typography.labelSmall)
         }
+        if (run.isActiveStatusRun()) {
+            IconButton(onClick = onCancel, enabled = !cancelling) {
+                if (cancelling) {
+                    LoadingIndicator(Modifier.size(18.dp))
+                } else {
+                    Icon(
+                        Icons.Default.Cancel,
+                        contentDescription = "取消工作流",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
     }
 }
+
+private fun WorkflowRun.isActiveStatusRun(): Boolean =
+    status in setOf("queued", "waiting", "requested", "pending", "in_progress")
 
 private fun buildStatusDisplay(status: BuildStatus): String = when (status) {
     BuildStatus.IDLE -> "空闲"

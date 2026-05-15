@@ -31,6 +31,8 @@ class PreferencesRepository(private val context: Context) {
         val KEY_UI_SURFACE_ALPHA = floatPreferencesKey("ui_surface_alpha")
         val KEY_BUILD_CONFIG = stringPreferencesKey("build_config_json")
         val KEY_BUILD_PLANS = stringPreferencesKey("build_plans_json")
+        val KEY_BUILD_QUEUE = stringPreferencesKey("build_queue_json")
+        val KEY_MODULE_CATALOG_REPOSITORIES = stringPreferencesKey("module_catalog_repositories_json")
         val KEY_DOWNLOADED_ARTIFACTS = stringPreferencesKey("downloaded_artifacts_json")
         val KEY_REMOTE_ARTIFACTS = stringPreferencesKey("remote_artifacts_json")
         val KEY_BUILD_PARAMETER_SUMMARIES = stringPreferencesKey("build_parameter_summaries_json")
@@ -38,6 +40,8 @@ class PreferencesRepository(private val context: Context) {
         val KEY_DOWNLOAD_MIRROR_BASE_URL = stringPreferencesKey("download_mirror_base_url")
         val KEY_PREBUILT_GKI_ENABLED = booleanPreferencesKey("prebuilt_gki_enabled")
         val KEY_PREDICTIVE_BACK_ENABLED = booleanPreferencesKey("predictive_back_enabled")
+        val KEY_RUNTIME_NAVIGATION_ENABLED = booleanPreferencesKey("runtime_navigation_enabled")
+        val KEY_WEBVIEW_DEBUG_ENABLED = booleanPreferencesKey("webview_debug_enabled")
         val KEY_TERMS_ACCEPTED_VERSION = intPreferencesKey("terms_accepted_version")
     }
 
@@ -57,6 +61,10 @@ class PreferencesRepository(private val context: Context) {
     val uiSurfaceAlpha: Flow<Float> = context.dataStore.data.map { it[KEY_UI_SURFACE_ALPHA] ?: 1f }
     val buildConfigJson: Flow<String?> = context.dataStore.data.map { it[KEY_BUILD_CONFIG] }
     val buildPlansJson: Flow<String?> = context.dataStore.data.map { it[KEY_BUILD_PLANS] }
+    val buildQueueJson: Flow<String?> = context.dataStore.data.map { it[KEY_BUILD_QUEUE] }
+    val moduleCatalogRepositoriesJson: Flow<String?> = context.dataStore.data.map {
+        it[KEY_MODULE_CATALOG_REPOSITORIES]
+    }
     val downloadedArtifactsJson: Flow<String?> = context.dataStore.data.map { it[KEY_DOWNLOADED_ARTIFACTS] }
     val remoteArtifactsJson: Flow<String?> = context.dataStore.data.map { it[KEY_REMOTE_ARTIFACTS] }
     val buildParameterSummariesJson: Flow<String?> = context.dataStore.data.map { it[KEY_BUILD_PARAMETER_SUMMARIES] }
@@ -64,6 +72,12 @@ class PreferencesRepository(private val context: Context) {
     val downloadMirrorBaseUrl: Flow<String> = context.dataStore.data.map { it[KEY_DOWNLOAD_MIRROR_BASE_URL] ?: "" }
     val prebuiltGkiEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_PREBUILT_GKI_ENABLED] ?: true }
     val predictiveBackEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_PREDICTIVE_BACK_ENABLED] ?: true }
+    val runtimeNavigationEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_RUNTIME_NAVIGATION_ENABLED] ?: false
+    }
+    val webViewDebugEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_WEBVIEW_DEBUG_ENABLED] ?: false
+    }
     val termsAcceptedVersion: Flow<Int> = context.dataStore.data.map { it[KEY_TERMS_ACCEPTED_VERSION] ?: 0 }
 
     suspend fun saveToken(token: String) = context.dataStore.edit { it[KEY_ACCESS_TOKEN] = token }
@@ -107,6 +121,10 @@ class PreferencesRepository(private val context: Context) {
     }
     suspend fun saveBuildConfigJson(json: String) = context.dataStore.edit { it[KEY_BUILD_CONFIG] = json }
     suspend fun saveBuildPlansJson(json: String) = context.dataStore.edit { it[KEY_BUILD_PLANS] = json }
+    suspend fun saveBuildQueueJson(json: String) = context.dataStore.edit { it[KEY_BUILD_QUEUE] = json }
+    suspend fun saveModuleCatalogRepositoriesJson(json: String) = context.dataStore.edit {
+        it[KEY_MODULE_CATALOG_REPOSITORIES] = json
+    }
     suspend fun saveDownloadedArtifactsJson(json: String) = context.dataStore.edit { it[KEY_DOWNLOADED_ARTIFACTS] = json }
     suspend fun saveRemoteArtifactsJson(json: String) = context.dataStore.edit { it[KEY_REMOTE_ARTIFACTS] = json }
     suspend fun saveBuildParameterSummariesJson(json: String) = context.dataStore.edit {
@@ -116,6 +134,12 @@ class PreferencesRepository(private val context: Context) {
     suspend fun setDownloadMirrorBaseUrl(url: String) = context.dataStore.edit { it[KEY_DOWNLOAD_MIRROR_BASE_URL] = url }
     suspend fun setPrebuiltGkiEnabled(v: Boolean) = context.dataStore.edit { it[KEY_PREBUILT_GKI_ENABLED] = v }
     suspend fun setPredictiveBackEnabled(v: Boolean) = context.dataStore.edit { it[KEY_PREDICTIVE_BACK_ENABLED] = v }
+    suspend fun setRuntimeNavigationEnabled(v: Boolean) = context.dataStore.edit {
+        it[KEY_RUNTIME_NAVIGATION_ENABLED] = v
+    }
+    suspend fun setWebViewDebugEnabled(v: Boolean) = context.dataStore.edit {
+        it[KEY_WEBVIEW_DEBUG_ENABLED] = v
+    }
     suspend fun acceptCurrentTerms() = context.dataStore.edit {
         it[KEY_TERMS_ACCEPTED_VERSION] = CURRENT_TERMS_VERSION
     }
@@ -127,6 +151,7 @@ class PreferencesRepository(private val context: Context) {
         it.remove(KEY_AVATAR_URL)
         it.remove(KEY_FORK_REPO_NAME)
         it.remove(KEY_LAST_RUN_ID)
+        it.remove(KEY_BUILD_QUEUE)
         it.remove(KEY_REMOTE_ARTIFACTS)
         it.remove(KEY_BUILD_PARAMETER_SUMMARIES)
         it.remove(KEY_PENDING_AUTO_DOWNLOAD_RUN_ID)

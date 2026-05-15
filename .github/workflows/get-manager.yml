@@ -20,6 +20,7 @@ on:
 
 jobs:
   get_ksu_manager:
+    if: inputs.kernelsu_variant != 'None'
     runs-on: ubuntu-latest
     outputs:
       # 输出1: KSU版本号
@@ -229,3 +230,24 @@ jobs:
         with:
           name: susfs-${{ env.SUSFS_NAME }}
           path: ./susfs-module/*
+      
+  upload_other_modules:
+    if: ${{ inputs.use_ntsync || inputs.use_networking }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      
+      - name: 解压 ntsync权限修复&ipset启用.zip
+        run: |
+          mkdir -p disk
+          unzip 'modules/ntsync-ipset-helper/ntsync权限修复&ipset启用.zip' -d 'disk/ntsync&ipset'
+
+      - name: 上传ntsync&ipset模块
+        uses: actions/upload-artifact@v6
+        with:
+          name: 'ntsync&ipset'
+          path: 'disk/ntsync&ipset/*'
+          if-no-files-found: error

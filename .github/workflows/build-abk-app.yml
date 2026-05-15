@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     env:
       HAS_RELEASE_SIGNING: ${{ secrets.ABK_RELEASE_KEYSTORE_BASE64 != '' && secrets.ABK_RELEASE_STORE_PASSWORD != '' && secrets.ABK_RELEASE_KEY_ALIAS != '' && secrets.ABK_RELEASE_KEY_PASSWORD != '' }}
     steps:
@@ -38,12 +39,107 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK packages
-        run: sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0"
+        run: sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0" "cmake;3.22.1" "ndk;28.2.13676358"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
+
+      - name: Bundle ABK LKM artifacts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          repo="xingguangcuican6666/ABK_control_module"
+          workflow="lkm.yml"
+          target_dir="app/src/main/assets/abk_lkm"
+          mkdir -p "$target_dir"
+          rm -rf "$target_dir"/*
+
+          api_get() {
+            local url="$1"
+            local tmp
+            tmp="$(mktemp)"
+            if [ -n "${GITHUB_TOKEN:-}" ] && curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              "$url" -o "$tmp"; then
+              cat "$tmp"
+              rm -f "$tmp"
+              return 0
+            fi
+            rm -f "$tmp"
+            curl -fsSL -H "Accept: application/vnd.github+json" "$url"
+          }
+
+          download_artifact() {
+            local url="$1"
+            local out="$2"
+            if [ -n "${GITHUB_TOKEN:-}" ] && curl -fsSL -L \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              "$url" -o "$out"; then
+              return 0
+            fi
+            curl -fsSL -L "$url" -o "$out"
+          }
+
+          runs_json="$(api_get "https://api.github.com/repos/$repo/actions/workflows/$workflow/runs?status=success&per_page=1")"
+          run_id="$(printf '%s' "$runs_json" | jq -r '.workflow_runs[0].id // empty')"
+          run_sha="$(printf '%s' "$runs_json" | jq -r '.workflow_runs[0].head_sha // empty')"
+          if [ -z "$run_id" ]; then
+            echo "::error::未找到 $repo 的成功 LKM action"
+            exit 1
+          fi
+
+          artifacts_json="$(api_get "https://api.github.com/repos/$repo/actions/runs/$run_id/artifacts?per_page=100")"
+          artifact_count=0
+          printf '%s' "$artifacts_json" | jq -r '.artifacts[] | select(.name | endswith("-lkm")) | [.name, .archive_download_url] | @tsv' |
+          while IFS=$'\t' read -r name url; do
+            [ -n "$name" ] || continue
+            variant="${name%%-*}"
+            remainder="${name#*-}"
+            kmi="${remainder%-lkm}"
+            out_dir="$target_dir/$variant"
+            tmp_dir="$(mktemp -d)"
+            mkdir -p "$out_dir"
+            download_artifact "$url" "$tmp_dir/artifact.zip"
+            unzip -q "$tmp_dir/artifact.zip" -d "$tmp_dir/unpack"
+            ko_file="$(find "$tmp_dir/unpack" -type f -name '*.ko' | head -n 1)"
+            if [ -z "$ko_file" ]; then
+              echo "::error::artifact $name 中没有 .ko 文件"
+              exit 1
+            fi
+            cp "$ko_file" "$out_dir/${kmi}_kernelsu.ko"
+            artifact_count=$((artifact_count + 1))
+            rm -rf "$tmp_dir"
+          done
+
+          count="$(find "$target_dir" -type f -name '*.ko' | wc -l | tr -d '[:space:]')"
+          if [ "$count" -eq 0 ]; then
+            echo "::error::没有成功打包任何 LKM .ko"
+            exit 1
+          fi
+
+          {
+            echo "source=$repo"
+            echo "workflow=$workflow"
+            echo "run_id=$run_id"
+            echo "head_sha=$run_sha"
+            echo "count=$count"
+          } > "$target_dir/source.properties"
+
+          {
+            echo "### ABK LKM artifacts"
+            echo
+            echo "- Source: $repo"
+            echo "- Workflow: $workflow"
+            echo "- Run: $run_id"
+            echo "- Commit: $run_sha"
+            echo "- Files: $count"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build debug APK
         run: gradle assembleDebug
@@ -55,6 +151,81 @@ jobs:
         run: |
           mkdir -p app/signing
           printf '%s' "$ABK_RELEASE_KEYSTORE_BASE64" | base64 --decode > app/signing/abk-release.jks
+
+      - name: Export ABK manager certificate metadata
+        if: ${{ env.HAS_RELEASE_SIGNING == 'true' }}
+        env:
+          ABK_RELEASE_STORE_PASSWORD: ${{ secrets.ABK_RELEASE_STORE_PASSWORD }}
+          ABK_RELEASE_KEY_ALIAS: ${{ secrets.ABK_RELEASE_KEY_ALIAS }}
+          ABK_RELEASE_STORE_TYPE: ${{ secrets.ABK_RELEASE_STORE_TYPE }}
+        run: |
+          set -euo pipefail
+
+          cert="$RUNNER_TEMP/abk-manager-cert.der"
+          keytool -exportcert \
+            -keystore app/signing/abk-release.jks \
+            -storetype "${ABK_RELEASE_STORE_TYPE:-JKS}" \
+            -storepass "$ABK_RELEASE_STORE_PASSWORD" \
+            -alias "$ABK_RELEASE_KEY_ALIAS" \
+            -file "$cert"
+
+          size="$(wc -c < "$cert" | tr -d '[:space:]')"
+          hash="$(sha256sum "$cert" | awk '{print tolower($1)}')"
+          {
+            echo "# Official ABK release signing certificate metadata."
+            echo "# This is public certificate metadata, not a private signing key."
+            echo "ABK_MANAGER_PACKAGE=com.abk.kernel"
+            echo "ABK_MANAGER_CERT_SIZE=$size"
+            echo "ABK_MANAGER_CERT_SHA256=$hash"
+          } > app/signing/abk-manager-cert.generated.env
+
+          {
+            echo "### ABK manager certificate metadata"
+            echo
+            echo '```env'
+            cat app/signing/abk-manager-cert.generated.env
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify checked-in ABK manager certificate metadata
+        if: ${{ env.HAS_RELEASE_SIGNING == 'true' }}
+        run: |
+          set -euo pipefail
+
+          expected="app/signing/abk-manager-cert.env"
+          actual="app/signing/abk-manager-cert.generated.env"
+          if [ ! -f "$expected" ]; then
+            echo "::error::$expected is missing. Commit the public manager certificate metadata so kernel builds can trust the release APK."
+            exit 1
+          fi
+
+          read_value() {
+            local file="$1"
+            local key="$2"
+            awk -F= -v target="$key" '
+              /^[[:space:]]*#/ { next }
+              $1 == target {
+                value = substr($0, index($0, "=") + 1)
+                gsub(/^[[:space:]\042\047]+|[[:space:]\042\047]+$/, "", value)
+                print value
+                exit
+              }
+            ' "$file"
+          }
+
+          mismatch=0
+          for key in ABK_MANAGER_PACKAGE ABK_MANAGER_CERT_SIZE ABK_MANAGER_CERT_SHA256; do
+            expected_value="$(read_value "$expected" "$key")"
+            actual_value="$(read_value "$actual" "$key")"
+            if [ "$expected_value" != "$actual_value" ]; then
+              echo "::error::$key mismatch: checked-in='$expected_value' generated='$actual_value'"
+              mismatch=1
+            fi
+          done
+          if [ "$mismatch" -ne 0 ]; then
+            echo "::error::Update $expected with the generated metadata before building trusted manager kernels."
+            exit 1
+          fi
 
       - name: Build release APK
         env:
@@ -82,3 +253,4 @@ jobs:
           path: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/release/*.apk
+            app/signing/abk-manager-cert.generated.env

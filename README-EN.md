@@ -146,6 +146,9 @@ Common variables available in both stages:
 | `BRANCH` | KernelSU setup branch argument, for example `-s main`. |
 | `KSU_LATEST_COMMIT_DATE` | Latest commit time of the current KernelSU tree; `未知` when unknown. |
 | `SUSFS_LATEST_COMMIT_DATE` | Latest commit time of the current SUSFS tree; `禁用` when disabled. |
+| `ABK_MANAGER_PACKAGE` | Trusted ABK manager package name, loaded from `app/signing/abk-manager-cert.env` by default. |
+| `ABK_MANAGER_CERT_SIZE` | Trusted ABK manager signing certificate DER size. |
+| `ABK_MANAGER_CERT_SHA256` | Trusted ABK manager signing certificate SHA-256. |
 | `AVBTOOL` / `MKBOOTIMG` / `UNPACK_BOOTIMG` / `BOOT_SIGN_KEY_PATH` | Tool paths used later for packaging/signing. |
 | `CCACHE_DIR` | ccache directory. |
 
@@ -154,6 +157,12 @@ Conditional variables:
 - `KSU_VERSION`: set only for the KernelSU Official branch.
 - `KBUILD_BUILD_TIMESTAMP` and `KBUILD_BUILD_VERSION`: available only in `before_build`, because they are written after the "set custom build time" step.
 - Standard GitHub Actions variables such as `GITHUB_REPOSITORY`, `GITHUB_REF`, `GITHUB_SHA`, `GITHUB_RUN_ID`, `RUNNER_OS`, `RUNNER_TEMP`, `HOME`, and `PATH` are also available.
+
+ABK Control manager recognition notes:
+
+- When using `ABK_control_module` to make ABK work directly as a KernelSU / SukiSU / ReSukiSU manager, configure both `after_patch` and `before_build`.
+- The ABK APK installed on the phone must match the `ABK_MANAGER_PACKAGE` and `ABK_MANAGER_CERT_SHA256` printed in the kernel build log. Default debug or locally ad-hoc signed APKs do not match the checked-in release certificate metadata.
+- The kernel build validates the ABK Control bridge markers and `CONFIG_ABK_CONTROL=y` before compiling. If it fails, first check for a missing `before_build` stage or certificate metadata that does not match the installed APK.
 
 Minimal module layout:
 

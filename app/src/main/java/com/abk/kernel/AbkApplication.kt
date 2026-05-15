@@ -7,7 +7,7 @@ import com.abk.kernel.utils.RootUtils
 class AbkApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        RootUtils.init()
+        RootUtils.init(this)
         NotificationUtils.createChannels(this)
     }
 }

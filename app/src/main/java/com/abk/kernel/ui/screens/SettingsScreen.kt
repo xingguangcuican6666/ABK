@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -47,6 +48,7 @@ import androidx.core.graphics.ColorUtils
 import coil.compose.AsyncImage
 import com.abk.kernel.BuildConfig
 import com.abk.kernel.R
+import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.ExpressiveHeroCard
 import com.abk.kernel.ui.components.ExpressiveListItem
 import com.abk.kernel.ui.components.ExpressiveSectionCard
@@ -54,6 +56,8 @@ import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveSwitchItem
 import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.ui.theme.uiSurfaceColor
+import com.abk.kernel.data.model.ManagerSettingItem
+import com.abk.kernel.data.model.ManagerSettingKind
 import com.abk.kernel.viewmodel.MainUiState
 import com.abk.kernel.viewmodel.MainViewModel
 import kotlin.math.pow
@@ -73,14 +77,19 @@ private val THEME_BACK_MAX_CORNER = 32.dp
 fun SettingsScreen(
     vm: MainViewModel,
     outerPadding: PaddingValues = PaddingValues(0.dp),
-    onThemePageVisibleChange: (Boolean) -> Unit = {}
+    onThemePageVisibleChange: (Boolean) -> Unit = {},
+    onOpenInstalledModules: () -> Unit = {}
 ) {
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showThemeSettings by rememberSaveable { mutableStateOf(false) }
+    var showAppProfileTemplates by rememberSaveable { mutableStateOf(false) }
+    var showManagerTools by rememberSaveable { mutableStateOf(false) }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     var themeBackProgress by remember { mutableFloatStateOf(0f) }
+    val showChildPage = showThemeSettings || showAppProfileTemplates || showManagerTools
     val motionScheme = MaterialTheme.motionScheme
     val animatedThemeBackProgress by animateFloatAsState(
         targetValue = themeBackProgress.coerceIn(0f, 1f),
@@ -94,8 +103,12 @@ fun SettingsScreen(
     val themeBackOffsetPx = with(density) { THEME_BACK_MAX_OFFSET.toPx() }
     val themeBackCorner = with(density) { (THEME_BACK_MAX_CORNER.toPx() * visualThemeBackProgress).toDp() }
 
-    LaunchedEffect(showThemeSettings) {
-        if (showThemeSettings) {
+    LaunchedEffect(Unit) {
+        vm.refreshManagerSettings(force = true)
+    }
+
+    LaunchedEffect(showChildPage) {
+        if (showChildPage) {
             onThemePageVisibleChange(true)
         } else {
             delay(THEME_PAGE_EXIT_DELAY_MS)
@@ -111,6 +124,8 @@ fun SettingsScreen(
     fun openThemeSettings() {
         themeBackProgress = 0f
         onThemePageVisibleChange(true)
+        showAppProfileTemplates = false
+        showManagerTools = false
         showThemeSettings = true
     }
 
@@ -118,19 +133,43 @@ fun SettingsScreen(
         showThemeSettings = false
     }
 
-    PredictiveBackHandler(enabled = showThemeSettings && state.predictiveBackEnabled) { progress ->
+    fun openAppProfileTemplates() {
+        themeBackProgress = 0f
+        onThemePageVisibleChange(true)
+        showThemeSettings = false
+        showManagerTools = false
+        showAppProfileTemplates = true
+        vm.refreshAppProfileTemplates()
+    }
+
+    fun openManagerTools() {
+        themeBackProgress = 0f
+        onThemePageVisibleChange(true)
+        showThemeSettings = false
+        showAppProfileTemplates = false
+        showManagerTools = true
+        vm.refreshManagerTools(force = true)
+    }
+
+    fun closeChildPage() {
+        showThemeSettings = false
+        showAppProfileTemplates = false
+        showManagerTools = false
+    }
+
+    PredictiveBackHandler(enabled = showChildPage && state.predictiveBackEnabled) { progress ->
         try {
             progress.collect { backEvent ->
                 themeBackProgress = backEvent.progress.coerceIn(0f, 1f)
             }
-            closeThemeSettings()
+            closeChildPage()
         } catch (_: CancellationException) {
             themeBackProgress = 0f
         }
     }
 
-    BackHandler(enabled = showThemeSettings && !state.predictiveBackEnabled) {
-        closeThemeSettings()
+    BackHandler(enabled = showChildPage && !state.predictiveBackEnabled) {
+        closeChildPage()
     }
 
     if (showLogoutDialog) {
@@ -169,7 +208,8 @@ fun SettingsScreen(
             containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surface),
             topBar = {
                 ExpressiveTopBar(
-                    title = stringResource(R.string.settings_title)
+                    title = stringResource(R.string.settings_title),
+                    scrollBehavior = scrollBehavior
                 )
             }
         ) {
@@ -177,14 +217,18 @@ fun SettingsScreen(
                 padding = it,
                 state = state,
                 vm = vm,
+                scrollBehavior = scrollBehavior,
                 onLogout = { showLogoutDialog = true },
                 onOpenThemeSettings = ::openThemeSettings,
+                onOpenAppProfileTemplates = ::openAppProfileTemplates,
+                onOpenManagerTools = ::openManagerTools,
+                onOpenInstalledModules = onOpenInstalledModules,
                 onAbout = { showAboutDialog = true }
             )
         }
 
         AnimatedVisibility(
-            visible = showThemeSettings,
+            visible = showChildPage,
             enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
             exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
             modifier = childPageModifier
@@ -256,6 +300,113 @@ fun SettingsScreen(
                 }
             }
         }
+
+        AnimatedVisibility(
+            visible = showAppProfileTemplates,
+            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
+                slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { width -> width / 4 },
+            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
+                slideOutHorizontally(animationSpec = motionScheme.fastSpatialSpec()) { width -> width },
+            modifier = childPageModifier
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        translationX = themeBackOffsetPx * visualThemeBackProgress
+                        scaleX = 1f - THEME_BACK_SCALE_DELTA * visualThemeBackProgress
+                        scaleY = 1f - THEME_BACK_SCALE_DELTA * visualThemeBackProgress
+                        alpha = 1f - 0.06f * visualThemeBackProgress
+                        shape = RoundedCornerShape(themeBackCorner)
+                        clip = visualThemeBackProgress > 0.01f
+                    }
+            ) {
+                SettingsPageBackground(
+                    backgroundUri = state.customBackgroundUri,
+                    backgroundImageEnabled = state.backgroundImageEnabled
+                )
+                Scaffold(
+                    containerColor = Color.Transparent,
+                    topBar = {
+                        ExpressiveTopBar(
+                            title = "App Profile 模板",
+                            navigationIcon = {
+                                IconButton(onClick = ::closeChildPage) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                                }
+                            },
+                            actions = {
+                                IconButton(onClick = { vm.refreshAppProfileTemplates() }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                                }
+                            }
+                        )
+                    }
+                ) {
+                    AppProfileTemplateSettingsScreen(
+                        padding = it,
+                        state = state,
+                        onRefresh = vm::refreshAppProfileTemplates,
+                        onSelect = vm::selectAppProfileTemplate,
+                        onSave = vm::saveAppProfileTemplate,
+                        onDelete = vm::deleteAppProfileTemplate
+                    )
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showManagerTools,
+            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
+                slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { width -> width / 4 },
+            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
+                slideOutHorizontally(animationSpec = motionScheme.fastSpatialSpec()) { width -> width },
+            modifier = childPageModifier
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        translationX = themeBackOffsetPx * visualThemeBackProgress
+                        scaleX = 1f - THEME_BACK_SCALE_DELTA * visualThemeBackProgress
+                        scaleY = 1f - THEME_BACK_SCALE_DELTA * visualThemeBackProgress
+                        alpha = 1f - 0.06f * visualThemeBackProgress
+                        shape = RoundedCornerShape(themeBackCorner)
+                        clip = visualThemeBackProgress > 0.01f
+                    }
+            ) {
+                SettingsPageBackground(
+                    backgroundUri = state.customBackgroundUri,
+                    backgroundImageEnabled = state.backgroundImageEnabled
+                )
+                Scaffold(
+                    containerColor = Color.Transparent,
+                    topBar = {
+                        ExpressiveTopBar(
+                            title = "工具",
+                            navigationIcon = {
+                                IconButton(onClick = ::closeChildPage) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                                }
+                            },
+                            actions = {
+                                IconButton(onClick = { vm.refreshManagerTools(force = true) }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                                }
+                            }
+                        )
+                    }
+                ) {
+                    ManagerToolsSettingsScreen(
+                        padding = it,
+                        state = state,
+                        onSelinuxChange = vm::setSelinuxEnforcing,
+                        onBackupAllowlist = vm::backupRootGrantAllowlist,
+                        onRestoreAllowlist = vm::restoreRootGrantAllowlist
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -297,16 +448,21 @@ private fun SettingsMainContent(
     padding: PaddingValues,
     state: MainUiState,
     vm: MainViewModel,
+    scrollBehavior: TopAppBarScrollBehavior,
     onLogout: () -> Unit,
     onOpenThemeSettings: () -> Unit,
+    onOpenAppProfileTemplates: () -> Unit,
+    onOpenManagerTools: () -> Unit,
+    onOpenInstalledModules: () -> Unit,
     onAbout: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .padding(padding)
             .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 18.dp),
+            .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SettingsGroup(title = stringResource(R.string.settings_account)) {
@@ -365,6 +521,14 @@ private fun SettingsMainContent(
             )
         }
 
+        ManagerInjectedSettingsGroup(
+            state = state,
+            vm = vm,
+            onOpenAppProfileTemplates = onOpenAppProfileTemplates,
+            onOpenManagerTools = onOpenManagerTools,
+            onOpenInstalledModules = onOpenInstalledModules
+        )
+
         SettingsGroup(title = stringResource(R.string.settings_notification)) {
             SwitchSettingsItem(
                 icon = Icons.Default.Notifications,
@@ -415,6 +579,390 @@ private fun SettingsMainContent(
 }
 
 @Composable
+private fun ManagerInjectedSettingsGroup(
+    state: MainUiState,
+    vm: MainViewModel,
+    onOpenAppProfileTemplates: () -> Unit,
+    onOpenManagerTools: () -> Unit,
+    onOpenInstalledModules: () -> Unit
+) {
+    val hasInjectedSettings = state.managerSettingsItems.isNotEmpty()
+    if (!hasInjectedSettings && !state.managerSettingsLoading && state.managerSettingsError == null) return
+
+    SettingsGroup(title = state.managerSettingsTitle.ifBlank { "管理器设置" }) {
+        when {
+            state.managerSettingsLoading && !hasInjectedSettings -> {
+                ExpressiveListItem(
+                    title = "正在读取后端设置",
+                    subtitle = "从当前 KSU 后端加载可用功能",
+                    leadingContent = { LoadingIndicator(Modifier.size(24.dp)) }
+                )
+            }
+            state.managerSettingsError != null -> {
+                ExpressiveListItem(
+                    title = "后端设置读取失败",
+                    subtitle = state.managerSettingsError,
+                    leadingIcon = Icons.Default.Error,
+                    trailingContent = {
+                        IconButton(onClick = { vm.refreshManagerSettings(force = true) }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "重试")
+                        }
+                    }
+                )
+            }
+        }
+
+        state.managerSettingsItems.forEach { item ->
+            val actionInFlight = state.managerSettingActionId == item.id
+            when (item.kind) {
+                ManagerSettingKind.NAVIGATION -> ExpressiveListItem(
+                    title = item.title,
+                    subtitle = item.subtitle,
+                    leadingIcon = managerSettingIcon(item.id),
+                    enabled = item.enabled && !actionInFlight,
+                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = "进入") },
+                    onClick = {
+                        when (item.id) {
+                            "app_profile_templates" -> onOpenAppProfileTemplates()
+                            "manager_tools" -> onOpenManagerTools()
+                            "kpm" -> onOpenInstalledModules()
+                        }
+                    }
+                )
+                ManagerSettingKind.MODE -> ManagerModeSettingItem(
+                    item = item,
+                    actionInFlight = actionInFlight,
+                    onSelected = { index -> vm.setManagerSettingMode(item.id, index) }
+                )
+                ManagerSettingKind.SWITCH -> SwitchSettingsItem(
+                    icon = managerSettingIcon(item.id),
+                    title = item.title,
+                    subtitle = item.subtitle,
+                    checked = item.checked,
+                    enabled = item.enabled && !actionInFlight,
+                    onCheckedChange = { checked -> vm.setManagerSettingChecked(item.id, checked) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ManagerModeSettingItem(
+    item: ManagerSettingItem,
+    actionInFlight: Boolean,
+    onSelected: (Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val enabled = item.enabled && !actionInFlight
+    ExpressiveListItem(
+        title = item.title,
+        subtitle = item.subtitle,
+        leadingIcon = managerSettingIcon(item.id),
+        enabled = enabled,
+        trailingContent = {
+            Box {
+                TextButton(
+                    onClick = { expanded = true },
+                    enabled = enabled
+                ) {
+                    if (actionInFlight) {
+                        LoadingIndicator(Modifier.size(18.dp))
+                    } else {
+                        Text(item.options.getOrElse(item.selectedIndex) { "选择" })
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                    }
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    item.options.forEachIndexed { index, option ->
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            leadingIcon = {
+                                if (index == item.selectedIndex) {
+                                    Icon(Icons.Default.Check, contentDescription = null)
+                                }
+                            },
+                            onClick = {
+                                expanded = false
+                                if (index != item.selectedIndex) onSelected(index)
+                            }
+                        )
+                    }
+                }
+            }
+        },
+        onClick = { if (enabled) expanded = true }
+    )
+}
+
+@Composable
+private fun ManagerToolsSettingsScreen(
+    padding: PaddingValues,
+    state: MainUiState,
+    onSelinuxChange: (Boolean) -> Unit,
+    onBackupAllowlist: (Uri) -> Unit,
+    onRestoreAllowlist: (Uri) -> Unit
+) {
+    val backupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) onBackupAllowlist(uri)
+    }
+    val restoreLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) onRestoreAllowlist(uri)
+    }
+    val selinuxBusy = state.managerToolActionId == "selinux_mode"
+    val backupBusy = state.managerToolActionId == "backup_allowlist"
+    val restoreBusy = state.managerToolActionId == "restore_allowlist"
+
+    Column(
+        modifier = Modifier
+            .padding(padding)
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = AbkScreenHorizontalPadding),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SettingsGroup(title = "系统工具") {
+            SwitchSettingsItem(
+                icon = Icons.Default.Security,
+                title = "SELinux 模式",
+                subtitle = "当前：${selinuxModeLabel(state.selinuxModeText)}",
+                checked = state.selinuxEnforcing,
+                enabled = !state.managerToolsLoading && !selinuxBusy,
+                onCheckedChange = onSelinuxChange
+            )
+            ExpressiveListItem(
+                title = "Umount 路径管理",
+                subtitle = if (state.umountPaths.isEmpty()) {
+                    "当前无自定义路径"
+                } else {
+                    "已配置 ${state.umountPaths.size} 条路径"
+                },
+                leadingIcon = Icons.Default.FolderDelete,
+                trailingContent = {
+                    if (state.managerToolsLoading) LoadingIndicator(Modifier.size(22.dp))
+                }
+            )
+        }
+
+        SettingsGroup(title = "授权列表") {
+            ExpressiveListItem(
+                title = "备份允许列表",
+                subtitle = "选择位置导出允许列表",
+                leadingIcon = Icons.Default.CloudUpload,
+                enabled = !backupBusy,
+                trailingContent = {
+                    if (backupBusy) {
+                        LoadingIndicator(Modifier.size(22.dp))
+                    } else {
+                        Icon(Icons.Default.ChevronRight, contentDescription = "导出")
+                    }
+                },
+                onClick = { backupLauncher.launch("abk-root-allowlist.json") }
+            )
+            ExpressiveListItem(
+                title = "还原允许列表",
+                subtitle = "选择备份文件进行导入",
+                leadingIcon = Icons.Default.History,
+                enabled = !restoreBusy,
+                trailingContent = {
+                    if (restoreBusy) {
+                        LoadingIndicator(Modifier.size(22.dp))
+                    } else {
+                        Icon(Icons.Default.ChevronRight, contentDescription = "导入")
+                    }
+                },
+                onClick = { restoreLauncher.launch(arrayOf("application/json", "text/*", "*/*")) }
+            )
+        }
+
+        if (state.managerToolsError != null) {
+            SettingsGroup(title = "工具状态") {
+                ExpressiveListItem(
+                    title = "操作未完成",
+                    subtitle = state.managerToolsError,
+                    leadingIcon = Icons.Default.Error
+                )
+            }
+        }
+
+        Spacer(Modifier.height(80.dp))
+    }
+}
+
+private fun selinuxModeLabel(mode: String): String =
+    when (mode.trim().lowercase()) {
+        "enforcing" -> "强制执行"
+        "permissive" -> "宽容"
+        "disabled" -> "已禁用"
+        else -> mode.ifBlank { "未知" }
+    }
+
+@Composable
+private fun AppProfileTemplateSettingsScreen(
+    padding: PaddingValues,
+    state: MainUiState,
+    onRefresh: () -> Unit,
+    onSelect: (String?) -> Unit,
+    onSave: (String, String) -> Unit,
+    onDelete: (String) -> Unit
+) {
+    var editingId by rememberSaveable { mutableStateOf("") }
+    var editingContent by rememberSaveable { mutableStateOf("") }
+    var creating by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(state.selectedAppProfileTemplateId, state.selectedAppProfileTemplateContent) {
+        if (!state.selectedAppProfileTemplateId.isNullOrBlank()) {
+            creating = false
+            editingId = state.selectedAppProfileTemplateId
+            editingContent = state.selectedAppProfileTemplateContent
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .padding(padding)
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = AbkScreenHorizontalPadding),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SettingsGroup(title = "本地模板") {
+            when {
+                state.appProfileTemplatesLoading -> ExpressiveListItem(
+                    title = "正在读取模板",
+                    subtitle = "从 ReSukiSU profile 存储加载",
+                    leadingContent = { LoadingIndicator(Modifier.size(24.dp)) }
+                )
+                state.appProfileTemplates.isEmpty() -> ExpressiveListItem(
+                    title = "暂无模板",
+                    subtitle = "保存后会出现在这里",
+                    leadingIcon = Icons.Default.Description
+                )
+            }
+            state.appProfileTemplates.forEach { template ->
+                ExpressiveListItem(
+                    title = template.id,
+                    subtitle = if (state.selectedAppProfileTemplateId == template.id) "正在编辑" else "App Profile 模板",
+                    leadingIcon = Icons.Default.Description,
+                    selected = state.selectedAppProfileTemplateId == template.id,
+                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = "编辑") },
+                    onClick = { onSelect(template.id) }
+                )
+            }
+            ExpressiveListItem(
+                title = "新建模板",
+                subtitle = "创建新的 App Profile 模板 JSON",
+                leadingIcon = Icons.Default.Add,
+                onClick = {
+                    creating = true
+                    editingId = ""
+                    editingContent = defaultAppProfileTemplateJson()
+                    onSelect(null)
+                }
+            )
+        }
+
+        if (state.appProfileTemplatesError != null) {
+            SettingsGroup(title = "状态") {
+                ExpressiveListItem(
+                    title = "操作未完成",
+                    subtitle = state.appProfileTemplatesError,
+                    leadingIcon = Icons.Default.Error,
+                    trailingContent = {
+                        IconButton(onClick = onRefresh) {
+                            Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                        }
+                    }
+                )
+            }
+        }
+
+        val hasEditor = creating || !state.selectedAppProfileTemplateId.isNullOrBlank()
+        if (hasEditor) {
+            SettingsGroup(title = "编辑模板") {
+                OutlinedTextField(
+                    value = editingId,
+                    onValueChange = { editingId = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("模板名称") },
+                    singleLine = true,
+                    enabled = state.selectedAppProfileTemplateId.isNullOrBlank()
+                )
+                OutlinedTextField(
+                    value = editingContent,
+                    onValueChange = { editingContent = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 220.dp),
+                    label = { Text("模板 JSON") },
+                    minLines = 10
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (state.appProfileTemplateSaving) {
+                        LoadingIndicator(Modifier.size(22.dp))
+                    }
+                    if (!state.selectedAppProfileTemplateId.isNullOrBlank()) {
+                        TextButton(
+                            onClick = { onDelete(state.selectedAppProfileTemplateId.orEmpty()) },
+                            enabled = !state.appProfileTemplateSaving,
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("删除")
+                        }
+                    }
+                    Button(
+                        onClick = { onSave(editingId, editingContent) },
+                        enabled = !state.appProfileTemplateSaving && editingId.isNotBlank()
+                    ) {
+                        Text("保存")
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(80.dp))
+    }
+}
+
+private fun managerSettingIcon(id: String) = when (id) {
+    "app_profile_templates" -> Icons.Default.Apps
+    "manager_tools" -> Icons.Default.Build
+    "kpm" -> Icons.Default.Extension
+    "su_compat" -> Icons.Default.RemoveModerator
+    "kernel_umount" -> Icons.Default.RemoveCircle
+    "adb_root" -> Icons.Default.Adb
+    "sulog" -> Icons.Default.Article
+    "selinux_hide" -> Icons.Default.Shield
+    "default_umount_modules" -> Icons.Default.FolderDelete
+    "webview_debug" -> Icons.Default.Code
+    else -> Icons.Default.Settings
+}
+
+private fun defaultAppProfileTemplateJson(): String =
+    """
+    {
+      "uid": 0,
+      "gid": 0,
+      "groups": [],
+      "capabilities": [],
+      "context": "u:r:ksu:s0",
+      "namespace": 0,
+      "rules": ""
+    }
+    """.trimIndent()
+
+@Composable
 private fun ThemeSettingsScreen(
     padding: PaddingValues,
     themeMode: String,
@@ -461,7 +1009,7 @@ private fun ThemeSettingsScreen(
             .padding(padding)
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 18.dp),
+            .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SettingsGroup(title = "外观模式") {
@@ -883,6 +1431,16 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
             stringResource(R.string.settings_notification) -> "同步工作流状态到系统通知。"
             "导航" -> "控制返回手势和页面切换体验。"
             stringResource(R.string.settings_theme) -> "Material 3 Expressive 主题显示模式。"
+            "ReSukiSU" -> "按当前 ReSukiSU 后端能力动态加载。"
+            "SukiSU" -> "按当前 SukiSU 后端能力动态加载。"
+            "KernelSU" -> "按当前 KernelSU 后端能力动态加载。"
+            "管理器设置" -> "按当前 KSU 后端能力动态加载。"
+            "系统工具" -> "SELinux 和模块卸载路径相关工具。"
+            "授权列表" -> "导出或导入当前 Root 授权列表。"
+            "工具状态" -> "最近一次工具操作的执行结果。"
+            "本地模板" -> "管理保存在 ReSukiSU profile 存储中的模板。"
+            "状态" -> "最近一次模板操作的执行结果。"
+            "编辑模板" -> "直接编辑 App Profile 模板 JSON。"
             "外观模式" -> "控制应用明暗显示方式。"
             "颜色来源" -> "选择系统动态颜色或自定义色板。"
             "自定义颜色" -> "莫奈关闭时使用的主题色和强调色。"
@@ -895,6 +1453,13 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
             stringResource(R.string.settings_notification) -> Icons.Default.Notifications
             "导航" -> Icons.Default.ArrowBack
             stringResource(R.string.settings_theme) -> Icons.Default.Palette
+            "ReSukiSU", "SukiSU", "KernelSU", "管理器设置" -> Icons.Default.AdminPanelSettings
+            "系统工具" -> Icons.Default.Build
+            "授权列表" -> Icons.Default.VerifiedUser
+            "工具状态" -> Icons.Default.Info
+            "本地模板" -> Icons.Default.Apps
+            "状态" -> Icons.Default.Info
+            "编辑模板" -> Icons.Default.Edit
             "外观模式" -> Icons.Default.BrightnessMedium
             "颜色来源" -> Icons.Default.AutoAwesome
             "自定义颜色" -> Icons.Default.Palette
