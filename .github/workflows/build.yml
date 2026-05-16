@@ -786,7 +786,7 @@ jobs:
           variant_input="${{ inputs.ksu_variant }}"
           OFFICIAL_STABLE_REF="3f388ef137c78e1ca0c92c0ada3b8717cdcc4302"
           SUKISU_STABLE_REF="a992f224f5ea5a69b56ba20e925379c9a226f2b2"
-          RESUKISU_STABLE_REF="ddcf5d77c3a1953ea00becc0652b52a4978166f5"
+          RESUKISU_STABLE_REF="b6706363b95525acd4007da19edadb1d41b2ea27"
 
           # Dev 固定引用先完整复制 Stable 配置，后续只改这里的 *_DEV_REF 即可。
           OFFICIAL_DEV_REF="290609c945728fc93d85735918793567588103c1"
