@@ -30,6 +30,9 @@ on:
         type: string
 
       # ==================== 可选配置 ====================
+      custom_ref:
+        required: false
+        type: string
       version:
         required: false
         type: string
@@ -784,32 +787,62 @@ jobs:
         run: |
           branch_input="${{ inputs.ksu_branch }}"
           variant_input="${{ inputs.ksu_variant }}"
-          OFFICIAL_STABLE_REF="3f388ef137c78e1ca0c92c0ada3b8717cdcc4302"
+
           SUKISU_STABLE_REF="a992f224f5ea5a69b56ba20e925379c9a226f2b2"
-          RESUKISU_STABLE_REF="ddcf5d77c3a1953ea00becc0652b52a4978166f5"
 
-          # Dev 固定引用先完整复制 Stable 配置，后续只改这里的 *_DEV_REF 即可。
-          OFFICIAL_DEV_REF="290609c945728fc93d85735918793567588103c1"
-          SUKISU_DEV_REF="4610456736ba3a3c9a00ad618aa0f4ccc4db5b70"
-          RESUKISU_DEV_REF="fb771414f249ab886c09f2cfcbbf91c4b4dab2d1"
-
-          if [ "$branch_input" = "SUSFS(自动)" ]; then
-            echo "SUSFS(自动) 已取消独立分支，按 Stable 处理。"
-            branch_input="Stable(标准)"
-          fi
+          get_latest_release_sha() {
+          REPO="$1"
+            TAG=$(curl -s https://api.github.com/repos/$REPO/releases/latest | jq -r '.tag_name')
+            curl -s https://api.github.com/repos/$REPO/commits/$TAG | jq -r '.sha'
+          }
+          get_latest_success_sha() {
+          REPO="$1"
+          BRANCH="$2"
+          curl -s \
+              "https://api.github.com/repos/$REPO/actions/workflows/build-manager.yml/runs?status=success&branch=$BRANCH&per_page=1" \
+            | jq -r '.workflow_runs[0].head_sha'
+          }
+          get_latest_success_sha_auto() {
+            REPO="$1"
+            DEV_SHA=$(get_latest_success_sha "$REPO" "dev")
+            DEV_TIME="0"
+            if [ "$DEV_SHA" != "null" ]; then
+              DEV_TIME=$(curl -s \
+                "https://api.github.com/repos/$REPO/commits/$DEV_SHA" \
+                | jq -r '.commit.committer.date' | xargs -I{} date -d {} +%s)
+            fi
+            MAIN_SHA=$(get_latest_success_sha "$REPO" "main")
+            MAIN_TIME="0"
+            if [ "$MAIN_SHA" != "null" ]; then
+              MAIN_TIME=$(curl -s \
+                "https://api.github.com/repos/$REPO/commits/$MAIN_SHA" \
+                | jq -r '.commit.committer.date' | xargs -I{} date -d {} +%s)
+            fi
+            if [ "$DEV_TIME" -gt "$MAIN_TIME" ]; then
+              echo "$DEV_SHA"
+            else
+              echo "$MAIN_SHA"
+            fi
+          }
 
           case "$branch_input" in
             "Stable(标准)")
-              OFFICIAL_REF="$OFFICIAL_STABLE_REF"
+              OFFICIAL_REF="$(get_latest_success_sha "tiann/KernelSU" "main")"
               SUKISU_REF="$SUKISU_STABLE_REF"
-              RESUKISU_REF="$RESUKISU_STABLE_REF"
+              RESUKISU_REF="$(get_latest_success_sha "ReSukiSU/ReSukiSU" "main")"
               NEXT_BRANCH="main"
               ;;
             "Dev(开发)")
-              OFFICIAL_REF="$OFFICIAL_DEV_REF"
-              SUKISU_REF="$SUKISU_DEV_REF"
-              RESUKISU_REF="$RESUKISU_DEV_REF"
+              OFFICIAL_REF="$(get_latest_success_sha_auto "tiann/KernelSU")"
+              SUKISU_REF="builtin"
+              RESUKISU_REF="main"
               NEXT_BRANCH="dev"
+              ;;
+            "Custom(自定义)")
+              OFFICIAL_REF="$inputs.custom_ref"
+              SUKISU_REF="$inputs.custom_ref"
+              RESUKISU_REF="$inputs.custom_ref"
+              NEXT_BRANCH="$inputs.custom_ref"
               ;;
             *)
               echo "未知分支: $branch_input" >&2

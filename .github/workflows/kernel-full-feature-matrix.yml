@@ -23,7 +23,7 @@ on:
         options:
           - Stable(标准)
           - Dev(开发)
-          - Other(其他/指定)
+          - Custom(自定义)
         default: Dev(开发)
       version:
         description: "自定义版本名 (可选)"
