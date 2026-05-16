@@ -639,10 +639,11 @@ jobs:
               fi
               # 修复 6.6 早期分支: memory.c 头部上下文缺少 zswap.h，导致 SUSFS 头文件 hunk 漏打
               if grep -q 'SUSFS_IS_INODE_SUS_MAP' ./mm/memory.c && ! grep -qF '#include <linux/susfs_def.h>' ./mm/memory.c; then
-                if ! grep -qF '#include <linux/zswap.h>' ./mm/memory.c; then
-                  sed -i '/#include <linux\/sched\/sysctl.h>/a #include <linux\/zswap.h>' ./mm/memory.c
+                if grep -qF '#include <linux/zswap.h>' ./mm/memory.c; then
+                  sed -i '/#include <linux\/zswap.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_MAP\n#include <linux\/susfs_def.h>\n#endif' ./mm/memory.c
+                else
+                  sed -i '/#include <linux\/sched\/sysctl.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_MAP\n#include <linux\/susfs_def.h>\n#endif' ./mm/memory.c
                 fi
-                sed -i '/#include <linux\/zswap.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_MAP\n#include <linux\/susfs_def.h>\n#endif' ./mm/memory.c
               fi
             fi
 
