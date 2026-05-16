@@ -439,6 +439,17 @@ jobs:
               ;;
           esac
 
+          # 修复 SukiSU builtin 分支 sulog grant-root 事件在 SUSFS 路径下传参类型不匹配
+          if [ "${{ inputs.ksu_variant }}" == "SukiSU" ]; then
+            SULOG_EVENT="$KERNEL_ROOT/KernelSU/kernel/sulog/event.c"
+            if [ -f "$SULOG_EVENT" ] \
+              && grep -qF 'struct user_arg_ptr *argv_user, gfp_t gfp)' "$SULOG_EVENT" \
+              && grep -qF 'ksu_sulog_capture(KSU_SULOG_EVENT_IOCTL_GRANT_ROOT, NULL, USER_ARG_NULL, gfp)' "$SULOG_EVENT"; then
+              sed -i 's/ksu_sulog_capture(KSU_SULOG_EVENT_IOCTL_GRANT_ROOT, NULL, USER_ARG_NULL, gfp)/ksu_sulog_capture(KSU_SULOG_EVENT_IOCTL_GRANT_ROOT, NULL, \&USER_ARG_NULL, gfp)/' "$SULOG_EVENT"
+              echo "已修复 SukiSU sulog grant-root 空参数类型问题"
+            fi
+          fi
+
           if [ -d "KernelSU/.git" ]; then
             KSU_LATEST_COMMIT_DATE=$(git -C KernelSU log -1 --date=format:'%Y-%m-%d %H:%M:%S %z' --format='%cd')
             echo "KSU_LATEST_COMMIT_DATE=$KSU_LATEST_COMMIT_DATE" >> $GITHUB_ENV
