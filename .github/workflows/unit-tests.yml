@@ -1,0 +1,23 @@
+name: Unit Tests
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Prepare workspace permissions
+        run: |
+          sudo mkdir -p "$GITHUB_WORKSPACE/.gradle" "$GITHUB_WORKSPACE/app/build"
+          sudo chmod -R a+rwX "$GITHUB_WORKSPACE"
+
+      - name: Run JVM unit tests
+        run: docker compose run --rm --build unit-tests

@@ -787,7 +787,6 @@ jobs:
         run: |
           branch_input="${{ inputs.ksu_branch }}"
           variant_input="${{ inputs.ksu_variant }}"
-
           SUKISU_STABLE_REF="a992f224f5ea5a69b56ba20e925379c9a226f2b2"
 
           get_latest_release_sha() {
@@ -904,8 +903,10 @@ jobs:
 
       - name: 修复 ReSukiSU SUSFS 源码兼容
         if: inputs.ksu_variant == 'ReSukiSU' && inputs.enable_susfs
+        working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
+          echo "ReSukiSU SUSFS compat cwd: $(pwd)"
 
           python3 - <<'PY'
           from pathlib import Path
@@ -2359,7 +2360,7 @@ jobs:
           if [[ ! "$CURRENT_SUB" =~ ^[0-9]+$ ]]; then
             CURRENT_SUB=99999
           fi
-          if [[ "${{ inputs.ksu_variant }}" == "ReSukiSU" && "${{ inputs.android_version }}" == "android13" && "${{ inputs.kernel_version }}" == "5.15" && "$CURRENT_SUB" -ge 74 && "$CURRENT_SUB" -le 137 ]]; then
+          if [[ ( "${{ inputs.ksu_variant }}" == "Official" || "${{ inputs.ksu_variant }}" == "ReSukiSU" ) && "${{ inputs.android_version }}" == "android13" && "${{ inputs.kernel_version }}" == "5.15" && "$CURRENT_SUB" -ge 74 && "$CURRENT_SUB" -le 137 ]]; then
             {
               echo "CONFIG_KALLSYMS=y"
               echo "CONFIG_KALLSYMS_ALL=y"
@@ -3084,6 +3085,95 @@ jobs:
             echo "当前 SUSFS 最新提交日期: ${SUSFS_LATEST_COMMIT_DATE}"
             set -ex
             cd "$KERNEL_ROOT"
+
+            CURRENT_SUB="${{ inputs.sub_level }}"
+            if [[ ! "$CURRENT_SUB" =~ ^[0-9]+$ ]]; then
+              CURRENT_SUB=99999
+            fi
+
+            if [[ "${{ inputs.android_version }}" == "android13" \
+              && "${{ inputs.kernel_version }}" == "5.15" \
+              && "$CURRENT_SUB" -ge 74 && "$CURRENT_SUB" -le 137 ]]; then
+              case "${{ inputs.ksu_variant }}" in
+                "Official"|"ReSukiSU")
+                  echo "编译前兜底修复 ${{ inputs.ksu_variant }} 5.15 kallsyms symbol_resolver"
+                  python3 - <<'PY'
+            from pathlib import Path
+
+            VARIANT = "${{ inputs.ksu_variant }}"
+            MARKER = "ABK: Android 13 5.15.74-5.15.137 Official/ReSukiSU kallsyms weak reference"
+            INCLUDE_ANCHOR = '#include "infra/symbol_resolver.h"\n'
+            DIRECT_CALL = "    kallsyms_on_each_symbol(ksu_lookup_symbol_cb, &ctx);\n"
+            GUARDED_CALL = """#ifdef CONFIG_KALLSYMS
+                if (!kallsyms_on_each_symbol)
+                    return NULL;
+            #endif
+
+                kallsyms_on_each_symbol(ksu_lookup_symbol_cb, &ctx);
+            """
+            WEAK_BLOCK = f"""
+            /*
+             * {MARKER}.
+             *
+             * The affected GKI 5.15 builds can fail while linking .tmp_vmlinux.btf
+             * when KernelSU keeps a strong reference to kallsyms_on_each_symbol.
+             * Keep this scoped workflow patch weak so final kernels that provide
+             * the symbol still resolve and use it.
+             */
+            #ifdef CONFIG_KALLSYMS
+            extern __attribute__((weak)) typeof(kallsyms_on_each_symbol) kallsyms_on_each_symbol;
+            #endif
+
+            """
+
+            candidates = []
+            seen = set()
+            for root in (Path("common/drivers/kernelsu"), Path("drivers/kernelsu")):
+                path = root / "infra" / "symbol_resolver.c"
+                if path.exists():
+                    resolved = path.resolve()
+                    if resolved not in seen:
+                        candidates.append(path)
+                        seen.add(resolved)
+
+            if not candidates:
+                raise SystemExit(f"{VARIANT} 未找到最终编译目录 infra/symbol_resolver.c，无法应用 5.15 kallsyms 兼容补丁")
+
+            changed = False
+            for path in candidates:
+                print(f"检查 5.15 kallsyms 编译目录: {path}")
+                text = path.read_text()
+                if "kallsyms_on_each_symbol" not in text:
+                    print(f"{path} 未引用 kallsyms_on_each_symbol，跳过")
+                    continue
+
+                updated = text
+                if MARKER not in updated:
+                    if INCLUDE_ANCHOR not in updated:
+                        raise SystemExit(f"{path} 缺少 include anchor: {INCLUDE_ANCHOR.strip()}")
+                    updated = updated.replace(INCLUDE_ANCHOR, INCLUDE_ANCHOR + WEAK_BLOCK, 1)
+
+                if "if (!kallsyms_on_each_symbol)" not in updated:
+                    if DIRECT_CALL not in updated:
+                        raise SystemExit(f"{path} 未找到预期 kallsyms_on_each_symbol 调用位置")
+                    updated = updated.replace(DIRECT_CALL, GUARDED_CALL, 1)
+
+                if MARKER not in updated or "if (!kallsyms_on_each_symbol)" not in updated:
+                    raise SystemExit(f"{path} 的 5.15 kallsyms 兼容补丁未成功落地")
+
+                if updated != text:
+                    path.write_text(updated)
+                    changed = True
+                    print(f"已修复 {path} 的 {VARIANT} 5.15 kallsyms 弱引用兼容")
+                else:
+                    print(f"{path} 已包含 {VARIANT} 5.15 kallsyms 兼容补丁")
+
+            if not changed:
+                print(f"{VARIANT} 5.15 kallsyms 兼容补丁无需修改。")
+            PY
+                  ;;
+              esac
+            fi
 
             if [ "${{ inputs.ksu_variant }}" = "Official" ] \
               && [ "${{ inputs.enable_susfs }}" = "true" ]; then

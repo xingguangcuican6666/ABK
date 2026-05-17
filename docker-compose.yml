@@ -1,0 +1,16 @@
+services:
+  unit-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    image: abk-unit-tests:local
+    working_dir: /workspace
+    command: ["gradle", "--no-daemon", "--stacktrace", ":app:testDebugUnitTest"]
+    environment:
+      GRADLE_USER_HOME: /home/gradle/.gradle
+    volumes:
+      - .:/workspace
+      - gradle-cache:/home/gradle/.gradle
+
+volumes:
+  gradle-cache:

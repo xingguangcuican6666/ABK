@@ -157,11 +157,6 @@ private fun AppBackgroundHost(
 ) {
     val hasBackground = backgroundEnabled && !backgroundUri.isNullOrBlank()
     val colorScheme = MaterialTheme.colorScheme
-    val scrimColor = if (colorScheme.surface.luminance() > 0.5f) {
-        colorScheme.surface.copy(alpha = 0.28f)
-    } else {
-        Color.Black.copy(alpha = 0.38f)
-    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -173,11 +168,6 @@ private fun AppBackgroundHost(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(scrimColor)
             )
         }
         CompositionLocalProvider(

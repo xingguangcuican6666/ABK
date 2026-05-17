@@ -1,0 +1,8 @@
+.git
+.gradle
+**/build
+**/.gradle
+web/node_modules
+web/dist
+temp
+*.xcf

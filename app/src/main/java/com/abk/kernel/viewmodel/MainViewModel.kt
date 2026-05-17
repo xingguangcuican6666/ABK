@@ -3838,19 +3838,19 @@ private fun RootUtils.ManagerAccessInfo.toUiState(): ManagerAccessState =
         RootUtils.ManagerAccessKind.NATIVE_KERNEL_NO_MANAGER -> ManagerAccessState.NATIVE_KERNEL_NO_MANAGER
     }
 
-private fun sanitizeBuildPlanName(name: String, config: KernelBuildConfig): String =
+internal fun sanitizeBuildPlanName(name: String, config: KernelBuildConfig): String =
     name.trim().ifBlank { defaultBuildPlanName(config) }.take(BUILD_PLAN_NAME_LIMIT)
 
-private fun defaultBuildPlanName(config: KernelBuildConfig): String {
+internal fun defaultBuildPlanName(config: KernelBuildConfig): String {
     val android = config.androidVersion.removePrefix("android").ifBlank { config.androidVersion }
     return listOf("${config.kernelVersion}.${config.subLevel}", "Android $android", config.kernelsuVariant)
         .filter { it.isNotBlank() }
         .joinToString(" · ")
 }
 
-private fun normalizeModuleCatalogUrl(url: String): String = url.trim().trimEnd('/')
+internal fun normalizeModuleCatalogUrl(url: String): String = url.trim().trimEnd('/')
 
-private fun String.moduleCatalogFallbackName(): String = trim()
+internal fun String.moduleCatalogFallbackName(): String = trim()
     .trimEnd('/')
     .substringAfterLast('/')
     .removeSuffix(".git")
@@ -3860,13 +3860,13 @@ private fun String.moduleCatalogFallbackName(): String = trim()
 private fun padBase64Url(value: String): String =
     value + "=".repeat((4 - value.length % 4) % 4)
 
-private data class DecodedBuildPlanCode(
+internal data class DecodedBuildPlanCode(
     val name: String,
     val config: KernelBuildConfig,
     val scope: BuildPlanShareScope
 )
 
-private fun encodeBuildPlanPayload(
+internal fun encodeBuildPlanPayload(
     config: KernelBuildConfig,
     name: String,
     scope: BuildPlanShareScope
@@ -3915,7 +3915,7 @@ private fun encodeBuildPlanPayload(
     return writer.toByteArray()
 }
 
-private fun decodeBuildPlanPayload(bytes: ByteArray, baseConfig: KernelBuildConfig): DecodedBuildPlanCode {
+internal fun decodeBuildPlanPayload(bytes: ByteArray, baseConfig: KernelBuildConfig): DecodedBuildPlanCode {
     val reader = BuildPlanBinaryReader(bytes)
     val version = reader.readByte()
     require(version == BUILD_PLAN_CODE_VERSION) { "不支持的方案码版本" }
@@ -4102,7 +4102,7 @@ private val BUILD_PLAN_MODULE_STAGES = listOf(
 
 private const val BUILD_SUMMARY_STEP_NAME = "构建信息摘要"
 
-private fun parseBuildParameterSummary(
+internal fun parseBuildParameterSummary(
     logs: String,
     runId: Long,
     run: WorkflowRun?
@@ -4210,7 +4210,7 @@ private fun detectRecommendedBuildConfig(): KernelBuildConfig? {
     return KernelSupport.recommendedFromKernel(kernelVersion)
 }
 
-private fun prebuiltGkiReleaseFromGitHub(release: GitHubReleaseSummary): PrebuiltGkiRelease {
+internal fun prebuiltGkiReleaseFromGitHub(release: GitHubReleaseSummary): PrebuiltGkiRelease {
     val fallbackId = release.tagName.hashCode().toLong().let { if (it < 0) -it else it }
     return PrebuiltGkiRelease(
         id = if (release.id != 0L) release.id else fallbackId,
@@ -4224,7 +4224,7 @@ private fun prebuiltGkiReleaseFromGitHub(release: GitHubReleaseSummary): Prebuil
     )
 }
 
-private fun prebuiltGkiAssetsFromReleaseAssets(
+internal fun prebuiltGkiAssetsFromReleaseAssets(
     release: PrebuiltGkiRelease,
     assets: List<ReleaseAsset>
 ): List<PrebuiltGkiAsset> =
@@ -4246,11 +4246,11 @@ private fun prebuiltGkiAssetsFromReleaseAssets(
         )
     }
 
-private fun prebuiltGkiReleaseComparator(): Comparator<PrebuiltGkiRelease> =
+internal fun prebuiltGkiReleaseComparator(): Comparator<PrebuiltGkiRelease> =
     compareByDescending<PrebuiltGkiRelease> { it.publishedAt }
         .thenBy { it.name }
 
-private fun isPrebuiltGkiReleaseCandidate(release: GitHubReleaseSummary): Boolean {
+internal fun isPrebuiltGkiReleaseCandidate(release: GitHubReleaseSummary): Boolean {
     val haystack = listOf(release.tagName, release.name.orEmpty(), release.body.orEmpty())
         .joinToString(" ")
         .lowercase()
@@ -4282,7 +4282,7 @@ private fun isPrebuiltGkiReleaseCandidate(release: GitHubReleaseSummary): Boolea
         listOf("boot-", "boot_", "image", "img").any { haystack.contains(it) }
 }
 
-private fun isPrebuiltGkiCandidate(asset: PrebuiltGkiAsset): Boolean {
+internal fun isPrebuiltGkiCandidate(asset: PrebuiltGkiAsset): Boolean {
     val lower = asset.name.lowercase()
     val type = DownloadUtils.classifyArtifact(asset.name)
     return type in setOf(ArtifactType.KERNEL_PACKAGE, ArtifactType.KERNEL_IMG, ArtifactType.ANYKERNEL3) ||
@@ -4290,14 +4290,14 @@ private fun isPrebuiltGkiCandidate(asset: PrebuiltGkiAsset): Boolean {
             listOf("gki", "kernel", "boot", "anykernel", "ak3").any { lower.contains(it) })
 }
 
-private fun prebuiltGkiComparator(
+internal fun prebuiltGkiComparator(
     recommended: KernelBuildConfig?
 ): Comparator<PrebuiltGkiAsset> =
     compareByDescending<PrebuiltGkiAsset> { prebuiltRecommendationScore(it, recommended) }
         .thenByDescending { it.publishedAt }
         .thenBy { it.name }
 
-private fun prebuiltRecommendationScore(asset: PrebuiltGkiAsset, recommended: KernelBuildConfig?): Int {
+internal fun prebuiltRecommendationScore(asset: PrebuiltGkiAsset, recommended: KernelBuildConfig?): Int {
     recommended ?: return 0
     if (recommended.subLevel == "X") return 0
     val haystack = listOf(asset.name, asset.releaseTag, asset.releaseName, asset.releaseBody)
@@ -4423,7 +4423,7 @@ private fun WorkflowRun.toBuildStatus(): BuildStatus = when (status) {
 }
 
 // Helper to convert KernelBuildConfig to workflow dispatch inputs map
-private fun KernelBuildConfig.toInputMap(): Map<String, String> {
+internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
     val config = KernelSupport.normalize(this)
     return mapOf(
         "android_version" to config.androidVersion,

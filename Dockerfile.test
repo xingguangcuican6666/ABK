@@ -1,0 +1,36 @@
+FROM gradle:9.3.1-jdk17-jammy
+
+ARG ANDROID_CMDLINE_TOOLS_URL=https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+
+ENV ANDROID_HOME=/opt/android-sdk
+ENV ANDROID_SDK_ROOT=/opt/android-sdk
+ENV ANDROID_NDK_HOME=/opt/android-sdk/ndk/28.2.13676358
+ENV ANDROID_NDK_ROOT=/opt/android-sdk/ndk/28.2.13676358
+ENV PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}"
+
+USER root
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl unzip ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p "${ANDROID_HOME}/cmdline-tools" \
+    && curl -fsSL "${ANDROID_CMDLINE_TOOLS_URL}" -o /tmp/android-cmdline-tools.zip \
+    && unzip -q /tmp/android-cmdline-tools.zip -d /tmp/android-cmdline-tools \
+    && mv /tmp/android-cmdline-tools/cmdline-tools "${ANDROID_HOME}/cmdline-tools/latest" \
+    && rm -rf /tmp/android-cmdline-tools /tmp/android-cmdline-tools.zip
+
+RUN yes | sdkmanager --licenses >/dev/null \
+    && sdkmanager --channel=3 \
+        "platform-tools" \
+        "platforms;android-37.0" \
+        "build-tools;37.0.0" \
+        "cmake;3.22.1" \
+        "ndk;28.2.13676358"
+
+RUN chown -R gradle:gradle "${ANDROID_HOME}"
+
+USER gradle
+WORKDIR /workspace
+
+CMD ["gradle", "--no-daemon", "--stacktrace", ":app:testDebugUnitTest"]
