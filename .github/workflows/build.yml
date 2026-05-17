@@ -374,6 +374,94 @@ jobs:
           fi
           exit 1
 
+      - name: 确定 KernelSU 分支
+        if: inputs.ksu_variant != 'None'
+        id: ksu-branch
+        run: |
+          branch_input="${{ inputs.ksu_branch }}"
+          variant_input="${{ inputs.ksu_variant }}"
+          custom_ref_input="${{ inputs.custom_ref }}"
+          OFFICIAL_STABLE_REF="3f388ef137c78e1ca0c92c0ada3b8717cdcc4302"
+          SUKISU_STABLE_REF="a992f224f5ea5a69b56ba20e925379c9a226f2b2"
+          RESUKISU_STABLE_REF="b6706363b95525acd4007da19edadb1d41b2ea27"
+
+          # Dev 固定引用先完整复制 Stable 配置，后续只改这里的 *_DEV_REF 即可。
+          OFFICIAL_DEV_REF="290609c945728fc93d85735918793567588103c1"
+          SUKISU_DEV_REF="4610456736ba3a3c9a00ad618aa0f4ccc4db5b70"
+          RESUKISU_DEV_REF="fb771414f249ab886c09f2cfcbbf91c4b4dab2d1"
+
+          get_success_action_sha() {
+            REPO="$1"
+            BRANCH="$2"
+            NABE="$3"
+            INDEX=$((NABE - 1))
+            curl -s \
+              "https://api.github.com/repos/$REPO/actions/workflows/build-manager.yml/runs?status=success&branch=$BRANCH&per_page=$NABE" \
+              | jq -r --argjson idx "$INDEX" '.workflow_runs[$idx].head_sha'
+          }
+
+          if [ "$branch_input" = "Custom(自定义)" ]; then
+            # 分支名:数字（如 main:5 → 第 5 个成功构建）
+            if [[ "$custom_ref_input" =~ ^([A-Za-z0-9._/-]+):([0-9]+)$ ]]; then
+              BRANCH="${BASH_REMATCH[1]}"
+              NABE="${BASH_REMATCH[2]}"
+              if [ "$variant_input" = "Official" ]; then
+                OFFICIAL_CUSTOM_REF="$(get_success_action_sha "tiann/KernelSU" "$BRANCH" "$NABE")"
+              fi
+              if [ "$variant_input" = "SukiSU" ]; then
+                SUKISU_CUSTOM_REF="$(get_success_action_sha "ShirkNeko/susfs4ksu" "$BRANCH" "$NABE")"
+              fi
+              if [ "$variant_input" = "ReSukiSU" ]; then
+                RESUKISU_CUSTOM_REF="$(get_success_action_sha "ReSukiSU/ReSukiSU" "$BRANCH" "$NABE")"
+              fi
+            else
+              OFFICIAL_CUSTOM_REF="$custom_ref_input"
+              SUKISU_CUSTOM_REF="$custom_ref_input"
+              RESUKISU_CUSTOM_REF="$custom_ref_input"
+            fi
+          fi
+
+          case "$branch_input" in
+            "Stable(标准)")
+              OFFICIAL_REF="$OFFICIAL_STABLE_REF"
+              SUKISU_REF="$SUKISU_STABLE_REF"
+              RESUKISU_REF="$RESUKISU_STABLE_REF"
+              NEXT_BRANCH="main"
+              ;;
+            "Dev(开发)")
+              OFFICIAL_REF="$OFFICIAL_DEV_REF"
+              SUKISU_REF="$SUKISU_DEV_REF"
+              RESUKISU_REF="$RESUKISU_DEV_REF"
+              NEXT_BRANCH="dev"
+              ;;
+            "Custom(自定义)")
+              OFFICIAL_REF="$OFFICIAL_CUSTOM_REF"
+              SUKISU_REF="$SUKISU_CUSTOM_REF"
+              RESUKISU_REF="$RESUKISU_CUSTOM_REF"
+              NEXT_BRANCH="$custom_ref_input"
+              ;;
+            *)
+              echo "未知分支: $branch_input" >&2
+              exit 1
+              ;;
+          esac
+
+          case "$variant_input" in
+            "Official") BRANCH="-s $OFFICIAL_REF" ;;
+            "SukiSU") BRANCH="-s $SUKISU_REF" ;;
+            "ReSukiSU") BRANCH="$RESUKISU_REF" ;;
+            "Next") BRANCH="$NEXT_BRANCH" ;;
+            *) echo "未知变体: $variant_input" >&2; exit 1 ;;
+          esac
+
+          echo "EFFECTIVE_KSU_BRANCH=$branch_input" >> $GITHUB_ENV
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+          if [ "$BRANCH" == "null" ]; then
+            echo "error:KernelSU分支获取失败，请检查输入"
+            exit 1
+          fi
+          echo "KSU 分支: $branch_input -> $BRANCH"
+
       - name: 清理磁盘空间
         uses: endersonmenezes/free-disk-space@v3
         with:
@@ -780,90 +868,6 @@ jobs:
           echo "下载一加 8E 支持补丁..."
           curl -LSs "https://github.com/xingguangcuican6666/ABK/raw/refs/heads/dev/hmbird_patch.c" -o hmbird_patch.c
           echo "obj-y += hmbird_patch.o" >> Makefile
-
-      - name: 确定 KernelSU 分支
-        if: inputs.ksu_variant != 'None'
-        id: ksu-branch
-        run: |
-          branch_input="${{ inputs.ksu_branch }}"
-          variant_input="${{ inputs.ksu_variant }}"
-          custom_ref_input="${{ inputs.custom_ref }}"
-          OFFICIAL_STABLE_REF="3f388ef137c78e1ca0c92c0ada3b8717cdcc4302"
-          SUKISU_STABLE_REF="a992f224f5ea5a69b56ba20e925379c9a226f2b2"
-          RESUKISU_STABLE_REF="b6706363b95525acd4007da19edadb1d41b2ea27"
-
-          # Dev 固定引用先完整复制 Stable 配置，后续只改这里的 *_DEV_REF 即可。
-          OFFICIAL_DEV_REF="290609c945728fc93d85735918793567588103c1"
-          SUKISU_DEV_REF="4610456736ba3a3c9a00ad618aa0f4ccc4db5b70"
-          RESUKISU_DEV_REF="fb771414f249ab886c09f2cfcbbf91c4b4dab2d1"
-
-          get_success_action_sha() {
-            REPO="$1"
-            BRANCH="$2"
-            NABE="$3"
-            INDEX=$((NABE - 1))
-            curl -s \
-              "https://api.github.com/repos/$REPO/actions/workflows/build-manager.yml/runs?status=success&branch=$BRANCH&per_page=$NABE" \
-              | jq -r --argjson idx "$INDEX" '.workflow_runs[$idx].head_sha'
-          }
-
-          if [ "$branch_input" = "Custom(自定义)" ]; then
-            # 分支名:数字（如 main:5 → 第 5 个成功构建）
-            if [[ "$custom_ref_input" =~ ^([A-Za-z0-9._/-]+):([0-9]+)$ ]]; then
-              BRANCH="${BASH_REMATCH[1]}"
-              NABE="${BASH_REMATCH[2]}"
-              if [ "$variant_input" = "Official" ]; then
-                OFFICIAL_CUSTOM_REF="$(get_success_action_sha "tiann/KernelSU" "$BRANCH" "$NABE")"
-              fi
-              if [ "$variant_input" = "SukiSU" ]; then
-                SUKISU_CUSTOM_REF="$(get_success_action_sha "ShirkNeko/susfs4ksu" "$BRANCH" "$NABE")"
-              fi
-              if [ "$variant_input" = "ReSukiSU" ]; then
-                RESUKISU_CUSTOM_REF="$(get_success_action_sha "ReSukiSU/ReSukiSU" "$BRANCH" "$NABE")"
-              fi
-            else
-              OFFICIAL_CUSTOM_REF="$custom_ref_input"
-              SUKISU_CUSTOM_REF="$custom_ref_input"
-              RESUKISU_CUSTOM_REF="$custom_ref_input"
-            fi
-          fi
-
-          case "$branch_input" in
-            "Stable(标准)")
-              OFFICIAL_REF="$OFFICIAL_STABLE_REF"
-              SUKISU_REF="$SUKISU_STABLE_REF"
-              RESUKISU_REF="$RESUKISU_STABLE_REF"
-              NEXT_BRANCH="main"
-              ;;
-            "Dev(开发)")
-              OFFICIAL_REF="$OFFICIAL_DEV_REF"
-              SUKISU_REF="$SUKISU_DEV_REF"
-              RESUKISU_REF="$RESUKISU_DEV_REF"
-              NEXT_BRANCH="dev"
-              ;;
-            "Custom(自定义)")
-              OFFICIAL_REF="$OFFICIAL_CUSTOM_REF"
-              SUKISU_REF="$SUKISU_CUSTOM_REF"
-              RESUKISU_REF="$RESUKISU_CUSTOM_REF"
-              NEXT_BRANCH="$custom_ref_input"
-              ;;
-            *)
-              echo "未知分支: $branch_input" >&2
-              exit 1
-              ;;
-          esac
-
-          case "$variant_input" in
-            "Official") BRANCH="-s $OFFICIAL_REF" ;;
-            "SukiSU") BRANCH="-s $SUKISU_REF" ;;
-            "ReSukiSU") BRANCH="$RESUKISU_REF" ;;
-            "Next") BRANCH="$NEXT_BRANCH" ;;
-            *) echo "未知变体: $variant_input" >&2; exit 1 ;;
-          esac
-
-          echo "EFFECTIVE_KSU_BRANCH=$branch_input" >> $GITHUB_ENV
-          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
-          echo "KSU 分支: $branch_input -> $BRANCH"
 
       - name: 添加 KernelSU
         if: inputs.ksu_variant != 'None'
