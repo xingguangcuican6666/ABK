@@ -2368,7 +2368,7 @@ jobs:
           if [[ ! "$CURRENT_SUB" =~ ^[0-9]+$ ]]; then
             CURRENT_SUB=99999
           fi
-          if [[ ( "${{ inputs.ksu_variant }}" == "Official" || "${{ inputs.ksu_variant }}" == "ReSukiSU" ) && "${{ inputs.android_version }}" == "android13" && "${{ inputs.kernel_version }}" == "5.15" && "$CURRENT_SUB" -ge 74 && "$CURRENT_SUB" -le 137 ]]; then
+          if [[ ( "${{ inputs.ksu_variant }}" == "Official" || "${{ inputs.ksu_variant }}" == "ReSukiSU" ) && "${{ inputs.android_version }}" == "android13" && "${{ inputs.kernel_version }}" == "5.15" && "$CURRENT_SUB" -ge 41 && "$CURRENT_SUB" -le 137 ]]; then
             {
               echo "CONFIG_KALLSYMS=y"
               echo "CONFIG_KALLSYMS_ALL=y"
@@ -3101,7 +3101,7 @@ jobs:
 
             if [[ "${{ inputs.android_version }}" == "android13" \
               && "${{ inputs.kernel_version }}" == "5.15" \
-              && "$CURRENT_SUB" -ge 74 && "$CURRENT_SUB" -le 137 ]]; then
+              && "$CURRENT_SUB" -ge 41 && "$CURRENT_SUB" -le 137 ]]; then
               case "${{ inputs.ksu_variant }}" in
                 "Official"|"ReSukiSU")
                   echo "编译前兜底修复 ${{ inputs.ksu_variant }} 5.15 kallsyms symbol_resolver"
@@ -3110,8 +3110,8 @@ jobs:
             from textwrap import dedent
 
             VARIANT = "${{ inputs.ksu_variant }}"
-            MARKER = "ABK: Android 13 5.15.74-5.15.137 Official/ReSukiSU kallsyms lookup rewrite"
-            LEGACY_MARKER = "ABK: Android 13 5.15.74-5.15.137 Official/ReSukiSU kallsyms weak reference"
+            MARKER = "ABK: Android 13 5.15.41-5.15.137 Official/ReSukiSU kallsyms lookup rewrite"
+            LEGACY_MARKER = "ABK: Android 13 5.15.41-5.15.137 Official/ReSukiSU kallsyms weak reference"
             TARGET_SOURCE = dedent(f"""\
             // SPDX-License-Identifier: GPL-2.0-only
             /*
@@ -3129,15 +3129,28 @@ jobs:
 
             #include "infra/symbol_resolver.h"
 
-            unsigned long ksu_symbol_lookup_name(const char *name)
+            static const char cfi_suffix[] = ".cfi_jt";
+
+            void *ksu_lookup_symbol(const char *symbol_name)
             {{
             #ifdef CONFIG_KALLSYMS
-                if (!name || !*name)
-                    return 0;
+                unsigned long addr;
+                char cfi_name[KSYM_NAME_LEN];
 
-                return kallsyms_lookup_name(name);
+                if (!symbol_name || !symbol_name[0])
+                    return NULL;
+
+                addr = kallsyms_lookup_name(symbol_name);
+                if (addr)
+                    return (void *)addr;
+
+                if (scnprintf(cfi_name, sizeof(cfi_name), "%s%s", symbol_name, cfi_suffix) >= sizeof(cfi_name))
+                    return NULL;
+
+                addr = kallsyms_lookup_name(cfi_name);
+                return addr ? (void *)addr : NULL;
             #else
-                return 0;
+                return NULL;
             #endif
             }}
             """)
@@ -3160,8 +3173,14 @@ jobs:
             for path in candidates:
                 print(f"检查 5.15 kallsyms 编译目录: {path}")
                 text = path.read_text()
-                if "ksu_symbol_lookup_name(" not in text:
-                    print(f"{path} 未找到 ksu_symbol_lookup_name()，跳过")
+                if not any(token in text for token in (
+                    "ksu_lookup_symbol(",
+                    "kallsyms_on_each_symbol(",
+                    "kallsyms_lookup_name(",
+                    MARKER,
+                    LEGACY_MARKER,
+                )):
+                    print(f"{path} 看起来不是预期的 KernelSU symbol_resolver，跳过")
                     continue
 
                 matched = True
@@ -3170,7 +3189,8 @@ jobs:
                     or LEGACY_MARKER in text
                     or "kallsyms_on_each_symbol(" in text
                     or "__attribute__((weak))" in text
-                    or "return kallsyms_lookup_name(name);" not in text
+                    or "void *ksu_lookup_symbol(const char *symbol_name)" not in text
+                    or "kallsyms_lookup_name(symbol_name)" not in text
                 )
 
                 if needs_rewrite:
@@ -3187,13 +3207,15 @@ jobs:
                     raise SystemExit(f"{path} 仍包含 kallsyms_on_each_symbol 直接调用")
                 if "__attribute__((weak))" in final_text:
                     raise SystemExit(f"{path} 仍包含 weak kallsyms extern")
-                if "return kallsyms_lookup_name(name);" not in final_text:
+                if "void *ksu_lookup_symbol(const char *symbol_name)" not in final_text:
+                    raise SystemExit(f"{path} 缺少 ksu_lookup_symbol() 目标实现")
+                if "kallsyms_lookup_name(symbol_name)" not in final_text:
                     raise SystemExit(f"{path} 未切换到 kallsyms_lookup_name 直接查表实现")
 
                 print(f"已验证 {path}: 无 kallsyms_on_each_symbol 直接调用，且无 weak extern")
 
             if not matched:
-                raise SystemExit(f"{VARIANT} 未找到可修补的 ksu_symbol_lookup_name() 实现")
+                raise SystemExit(f"{VARIANT} 未找到可修补的 KernelSU symbol_resolver 实现")
 
             if not changed:
                 print(f"{VARIANT} 5.15 kallsyms rewrite 已经是目标状态，无需修改。")
