@@ -787,60 +787,63 @@ jobs:
         run: |
           branch_input="${{ inputs.ksu_branch }}"
           variant_input="${{ inputs.ksu_variant }}"
+          OFFICIAL_STABLE_REF="3f388ef137c78e1ca0c92c0ada3b8717cdcc4302"
           SUKISU_STABLE_REF="a992f224f5ea5a69b56ba20e925379c9a226f2b2"
+          RESUKISU_STABLE_REF="b6706363b95525acd4007da19edadb1d41b2ea27"
 
-          get_latest_release_sha() {
-          REPO="$1"
-            TAG=$(curl -s https://api.github.com/repos/$REPO/releases/latest | jq -r '.tag_name')
-            curl -s https://api.github.com/repos/$REPO/commits/$TAG | jq -r '.sha'
-          }
-          get_latest_success_sha() {
-          REPO="$1"
-          BRANCH="$2"
-          curl -s \
-              "https://api.github.com/repos/$REPO/actions/workflows/build-manager.yml/runs?status=success&branch=$BRANCH&per_page=1" \
-            | jq -r '.workflow_runs[0].head_sha'
-          }
-          get_latest_success_sha_auto() {
+          # Dev 固定引用先完整复制 Stable 配置，后续只改这里的 *_DEV_REF 即可。
+          OFFICIAL_DEV_REF="290609c945728fc93d85735918793567588103c1"
+          SUKISU_DEV_REF="4610456736ba3a3c9a00ad618aa0f4ccc4db5b70"
+          RESUKISU_DEV_REF="fb771414f249ab886c09f2cfcbbf91c4b4dab2d1"
+
+          get_success_action_sha() {
             REPO="$1"
-            DEV_SHA=$(get_latest_success_sha "$REPO" "dev")
-            DEV_TIME="0"
-            if [ "$DEV_SHA" != "null" ]; then
-              DEV_TIME=$(curl -s \
-                "https://api.github.com/repos/$REPO/commits/$DEV_SHA" \
-                | jq -r '.commit.committer.date' | xargs -I{} date -d {} +%s)
-            fi
-            MAIN_SHA=$(get_latest_success_sha "$REPO" "main")
-            MAIN_TIME="0"
-            if [ "$MAIN_SHA" != "null" ]; then
-              MAIN_TIME=$(curl -s \
-                "https://api.github.com/repos/$REPO/commits/$MAIN_SHA" \
-                | jq -r '.commit.committer.date' | xargs -I{} date -d {} +%s)
-            fi
-            if [ "$DEV_TIME" -gt "$MAIN_TIME" ]; then
-              echo "$DEV_SHA"
-            else
-              echo "$MAIN_SHA"
-            fi
+            BRANCH="$2"
+            NABE="$3"
+            INDEX=$((NABE - 1))
+            curl -s \
+              "https://api.github.com/repos/$REPO/actions/workflows/build-manager.yml/runs?status=success&branch=$BRANCH&per_page=$NABE" \
+              | jq -r --argjson idx "$INDEX" '.workflow_runs[$idx].head_sha'
           }
+
+          if [ "$branch_input" = "Custom(自定义)" ]; then
+            # 分支名:数字（如 main:5 → 第 5 个成功构建）
+            if [[ "${inputs.custom_ref}" =~ ^([A-Za-z0-9._/-]+):([0-9]+)$ ]]; then
+              BRANCH="${BASH_REMATCH[1]}"
+              NABE="${BASH_REMATCH[2]}"
+              if [ "$variant_input" = "Official" ]; then
+                OFFICIAL_CUSTOM_REF="$(get_success_action_sha "tiann/KernelSU" "$BRANCH" "$NABE")"
+              fi
+              if [ "$variant_input" = "SukiSU" ]; then
+                SUKISU_CUSTOM_REF="$(get_success_action_sha "ShirkNeko/susfs4ksu" "$BRANCH" "$NABE")"
+              fi
+              if [ "$variant_input" = "ReSukiSU" ]; then
+                RESUKISU_CUSTOM_REF="$(get_success_action_sha "ReSukiSU/ReSukiSU" "$BRANCH" "$NABE")"
+              fi
+            else
+              OFFICIAL_CUSTOM_REF="${inputs.custom_ref}"
+              SUKISU_CUSTOM_REF="${inputs.custom_ref}"
+              RESUKISU_CUSTOM_REF="${inputs.custom_ref}"
+            fi
+          fi
 
           case "$branch_input" in
             "Stable(标准)")
-              OFFICIAL_REF="$(get_latest_success_sha "tiann/KernelSU" "main")"
+              OFFICIAL_REF="$OFFICIAL_STABLE_REF"
               SUKISU_REF="$SUKISU_STABLE_REF"
-              RESUKISU_REF="$(get_latest_success_sha "ReSukiSU/ReSukiSU" "main")"
+              RESUKISU_REF="$RESUKISU_STABLE_REF"
               NEXT_BRANCH="main"
               ;;
             "Dev(开发)")
-              OFFICIAL_REF="$(get_latest_success_sha_auto "tiann/KernelSU")"
-              SUKISU_REF="builtin"
-              RESUKISU_REF="main"
+              OFFICIAL_REF="$OFFICIAL_DEV_REF"
+              SUKISU_REF="$SUKISU_DEV_REF"
+              RESUKISU_REF="$RESUKISU_DEV_REF"
               NEXT_BRANCH="dev"
               ;;
             "Custom(自定义)")
-              OFFICIAL_REF="$inputs.custom_ref"
-              SUKISU_REF="$inputs.custom_ref"
-              RESUKISU_REF="$inputs.custom_ref"
+              OFFICIAL_REF="$OFFICIAL_CUSTOM_REF"
+              SUKISU_REF="$SUKISU_CUSTOM_REF"
+              RESUKISU_REF="$RESUKISU_CUSTOM_REF"
               NEXT_BRANCH="$inputs.custom_ref"
               ;;
             *)
