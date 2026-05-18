@@ -1579,38 +1579,19 @@ private fun LanguageSettingsItem(
     onSelect: (String) -> Unit
 ) {
     val options = listOf(
-        LocaleHelper.LANG_ZH to stringResource(R.string.settings_language_zh),
-        LocaleHelper.LANG_EN to stringResource(R.string.settings_language_en)
+        Triple(LocaleHelper.LANG_ZH, stringResource(R.string.settings_language_zh), Icons.Default.Language),
+        Triple(LocaleHelper.LANG_EN, stringResource(R.string.settings_language_en), Icons.Default.Language)
     )
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.forEach { (lang, label) ->
-            val selected = current == lang
-            OutlinedButton(
-                onClick = { if (!selected) onSelect(lang) },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(4.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
-                                     else Color.Transparent,
-                    contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-                                   else MaterialTheme.colorScheme.onSurface
-                ),
-                border = BorderStroke(
-                    1.dp,
-                    if (selected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.outline
-                )
-            ) {
-                if (selected) {
-                    Icon(
-                        Icons.Default.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                }
-                Text(label)
-            }
-        }
+    options.forEach { (lang, label, icon) ->
+        val selected = current == lang
+        ExpressiveListItem(
+            title = label,
+            leadingIcon = icon,
+            selected = selected,
+            trailingContent = {
+                if (selected) Icon(Icons.Default.Check, null)
+            },
+            onClick = { onSelect(lang) }
+        )
     }
 }
