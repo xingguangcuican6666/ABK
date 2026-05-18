@@ -931,4 +931,8 @@
     <string name="copied">已复制</string>
     <string name="clear">清除</string>
     <string name="close_error">关闭错误提示</string>
+    <!-- Language switcher -->
+    <string name="settings_language">语言</string>
+    <string name="settings_language_zh">中文</string>
+    <string name="settings_language_en">English</string>
 </resources>

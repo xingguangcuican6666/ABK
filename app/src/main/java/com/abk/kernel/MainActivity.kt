@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import com.abk.kernel.utils.LocaleHelper
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -92,6 +93,10 @@ import com.abk.kernel.viewmodel.AuthStep
 import com.abk.kernel.viewmodel.MainViewModel
 
 class MainActivity : ComponentActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.applyLocale(newBase))
+    }
 
     private val requestNotifications = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
