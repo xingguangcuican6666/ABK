@@ -933,6 +933,7 @@
     <string name="close_error">Close error message</string>
     <!-- Language switcher -->
     <string name="settings_language">Language</string>
+    <string name="settings_language_desc">Select the app display language</string>
     <string name="settings_language_zh">中文</string>
     <string name="settings_language_en">English</string>
 </resources>
