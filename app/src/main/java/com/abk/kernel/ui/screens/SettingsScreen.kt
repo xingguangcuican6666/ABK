@@ -1486,7 +1486,7 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
             stringResource(R.string.settings_build) -> stringResource(R.string.settings_group_build_desc)
             stringResource(R.string.settings_notification) -> stringResource(R.string.settings_group_notification_desc)
             stringResource(R.string.settings_navigation) -> stringResource(R.string.settings_group_navigation_desc)
-            stringResource(R.string.settings_language) -> ""
+            stringResource(R.string.settings_language) -> stringResource(R.string.settings_language_desc)
             stringResource(R.string.settings_theme) -> stringResource(R.string.settings_group_theme_desc)
             "ReSukiSU" -> stringResource(R.string.settings_group_backend_desc, "ReSukiSU")
             "SukiSU" -> stringResource(R.string.settings_group_backend_desc, "SukiSU")

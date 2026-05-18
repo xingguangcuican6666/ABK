@@ -933,6 +933,7 @@
     <string name="close_error">关闭错误提示</string>
     <!-- Language switcher -->
     <string name="settings_language">语言</string>
+    <string name="settings_language_desc">选择应用的显示语言</string>
     <string name="settings_language_zh">中文</string>
     <string name="settings_language_en">English</string>
 </resources>
