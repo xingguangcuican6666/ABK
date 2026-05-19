@@ -8,7 +8,7 @@
     <string name="nav_modules">Модули</string>
     <string name="nav_flash">Прошивка</string>
     <string name="nav_home">Главная</string>
-    <string name="nav_installed_modules">Установленные модули</string>
+    <string name="nav_installed_modules">Модули</string>
     <string name="nav_root_auth">Суперпользователь</string>
     <string name="nav_files">Файлы</string>
     <string name="nav_settings">Настройки</string>
