@@ -40,7 +40,7 @@ body:
     validations:
       required: true
   - type: textarea
-    id: reproduce
+    id: workflow_config
     attributes:
       label: "Workflow Config / 编译工作流参数"
       description: "Config List / 参数列表"
