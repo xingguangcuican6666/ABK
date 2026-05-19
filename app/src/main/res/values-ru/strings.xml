@@ -4,8 +4,8 @@
 
     <!-- Bottom nav -->
     <string name="nav_status">Состояние</string>
-    <string name="nav_build">Сборка ядра</string>
-    <string name="nav_modules">Репозитории модулей</string>
+    <string name="nav_build">Сборка</string>
+    <string name="nav_modules">Модули</string>
     <string name="nav_flash">Прошивка</string>
     <string name="nav_home">Главная</string>
     <string name="nav_installed_modules">Установленные модули</string>
@@ -99,7 +99,7 @@
     <string name="build_success">Сборка успешна</string>
     <string name="build_failed">Сборка не удалась</string>
     <string name="build_queued">Сборка в очереди</string>
-    <string name="build_confirm_submit">Подтвердить отправку сборки</string>
+    <string name="build_confirm_submit">Подтвердить сборку</string>
     <string name="build_config_overview">Сводка конфигурации сборки:</string>
     <string name="build_kernel_line">Android %1$s · ядро %2$s.%3$s</string>
     <string name="build_patch_level_line">Уровень патча: %1$s</string>
@@ -159,14 +159,14 @@
     <string name="build_virtualization_support">Поддержка виртуализации</string>
     <string name="build_enable_oneplus_8e">Включить поддержку OnePlus 8E</string>
     <string name="build_zram_options">Параметры ZRAM</string>
-    <string name="build_zram_full_algo">Включить полную поддержку алгоритмов (LZO/LZ4/ZSTD и др.)</string>
+    <string name="build_zram_full_algo">Полный набор алгоритмов (LZO/LZ4/ZSTD…)</string>
     <string name="build_zram_custom_algo">Свои алгоритмы ZRAM</string>
     <string name="build_zram_algo_placeholder">например, lzo,lz4,deflate,zstd</string>
     <string name="build_kpm_options">Параметры KPM</string>
     <string name="build_kpm_password">Супер-ключ KPM (необязательно)</string>
     <string name="build_kpm_password_placeholder">Пусто = пароль по умолчанию</string>
     <string name="build_custom_modules">Пользовательские внешние модули</string>
-    <string name="build_enable_custom_modules">Включить пользовательские внешние модули</string>
+    <string name="build_enable_custom_modules">Использовать внешние модули</string>
     <string name="build_add_from_module_repo">Добавить из репозитория модулей</string>
     <string name="build_manual_add">Добавить вручную</string>
     <string name="build_repo_url">Ссылка на репозиторий</string>
@@ -187,9 +187,9 @@
     <string name="build_collapse_plan_tools">Свернуть пресеты сборки</string>
     <string name="build_expand_plan_tools">Развернуть пресеты сборки</string>
     <string name="build_save">Сохранить</string>
-    <string name="build_library">Библиотека</string>
+    <string name="build_library">Пресеты</string>
     <string name="build_queue_short">Очередь</string>
-    <string name="build_share">Поделиться</string>
+    <string name="build_share">Экспорт</string>
     <string name="build_import">Импорт</string>
     <string name="build_saved_plans_count">Сохранено пресетов: %1$d</string>
     <string name="build_no_saved_plans">Нет сохранённых пресетов</string>
@@ -457,7 +457,7 @@
     <string name="settings_about">О приложении</string>
     <string name="settings_version">Версия</string>
     <string name="settings_source_repo">Исходный репозиторий</string>
-    <string name="settings_auto_download">Автоматически скачивать после сборки</string>
+    <string name="settings_auto_download">Автозагрузка после сборки</string>
     <string name="settings_notify_build">Уведомления о статусе сборки</string>
     <string name="settings_theme">Тема</string>
     <string name="settings_theme_system">Как в системе</string>
@@ -470,7 +470,7 @@
     <string name="settings_fork_repo">Fork-репозиторий</string>
     <string name="settings_not_logged_in">Не выполнен вход</string>
     <string name="settings_auto_download_desc">Применяется только к следующей новой сборке. Если выключить, автозагрузки не будет.</string>
-    <string name="settings_prebuilt_gki">Получение и загрузка предсобранного GKI</string>
+    <string name="settings_prebuilt_gki">Загрузка предсобранного GKI</string>
     <string name="settings_prebuilt_gki_desc">Берёт предсобранный GKI из Release этого репозитория. Загрузка — вручную.</string>
     <string name="settings_notify_build_desc">Показывать статус сборки в уведомлениях</string>
     <string name="settings_navigation">Навигация</string>
@@ -675,7 +675,7 @@
     <string name="save">Сохранить</string>
 
     <!-- Module repository -->
-    <string name="module_repo_title">Репозитории модулей</string>
+    <string name="module_repo_title">Репозитории</string>
     <string name="module_repo_configure">Настроить репозитории модулей</string>
     <string name="module_repo_select_stage">Выбрать этап внедрения</string>
     <string name="module_repo_version">Версия: %1$s</string>
@@ -700,7 +700,7 @@
     <string name="module_repo_central_desc">Добавьте индексный репозиторий, содержащий abk-modules.json.</string>
     <string name="module_repo_url">Ссылка на центральный репозиторий</string>
     <string name="add">Добавить</string>
-    <string name="refresh_all">Обновить всё</string>
+    <string name="refresh_all">Обн. всё</string>
     <string name="module_repo_empty_title">Центральных репозиториев нет</string>
     <string name="module_repo_empty_desc">После добавления центрального репозитория модули объединяются на главной странице.</string>
     <string name="module_repo_delete_keep_modules">Удаление центрального репозитория не убирает одиночные репозитории модулей, уже добавленные в конфигурацию сборки.</string>
