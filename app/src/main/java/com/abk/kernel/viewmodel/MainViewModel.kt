@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import androidx.annotation.StringRes
+import com.abk.kernel.utils.LocaleHelper
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.abk.kernel.BuildConfig
@@ -174,7 +175,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
     private fun text(@StringRes resId: Int, vararg args: Any): String =
-        getApplication<Application>().getString(resId, *args)
+        LocaleHelper.str(resId, *args)
 
     private fun managerAccessErrorMessage(
         access: RootUtils.ManagerAccessInfo,
