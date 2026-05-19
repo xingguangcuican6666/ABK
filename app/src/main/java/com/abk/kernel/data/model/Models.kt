@@ -98,7 +98,7 @@ data class BuildStepProgress(
 
 data class BuildProgress(
     val percent: Int = 0,
-    val currentStep: String = "等待 GitHub 分配 Runner",
+    val currentStep: String = "",
     val completedSteps: Int = 0,
     val totalSteps: Int = 0,
     val steps: List<BuildStepProgress> = emptyList()
