@@ -202,7 +202,7 @@
     <string name="build_abkp2_placeholder">Вставьте код, начинающийся с ABKP2:</string>
     <string name="build_parse">Разобрать</string>
     <string name="build_apply">Применить</string>
-    <string name="build_share_plan">Поделиться пресетом</string>
+    <string name="build_share_plan">Экспорт пресета</string>
     <string name="build_current_plan">Текущий пресет</string>
     <string name="build_share_plan_desc">Полный пресет содержит Android, версию ядра, уровень патча и настройки функций. «Только функции» при импорте сохраняет данные о версии ядра текущей страницы.</string>
     <string name="build_full_plan">Полный пресет</string>
@@ -470,8 +470,8 @@
     <string name="settings_fork_repo">Fork-репозиторий</string>
     <string name="settings_not_logged_in">Не выполнен вход</string>
     <string name="settings_auto_download_desc">Применяется только к следующей новой сборке. Если выключить, автозагрузки не будет.</string>
-    <string name="settings_prebuilt_gki">Загрузка предсобранного GKI</string>
-    <string name="settings_prebuilt_gki_desc">Берёт предсобранный GKI из Release этого репозитория. Загрузка — вручную.</string>
+    <string name="settings_prebuilt_gki">Готовые сборки GKI</string>
+    <string name="settings_prebuilt_gki_desc">Раздел готовых сборок GKI из Release репозитория. Скачивание вручную.</string>
     <string name="settings_notify_build_desc">Показывать статус сборки в уведомлениях</string>
     <string name="settings_navigation">Навигация</string>
     <string name="settings_predictive_back">M3E-анимация возврата в приложении</string>
