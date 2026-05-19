@@ -298,7 +298,7 @@
     <string name="flash_delete_prebuilt_msg">Локально скачанные файлы предсобранного GKI будут удалены.</string>
     <string name="flash_delete_workflow_msg">Кэшированные в ABK записи об артефактах этого workflow и локально скачанные файлы будут удалены.\n\nWorkflow %1$s</string>
     <string name="flash_delete_remote_workflow">Также удалить удалённую запись workflow в GitHub Actions</string>
-    <string name="flash_refresh_artifacts">Обновить артефакты сборки по сети</string>
+    <string name="flash_refresh_artifacts">Обновить артефакты сборки</string>
     <string name="flash_empty_flash_title">Нет артефактов для прошивки</string>
     <string name="flash_empty_files_title">Нет файлов для просмотра</string>
     <string name="flash_empty_flash_desc">После успешной сборки ABK синхронизирует и упорядочит артефакты по workflow.</string>
