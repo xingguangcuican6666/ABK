@@ -55,6 +55,7 @@ import com.abk.kernel.data.model.CustomExternalModuleStage
 import com.abk.kernel.data.model.ExternalModuleMetadata
 import com.abk.kernel.data.model.KernelSupport
 import com.abk.kernel.data.model.KernelBuildConfig
+import com.abk.kernel.data.model.KSU_BRANCH_CUSTOM
 import com.abk.kernel.data.model.KSU_VARIANT_NONE
 import com.abk.kernel.data.model.ModuleCatalogItem
 import com.abk.kernel.data.model.ModuleCatalogRepository
@@ -779,6 +780,16 @@ fun BuildScreen(
                             )
                         }
                     )
+                    AnimatedVisibility(config.kernelsuBranch == KSU_BRANCH_CUSTOM) {
+                        OutlinedTextField(
+                            value = config.customRef,
+                            onValueChange = { vm.updateBuildConfig(config.copy(customRef = it)) },
+                            label = { Text(stringResource(R.string.build_custom_ksu_ref)) },
+                            placeholder = { Text(stringResource(R.string.build_custom_ksu_ref_placeholder)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
                 }
             }
 
@@ -1899,10 +1910,11 @@ private fun buildPlanSummary(config: KernelBuildConfig): String {
     }
     val featureSummary = enabled.ifEmpty { listOf(stringResource(R.string.build_base_config)) }.joinToString("、")
     val externalModuleCount = if (config.useCustomExternalModules) config.customExternalModules.size else 0
-    val ksuSummary = if (config.kernelsuVariant == KSU_VARIANT_NONE) {
-        ksuVariantDisplayName(config.kernelsuVariant)
-    } else {
-        "${config.kernelsuVariant} / ${config.kernelsuBranch}"
+    val ksuSummary = when {
+        config.kernelsuVariant == KSU_VARIANT_NONE -> ksuVariantDisplayName(config.kernelsuVariant)
+        config.kernelsuBranch == KSU_BRANCH_CUSTOM && config.customRef.isNotBlank() ->
+            "${config.kernelsuVariant} / ${config.kernelsuBranch} / ${config.customRef}"
+        else -> "${config.kernelsuVariant} / ${config.kernelsuBranch}"
     }
     return "${config.kernelVersion}.${config.subLevel} · Android $android · ${config.osPatchLevel}\n" +
         "$ksuSummary · $featureSummary · ${stringResource(R.string.build_summary_external_modules, externalModuleCount)}"

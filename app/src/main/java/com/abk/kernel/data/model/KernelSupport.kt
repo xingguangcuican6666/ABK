@@ -180,6 +180,7 @@ object KernelSupport {
             kernelsuBranch = normalizeKsuBranch(
                 if (ksuVariant == KSU_VARIANT_NONE) KSU_BRANCH_STABLE else config.kernelsuBranch
             ),
+            customRef = config.customRef.trim(),
             useKpm = if (ksuVariant == KSU_VARIANT_NONE) false else config.useKpm,
             cancelSusfs = if (ksuVariant == KSU_VARIANT_NONE) true else config.cancelSusfs,
             kpmPassword = if (ksuVariant == KSU_VARIANT_NONE) "" else config.kpmPassword,

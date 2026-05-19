@@ -2,7 +2,9 @@ package com.abk.kernel.viewmodel
 
 import com.abk.kernel.data.model.CustomExternalModule
 import com.abk.kernel.data.model.CustomExternalModuleStage
-import com.abk.kernel.data.model.KSU_BRANCH_DEV
+import com.abk.kernel.data.model.KSU_BRANCH_CUSTOM
+import com.abk.kernel.data.model.KSU_BRANCH_STABLE
+import com.abk.kernel.data.model.KSU_VARIANT_NONE
 import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
 import com.abk.kernel.data.model.KernelBuildConfig
 import com.abk.kernel.data.model.KernelSupport
@@ -20,7 +22,8 @@ class BuildPlanLogicTest {
                 subLevel = "162",
                 osPatchLevel = "2026-03",
                 kernelsuVariant = KSU_VARIANT_SUKISU,
-                kernelsuBranch = KSU_BRANCH_DEV,
+                kernelsuBranch = KSU_BRANCH_CUSTOM,
+                customRef = "feature:5",
                 version = "test-build",
                 buildTime = "Sun Dec 01 08:10:00 UTC 2024",
                 useZram = true,
@@ -54,6 +57,7 @@ class BuildPlanLogicTest {
         assertEquals(config.osPatchLevel, decoded.config.osPatchLevel)
         assertEquals(config.kernelsuVariant, decoded.config.kernelsuVariant)
         assertEquals(config.kernelsuBranch, decoded.config.kernelsuBranch)
+        assertEquals(config.customRef, decoded.config.customRef)
         assertEquals(config.version, decoded.config.version)
         assertEquals(config.buildTime, decoded.config.buildTime)
         assertEquals(config.zramExtraAlgos, decoded.config.zramExtraAlgos)
@@ -108,6 +112,8 @@ class BuildPlanLogicTest {
             osPatchLevel = "2026-03",
             useZram = true,
             useDdk = true,
+            kernelsuBranch = KSU_BRANCH_CUSTOM,
+            customRef = "  main:5  ",
             useCustomExternalModules = true,
             customExternalModules = listOf(
                 CustomExternalModule(" https://github.com/example/a.git ", "after-patch"),
@@ -120,10 +126,25 @@ class BuildPlanLogicTest {
         assertEquals("162", inputs["sub_level"])
         assertEquals("true", inputs["use_zram"])
         assertEquals("true", inputs["use_ddk"])
+        assertEquals(KSU_BRANCH_CUSTOM, inputs["kernelsu_branch"])
+        assertEquals("main:5", inputs["custom_ref"])
         assertEquals("true", inputs["use_custom_external_modules"])
         assertEquals(
             "https://github.com/example/a.git;after_patch|https://github.com/example/b.git;before_build",
             inputs["custom_external_modules"]
         )
+    }
+
+    @Test
+    fun workflowInputMapKeepsNoneVariantAsNone() {
+        val inputs = KernelBuildConfig(
+            kernelsuVariant = KSU_VARIANT_NONE,
+            kernelsuBranch = KSU_BRANCH_CUSTOM,
+            customRef = "ignored"
+        ).toInputMap()
+
+        assertEquals(KSU_VARIANT_NONE, inputs["kernelsu_variant"])
+        assertEquals(KSU_BRANCH_STABLE, inputs["kernelsu_branch"])
+        assertEquals("", inputs["custom_ref"])
     }
 }

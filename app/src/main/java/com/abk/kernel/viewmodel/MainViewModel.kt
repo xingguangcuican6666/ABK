@@ -3939,6 +3939,7 @@ internal fun encodeBuildPlanPayload(
     writer.writeString(config.buildTime)
     writer.writeString(config.zramExtraAlgos)
     writer.writeString(config.kpmPassword)
+    writer.writeString(config.customRef)
     val modules = if (config.useCustomExternalModules) {
         config.customExternalModules
             .mapNotNull { module ->
@@ -3971,7 +3972,7 @@ internal fun decodeBuildPlanPayload(
 ): DecodedBuildPlanCode {
     val reader = BuildPlanBinaryReader(bytes, messages)
     val version = reader.readByte()
-    require(version == BUILD_PLAN_CODE_VERSION) { messages.unsupportedVersion }
+    require(version in BUILD_PLAN_MIN_SUPPORTED_VERSION..BUILD_PLAN_CODE_VERSION) { messages.unsupportedVersion }
     val scope = buildPlanShareScopeFromWireValue(reader.readByte(), messages)
     val name = reader.readString()
     val versionBase = if (scope == BuildPlanShareScope.FULL) {
@@ -3996,6 +3997,11 @@ internal fun decodeBuildPlanPayload(
     val buildTime = reader.readString()
     val zramExtraAlgos = reader.readString()
     val kpmPassword = reader.readString()
+    val customRef = if (version >= BUILD_PLAN_CODE_VERSION) {
+        reader.readString()
+    } else {
+        ""
+    }
     val moduleCount = reader.readVarInt()
     require(moduleCount in 0..BUILD_PLAN_MAX_MODULES) { messages.tooManyModules }
     val modules = List(moduleCount) {
@@ -4025,6 +4031,7 @@ internal fun decodeBuildPlanPayload(
         zramFullAlgo = featureMask.hasBuildPlanFlag(9),
         zramExtraAlgos = zramExtraAlgos,
         kpmPassword = kpmPassword,
+        customRef = customRef,
         virtualizationSupport = virtualizationSupport,
         useCustomExternalModules = featureMask.hasBuildPlanFlag(10),
         customExternalModules = modules
@@ -4146,7 +4153,8 @@ private fun buildPlanShareScopeFromWireValue(
 
 private const val BUILD_PLAN_CODE_PREFIX = "ABKP2:"
 private const val BUILD_PLAN_LEGACY_CODE_PREFIX = "ABKP1:"
-private const val BUILD_PLAN_CODE_VERSION = 2
+private const val BUILD_PLAN_CODE_VERSION = 3
+private const val BUILD_PLAN_MIN_SUPPORTED_VERSION = 2
 private const val BUILD_PLAN_NAME_LIMIT = 80
 private const val BUILD_PLAN_MAX_STRING_BYTES = 4096
 private const val BUILD_PLAN_MAX_MODULES = 32
@@ -4548,6 +4556,11 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
         "kpm_password" to config.kpmPassword,
         "virtualization_support" to config.virtualizationSupport,
         "use_custom_external_modules" to config.useCustomExternalModules.toString(),
+        "custom_ref" to if (config.kernelsuBranch == KSU_BRANCH_CUSTOM) {
+            config.customRef.trim()
+        } else {
+            ""
+        },
         "custom_external_modules" to if (config.useCustomExternalModules) {
             config.customExternalModules.toWorkflowInput()
         } else {
