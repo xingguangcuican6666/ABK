@@ -1,4 +1,6 @@
 package com.abk.kernel.utils
+import com.abk.kernel.tr
+import com.abk.kernel.R
 
 import com.abk.kernel.data.model.BuildProgress
 import com.abk.kernel.data.model.BuildStepProgress
@@ -36,12 +38,12 @@ object BuildProgressUtils {
             return when (run.status) {
                 "completed" -> BuildProgress(
                     percent = 100,
-                    currentStep = if (run.conclusion == "success") "全部步骤完成" else "构建已结束",
+                    currentStep = if (run.conclusion == "success") tr(R.string.bp_all_steps_done) else tr(R.string.bp_build_finished),
                     completedSteps = 1,
                     totalSteps = 1
                 )
-                "in_progress" -> BuildProgress(percent = 5, currentStep = "等待 GitHub 返回步骤")
-                else -> BuildProgress(percent = 0, currentStep = "构建已排队")
+                "in_progress" -> BuildProgress(percent = 5, currentStep = tr(R.string.bp_waiting_steps))
+                else -> BuildProgress(percent = 0, currentStep = tr(R.string.bp_build_queued))
             }
         }
 
@@ -68,25 +70,25 @@ object BuildProgressUtils {
     fun defaultFor(run: WorkflowRun): BuildProgress = when (run.status) {
         "completed" -> BuildProgress(
             percent = 100,
-            currentStep = if (run.conclusion == "success") "全部步骤完成" else "构建已结束",
+            currentStep = if (run.conclusion == "success") tr(R.string.bp_all_steps_done) else tr(R.string.bp_build_finished),
             completedSteps = 1,
             totalSteps = 1
         )
         "in_progress" -> BuildProgress(
             percent = 5,
-            currentStep = "${runDisplayLabel(run)} 等待 GitHub 返回步骤",
+            currentStep = tr(R.string.bp_run_waiting_steps, runDisplayLabel(run)),
             completedSteps = 0,
             totalSteps = 1
         )
         "queued", "waiting", "requested", "pending" -> BuildProgress(
             percent = 0,
-            currentStep = "${runDisplayLabel(run)} 已排队",
+            currentStep = tr(R.string.bp_run_queued, runDisplayLabel(run)),
             completedSteps = 0,
             totalSteps = 1
         )
         else -> BuildProgress(
             percent = 0,
-            currentStep = "${runDisplayLabel(run)} 等待状态同步",
+            currentStep = tr(R.string.bp_run_waiting_sync, runDisplayLabel(run)),
             completedSteps = 0,
             totalSteps = 1
         )
@@ -126,9 +128,9 @@ object BuildProgressUtils {
                 "${runDisplayLabel(run)} ${progress.currentStep}"
             }
         val currentStep = buildString {
-            append("${activeRuns.size} 个工作流合并进度")
-            if (runningCount > 0) append("，$runningCount 个运行中")
-            if (queuedCount > 0) append("，$queuedCount 个排队中")
+            append(tr(R.string.bp_merge_progress, activeRuns.size))
+            if (runningCount > 0) append(tr(R.string.bp_merge_running, runningCount))
+            if (queuedCount > 0) append(tr(R.string.bp_merge_queued, queuedCount))
             if (detail.isNotBlank()) append(" · ").append(detail)
         }
         val steps = pairs.flatMap { (run, progress) ->
