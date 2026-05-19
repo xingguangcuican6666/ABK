@@ -271,7 +271,7 @@
     <string name="build_recommended_suffix"> (рекомендуется)</string>
 
     <!-- Flash -->
-    <string name="flash_title">Прошивка / установка</string>
+    <string name="flash_title">Прошивка</string>
     <string name="download_artifacts">Скачать артефакты</string>
     <string name="flash_kernel">Прошить ядро</string>
     <string name="install_module">Установить модуль</string>
