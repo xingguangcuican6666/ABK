@@ -1,4 +1,6 @@
 package com.abk.kernel.data.repository
+import com.abk.kernel.tr
+import com.abk.kernel.R
 
 import com.abk.kernel.BuildConfig
 import com.abk.kernel.data.api.GitHubApiService
@@ -63,7 +65,7 @@ class GitHubRepository(
         withContext(Dispatchers.IO) {
             val candidates = externalModuleConfCandidates(repositoryUrl)
             if (candidates.isEmpty()) {
-                return@withContext Result.Error("模块仓库链接格式不支持")
+                return@withContext Result.Error(tr(R.string.gh_repo_link_unsupported))
             }
 
             var lastError = ""
@@ -74,7 +76,7 @@ class GitHubRepository(
                     .build()
                 val response = runCatching { publicHttpClient.newCall(request).execute() }
                     .getOrElse {
-                        lastError = it.message ?: "网络请求失败"
+                        lastError = it.message ?: tr(R.string.gh_network_request_failed)
                         null
                     } ?: continue
 
@@ -88,19 +90,19 @@ class GitHubRepository(
                     return@withContext runCatching { parseExternalModuleConf(body) }
                         .fold(
                             onSuccess = { Result.Success(it) },
-                            onFailure = { Result.Error("module.conf 无效: ${it.message ?: "格式错误"}") }
+                            onFailure = { Result.Error(tr(R.string.gh_module_conf_invalid, it.message ?: tr(R.string.gh_format_error))) }
                         )
                 }
             }
 
-            Result.Error("无法读取 module.conf: $lastError")
+            Result.Error(tr(R.string.gh_module_conf_unreadable, lastError))
         }
 
     suspend fun fetchModuleCatalog(repositoryUrl: String): Result<ModuleCatalogFetchResult> =
         withContext(Dispatchers.IO) {
             val candidates = moduleCatalogIndexCandidates(repositoryUrl)
             if (candidates.isEmpty()) {
-                return@withContext Result.Error("模块仓库链接格式不支持")
+                return@withContext Result.Error(tr(R.string.gh_repo_link_unsupported))
             }
 
             var lastError = ""
@@ -111,7 +113,7 @@ class GitHubRepository(
                     .build()
                 val response = runCatching { publicHttpClient.newCall(request).execute() }
                     .getOrElse {
-                        lastError = it.message ?: "网络请求失败"
+                        lastError = it.message ?: tr(R.string.gh_network_request_failed)
                         null
                     } ?: continue
 
@@ -124,7 +126,7 @@ class GitHubRepository(
                     val body = resp.body?.string().orEmpty()
                     val catalog = runCatching { parseModuleCatalogDocument(body, repositoryUrl) }
                         .getOrElse {
-                            lastError = "JSON 解析失败: ${it.message ?: "格式错误"}"
+                            lastError = tr(R.string.gh_json_parse_failed, it.message ?: tr(R.string.gh_format_error))
                             return@use
                         }
 
@@ -139,7 +141,7 @@ class GitHubRepository(
                 }
             }
 
-            Result.Error("无法读取模块仓库 JSON: $lastError")
+            Result.Error(tr(R.string.gh_catalog_json_unreadable, lastError))
         }
 
     // ── User ──────────────────────────────────────────────────────────────
@@ -512,7 +514,7 @@ class GitHubRepository(
 
     internal fun parseModuleCatalogDocument(body: String, repositoryUrl: String): ParsedModuleCatalogDocument {
         val root = JsonParser.parseString(body)
-        val document = root.asJsonObjectOrNull() ?: error("根节点必须是 JSON 对象")
+        val document = root.asJsonObjectOrNull() ?: error(tr(R.string.gh_root_must_be_object))
         val rawModules = document.arrayOrEmpty("modules")
         val modules = rawModules.mapNotNull { element ->
             element.asJsonObjectOrNull()?.let(::sanitizeCatalogItem)
@@ -560,7 +562,7 @@ class GitHubRepository(
     internal fun parseExternalModuleConf(body: String): ExternalModuleMetadata {
         val values = parseShellLikeConf(body)
         val name = values["ABK_MODULE_NAME"].orEmpty().trim()
-        if (name.isBlank()) error("缺少 ABK_MODULE_NAME")
+        if (name.isBlank()) error(tr(R.string.gh_missing_module_name))
         val supportedStages = values["ABK_MODULE_SUPPORTED_STAGES"]
             ?.takeIf { it.isNotBlank() }
             ?.split(',')
@@ -654,7 +656,7 @@ class GitHubRepository(
         .trimEnd('/')
         .substringAfterLast('/')
         .removeSuffix(".git")
-        .ifBlank { "模块仓库" }
+        .ifBlank { tr(R.string.gh_catalog_fallback_name) }
 
     private companion object {
         const val DEFAULT_LOG_BUFFER_SIZE = 8 * 1024
