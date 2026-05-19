@@ -10,6 +10,7 @@ object LocaleHelper {
     private const val KEY = "language"
     const val LANG_ZH = "zh"
     const val LANG_EN = "en"
+    const val LANG_RU = "ru"
 
     private var appContext: Context? = null
 
@@ -43,5 +44,9 @@ object LocaleHelper {
     }
 
     private fun detectDefault(): String =
-        if (Locale.getDefault().language == LANG_ZH) LANG_ZH else LANG_EN
+        when (Locale.getDefault().language) {
+            LANG_ZH -> LANG_ZH
+            LANG_RU -> LANG_RU
+            else -> LANG_EN
+        }
 }

@@ -938,6 +938,8 @@
     <string name="settings_language_desc">Select the app display language</string>
     <string name="settings_language_zh">中文</string>
     <string name="settings_language_en">English</string>
+    <string name="settings_language_ru">Русский</string>
+    
     <string name="ru_apk_not_found">APK file not found: %1$s</string>
     <string name="ru_boot_image_not_found">boot image not found: %1$s</string>
     <string name="ru_lkm_file_not_found">LKM file not found: %1$s</string>

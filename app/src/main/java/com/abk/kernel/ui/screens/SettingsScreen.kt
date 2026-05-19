@@ -1580,7 +1580,8 @@ private fun LanguageSettingsItem(
 ) {
     val options = listOf(
         Triple(LocaleHelper.LANG_ZH, stringResource(R.string.settings_language_zh), Icons.Default.Language),
-        Triple(LocaleHelper.LANG_EN, stringResource(R.string.settings_language_en), Icons.Default.Language)
+        Triple(LocaleHelper.LANG_EN, stringResource(R.string.settings_language_en), Icons.Default.Language),
+        Triple(LocaleHelper.LANG_RU, stringResource(R.string.settings_language_ru), Icons.Default.Language)
     )
     options.forEach { (lang, label, icon) ->
         val selected = current == lang
