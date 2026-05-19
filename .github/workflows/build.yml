@@ -1595,15 +1595,15 @@ jobs:
               fi
               if sub_in_range "$CURRENT_SUB" 98 127; then
                 apply_susfs_base_patch "Android 15 - 6.6 base.c" "a15-6.6/base.c.patch"
-                # 修复 6.6.98~6.6.127: fs/proc/base.c 头部 hunk 失配，导致 susfs_def.h 漏打
-                if grep -q 'AS_FLAGS_SUS_MAP\|susfs_is_current_proc_umounted\|SUSFS_IS_INODE_SUS_MAP\|SUSFS_IS_INODE_OPEN_REDIRECT' ./fs/proc/base.c && ! grep -qF 'susfs_def.h' ./fs/proc/base.c; then
-                  if ! grep -qF '#include <linux/dma-buf.h>' ./fs/proc/base.c; then
-                    sed -i '/#include <linux\/cpufreq_times.h>/a #include <linux\/dma-buf.h>' ./fs/proc/base.c
-                  fi
-                  sed -i '/#include <linux\/dma-buf.h>/a #endif' ./fs/proc/base.c
-                  sed -i '/#include <linux\/dma-buf.h>/a #include <linux\/susfs_def.h>' ./fs/proc/base.c
-                  sed -i '/#include <linux\/dma-buf.h>/a #if defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)' ./fs/proc/base.c
+              fi
+              # 修复 fs/proc/base.c 缺少 susfs_def.h (不限 sublevel，检测到宏调用但缺头文件时注入)
+              if grep -q 'AS_FLAGS_SUS_MAP\|susfs_is_current_proc_umounted\|SUSFS_IS_INODE_SUS_MAP\|SUSFS_IS_INODE_OPEN_REDIRECT' ./fs/proc/base.c && ! grep -qF 'susfs_def.h' ./fs/proc/base.c; then
+                if ! grep -qF '#include <linux/dma-buf.h>' ./fs/proc/base.c; then
+                  sed -i '/#include <linux\/cpufreq_times.h>/a #include <linux\/dma-buf.h>' ./fs/proc/base.c
                 fi
+                sed -i '/#include <linux\/dma-buf.h>/a #endif' ./fs/proc/base.c
+                sed -i '/#include <linux\/dma-buf.h>/a #include <linux\/susfs_def.h>' ./fs/proc/base.c
+                sed -i '/#include <linux\/dma-buf.h>/a #if defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)' ./fs/proc/base.c
               fi
               if sub_in_range "$CURRENT_SUB" 50 58; then
                 apply_susfs_optional_patch "Android 15 - 6.6 task_mmu.c" "a15-6.6/task_mmu.c.patch"
