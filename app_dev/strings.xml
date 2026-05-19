@@ -141,6 +141,8 @@
     <string name="build_kernelsu_config">KernelSU 配置</string>
     <string name="build_kernelsu_variant">KernelSU 变体</string>
     <string name="build_ksu_branch">KSU 分支</string>
+    <string name="build_custom_ksu_ref">自定义 KSU commit/ref</string>
+    <string name="build_custom_ksu_ref_placeholder">例如: abc123, branch:5, 或 tag</string>
     <string name="build_no_root_scheme_desc">不注入任何 Root 授权方案；KSU 分支、SUSFS 和 KPM 会自动关闭。</string>
     <string name="build_ksu_none">None（无 Root 方案）</string>
     <string name="build_standard">标准</string>

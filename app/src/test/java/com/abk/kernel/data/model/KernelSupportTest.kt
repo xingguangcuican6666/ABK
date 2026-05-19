@@ -46,6 +46,20 @@ class KernelSupportTest {
     }
 
     @Test
+    fun normalizePreservesCustomKsuBranchAndTrimsCustomRef() {
+        val normalized = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_SUKISU,
+                kernelsuBranch = KSU_BRANCH_CUSTOM,
+                customRef = "  feature:5  "
+            )
+        )
+
+        assertEquals(KSU_BRANCH_CUSTOM, normalized.kernelsuBranch)
+        assertEquals("feature:5", normalized.customRef)
+    }
+
+    @Test
     fun recommendedFromKernelDetectsAndroidLineSubLevelAndPatch() {
         val config = KernelSupport.recommendedFromKernel(
             "Linux version 6.1.162-android14-11-gabcdef SMP PREEMPT 2026-03"

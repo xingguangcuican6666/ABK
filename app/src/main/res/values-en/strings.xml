@@ -141,6 +141,8 @@
     <string name="build_kernelsu_config">KernelSU config</string>
     <string name="build_kernelsu_variant">KernelSU variant</string>
     <string name="build_ksu_branch">KSU branch</string>
+    <string name="build_custom_ksu_ref">Custom KSU commit/ref</string>
+    <string name="build_custom_ksu_ref_placeholder">e.g. abc123, branch:5, or tag</string>
     <string name="build_no_root_scheme_desc">Do not inject any root authorization scheme. KSU branch, SUSFS, and KPM will be disabled automatically.</string>
     <string name="build_ksu_none">None (no root scheme)</string>
     <string name="build_standard">stable</string>

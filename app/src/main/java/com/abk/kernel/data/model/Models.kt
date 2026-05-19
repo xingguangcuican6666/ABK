@@ -343,12 +343,13 @@ data class ModuleCatalogFetchResult(
 
 const val KSU_BRANCH_STABLE = "Stable(标准)"
 const val KSU_BRANCH_DEV = "Dev(开发)"
+const val KSU_BRANCH_CUSTOM = "Custom(自定义)"
 const val KSU_VARIANT_NONE = "None"
 const val KSU_VARIANT_OFFICIAL = "Official"
 const val KSU_VARIANT_SUKISU = "SukiSU"
 const val KSU_VARIANT_RESUKISU = "ReSukiSU"
 
-val KSU_BRANCH_STANDARD_OPTIONS = listOf(KSU_BRANCH_STABLE, KSU_BRANCH_DEV)
+val KSU_BRANCH_STANDARD_OPTIONS = listOf(KSU_BRANCH_STABLE, KSU_BRANCH_DEV, KSU_BRANCH_CUSTOM)
 val KSU_BRANCH_BUILD_PLAN_OPTIONS = KSU_BRANCH_STANDARD_OPTIONS
 val KSU_VARIANT_OPTIONS = listOf(
     KSU_VARIANT_OFFICIAL,
@@ -366,6 +367,7 @@ data class KernelBuildConfig(
     val revision: String = "r11",
     val kernelsuVariant: String = KSU_VARIANT_RESUKISU,
     val kernelsuBranch: String = KSU_BRANCH_STABLE,
+    val customRef: String = "",
     val version: String = "",
     val buildTime: String = "",
     val useZram: Boolean = false,
