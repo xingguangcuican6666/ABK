@@ -400,6 +400,24 @@ jobs:
               | jq -r --argjson idx "$INDEX" '.workflow_runs[$idx].head_sha'
           }
 
+          check_ref() {
+            REPO="$1"
+            if [[ "$custom_ref_input" =~ ^[A-Fa-f0-9]{40}$ ]]; then
+              MSG=$(curl -s "https://api.github.com/repos/$REPO/commits/$custom_ref_input" \
+                      | jq -r '.message // empty')
+            elif [[ "$custom_ref_input" =~ ^[Vv]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              MSG=$(curl -s "https://api.github.com/repos/$REPO/git/ref/tags/$custom_ref_input" \
+                      | jq -r '.message // empty')
+            else
+              MSG=$(curl -s "https://api.github.com/repos/$REPO/branches/$custom_ref_input" \
+                      | jq -r '.message // empty')
+            fi
+            if echo "$MSG" | grep -qi "no.*found"; then
+              echo "error: '$custom_ref_input' 在 $REPO 中不存在"
+              exit 1
+            fi
+          }
+
           if [ "$branch_input" = "Custom(自定义)" ]; then
             # 分支名:数字（如 main:5 → 第 5 个成功构建）
             if [[ "$custom_ref_input" =~ ^([A-Za-z0-9._/-]+):([0-9]+)$ ]]; then
@@ -415,6 +433,15 @@ jobs:
                 RESUKISU_CUSTOM_REF="$(get_success_action_sha "ReSukiSU/ReSukiSU" "$BRANCH" "$NABE")"
               fi
             else
+              if [ "$variant_input" = "Official" ]; then
+                check_ref "tiann/KernelSU"
+              fi
+              if [ "$variant_input" = "SukiSU" ]; then
+                check_ref "ShirkNeko/susfs4ksu"
+              fi
+              if [ "$variant_input" = "ReSukiSU" ]; then
+                check_ref "ReSukiSU/ReSukiSU"
+              fi
               OFFICIAL_CUSTOM_REF="$custom_ref_input"
               SUKISU_CUSTOM_REF="$custom_ref_input"
               RESUKISU_CUSTOM_REF="$custom_ref_input"
