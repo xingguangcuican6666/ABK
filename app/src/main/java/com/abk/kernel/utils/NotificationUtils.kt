@@ -43,6 +43,7 @@ object NotificationUtils {
 
     private val MIUI_FOCUS_PERMISSION_URI = Uri.parse("content://miui.statusbar.notification.public")
     private val whitespaceRegex = Regex("\\s+")
+    private var lastBuildNotificationSignature: String? = null
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -67,19 +68,38 @@ object NotificationUtils {
         progress: Int? = null,
         currentStep: String? = null
     ) {
-        post(context, NOTIF_ID_BUILD, buildBuildRunningNotification(context, progress, currentStep))
+        val normalizedProgress = progress?.coerceIn(0, 100)
+        val normalizedStep = currentStep.orEmpty().trim()
+        val signature = buildRunningNotificationSignature(normalizedProgress, normalizedStep)
+        if (signature == lastBuildNotificationSignature) return
+        post(
+            context,
+            NOTIF_ID_BUILD,
+            buildBuildRunningNotification(
+                context = context,
+                progress = normalizedProgress,
+                currentStep = normalizedStep,
+                rememberAsShown = true
+            )
+        )
     }
 
     fun buildBuildRunningNotification(
         context: Context,
         progress: Int? = null,
-        currentStep: String? = null
+        currentStep: String? = null,
+        rememberAsShown: Boolean = false
     ): android.app.Notification {
+        val normalizedProgress = progress?.coerceIn(0, 100)
+        val normalizedStep = currentStep.orEmpty().trim()
+        if (rememberAsShown) {
+            lastBuildNotificationSignature = buildRunningNotificationSignature(normalizedProgress, normalizedStep)
+        }
         val intent = Intent(context, MainActivity::class.java)
         val pi = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
         val text = when {
-            progress != null && !currentStep.isNullOrBlank() -> "$progress% · $currentStep"
-            !currentStep.isNullOrBlank() -> currentStep
+            normalizedProgress != null && normalizedStep.isNotBlank() -> "$normalizedProgress% · $normalizedStep"
+            normalizedStep.isNotBlank() -> normalizedStep
             else -> context.getString(R.string.build_running)
         }
         val builder = NotificationCompat.Builder(context, CHANNEL_BUILD)
@@ -90,7 +110,7 @@ object NotificationUtils {
             .setContentIntent(pi)
             .setOnlyAlertOnce(true)
         if (progress != null) {
-            builder.setProgress(100, progress.coerceIn(0, 100), false)
+            builder.setProgress(100, normalizedProgress ?: 0, false)
         } else {
             builder.setProgress(100, 0, true)
         }
@@ -100,7 +120,7 @@ object NotificationUtils {
                 content = BuildIslandContent(
                     title = context.getString(R.string.notif_build_running),
                     content = text,
-                    progressLabel = progress?.coerceIn(0, 100)?.let { "$it%" } ?: context.getString(R.string.build_running),
+                    progressLabel = normalizedProgress?.let { "$it%" } ?: context.getString(R.string.build_running),
                     color = COLOR_BUILD_RUNNING
                 )
             )
@@ -138,6 +158,7 @@ object NotificationUtils {
                     )
                 )
             }
+        lastBuildNotificationSignature = null
         post(context, NOTIF_ID_BUILD, notif)
     }
 
@@ -163,6 +184,7 @@ object NotificationUtils {
     }
 
     fun cancelBuildNotification(context: Context) {
+        lastBuildNotificationSignature = null
         NotificationManagerCompat.from(context).cancel(NOTIF_ID_BUILD)
     }
 
@@ -253,7 +275,6 @@ object NotificationUtils {
         val imageTextInfo = JSONObject()
             .put("type", 1)
             .put("picInfo", picInfo)
-            .put("textInfo", textInfo)
             .put("miui.focus.paramtextInfo", textInfo)
 
         return JSONObject()
@@ -262,30 +283,26 @@ object NotificationUtils {
                 JSONObject()
                     .put("protocol", 1)
                     .put("business", MIUI_BUILD_BUSINESS)
-                    .put("enableFloat", true)
+                    .put("islandFirstFloat", false)
+                    .put("enableFloat", false)
                     .put("updatable", true)
+                    .put("filterWhenNoPermission", false)
                     .put("ticker", "$progress $title".cleanIslandText(32))
                     .put("aodTitle", title)
                     .put(
                         "param_island",
                         JSONObject()
                             .put("islandProperty", 1)
+                            .put("highlightColor", content.color)
                             .put(
                                 "bigIslandArea",
                                 JSONObject()
                                     .put("imageTextInfoLeft", imageTextInfo)
-                                    .put("picInfo", picInfo)
                             )
                             .put(
                                 "smallIslandArea",
                                 JSONObject()
                                     .put("picInfo", picInfo)
-                                    .put(
-                                        "textInfo",
-                                        JSONObject()
-                                            .put("title", progress)
-                                            .put("content", title)
-                                    )
                             )
                             .put("shareData", JSONObject().put("title", title))
                     )
@@ -311,6 +328,10 @@ object NotificationUtils {
         val cleaned = trim().replace(whitespaceRegex, " ")
         if (cleaned.length <= maxLength) return cleaned
         return cleaned.take((maxLength - 3).coerceAtLeast(1)).trimEnd() + "..."
+    }
+
+    private fun buildRunningNotificationSignature(progress: Int?, currentStep: String): String {
+        return "running|${progress ?: "indef"}|$currentStep"
     }
 
     private data class BuildIslandContent(

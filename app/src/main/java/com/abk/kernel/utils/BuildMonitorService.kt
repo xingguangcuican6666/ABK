@@ -73,7 +73,7 @@ class BuildMonitorService : Service() {
 
     private fun buildForegroundNotification(): Notification {
         NotificationUtils.createChannels(this)
-        return NotificationUtils.buildBuildRunningNotification(this)
+        return NotificationUtils.buildBuildRunningNotification(this, rememberAsShown = true)
     }
 
     private fun startMonitoring(owner: String, repo: String, runId: Long) {
@@ -89,8 +89,6 @@ class BuildMonitorService : Service() {
             val notifyBuild = prefs.notifyBuild.first()
             val github = GitHubRepository()
             github.updateToken(token)
-
-            if (notifyBuild) NotificationUtils.notifyBuildRunning(applicationContext)
 
             try {
                 while (isActive) {
