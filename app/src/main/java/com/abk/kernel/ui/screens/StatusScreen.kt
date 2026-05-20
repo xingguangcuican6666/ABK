@@ -42,6 +42,7 @@ import com.abk.kernel.viewmodel.MainViewModel
 @Composable
 fun StatusScreen(
     vm: MainViewModel,
+    outerPadding: PaddingValues = PaddingValues(0.dp),
     runtimeNavigationEnabled: Boolean = false,
     onToggleRuntimeNavigation: () -> Unit = {}
 ) {
@@ -290,7 +291,7 @@ fun StatusScreen(
                     }
                 }
             }
-            Spacer(Modifier.height(80.dp))
+            Spacer(Modifier.height(80.dp + outerPadding.calculateBottomPadding()))
         }
     }
 }

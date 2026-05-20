@@ -501,7 +501,7 @@ private fun AbkMainScaffold(
                 .fillMaxSize()
                 .zIndex(1f)
         ) {
-            Box(modifier = Modifier.padding(contentPadding).fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 AnimatedContent(
                     targetState = activeTab,
                     transitionSpec = {
@@ -523,6 +523,7 @@ private fun AbkMainScaffold(
                     when (tab) {
                         AbkTab.Status -> StatusScreen(
                             vm = vm,
+                            outerPadding = contentPadding,
                             runtimeNavigationEnabled = state.runtimeNavigationEnabled,
                             onToggleRuntimeNavigation = { vm.setRuntimeNavigationEnabled(true) }
                         )
@@ -549,6 +550,7 @@ private fun AbkMainScaffold(
                         )
                         AbkTab.InstalledModules -> InstalledModulesScreen(
                             vm = vm,
+                            outerPadding = contentPadding,
                             pendingModuleInstallUri = pendingModuleInstallUri,
                             onPendingModuleInstallUriConsumed = onModuleInstallUriConsumed
                         )

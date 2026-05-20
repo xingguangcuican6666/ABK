@@ -230,7 +230,7 @@ fun RootAuthorizationScreen(
                 contentPadding = PaddingValues(
                     start = AbkScreenHorizontalPadding,
                     end = AbkScreenHorizontalPadding,
-                    bottom = 80.dp
+                    bottom = 80.dp + outerPadding.calculateBottomPadding()
                 ),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {

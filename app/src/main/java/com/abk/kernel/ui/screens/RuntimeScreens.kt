@@ -211,7 +211,7 @@ fun RuntimeHomeScreen(
                     RuntimeBuildParametersCard(runtimeStatus)
                 }
 
-                Spacer(Modifier.height(80.dp))
+                Spacer(Modifier.height(80.dp + outerPadding.calculateBottomPadding()))
             }
         }
 
@@ -265,6 +265,7 @@ fun RuntimeHomeScreen(
 @Composable
 fun InstalledModulesScreen(
     vm: MainViewModel,
+    outerPadding: PaddingValues = PaddingValues(0.dp),
     pendingModuleInstallUri: String? = null,
     onPendingModuleInstallUriConsumed: () -> Unit = {}
 ) {
@@ -492,7 +493,7 @@ fun InstalledModulesScreen(
                 }
             }
 
-            Spacer(Modifier.height(80.dp))
+            Spacer(Modifier.height(80.dp + outerPadding.calculateBottomPadding()))
         }
     }
 

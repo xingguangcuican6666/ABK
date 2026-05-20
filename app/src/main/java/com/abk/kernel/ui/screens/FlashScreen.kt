@@ -566,7 +566,7 @@ fun FlashScreen(
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .padding(horizontal = AbkScreenHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 96.dp)
+                contentPadding = PaddingValues(bottom = 96.dp + outerPadding.calculateBottomPadding())
             ) {
                 item {
                     FlashHero(

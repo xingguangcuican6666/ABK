@@ -224,6 +224,7 @@ fun SettingsScreen(
         ) {
             SettingsMainContent(
                 padding = it,
+                outerPadding = outerPadding,
                 state = state,
                 vm = vm,
                 scrollBehavior = scrollBehavior,
@@ -455,6 +456,7 @@ private fun SettingsPageBackground(
 @Composable
 private fun SettingsMainContent(
     padding: PaddingValues,
+    outerPadding: PaddingValues,
     state: MainUiState,
     vm: MainViewModel,
     scrollBehavior: TopAppBarScrollBehavior,
@@ -603,7 +605,7 @@ private fun SettingsMainContent(
             )
         }
 
-        Spacer(Modifier.height(80.dp))
+        Spacer(Modifier.height(80.dp + outerPadding.calculateBottomPadding()))
     }
 }
 
