@@ -448,7 +448,7 @@ private fun AbkMainScaffold(
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
                 .onSizeChanged { bottomBarHeightPx = it.height }
-                .zIndex(0f)
+                .zIndex(if (childPageVisible) 0f else 2f)
         ) {
             NavigationBar(
                 containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer),
