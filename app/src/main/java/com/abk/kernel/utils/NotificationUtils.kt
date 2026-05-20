@@ -40,6 +40,7 @@ object NotificationUtils {
     private const val COLOR_BUILD_RUNNING = "#006EFF"
     private const val COLOR_BUILD_SUCCESS = "#1A7F37"
     private const val COLOR_BUILD_FAILED = "#D93025"
+    private const val COLOR_PROGRESS_UNREACHED = "#1A000000"
 
     private val MIUI_FOCUS_PERMISSION_URI = Uri.parse("content://miui.statusbar.notification.public")
     private val whitespaceRegex = Regex("\\s+")
@@ -283,16 +284,22 @@ object NotificationUtils {
             .put("type", 1)
             .put("pic", MIUI_FOCUS_BUILD_ICON)
             .put("picDark", MIUI_FOCUS_BUILD_ICON)
-        val smallIslandInfo = JSONObject()
+        val percentTextInfo = JSONObject()
+            .put("title", progressLabel)
+            .put("narrowFont", true)
+            .put("showHighlightColor", false)
+        val bigIslandIconInfo = JSONObject()
             .put("type", 1)
             .put("picInfo", iconInfo)
+        val progressTextInfo = JSONObject()
             .put(
-                "textInfo",
+                "progressInfo",
                 JSONObject()
-                    .put("title", progressLabel)
-                    .put("narrowFont", true)
-                    .put("showHighlightColor", false)
+                    .put("progress", progress)
+                    .put("colorReach", content.color)
+                    .put("colorUnReach", COLOR_PROGRESS_UNREACHED)
             )
+            .put("textInfo", percentTextInfo)
 
         return JSONObject()
             .put(
@@ -315,17 +322,18 @@ object NotificationUtils {
                             .put(
                                 "bigIslandArea",
                                 JSONObject()
-                                    .put("baseInfo", baseInfo)
-                                    .put("picInfo", iconInfo)
-                                    .put("progressInfo", progressInfo)
+                                    .put("imageTextInfoLeft", bigIslandIconInfo)
+                                    .put("progressTextInfo", progressTextInfo)
                             )
                             .put(
                                 "smallIslandArea",
                                 JSONObject()
-                                    .put("imageTextInfoLeft", smallIslandInfo)
+                                    .put("picInfo", iconInfo)
+                                    .put("textInfo", percentTextInfo)
                             )
                             .put("shareData", JSONObject().put("title", title))
                     )
+                    .put("progressInfo", progressInfo)
                     .put(
                         "hintInfo",
                         JSONObject()
