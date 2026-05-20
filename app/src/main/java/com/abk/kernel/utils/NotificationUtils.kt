@@ -44,6 +44,7 @@ object NotificationUtils {
     private val MIUI_FOCUS_PERMISSION_URI = Uri.parse("content://miui.statusbar.notification.public")
     private val whitespaceRegex = Regex("\\s+")
     private var lastBuildNotificationSignature: String? = null
+    private var lastBuildProgressPercent: Int? = null
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -94,6 +95,7 @@ object NotificationUtils {
         val normalizedStep = currentStep.orEmpty().trim()
         if (rememberAsShown) {
             lastBuildNotificationSignature = buildRunningNotificationSignature(normalizedProgress, normalizedStep)
+            lastBuildProgressPercent = normalizedProgress ?: 0
         }
         val intent = Intent(context, MainActivity::class.java)
         val pi = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
@@ -120,7 +122,7 @@ object NotificationUtils {
                 content = BuildIslandContent(
                     title = context.getString(R.string.notif_build_running),
                     content = text,
-                    progressLabel = normalizedProgress?.let { "$it%" } ?: context.getString(R.string.build_running),
+                    progress = normalizedProgress ?: 0,
                     color = COLOR_BUILD_RUNNING
                 )
             )
@@ -134,6 +136,7 @@ object NotificationUtils {
             context.getString(R.string.notif_build_done)
         else
             context.getString(R.string.notif_build_failed)
+        val progress = if (success) 100 else lastBuildProgressPercent ?: 0
         val notif = NotificationCompat.Builder(context, CHANNEL_BUILD)
             .setSmallIcon(
                 if (success) android.R.drawable.ic_dialog_info
@@ -153,12 +156,13 @@ object NotificationUtils {
                         } else {
                             context.getString(R.string.build_failed)
                         },
-                        progressLabel = if (success) "100%" else context.getString(R.string.build_failed),
+                        progress = progress,
                         color = if (success) COLOR_BUILD_SUCCESS else COLOR_BUILD_FAILED
                     )
                 )
             }
         lastBuildNotificationSignature = null
+        lastBuildProgressPercent = null
         post(context, NOTIF_ID_BUILD, notif)
     }
 
@@ -185,6 +189,7 @@ object NotificationUtils {
 
     fun cancelBuildNotification(context: Context) {
         lastBuildNotificationSignature = null
+        lastBuildProgressPercent = null
         NotificationManagerCompat.from(context).cancel(NOTIF_ID_BUILD)
     }
 
@@ -263,19 +268,31 @@ object NotificationUtils {
     private fun buildMiuiBuildIslandParams(content: BuildIslandContent): String {
         val title = content.title.cleanIslandText(24)
         val body = content.content.cleanIslandText(48)
-        val progress = content.progressLabel.cleanIslandText(16)
-        val textInfo = JSONObject()
-            .put("frontTitle", title)
-            .put("title", progress)
+        val progress = content.progress.coerceIn(0, 100)
+        val progressLabel = "$progress%"
+        val baseInfo = JSONObject()
+            .put("type", 1)
+            .put("title", title)
             .put("content", body)
-            .put("useHighLight", false)
-        val picInfo = JSONObject()
+            .put("colorTitle", content.color)
+        val progressInfo = JSONObject()
+            .put("progress", progress)
+            .put("colorProgress", content.color)
+            .put("colorProgressEnd", content.color)
+        val iconInfo = JSONObject()
             .put("type", 1)
             .put("pic", MIUI_FOCUS_BUILD_ICON)
-        val imageTextInfo = JSONObject()
+            .put("picDark", MIUI_FOCUS_BUILD_ICON)
+        val smallIslandInfo = JSONObject()
             .put("type", 1)
-            .put("picInfo", picInfo)
-            .put("miui.focus.paramtextInfo", textInfo)
+            .put("picInfo", iconInfo)
+            .put(
+                "textInfo",
+                JSONObject()
+                    .put("title", progressLabel)
+                    .put("narrowFont", true)
+                    .put("showHighlightColor", false)
+            )
 
         return JSONObject()
             .put(
@@ -287,8 +304,9 @@ object NotificationUtils {
                     .put("enableFloat", false)
                     .put("updatable", true)
                     .put("filterWhenNoPermission", false)
-                    .put("ticker", "$progress $title".cleanIslandText(32))
+                    .put("ticker", "$progressLabel $title".cleanIslandText(32))
                     .put("aodTitle", title)
+                    .put("baseInfo", baseInfo)
                     .put(
                         "param_island",
                         JSONObject()
@@ -297,28 +315,22 @@ object NotificationUtils {
                             .put(
                                 "bigIslandArea",
                                 JSONObject()
-                                    .put("imageTextInfoLeft", imageTextInfo)
+                                    .put("baseInfo", baseInfo)
+                                    .put("picInfo", iconInfo)
+                                    .put("progressInfo", progressInfo)
                             )
                             .put(
                                 "smallIslandArea",
                                 JSONObject()
-                                    .put("picInfo", picInfo)
+                                    .put("imageTextInfoLeft", smallIslandInfo)
                             )
                             .put("shareData", JSONObject().put("title", title))
-                    )
-                    .put(
-                        "baseInfo",
-                        JSONObject()
-                            .put("title", title)
-                            .put("content", body)
-                            .put("colorTitle", content.color)
-                            .put("type", 2)
                     )
                     .put(
                         "hintInfo",
                         JSONObject()
                             .put("type", 1)
-                            .put("title", progress)
+                            .put("title", progressLabel)
                     )
             )
             .toString()
@@ -337,7 +349,7 @@ object NotificationUtils {
     private data class BuildIslandContent(
         val title: String,
         val content: String,
-        val progressLabel: String,
+        val progress: Int,
         val color: String
     )
 }
