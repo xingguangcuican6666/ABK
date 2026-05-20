@@ -37,7 +37,7 @@ val AbkScreenHorizontalPadding: Dp = 24.dp
 private val ExpressiveTopBarActionHeight: Dp = 40.dp
 private val ExpressiveTopBarCompactTitleHeight: Dp = 62.dp
 private val ExpressiveTopBarExpandedTitleHeight: Dp = 60.dp
-private val ExpressiveTopBarLift: Dp = 8.dp
+private val ExpressiveTopBarLift: Dp = 12.dp
 
 @Composable
 fun ExpressiveFlexibleTopBar(

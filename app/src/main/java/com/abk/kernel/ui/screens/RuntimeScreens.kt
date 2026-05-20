@@ -94,6 +94,7 @@ private val RUNTIME_PATCH_BACK_MAX_CORNER = 32.dp
 @Composable
 fun RuntimeHomeScreen(
     vm: MainViewModel,
+    outerPadding: PaddingValues = PaddingValues(0.dp),
     onSwitchToClassic: () -> Unit,
     onManagerPatchPageVisibleChange: (Boolean) -> Unit = {}
 ) {
@@ -159,9 +160,10 @@ fun RuntimeHomeScreen(
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
+        val childPageBottomInset = outerPadding.calculateBottomPadding()
         val childPageModifier = Modifier
             .fillMaxWidth()
-            .height(maxHeight)
+            .height(maxHeight + childPageBottomInset)
 
         Scaffold(
             containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surface),

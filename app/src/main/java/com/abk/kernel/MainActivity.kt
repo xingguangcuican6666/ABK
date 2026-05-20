@@ -16,11 +16,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -52,7 +49,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,18 +58,23 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -340,7 +341,12 @@ private fun AbkMainScaffold(
     }
     val activeTab = if (selectedTab in visibleTabs) selectedTab else visibleTabs.first()
     val motionScheme = MaterialTheme.motionScheme
-    val hideBottomBar = when (activeTab) {
+    val density = LocalDensity.current
+    var bottomBarHeightPx by remember { mutableIntStateOf(0) }
+    val contentPadding = PaddingValues(
+        bottom = with(density) { bottomBarHeightPx.toDp() }
+    )
+    val childPageVisible = when (activeTab) {
         AbkTab.Build -> buildPlanPageVisible
         AbkTab.Modules -> moduleRepositoryPageVisible
         AbkTab.Flash -> flashDetailPageVisible
@@ -428,135 +434,143 @@ private fun AbkMainScaffold(
         }
     }
 
-    if (!hideBottomBar) {
+    if (!childPageVisible) {
         BackHandler(onBack = ::handleTopLevelBack)
     }
 
-    Scaffold(
-        containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surface),
-        bottomBar = {
-            AnimatedVisibility(
-                visible = !hideBottomBar,
-                enter = fadeIn(animationSpec = motionScheme.fastEffectsSpec()) +
-                    slideInVertically(animationSpec = motionScheme.fastSpatialSpec()) { height -> height },
-                exit = ExitTransition.None
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(uiSurfaceColor(MaterialTheme.colorScheme.surface))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .onSizeChanged { bottomBarHeightPx = it.height }
+                .zIndex(0f)
+        ) {
+            NavigationBar(
+                containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer),
+                tonalElevation = 0.dp
             ) {
-                NavigationBar(
-                    containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer),
-                    tonalElevation = 0.dp
-                ) {
-                    visibleTabs.forEach { tab ->
-                        NavigationBarItem(
-                            selected = activeTab == tab,
-                            onClick = { selectedTab = tab },
-                            alwaysShowLabel = false,
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            icon = {
-                                Icon(
-                                    imageVector = when (tab) {
-                                        AbkTab.Status -> Icons.Default.Home
-                                        AbkTab.Build -> Icons.Default.RocketLaunch
-                                        AbkTab.Modules -> Icons.Default.LibraryBooks
-                                        AbkTab.Flash -> if (state.rootGranted) Icons.Default.FlashOn else Icons.Default.FolderOpen
-                                        AbkTab.RuntimeHome -> Icons.Default.Memory
-                                        AbkTab.InstalledModules -> Icons.Default.Extension
-                                        AbkTab.RootAuth -> Icons.Default.AdminPanelSettings
-                                        AbkTab.Settings -> Icons.Default.Settings
-                                    },
-                                    contentDescription = tab.displayLabel(state.rootGranted)
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = tab.displayLabel(state.rootGranted),
-                                    maxLines = 2,
-                                    softWrap = true,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
-                        )
-                    }
+                visibleTabs.forEach { tab ->
+                    NavigationBarItem(
+                        selected = activeTab == tab,
+                        onClick = { selectedTab = tab },
+                        enabled = !childPageVisible,
+                        alwaysShowLabel = false,
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        icon = {
+                            Icon(
+                                imageVector = when (tab) {
+                                    AbkTab.Status -> Icons.Default.Home
+                                    AbkTab.Build -> Icons.Default.RocketLaunch
+                                    AbkTab.Modules -> Icons.Default.LibraryBooks
+                                    AbkTab.Flash -> if (state.rootGranted) Icons.Default.FlashOn else Icons.Default.FolderOpen
+                                    AbkTab.RuntimeHome -> Icons.Default.Memory
+                                    AbkTab.InstalledModules -> Icons.Default.Extension
+                                    AbkTab.RootAuth -> Icons.Default.AdminPanelSettings
+                                    AbkTab.Settings -> Icons.Default.Settings
+                                },
+                                contentDescription = tab.displayLabel(state.rootGranted)
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = tab.displayLabel(state.rootGranted),
+                                maxLines = 2,
+                                softWrap = true,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    )
                 }
             }
         }
-    ) { padding ->
-        val contentPadding = if (hideBottomBar) PaddingValues(0.dp) else padding
-        androidx.compose.foundation.layout.Box(modifier = Modifier.padding(contentPadding).fillMaxSize()) {
-            AnimatedContent(
-                targetState = activeTab,
-                transitionSpec = {
-                    val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                    (
-                        fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
-                            slideInHorizontally(
-                                animationSpec = motionScheme.defaultSpatialSpec()
-                            ) { width -> direction * width / 4 }
-                        ) togetherWith (
-                        fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
-                            slideOutHorizontally(
-                                animationSpec = motionScheme.fastSpatialSpec()
-                            ) { width -> -direction * width / 6 }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(1f)
+        ) {
+            Box(modifier = Modifier.padding(contentPadding).fillMaxSize()) {
+                AnimatedContent(
+                    targetState = activeTab,
+                    transitionSpec = {
+                        val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                        (
+                            fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
+                                slideInHorizontally(
+                                    animationSpec = motionScheme.defaultSpatialSpec()
+                                ) { width -> direction * width / 4 }
+                            ) togetherWith (
+                            fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
+                                slideOutHorizontally(
+                                    animationSpec = motionScheme.fastSpatialSpec()
+                                ) { width -> -direction * width / 6 }
+                            )
+                    },
+                    label = "abk-tab"
+                ) { tab ->
+                    when (tab) {
+                        AbkTab.Status -> StatusScreen(
+                            vm = vm,
+                            runtimeNavigationEnabled = state.runtimeNavigationEnabled,
+                            onToggleRuntimeNavigation = { vm.setRuntimeNavigationEnabled(true) }
                         )
-                },
-                label = "abk-tab"
-            ) { tab ->
-                when (tab) {
-                    AbkTab.Status -> StatusScreen(
-                        vm = vm,
-                        runtimeNavigationEnabled = state.runtimeNavigationEnabled,
-                        onToggleRuntimeNavigation = { vm.setRuntimeNavigationEnabled(true) }
-                    )
-                    AbkTab.Build -> BuildScreen(
-                        vm = vm,
-                        outerPadding = contentPadding,
-                        onPlanPageVisibleChange = { buildPlanPageVisible = it }
-                    )
-                    AbkTab.Modules -> ModuleRepositoryScreen(
-                        vm = vm,
-                        outerPadding = contentPadding,
-                        onRepositoryPageVisibleChange = { moduleRepositoryPageVisible = it }
-                    )
-                    AbkTab.Flash -> FlashScreen(
-                        vm = vm,
-                        outerPadding = contentPadding,
-                        onDetailPageVisibleChange = { flashDetailPageVisible = it }
-                    )
-                    AbkTab.RuntimeHome -> RuntimeHomeScreen(
-                        vm = vm,
-                        onSwitchToClassic = { vm.setRuntimeNavigationEnabled(false) },
-                        onManagerPatchPageVisibleChange = { managerPatchPageVisible = it }
-                    )
-                    AbkTab.InstalledModules -> InstalledModulesScreen(
-                        vm = vm,
-                        pendingModuleInstallUri = pendingModuleInstallUri,
-                        onPendingModuleInstallUriConsumed = onModuleInstallUriConsumed
-                    )
-                    AbkTab.RootAuth -> RootAuthorizationScreen(
-                        vm = vm,
-                        outerPadding = contentPadding,
-                        onDetailPageVisibleChange = { rootAuthDetailPageVisible = it }
-                    )
-                    AbkTab.Settings -> SettingsScreen(
-                        vm = vm,
-                        outerPadding = contentPadding,
-                        onThemePageVisibleChange = { settingsThemePageVisible = it },
-                        onOpenInstalledModules = {
-                            if (!state.runtimeNavigationEnabled) vm.setRuntimeNavigationEnabled(true)
-                            selectedTab = if (state.rootGranted) {
-                                AbkTab.InstalledModules
-                            } else {
-                                AbkTab.RuntimeHome
+                        AbkTab.Build -> BuildScreen(
+                            vm = vm,
+                            outerPadding = contentPadding,
+                            onPlanPageVisibleChange = { buildPlanPageVisible = it }
+                        )
+                        AbkTab.Modules -> ModuleRepositoryScreen(
+                            vm = vm,
+                            outerPadding = contentPadding,
+                            onRepositoryPageVisibleChange = { moduleRepositoryPageVisible = it }
+                        )
+                        AbkTab.Flash -> FlashScreen(
+                            vm = vm,
+                            outerPadding = contentPadding,
+                            onDetailPageVisibleChange = { flashDetailPageVisible = it }
+                        )
+                        AbkTab.RuntimeHome -> RuntimeHomeScreen(
+                            vm = vm,
+                            outerPadding = contentPadding,
+                            onSwitchToClassic = { vm.setRuntimeNavigationEnabled(false) },
+                            onManagerPatchPageVisibleChange = { managerPatchPageVisible = it }
+                        )
+                        AbkTab.InstalledModules -> InstalledModulesScreen(
+                            vm = vm,
+                            pendingModuleInstallUri = pendingModuleInstallUri,
+                            onPendingModuleInstallUriConsumed = onModuleInstallUriConsumed
+                        )
+                        AbkTab.RootAuth -> RootAuthorizationScreen(
+                            vm = vm,
+                            outerPadding = contentPadding,
+                            onDetailPageVisibleChange = { rootAuthDetailPageVisible = it }
+                        )
+                        AbkTab.Settings -> SettingsScreen(
+                            vm = vm,
+                            outerPadding = contentPadding,
+                            onThemePageVisibleChange = { settingsThemePageVisible = it },
+                            onOpenInstalledModules = {
+                                if (!state.runtimeNavigationEnabled) vm.setRuntimeNavigationEnabled(true)
+                                selectedTab = if (state.rootGranted) {
+                                    AbkTab.InstalledModules
+                                } else {
+                                    AbkTab.RuntimeHome
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
