@@ -5,7 +5,6 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
-import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.abk.kernel.data.model.BuildProgress
 import com.abk.kernel.data.model.WorkflowJob
@@ -74,11 +73,7 @@ class BuildMonitorService : Service() {
 
     private fun buildForegroundNotification(): Notification {
         NotificationUtils.createChannels(this)
-        return NotificationCompat.Builder(this, NotificationUtils.CHANNEL_BUILD)
-            .setSmallIcon(android.R.drawable.ic_popup_sync)
-            .setContentTitle(getString(com.abk.kernel.R.string.notif_build_running))
-            .setOngoing(true)
-            .build()
+        return NotificationUtils.buildBuildRunningNotification(this)
     }
 
     private fun startMonitoring(owner: String, repo: String, runId: Long) {
