@@ -382,12 +382,13 @@ jobs:
           variant_input="${{ inputs.ksu_variant }}"
           custom_ref_input="${{ inputs.custom_ref }}"
           OFFICIAL_STABLE_REF="3f388ef137c78e1ca0c92c0ada3b8717cdcc4302"
-          SUKISU_STABLE_REF="a992f224f5ea5a69b56ba20e925379c9a226f2b2"
+          SUKISU_STABLE_REF="c5af9eadac43b1f0b9751471be78e6eef681554b"
           RESUKISU_STABLE_REF="b6706363b95525acd4007da19edadb1d41b2ea27"
+          SUKISU_REPO="SukiSU-Ultra/SukiSU-Ultra"
 
           # Dev 固定引用先完整复制 Stable 配置，后续只改这里的 *_DEV_REF 即可。
           OFFICIAL_DEV_REF="290609c945728fc93d85735918793567588103c1"
-          SUKISU_DEV_REF="4610456736ba3a3c9a00ad618aa0f4ccc4db5b70"
+          SUKISU_DEV_REF="c5af9eadac43b1f0b9751471be78e6eef681554b"
           RESUKISU_DEV_REF="fb771414f249ab886c09f2cfcbbf91c4b4dab2d1"
 
           get_success_action_sha() {
@@ -427,7 +428,7 @@ jobs:
                 OFFICIAL_CUSTOM_REF="$(get_success_action_sha "tiann/KernelSU" "$BRANCH" "$NABE")"
               fi
               if [ "$variant_input" = "SukiSU" ]; then
-                SUKISU_CUSTOM_REF="$(get_success_action_sha "ShirkNeko/susfs4ksu" "$BRANCH" "$NABE")"
+                SUKISU_CUSTOM_REF="$(get_success_action_sha "$SUKISU_REPO" "$BRANCH" "$NABE")"
               fi
               if [ "$variant_input" = "ReSukiSU" ]; then
                 RESUKISU_CUSTOM_REF="$(get_success_action_sha "ReSukiSU/ReSukiSU" "$BRANCH" "$NABE")"
@@ -437,7 +438,7 @@ jobs:
                 check_ref "tiann/KernelSU"
               fi
               if [ "$variant_input" = "SukiSU" ]; then
-                check_ref "ShirkNeko/susfs4ksu"
+                check_ref "$SUKISU_REPO"
               fi
               if [ "$variant_input" = "ReSukiSU" ]; then
                 check_ref "ReSukiSU/ReSukiSU"
@@ -662,16 +663,7 @@ jobs:
 
           if [ "${{ inputs.enable_susfs }}" == "true" ]; then
             echo "克隆 SUSFS (分支: $SUSFS_BRANCH)..."
-            if [ "${{ inputs.ksu_variant }}" == "SukiSU" ]; then
-              if ! git clone https://github.com/ShirkNeko/susfs4ksu.git -b "$SUSFS_BRANCH" 2>/dev/null; then
-                echo "ShirkNeko 仓库未找到分支 $SUSFS_BRANCH，回退到 simonpunk 原版..."
-                git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
-              fi
-            elif [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; then
-              git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
-            else
-              git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
-            fi
+            git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
 
             CONFIG_FILE="config/config"
             if [ -f "$CONFIG_FILE" ]; then
@@ -1295,7 +1287,7 @@ jobs:
               echo "ReSukiSU 使用内置 SUSFS 支持"
               ;;
             "SukiSU")
-              echo "SukiSU 跳过 SUSFS Kconfig，仅保留按版本收窄的源码兼容处理"
+              echo "SukiSU 使用单独步骤注入 SUSFS Kconfig 符号"
               ;;
           esac
 
@@ -1651,6 +1643,63 @@ jobs:
               fi
             fi
           fi
+
+      - name: 注入 SukiSU SUSFS Kconfig
+        if: inputs.enable_susfs && inputs.ksu_variant == 'SukiSU'
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+          set -euo pipefail
+          KSU_KERNEL_DIR=""
+          for dir in ./common/drivers/kernelsu ./drivers/kernelsu ./KernelSU/kernel ./kernel; do
+            if [ -f "$dir/Kconfig" ]; then
+              KSU_KERNEL_DIR="$dir"
+              break
+            fi
+          done
+          if [ -z "$KSU_KERNEL_DIR" ]; then
+            echo "::error::未找到 SukiSU Kconfig，无法注入 SUSFS Kconfig 符号"
+            exit 1
+          fi
+
+          python3 - "$KSU_KERNEL_DIR/Kconfig" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+          if "config KSU_SUSFS" in text:
+              print(f"{path} 已包含 SUSFS Kconfig 符号")
+              raise SystemExit(0)
+
+          options = [
+              ("KSU_SUSFS", "KernelSU addon - SUSFS", ["KSU", "THREAD_INFO_IN_TASK"]),
+              ("KSU_SUSFS_SUS_PATH", "Enable to hide suspicious path", ["KSU_SUSFS"]),
+              ("KSU_SUSFS_SUS_MOUNT", "Enable to hide suspicious mounts", ["KSU_SUSFS"]),
+              ("KSU_SUSFS_SUS_KSTAT", "Enable to spoof suspicious kstat", ["KSU_SUSFS"]),
+              ("KSU_SUSFS_SPOOF_UNAME", "Enable to spoof uname", ["KSU_SUSFS"]),
+              ("KSU_SUSFS_ENABLE_LOG", "Enable logging susfs log to kernel", ["KSU_SUSFS"]),
+              ("KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS", "Enable to hide ksu and susfs symbols", ["KSU_SUSFS"]),
+              ("KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG", "Enable to spoof cmdline or bootconfig", ["KSU_SUSFS"]),
+              ("KSU_SUSFS_OPEN_REDIRECT", "Enable to redirect opened paths", ["KSU_SUSFS"]),
+              ("KSU_SUSFS_SUS_MAP", "Enable to hide suspicious maps", ["KSU_SUSFS"]),
+          ]
+
+          lines = ["", 'menu "KernelSU - SUSFS"']
+          for name, prompt, deps in options:
+              lines.extend([f"config {name}", f'  bool "{prompt}"'])
+              lines.extend(f"  depends on {dep}" for dep in deps)
+              lines.extend(["  default y", ""])
+          lines.append("endmenu")
+          block = "\n".join(lines)
+
+          marker = "\nendmenu\n"
+          if marker in text:
+              text = text.rsplit(marker, 1)[0].rstrip() + "\n" + block + marker
+          else:
+              text = text.rstrip() + "\n" + block + "\n"
+          path.write_text(text)
+          print(f"已注入 {path} 的 SukiSU SUSFS Kconfig 符号")
+          PY
 
       - name: 应用 Kernel 特定补丁
         working-directory: ${{ env.KERNEL_ROOT }}/common
@@ -2498,10 +2547,24 @@ jobs:
 
       - name: 添加 SUSFS 配置
         if: inputs.enable_susfs && inputs.ksu_variant != 'None'
+        working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           if [ "${{ inputs.ksu_variant }}" == "SukiSU" ]; then
-            echo "::warning::SukiSU 固定源码缺少完整 SUSFS 导出符号，跳过 CONFIG_KSU_SUSFS* 写入以避免链接失败"
-            exit 0
+            KSU_SOURCE_DIR=""
+            for dir in common/drivers/kernelsu drivers/kernelsu KernelSU/kernel kernel; do
+              if [ -f "$dir/infra/symbol_resolver.c" ]; then
+                KSU_SOURCE_DIR="$dir"
+                break
+              fi
+            done
+
+            if [ -z "$KSU_SOURCE_DIR" ] \
+              || ! grep -qF 'ksu_resolve_symbol_for_functable_hook' "$KSU_SOURCE_DIR/infra/symbol_resolver.c" \
+              || ! grep -qF 'find_kernel_symbol_exact' "$KSU_SOURCE_DIR/infra/symbol_resolver.c" \
+              || ! grep -qF 'ksu_init_symbol_resolver' "$KSU_SOURCE_DIR/infra/symbol_resolver.c"; then
+              echo "::warning::SukiSU 源码仍缺少完整 SUSFS 导出符号，跳过 CONFIG_KSU_SUSFS* 写入以避免链接失败"
+              exit 0
+            fi
           fi
 
           cat >> "$DEFCONFIG" << 'EOF'
@@ -2975,6 +3038,13 @@ jobs:
           if not changed:
               print("Official SUSFS 源码兼容修复无需修改。")
           PY
+
+      - name: 补齐 SukiSU SUSFS 内联 hook 符号
+        if: inputs.ksu_variant == 'SukiSU' && inputs.enable_susfs
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/.github/scripts/fix_sukisu_susfs.py" "$KERNEL_ROOT"
 
       - name: 最终修复 SukiSU/ReSukiSU 源码兼容
         if: inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU'
