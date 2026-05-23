@@ -1932,12 +1932,12 @@ jobs:
             local patch_file="$1"
             local name
             name="$(basename "$patch_file")"
-            if git apply --check "$patch_file" >/dev/null 2>&1; then
-              git apply "$patch_file"
+            if patch -p1 --forward --dry-run < "$patch_file" >/dev/null 2>&1; then
+              patch -p1 --forward < "$patch_file"
               echo "已应用虚拟化支持 patch: $name"
               return 0
             fi
-            if git apply --reverse --check "$patch_file" >/dev/null 2>&1; then
+            if patch -p1 --reverse --dry-run < "$patch_file" >/dev/null 2>&1; then
               echo "虚拟化支持 patch 已应用: $name"
               return 0
             fi
