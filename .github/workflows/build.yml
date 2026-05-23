@@ -388,7 +388,7 @@ jobs:
 
           # Dev 固定引用先完整复制 Stable 配置，后续只改这里的 *_DEV_REF 即可。
           OFFICIAL_DEV_REF="290609c945728fc93d85735918793567588103c1"
-          SUKISU_DEV_REF="c5af9eadac43b1f0b9751471be78e6eef681554b"
+          SUKISU_DEV_REF="aac170bcb86ce45516b3e2c0e2b32b57004b8f73"
           RESUKISU_DEV_REF="fb771414f249ab886c09f2cfcbbf91c4b4dab2d1"
 
           get_success_action_sha() {
