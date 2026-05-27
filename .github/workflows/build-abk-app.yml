@@ -45,20 +45,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Cache Android SDK packages
-        id: sdk-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
-            ${{ env.ANDROID_HOME }}/build-tools/37.0.0
-            ${{ env.ANDROID_HOME }}/platforms/android-37
-            ${{ env.ANDROID_HOME }}/cmake/3.22.1
-          key: abk-app-sdk-v1-linux-ndk28.2-bt37.0-p37
-          restore-keys: abk-app-sdk-v1-linux-
-
       - name: Install Android SDK packages
-        if: steps.sdk-cache.outputs.cache-hit != 'true'
         run: sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0" "cmake;3.22.1" "ndk;28.2.13676358"
 
       - name: Set up Gradle
