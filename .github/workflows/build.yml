@@ -387,7 +387,7 @@ jobs:
           SUKISU_REPO="SukiSU-Ultra/SukiSU-Ultra"
 
           # Dev 固定引用先完整复制 Stable 配置，后续只改这里的 *_DEV_REF 即可。
-          OFFICIAL_DEV_REF="b3e24952e619fbe4dd759430039e3e71ee64aad0"
+          OFFICIAL_DEV_REF="96a72dd0107d660adcb273ab1911e1e77d87e562"
           SUKISU_DEV_REF="aac170bcb86ce45516b3e2c0e2b32b57004b8f73"
           RESUKISU_DEV_REF="fb771414f249ab886c09f2cfcbbf91c4b4dab2d1"
 
