@@ -359,8 +359,14 @@ jobs:
               fi
               ;;
             "SukiSU")
-              echo "SukiSU builtin分支无action构建的管理器，改为main分支 Ci版本,触发fallback"
-              download_manager_by_sha "SukiSU-Ultra/SukiSU-Ultra" "114514" "SukiSU"
+              if [[ "$BRANCH" =~ ^[Vv]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                download_tag_release_apk "SukiSU-Ultra/SukiSU-Ultra" "$BRANCH" "SukiSU"
+              else
+                if ! [[ "$BRANCH" =~ ^[A-Fa-f0-9]{40}$ ]]; then
+                  BRANCH="$(resolve_ref_to_sha "SukiSU-Ultra/SukiSU-Ultra" "$BRANCH")"
+                fi
+                download_manager_by_sha "SukiSU-Ultra/SukiSU-Ultra" "$BRANCH" "SukiSU"
+              fi
               ;;
             "ReSukiSU")
               if [[ "$BRANCH" =~ ^[Vv]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
