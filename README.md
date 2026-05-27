@@ -116,7 +116,7 @@ sukisu=
 
 - **Official（GKI）：** 内核使用 `main` 的 HEAD；管理器通过 [nightly.link](https://nightly.link/) 拉取 `main` 上最近一次成功的 `build-manager` 产物（`manager.zip`）。
 - **SukiSU（GKI）：** 内核与管理器均使用 `main` 的 HEAD；管理器同样经 nightly.link 拉取 `build-manager` 产物。
-- **ReSukiSU（GKI）：** 比较 `dev` 与 `main`（仅当 `main` 严格领先于 `dev` 时使用 `main`）；内核与管理器使用同一选定分支，管理器经 nightly.link 拉取（与 Stable 下 ReSukiSU 相同方式，仅分支由解析结果决定，如 `dev`）。
+- **ReSukiSU（GKI）：** 内核与管理器均使用 `main` 的 HEAD；管理器经 nightly.link 拉取 `build-manager` / `main` / `Manager-release.zip`（与 Stable 下 ReSukiSU 相同分支）。
 
 若管理器下载失败，管理器 job 对应步骤会失败，但**内核构建仍会继续**。Latest 不会回退到 `releases/latest`（Stable/Dev 用的发布包路径）。
 

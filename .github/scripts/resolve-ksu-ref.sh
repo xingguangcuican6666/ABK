@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/ksu-compare-branch.sh
-source "$SCRIPT_DIR/lib/ksu-compare-branch.sh"
-
 KSU_VARIANT="${KSU_VARIANT:?KSU_VARIANT is required}"
 KSU_BRANCH="${KSU_BRANCH:?KSU_BRANCH is required}"
 CUSTOM_REF="${CUSTOM_REF:-}"
@@ -92,9 +88,7 @@ resolve_latest() {
       ;;
     ReSukiSU)
       repo="ReSukiSU/ReSukiSU"
-      primary="dev"
-      secondary="main"
-      source_branch="$(pick_secondary_if_ahead "$repo" "$primary" "$secondary" "$GITHUB_TOKEN")"
+      source_branch="main"
       sha="$(head_sha_for_branch "$repo" "$source_branch")"
       ;;
     *)

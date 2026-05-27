@@ -39,7 +39,7 @@ download_via_nightlylink() {
 
 # Fork GITHUB_TOKEN cannot download another repo's Actions artifacts (HTTP 401).
 # Stable ReSukiSU already uses nightly.link in get-manager.yml; Latest uses the same
-# proxy with the resolved branch (e.g. dev instead of main).
+# proxy with the resolved branch (Latest uses main for all GKI variants).
 if [ -z "$GITHUB_REPOSITORY" ] || [ "$REPO" != "$GITHUB_REPOSITORY" ]; then
   download_via_nightlylink
   if ! find "$VARIANT_DIR" -type f -name '*.apk' -print -quit | grep -q .; then

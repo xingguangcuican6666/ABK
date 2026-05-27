@@ -117,7 +117,7 @@ On GitHub Actions and the app GKI build screen, **Latest(最新)** sits between 
 
 - **Official (GKI):** `main` HEAD for the kernel; manager via [nightly.link](https://nightly.link/) from the latest successful `build-manager` run on `main` (`manager.zip`).
 - **SukiSU (GKI):** kernel and manager both use `main` HEAD; manager via nightly.link from `build-manager`.
-- **ReSukiSU (GKI):** compares `dev` vs `main` (uses `main` only when strictly ahead of `dev`); kernel and manager share the resolved branch; manager via nightly.link (same as Stable ReSukiSU, branch from resolution e.g. `dev`).
+- **ReSukiSU (GKI):** kernel and manager both use `main` HEAD; manager via nightly.link `build-manager` / `main` / `Manager-release.zip` (same branch as Stable ReSukiSU).
 
 If manager download fails, the manager job step fails but **the kernel build continues**. Latest does not fall back to `releases/latest` (the Stable/Dev release path).
 
