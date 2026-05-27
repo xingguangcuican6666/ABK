@@ -46,14 +46,6 @@ class KernelSupportTest {
     }
 
     @Test
-    fun normalizePreservesLatestKsuBranch() {
-        val normalized = KernelSupport.normalize(
-            KernelBuildConfig(kernelsuBranch = KSU_BRANCH_LATEST)
-        )
-        assertEquals(KSU_BRANCH_LATEST, normalized.kernelsuBranch)
-    }
-
-    @Test
     fun normalizePreservesCustomKsuBranchAndTrimsCustomRef() {
         val normalized = KernelSupport.normalize(
             KernelBuildConfig(

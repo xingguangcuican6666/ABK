@@ -5,7 +5,6 @@ import com.abk.kernel.data.model.CustomExternalModuleStage
 import com.abk.kernel.data.model.BUILD_TARGET_GKI
 import com.abk.kernel.data.model.BUILD_TARGET_ONEPLUS
 import com.abk.kernel.data.model.KSU_BRANCH_CUSTOM
-import com.abk.kernel.data.model.KSU_BRANCH_LATEST
 import com.abk.kernel.data.model.KSU_BRANCH_STABLE
 import com.abk.kernel.data.model.KSU_VARIANT_NONE
 import com.abk.kernel.data.model.KSU_VARIANT_RESUKISU
@@ -71,23 +70,6 @@ class BuildPlanLogicTest {
             listOf(CustomExternalModule("https://github.com/example/module.git", CustomExternalModuleStage.BEFORE_BUILD)),
             decoded.config.customExternalModules
         )
-    }
-
-    @Test
-    fun fullBuildPlanPayloadRoundTripsLatestKsuBranch() {
-        val config = KernelSupport.normalize(
-            KernelBuildConfig(
-                androidVersion = "android15",
-                kernelVersion = "6.6",
-                subLevel = "118",
-                osPatchLevel = "2026-01",
-                kernelsuVariant = KSU_VARIANT_RESUKISU,
-                kernelsuBranch = KSU_BRANCH_LATEST
-            )
-        )
-        val payload = encodeBuildPlanPayload(config, "Latest plan", BuildPlanShareScope.FULL)
-        val decoded = decodeBuildPlanPayload(payload, KernelBuildConfig())
-        assertEquals(KSU_BRANCH_LATEST, decoded.config.kernelsuBranch)
     }
 
     @Test
