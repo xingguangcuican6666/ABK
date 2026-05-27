@@ -838,7 +838,6 @@
     <string name="root_patch_enable_adb_debug_desc">Force USB debugging and disable adb authentication. Enable only when needed.</string>
     <string name="root_patch_warn_no_lkm">No bundled LKM matches the current variant and KMI. Select a local .ko file.</string>
     <string name="root_patch_warn_no_ksud">This APK does not include an executable bundled SukiSU-Ultra ksud, so it can not patch boot.img without root. Use an APK with bundled ksud, or grant root and continue.</string>
-    <string name="root_patch_warn_no_magiskboot">This APK does not include an executable bundled magiskboot, so it can not unpack boot.img without root. Use an APK with bundled magiskboot, or grant root and continue.</string>
     <string name="root_patch_processing">Processing</string>
     <string name="root_patch_next">Next</string>
     <string name="root_patch_result">Patch result</string>

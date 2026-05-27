@@ -815,7 +815,6 @@
     <string name="root_patch_enable_adb_debug_desc">Принудительно разрешить USB-отладку и отключить аутентификацию adb. Включайте только при необходимости.</string>
     <string name="root_patch_warn_no_lkm">Для текущего варианта и KMI нет встроенного LKM. Выберите локальный .ko-файл.</string>
     <string name="root_patch_warn_no_ksud">В этот APK не встроен исполняемый SukiSU-Ultra ksud, поэтому пропатчить boot.img без root нельзя. Используйте APK со встроенным ksud или выдайте root.</string>
-    <string name="root_patch_warn_no_magiskboot">В этот APK не встроен исполняемый magiskboot, поэтому распаковать boot.img без root нельзя. Используйте APK со встроенным magiskboot или выдайте root.</string>
     <string name="root_patch_processing">Обработка</string>
     <string name="root_patch_next">Далее</string>
     <string name="root_patch_result">Результат патча</string>

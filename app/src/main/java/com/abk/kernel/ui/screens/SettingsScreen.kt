@@ -1675,7 +1675,7 @@ private fun openSourceNoticeGroups(): List<OpenSourceNoticeGroup> = listOf(
             OpenSourceNotice("Xiaomichael/kernel_manifest", "Upstream repository license / no SPDX detected", "OnePlus manifest branch source", "https://github.com/Xiaomichael/kernel_manifest"),
             OpenSourceNotice("Xiaomichael/kernel_patches", "Upstream repository license / no SPDX detected", "OnePlus patch source", "https://github.com/Xiaomichael/kernel_patches"),
             OpenSourceNotice("KernelSU", "GPL-3.0", "workflow setup.sh source", "https://github.com/tiann/KernelSU"),
-            OpenSourceNotice("SukiSU Ultra", "GPL-3.0", "kernel setup, ksud, libmagiskboot source", "https://github.com/SukiSU-Ultra/SukiSU-Ultra"),
+            OpenSourceNotice("SukiSU Ultra", "GPL-3.0", "kernel setup, ksud, android_bootimg", "https://github.com/SukiSU-Ultra/SukiSU-Ultra"),
             OpenSourceNotice("ReSukiSU", "GPL-3.0", "workflow setup.sh source", "https://github.com/ReSukiSU/ReSukiSU"),
             OpenSourceNotice("SUSFS", "GPL-2.0", "kernel patches and module integration", "https://gitlab.com/simonpunk/susfs4ksu"),
             OpenSourceNotice("ShirkNeko/susfs4ksu", "GPL-2.0", "GitHub mirror / patch source", "https://github.com/ShirkNeko/susfs4ksu"),

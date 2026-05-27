@@ -51,7 +51,7 @@ This document records the open source projects, embedded code, generated binarie
 
 ## APK-Bundled SukiSU Components
 
-The APK build workflows compile `userspace/ksud` from `SukiSU-Ultra/SukiSU-Ultra` and download `libmagiskboot.so` from that upstream manager tree for supported ABIs. Prebuilt `ksud` binaries are not committed to this repository. The pinned upstream ref is declared in `.github/workflows/build-abk-app.yml` and `.github/workflows/build-abk-app-dev.yml`.
+The APK build workflows compile `userspace/ksud` from `SukiSU-Ultra/SukiSU-Ultra` for supported ABIs. Upstream ksud patches boot images with the in-process `android_bootimg` crate and no longer ships or requires `libmagiskboot.so`. Prebuilt `ksud` binaries are not committed to this repository. The upstream ref is declared in `.github/workflows/build-abk-app.yml` and `.github/workflows/build-abk-app-dev.yml`.
 
 ## Android / Gradle Dependencies
 

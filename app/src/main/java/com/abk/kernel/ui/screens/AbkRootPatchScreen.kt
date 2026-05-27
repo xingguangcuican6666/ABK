@@ -184,9 +184,6 @@ fun AbkRootPatchScreen(
     val userlandKsudPath by produceState<String?>(initialValue = null, context) {
         value = withContext(Dispatchers.IO) { RootUtils.resolveUserlandKsudPath(context) }
     }
-    val userlandMagiskbootPath by produceState<String?>(initialValue = null, context) {
-        value = withContext(Dispatchers.IO) { RootUtils.resolveUserlandMagiskbootPath(context) }
-    }
     val hasLocalLkm = selectedLocalLkmPath.isNotBlank()
     val activeLkmLabel = selectedLocalLkmName.takeIf { it.isNotBlank() }
         ?: selectedAsset?.let { "${it.variantLabel} · ${it.kmi}" }
@@ -194,11 +191,10 @@ fun AbkRootPatchScreen(
     val hasLkmSource = hasLocalLkm || selectedAsset != null
     val showRootInstallModes = rootGranted
     val hasUserlandKsud = userlandKsudPath != null
-    val hasUserlandMagiskboot = userlandMagiskbootPath != null
     val canPatchSelectedFile = selectedBootPath.isNotBlank() &&
         hasLkmSource &&
         !running &&
-        (rootGranted || (hasUserlandKsud && hasUserlandMagiskboot))
+        (rootGranted || hasUserlandKsud)
     val canDirectInstall = rootGranted && hasLkmSource && !running
     val canFlashAnyKernel3 = rootGranted && selectedAnyKernelPath.isNotBlank() && !running
     val canProceed = when (selectedMode) {
@@ -788,11 +784,8 @@ fun AbkRootPatchScreen(
             if (!hasLkmSource && selectedMode != LkmPatchInstallMode.AnyKernel3) {
                 InlineWarning(stringResource(R.string.root_patch_warn_no_lkm))
             }
-            if (selectedMode == LkmPatchInstallMode.SelectFile && !rootGranted) {
-                when {
-                    !hasUserlandKsud -> InlineWarning(stringResource(R.string.root_patch_warn_no_ksud))
-                    !hasUserlandMagiskboot -> InlineWarning(stringResource(R.string.root_patch_warn_no_magiskboot))
-                }
+            if (selectedMode == LkmPatchInstallMode.SelectFile && !rootGranted && !hasUserlandKsud) {
+                InlineWarning(stringResource(R.string.root_patch_warn_no_ksud))
             }
 
             Button(

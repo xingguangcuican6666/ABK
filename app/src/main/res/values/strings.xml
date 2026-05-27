@@ -838,7 +838,6 @@
     <string name="root_patch_enable_adb_debug_desc">强制允许 USB 调试并取消 adb 认证，非必要请勿开启。</string>
     <string name="root_patch_warn_no_lkm">当前变体和 KMI 没有内置 LKM，请选择本地 .ko 文件。</string>
     <string name="root_patch_warn_no_ksud">当前 APK 未包含可执行的内置 SukiSU-Ultra ksud，无法无 Root 修补 boot.img。请使用带内置 ksud 的 APK，或授予 Root 后继续。</string>
-    <string name="root_patch_warn_no_magiskboot">当前 APK 未包含可执行的内置 magiskboot，无法无 Root 解包 boot.img。请使用带内置 magiskboot 的 APK，或授予 Root 后继续。</string>
     <string name="root_patch_processing">处理中</string>
     <string name="root_patch_next">下一步</string>
     <string name="root_patch_result">修补结果</string>

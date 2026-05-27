@@ -73,19 +73,6 @@ jobs:
           commit="$(git -C "$source_dir" rev-parse HEAD)"
           mkdir -p "$target_dir" "$jni_target_dir"
 
-          SOURCE_DIR="$source_dir" python3 - <<'PY'
-          import os
-          from pathlib import Path
-
-          path = Path(os.environ["SOURCE_DIR"]) / "userspace/ksud/src/boot_patch.rs"
-          text = path.read_text()
-          old = """            } else {\n                let magiskboot_path = workdir.join(\"magiskboot\");\n                assets::copy_assets_to_file(\"magiskboot\", &magiskboot_path)\n                    .context(\"copy magiskboot failed\")?;\n                magiskboot_path\n            };\n            ensure!(magiskboot.exists(), \"{} is not exist\", magiskboot.display());\n            #[cfg(unix)]\n            let _ = std::fs::set_permissions(&magiskboot, std::fs::Permissions::from_mode(0o755));\n            magiskboot\n"""
-          new = """            } else {\n                let magiskboot_path = workdir.join(\"magiskboot\");\n                let magiskboot_bin = workdir.join(\"magiskboot.bin\");\n                assets::copy_assets_to_file(\"magiskboot\", &magiskboot_bin)\n                    .context(\"copy magiskboot failed\")?;\n                #[cfg(unix)]\n                {\n                    use std::io::Write;\n                    let mut wrapper = std::fs::File::create(&magiskboot_path)?;\n                    wrapper.write_all(b\"#!/system/bin/sh\\nLINKER=/apex/com.android.runtime/bin/linker64\\n[ -x \\\\\\\"$LINKER\\\\\\\" ] || LINKER=/system/bin/linker64\\nexec \\\\\\\"$LINKER\\\\\\\" \\\\\\\"$0.bin\\\\\\\" \\\\\\\"$@\\\\\\\"\\n\")?;\n                    let _ = std::fs::set_permissions(&magiskboot_path, std::fs::Permissions::from_mode(0o755));\n                    let _ = std::fs::set_permissions(&magiskboot_bin, std::fs::Permissions::from_mode(0o755));\n                }\n                magiskboot_path\n            };\n            ensure!(magiskboot.exists(), \"{} is not exist\", magiskboot.display());\n            #[cfg(unix)]\n            let _ = std::fs::set_permissions(&magiskboot, std::fs::Permissions::from_mode(0o755));\n            magiskboot\n"""
-          if old not in text:
-              raise SystemExit("failed to find magiskboot injection block in boot_patch.rs")
-          path.write_text(text.replace(old, new, 1))
-          PY
-
           setup_rust_build() {
             local triple="$1"
             local android_sdk_level="$2"
@@ -179,18 +166,6 @@ jobs:
               --manifest-path "$source_dir/Cargo.toml"
           }
 
-          magiskboot_url_for_abi() {
-            case "$1" in
-              arm64-v8a) printf '%s\n' "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/manager/app/src/main/jniLibs/arm64-v8a/libmagiskboot.so" ;;
-              x86_64) printf '%s\n' "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/manager/app/src/main/jniLibs/x86_64/libmagiskboot.so" ;;
-              armeabi-v7a) printf '%s\n' "" ;;
-              *)
-                echo "::error::Unsupported magiskboot ABI: $1"
-                return 1
-                ;;
-            esac
-          }
-
           {
             echo "source_repo=$repo_url"
             echo "ref=$SUKISU_ULTRA_REF"
@@ -225,13 +200,6 @@ jobs:
               exit 1
             fi
             install -Dm755 "$ksuinit_binary" "$bin_dir/ksuinit"
-            magiskboot_url="$(magiskboot_url_for_abi "$abi")"
-            if [ -n "$magiskboot_url" ]; then
-              curl -fsSL "$magiskboot_url" -o "$bin_dir/magiskboot"
-              chmod 755 "$bin_dir/magiskboot"
-            else
-              echo "warning.$abi=magiskboot_missing_upstream" >> "$target_dir/source.properties"
-            fi
             setup_rust_build "$triple" 26
             cargo build \
               --target "$triple" \
@@ -275,7 +243,7 @@ jobs:
             echo "- Commit: $commit"
             echo "- ABIs: $SUKISU_KSUD_ABIS"
             echo "- Embedded ksuinit: aarch64-unknown-linux-musl, x86_64-unknown-linux-musl"
-            echo "- Embedded magiskboot: arm64-v8a, x86_64"
+            echo "- magiskboot: removed upstream (ksud uses bootimg crate)"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Bundle ABK LKM artifacts
