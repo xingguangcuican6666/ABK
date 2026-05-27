@@ -378,8 +378,8 @@ jobs:
         if: inputs.ksu_variant != 'None'
         id: ksu-branch
         run: |
-          branch_input="${{ inputs.ksu_branch }}"
           variant_input="${{ inputs.ksu_variant }}"
+          branch_input="${{ inputs.ksu_branch }}"
           custom_ref_input="${{ inputs.custom_ref }}"
           OFFICIAL_STABLE_REF="3f388ef137c78e1ca0c92c0ada3b8717cdcc4302"
           SUKISU_STABLE_REF="c5af9eadac43b1f0b9751471be78e6eef681554b"
@@ -426,21 +426,17 @@ jobs:
               NABE="${BASH_REMATCH[2]}"
               if [ "$variant_input" = "Official" ]; then
                 OFFICIAL_CUSTOM_REF="$(get_success_action_sha "tiann/KernelSU" "$BRANCH" "$NABE")"
-              fi
-              if [ "$variant_input" = "SukiSU" ]; then
-                SUKISU_CUSTOM_REF="$(get_success_action_sha "$SUKISU_REPO" "$BRANCH" "$NABE")"
-              fi
-              if [ "$variant_input" = "ReSukiSU" ]; then
+              elif [ "$variant_input" = "SukiSU" ]; then
+                SUKISU_CUSTOM_REF="$(get_success_action_sha "SukiSU-Ultra/SukiSU-Ultra" "$BRANCH" "$NABE")"
+              elif [ "$variant_input" = "ReSukiSU" ]; then
                 RESUKISU_CUSTOM_REF="$(get_success_action_sha "ReSukiSU/ReSukiSU" "$BRANCH" "$NABE")"
               fi
             else
               if [ "$variant_input" = "Official" ]; then
                 check_ref "tiann/KernelSU"
-              fi
-              if [ "$variant_input" = "SukiSU" ]; then
+              elif [ "$variant_input" = "SukiSU" ]; then
                 check_ref "$SUKISU_REPO"
-              fi
-              if [ "$variant_input" = "ReSukiSU" ]; then
+              elif [ "$variant_input" = "ReSukiSU" ]; then
                 check_ref "ReSukiSU/ReSukiSU"
               fi
               OFFICIAL_CUSTOM_REF="$custom_ref_input"
@@ -472,8 +468,8 @@ jobs:
           esac
 
           case "$variant_input" in
-            "Official") BRANCH="-s $OFFICIAL_REF" ;;
-            "SukiSU") BRANCH="-s $SUKISU_REF" ;;
+            "Official") BRANCH="$OFFICIAL_REF" ;;
+            "SukiSU") BRANCH="$SUKISU_REF" ;;
             "ReSukiSU") BRANCH="$RESUKISU_REF" ;;
             *) echo "未知变体: $variant_input" >&2; exit 1 ;;
           esac
@@ -924,11 +920,11 @@ jobs:
           case "${{ inputs.ksu_variant }}" in
             "Official")
               echo "添加 KernelSU 官方版..."
-              curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash $BRANCH
+              curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s $BRANCH
 
               cd KernelSU
               KSU_GIT_VERSION=$(git rev-list --count HEAD)
-              KSU_VERSION=$((20000 + KSU_GIT_VERSION))
+              KSU_VERSION=$((30000 + KSU_GIT_VERSION))
               echo "KSU_VERSION=$KSU_VERSION" >> $GITHUB_ENV
 
               if [ -f "kernel/Kbuild" ]; then
@@ -938,7 +934,7 @@ jobs:
               ;;
             "SukiSU")
               echo "添加 SukiSU..."
-              curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash $BRANCH
+              curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s $BRANCH
               ;;
             "ReSukiSU")
               echo "添加 ReSukiSU..."
