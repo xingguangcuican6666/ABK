@@ -77,6 +77,7 @@ jobs:
           KSU_VARIANT: ${{ inputs.kernelsu_variant }}
           KSU_BRANCH: ${{ inputs.kernelsu_branch }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: bash .github/scripts/resolve-ksu-ref.sh
 
       - name: 获取 KSU & SUSFS 版本
@@ -174,7 +175,8 @@ jobs:
                 echo "::error::Latest manager download requires RESOLVED_KSU_REPO and RESOLVED_KSU_SOURCE_BRANCH"
                 exit 1
               fi
-              bash .github/scripts/download-manager-from-actions.sh \
+              GITHUB_REPOSITORY="${{ github.repository }}" \
+                bash .github/scripts/download-manager-from-actions.sh \
                 "$RESOLVED_KSU_REPO" \
                 "$RESOLVED_KSU_SOURCE_BRANCH" \
                 "manager-artifacts/${{ inputs.kernelsu_variant }}"

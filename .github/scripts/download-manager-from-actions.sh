@@ -5,21 +5,30 @@ REPO="${1:?repo owner/name required}"
 BRANCH="${2:?branch required}"
 VARIANT_DIR="${3:?output dir required}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-}"
 
-runs_json="$(curl -fsSL \
-  ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
-  -H "Accept: application/vnd.github+json" \
+# GITHUB_TOKEN from a fork workflow is only valid for that repository.
+# Sending it to another repo's Actions API returns HTTP 401.
+curl_auth_args=()
+if [ -n "$GITHUB_TOKEN" ] && [ -n "$GITHUB_REPOSITORY" ] && [ "$REPO" = "$GITHUB_REPOSITORY" ]; then
+  curl_auth_args=(-H "Authorization: Bearer $GITHUB_TOKEN")
+fi
+
+github_api_curl() {
+  curl -fsSL "${curl_auth_args[@]}" -H "Accept: application/vnd.github+json" "$@"
+}
+
+runs_json="$(github_api_curl \
   "https://api.github.com/repos/${REPO}/actions/workflows/build-manager.yml/runs?status=success&branch=${BRANCH}&per_page=1")"
 
 run_id="$(printf '%s' "$runs_json" | jq -r '.workflow_runs[0].id // empty')"
 if [ -z "$run_id" ]; then
   echo "::error::No successful build-manager run for ${REPO} on branch ${BRANCH}" >&2
+  printf '%s\n' "$runs_json" | jq -r '.message // empty' >&2 || true
   exit 1
 fi
 
-artifacts_json="$(curl -fsSL \
-  ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
-  -H "Accept: application/vnd.github+json" \
+artifacts_json="$(github_api_curl \
   "https://api.github.com/repos/${REPO}/actions/runs/${run_id}/artifacts")"
 
 artifact_id="$(printf '%s' "$artifacts_json" | jq -r '
@@ -37,10 +46,8 @@ mkdir -p "$VARIANT_DIR"
 tmp_zip="$(mktemp "${TMPDIR:-/tmp}/manager-XXXXXX.zip")"
 trap 'rm -f "$tmp_zip"' EXIT
 
-curl -fsSL \
-  ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
-  -H "Accept: application/vnd.github+json" \
-  -L "https://api.github.com/repos/${REPO}/actions/artifacts/${artifact_id}/zip" \
+github_api_curl -L \
+  "https://api.github.com/repos/${REPO}/actions/artifacts/${artifact_id}/zip" \
   -o "$tmp_zip"
 
 if unzip -l "$tmp_zip" | grep -qi '\.apk'; then

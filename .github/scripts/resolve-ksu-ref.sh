@@ -45,8 +45,11 @@ get_success_action_sha() {
   local branch="$2"
   local nabe="$3"
   local index=$((nabe - 1))
-  curl -fsSL \
-    ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
+  local auth=()
+  if [ -n "${GITHUB_TOKEN:-}" ] && [ "$repo" = "${GITHUB_REPOSITORY:-}" ]; then
+    auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  fi
+  curl -fsSL "${auth[@]}" \
     -H "Accept: application/vnd.github+json" \
     "https://api.github.com/repos/${repo}/actions/workflows/build-manager.yml/runs?status=success&branch=${branch}&per_page=${nabe}" \
     | jq -r --argjson idx "$index" '.workflow_runs[$idx].head_sha'
