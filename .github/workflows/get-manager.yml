@@ -250,18 +250,35 @@ jobs:
             echo "$sha"
             return
           fi
-          # 尝试当作 tag
-          sha="$(curl -fsSL \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${repo}/git/ref/tags/${ref}" \
-            | jq -r '.object.sha // empty')"
-          if [ -n "$sha" ]; then
-            echo "$sha"
-            return
-          fi
           echo "::error::无法解析 $ref 为 SHA"
           exit 1
           }
+
+          download_tag_release_apk() {
+            local repo="$1"
+            local tag="$2"
+            local variant="$3"
+            local release_json apk_name apk_url
+            echo "从 $repo releases/${tag} 获取 $variant Manager APK..."
+            release_json="$(curl -fsSL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${repo}/releases/tags/${tag}")"
+            apk_name="$(echo "$release_json" | jq -r '
+              (.assets | map(select(((.name | ascii_downcase) | endswith(".apk")) and ((.name | ascii_downcase) | contains("release")))) | .[0].name // empty) as $release_apk |
+              if $release_apk != "" then $release_apk
+              else (.assets | map(select((.name | ascii_downcase) | endswith(".apk"))) | .[0].name // empty)
+              end
+            ')"
+            apk_url="$(echo "$release_json" | jq -r --arg name "$apk_name" '.assets[] | select(.name == $name) | .browser_download_url')"
+            if [ -z "$apk_name" ] || [ -z "$apk_url" ]; then
+              echo "::error::${repo} ${tag} release 中未找到 APK 资源"
+              echo "$release_json" | jq -r '.assets[]?.name'
+              exit 1
+            fi
+            mkdir -p "manager-artifacts/${variant}"
+            echo "下载 $apk_name"
+            curl -fL -o "manager-artifacts/${variant}/${apk_name}" "$apk_url"
+            }
 
           download_manager_by_sha() {
           local repo="$1"
@@ -274,71 +291,88 @@ jobs:
             "https://api.github.com/repos/${repo}/actions/workflows/build-manager.yml/runs?head_sha=${sha}&status=success&per_page=1")"
 
           run_id="$(echo "$run_json" | jq -r '.workflow_runs[0].id // empty')"
-          # 如果指定 SHA 找不到，尝试最新成功构建
+          # 如果指定 SHA 找不到run_id，尝试最新成功构建
           if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
             echo "::warning::未找到指定 SHA 的 run，尝试最新成功构建..."
-            run_json="$(curl -fsSL \
+            echo "尝试从nightly.link获取"
+              mkdir -p "manager-artifacts/${variant}"
+              if ! curl -fL -o "manager.zip" \
+                "https://nightly.link/${repo}/workflows/build-manager/main/Manager-release.zip" 2>/dev/null; then
+                if ! curl -fL -o "manager.zip" \
+                "https://nightly.link/${repo}/workflows/build-manager/main/manager.zip" 2>/dev/null; then
+                   echo "::error::nightly.link 下载失败，尝试 GitHub API fallback"
+                   run_json="$(curl -fsSL \
+                    -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                    "https://api.github.com/repos/${repo}/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1")"
+                   run_id="$(echo "$run_json" | jq -r '.workflow_runs[0].id // empty')"
+                fi
+              fi
+            if [ -f "manager.zip" ]; then
+              unzip -o "manager.zip" -d "manager-artifacts/${variant}"
+              rm -f "manager.zip"
+            fi
+          fi
+
+          if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
+            echo "找到工作流地址：https://github.com/${repo}/actions/runs/${run_id}"
+            # 获取 artifacts 列表
+            artifacts_json="$(curl -fsSL \
               -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${repo}/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1")"
-            run_id="$(echo "$run_json" | jq -r '.workflow_runs[0].id // empty')"
+              "https://api.github.com/repos/${repo}/actions/runs/${run_id}/artifacts")"
+            # 找 Manager.zip
+            artifact_url="$(echo "$artifacts_json" | jq -r '
+              .artifacts[] 
+              | select(
+                  # Official & SukiSU
+                  (.name == "manager")
+                  or
+                  # ReSukiSU
+                  (.name) == "Manager-release")
+              | .archive_download_url
+            ')"
+            if [ -z "$artifact_url" ] || [ "$artifact_url" = "null" ]; then
+              echo "::error::找不到 Manager artifact"
+              exit 1
+            fi
+
+            mkdir -p "manager-artifacts/${variant}"
+
+            curl -fsSL \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -o "manager-artifacts/${variant}/manager.zip" \
+              "$artifact_url"
+
+            unzip -o "manager-artifacts/${variant}/manager.zip" -d "manager-artifacts/${variant}"
+            rm "manager-artifacts/${variant}/manager.zip"
           fi
-          echo "找到工作流地址：https://github.com/${repo}/actions/runs/${run_id}"
-
-          # 获取 artifacts 列表
-          artifacts_json="$(curl -fsSL \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${repo}/actions/runs/${run_id}/artifacts")"
-          # 找 Manager.zip
-          artifact_url="$(echo "$artifacts_json" | jq -r '
-            .artifacts[] 
-            | select(
-                # Official & SukiSU
-                (.name == "manager")
-                or
-                # ReSukiSU
-                (.name) == "Manager-release")
-            | .archive_download_url
-          ')"
-          if [ -z "$artifact_url" ] || [ "$artifact_url" = "null" ]; then
-            echo "::error::找不到 Manager artifact"
-            exit 1
-          fi
-
-          mkdir -p "manager-artifacts/${variant}"
-
-          curl -fsSL \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -o "manager-artifacts/${variant}/manager.zip" \
-            "$artifact_url"
-
-          unzip -o "manager-artifacts/${variant}/manager.zip" -d "manager-artifacts/${variant}"
-          rm "manager-artifacts/${variant}/manager.zip"
           }
 
           case "${{ inputs.kernelsu_variant }}" in
             "Official")
-              if ! [[ "$BRANCH" =~ ^[A-Fa-f0-9]{40}$ ]]; then
-                BRANCH="$(resolve_ref_to_sha "tiann/KernelSU" "$BRANCH")"
+              if [[ "$BRANCH" =~ ^[Vv]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                download_tag_release_apk "tiann/KernelSU" "$BRANCH" "Official"
+              else
+                if ! [[ "$BRANCH" =~ ^[A-Fa-f0-9]{40}$ ]]; then
+                  BRANCH="$(resolve_ref_to_sha "tiann/KernelSU" "$BRANCH")"
+                fi
+                download_manager_by_sha "tiann/KernelSU" "$BRANCH" "Official"
               fi
-              download_manager_by_sha "tiann/KernelSU" "$BRANCH" "Official"
               ;;
             "SukiSU")
-              echo "SukiSU builtin分支无action构建的管理器，会改为main分支 Ci版本"
-              BRANCH=$(resolve_ref_to_sha "SukiSU-Ultra/SukiSU-Ultra" "main")
-              download_manager_by_sha "SukiSU-Ultra/SukiSU-Ultra" "$BRANCH" "SukiSU"
+              echo "SukiSU builtin分支无action构建的管理器，改为main分支 Ci版本,触发fallback"
+              download_manager_by_sha "SukiSU-Ultra/SukiSU-Ultra" "114514" "SukiSU"
               ;;
             "ReSukiSU")
-              if ! [[ "$BRANCH" =~ ^[A-Fa-f0-9]{40}$ ]]; then
-                BRANCH="$(resolve_ref_to_sha "ReSukiSU/ReSukiSU" "$BRANCH")"
+              if [[ "$BRANCH" =~ ^[Vv]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                # ReSukiSU无release
+                # download_tag_release_apk "ReSukiSU/ReSukiSU" "$BRANCH" "ReSukiSU"
+                download_manager_by_sha "ReSukiSU/ReSukiSU" "114514" "ReSukiSU"
+              else
+                if ! [[ "$BRANCH" =~ ^[A-Fa-f0-9]{40}$ ]]; then
+                  BRANCH="$(resolve_ref_to_sha "ReSukiSU/ReSukiSU" "$BRANCH")"
+                fi
+                download_manager_by_sha "ReSukiSU/ReSukiSU" "$BRANCH" "ReSukiSU"
               fi
-              download_manager_by_sha "ReSukiSU/ReSukiSU" "$BRANCH" "ReSukiSU"
-              
-              #echo "直接下载 ReSukiSU Manager-release.zip，不做匹配..."
-              #mkdir -p "manager-artifacts/ReSukiSU"
-              #curl -fL -o "ReSukiSU-Manager-release.zip" \
-              #  "https://nightly.link/ReSukiSU/ReSukiSU/workflows/build-manager/main/Manager-release.zip"
-              #unzip -o "ReSukiSU-Manager-release.zip" -d "manager-artifacts/ReSukiSU"
-              #rm -f "ReSukiSU-Manager-release.zip"
               ;;
             *)
               echo "::error::未知 KernelSU 变体: ${{ inputs.kernelsu_variant }}"
