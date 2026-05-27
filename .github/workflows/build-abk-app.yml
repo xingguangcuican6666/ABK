@@ -94,7 +94,7 @@ jobs:
           path: |
             app/build/generated/abk-assets/main
             app/build/generated/abk-jniLibs/main
-          key: abk-ksud-v1-${{ steps.abk-inputs.outputs.sukisu_commit }}-${{ env.SUKISU_KSUD_ABIS }}-${{ steps.abk-inputs.outputs.workflow_digest }}
+          key: abk-ksud-v1-${{ steps.abk-inputs.outputs.sukisu_commit }}-${{ steps.abk-inputs.outputs.ksud_abis_key }}-${{ steps.abk-inputs.outputs.workflow_digest }}
 
       - name: Verify ksud cache
         id: ksud-verify

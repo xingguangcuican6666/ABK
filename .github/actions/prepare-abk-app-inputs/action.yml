@@ -10,6 +10,9 @@ outputs:
   workflow_digest:
     description: Hash of workflow and ksud build logic inputs
     value: ${{ steps.resolve.outputs.workflow_digest }}
+  ksud_abis_key:
+    description: SUKISU_KSUD_ABIS with commas replaced for actions/cache keys
+    value: ${{ steps.resolve.outputs.ksud_abis_key }}
 runs:
   using: composite
   steps:
@@ -18,6 +21,7 @@ runs:
       env:
         SUKISU_ULTRA_REPO: ${{ env.SUKISU_ULTRA_REPO }}
         SUKISU_ULTRA_REF: ${{ env.SUKISU_ULTRA_REF }}
+        SUKISU_KSUD_ABIS: ${{ env.SUKISU_KSUD_ABIS }}
         GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
       run: |
         set -euo pipefail
@@ -57,9 +61,13 @@ runs:
           } | sha256sum | awk '{print $1}'
         )"
 
+        ksud_abis_key="${SUKISU_KSUD_ABIS:-arm64-v8a,armeabi-v7a,x86_64}"
+        ksud_abis_key="${ksud_abis_key//,/-}"
+
         echo "sukisu_commit=$sukisu_commit" >> "$GITHUB_OUTPUT"
         echo "lkm_head_sha=$lkm_head_sha" >> "$GITHUB_OUTPUT"
         echo "workflow_digest=$workflow_digest" >> "$GITHUB_OUTPUT"
+        echo "ksud_abis_key=$ksud_abis_key" >> "$GITHUB_OUTPUT"
 
         {
           echo "### Resolved ABK app inputs"
