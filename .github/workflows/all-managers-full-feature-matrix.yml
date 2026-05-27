@@ -28,6 +28,7 @@ on:
         options:
           - Stable(标准)
           - Dev(开发)
+          - Latest(最新)
           - Custom(自定义)
         default: Dev(开发)
       version:

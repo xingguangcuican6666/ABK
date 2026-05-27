@@ -47,6 +47,7 @@ on:
         options:
           - Stable(标准)
           - Dev(开发)
+          - Latest(最新)
         default: Stable(标准)
 
       # ==================== 可选配置 ====================
@@ -158,6 +159,7 @@ jobs:
     secrets: inherit
     with:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
+      kernelsu_branch: ${{ inputs.kernelsu_branch }}
 
   # ==================== Android 12 - 5.10 构建 ====================
   build-a12-5-10:

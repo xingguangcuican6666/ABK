@@ -4316,7 +4316,13 @@ internal fun decodeBuildPlanPayload(
         baseConfig
     }
     val ksuVariant = BUILD_PLAN_KSU_VARIANTS.valueOrDefault(reader.readByte(), versionBase.kernelsuVariant)
-    val ksuBranch = BUILD_PLAN_KSU_BRANCHES.valueOrDefault(reader.readByte(), versionBase.kernelsuBranch)
+    val rawKsuBranchWire = reader.readByte()
+    val ksuBranch = when {
+        version < BUILD_PLAN_KSU_BRANCH_V5_VERSION && rawKsuBranchWire == 2 ->
+            KSU_BRANCH_CUSTOM
+        else ->
+            BUILD_PLAN_KSU_BRANCHES.valueOrDefault(rawKsuBranchWire, versionBase.kernelsuBranch)
+    }
     val virtualizationSupport = BUILD_PLAN_VIRTUALIZATION_OPTIONS.valueOrDefault(
         reader.readByte(),
         versionBase.virtualizationSupport
@@ -4490,10 +4496,11 @@ private fun buildPlanShareScopeFromWireValue(
 
 private const val BUILD_PLAN_CODE_PREFIX = "ABKP2:"
 private const val BUILD_PLAN_LEGACY_CODE_PREFIX = "ABKP1:"
-private const val BUILD_PLAN_CODE_VERSION = 4
+private const val BUILD_PLAN_CODE_VERSION = 5
 private const val BUILD_PLAN_MIN_SUPPORTED_VERSION = 2
 private const val BUILD_PLAN_CUSTOM_REF_VERSION = 3
 private const val BUILD_PLAN_ONEPLUS_FIELDS_VERSION = 4
+private const val BUILD_PLAN_KSU_BRANCH_V5_VERSION = 5
 private const val BUILD_PLAN_NAME_LIMIT = 80
 private const val BUILD_PLAN_MAX_STRING_BYTES = 4096
 private const val BUILD_PLAN_MAX_MODULES = 32

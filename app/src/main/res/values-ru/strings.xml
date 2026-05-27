@@ -143,6 +143,7 @@
     <string name="build_ksu_branch">Ветка KSU</string>
     <string name="build_custom_ksu_ref">Свой KSU commit/ref</string>
     <string name="build_custom_ksu_ref_placeholder">например, abc123, branch:5 или tag</string>
+    <string name="build_ksu_branch_latest_hint">Ядро собирается с последнего коммита выбранной upstream-ветки. Менеджер — из последнего успешного CI build-manager на той же ветке. Если менеджер не скачался, сборка ядра всё равно продолжится.</string>
     <string name="build_no_root_scheme_desc">Не внедрять схему авторизации root. Ветка KSU, SUSFS и KPM будут автоматически отключены.</string>
     <string name="build_ksu_none">None (без root)</string>
     <string name="build_standard">стабильная</string>

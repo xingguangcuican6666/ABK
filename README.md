@@ -108,6 +108,16 @@ sukisu=
 
 留空表示使用对应分支的最新提交。
 
+## KSU 分支 `Latest(最新)`
+
+在 GitHub Actions 与 App 构建界面中，**Latest(最新)** 位于 **Dev** 与 **Custom** 之间，会在运行时解析上游 KernelSU 来源：
+
+- **Official：** 内核使用 `main` 的 HEAD；管理器取自 `main` 上最近一次成功的 `build-manager` CI 产物。
+- **SukiSU：** 比较 `main` 与 `builtin`（仅当 `builtin` 严格领先于 `main` 时使用 `builtin`）；内核与管理器使用同一选定分支。
+- **ReSukiSU：** 比较 `dev` 与 `main`（仅当 `main` 严格领先于 `dev` 时使用 `main`）；内核与管理器使用同一选定分支。
+
+若管理器 CI 下载失败，管理器 job 对应步骤会失败，但**内核构建仍会继续**。Latest 模式下不会回退到 `releases/latest` 或 `nightly.link`。
+
 ## Stock Config
 
 如果需要让构建产物中的 `/proc/config.gz` 更接近官方内核配置，可以将设备官方内核导出的配置解压并命名为 `stock_defconfig`，提交到 [`config/`](config/) 目录。

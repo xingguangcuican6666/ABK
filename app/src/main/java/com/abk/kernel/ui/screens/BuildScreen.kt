@@ -58,6 +58,7 @@ import com.abk.kernel.data.model.ExternalModuleMetadata
 import com.abk.kernel.data.model.KernelSupport
 import com.abk.kernel.data.model.KernelBuildConfig
 import com.abk.kernel.data.model.KSU_BRANCH_CUSTOM
+import com.abk.kernel.data.model.KSU_BRANCH_LATEST
 import com.abk.kernel.data.model.KSU_VARIANT_NONE
 import com.abk.kernel.data.model.KSU_VARIANT_RESUKISU
 import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
@@ -893,6 +894,13 @@ fun BuildScreen(
                             )
                         }
                     )
+                    AnimatedVisibility(config.kernelsuBranch == KSU_BRANCH_LATEST) {
+                        Text(
+                            text = stringResource(R.string.build_ksu_branch_latest_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     AnimatedVisibility(config.kernelsuBranch == KSU_BRANCH_CUSTOM) {
                         OutlinedTextField(
                             value = config.customRef,

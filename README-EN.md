@@ -109,6 +109,16 @@ sukisu=
 
 An empty value means the latest commit of that branch will be used.
 
+## KSU branch `Latest(最新)`
+
+In GitHub Actions and the app build screen, **Latest(最新)** sits between **Dev** and **Custom**. It resolves upstream KernelSU sources at run time:
+
+- **Official:** `main` HEAD for the kernel; manager from the latest successful `build-manager` CI run on `main`.
+- **SukiSU:** compares `main` vs `builtin` (uses `builtin` only when it is strictly ahead of `main`); kernel and manager use the same chosen branch.
+- **ReSukiSU:** compares `dev` vs `main` (uses `main` only when it is strictly ahead of `dev`); kernel and manager use the same chosen branch.
+
+If manager CI download fails, the manager job step fails but **the kernel build continues**. There is no fallback to `releases/latest` or `nightly.link` in Latest mode.
+
 ## Stock Config
 
 To make `/proc/config.gz` in the built kernel closer to your stock kernel configuration, export the stock kernel config from your device, decompress it, rename it to `stock_defconfig`, and commit it under [`config/`](config/).
