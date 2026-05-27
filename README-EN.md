@@ -109,13 +109,15 @@ sukisu=
 
 An empty value means the latest commit of that branch will be used.
 
-## KSU branch `Latest(最新)`
+## KSU branch `Latest(最新)` (GKI only)
 
-In GitHub Actions and the app build screen, **Latest(最新)** sits between **Dev** and **Custom**. It resolves upstream KernelSU sources at run time:
+Applies to every GKI `workflow_dispatch` workflow ([`kernel-custom.yml`](.github/workflows/kernel-custom.yml), [`kernel-a12-5-10.yml`](.github/workflows/kernel-a12-5-10.yml), [`kernel-a13-5-15.yml`](.github/workflows/kernel-a13-5-15.yml), [`kernel-a14-6-1.yml`](.github/workflows/kernel-a14-6-1.yml), [`kernel-a15-6-6.yml`](.github/workflows/kernel-a15-6-6.yml), [`kernel-a16-6-12.yml`](.github/workflows/kernel-a16-6-12.yml), and [`kernel-full-feature-matrix.yml`](.github/workflows/kernel-full-feature-matrix.yml)). The app dispatches [`kernel-custom.yml`](.github/workflows/kernel-custom.yml); on github.com you can also pick **Latest(最新)** when manually running a fixed-version workflow.
 
-- **Official:** `main` HEAD for the kernel; manager from the latest successful `build-manager` CI run on `main`.
-- **SukiSU:** compares `main` vs `builtin` (uses `builtin` only when it is strictly ahead of `main`); kernel and manager use the same chosen branch.
-- **ReSukiSU:** compares `dev` vs `main` (uses `main` only when it is strictly ahead of `dev`); kernel and manager use the same chosen branch.
+On GitHub Actions and the app GKI build screen, **Latest(最新)** sits between **Dev** and **Custom**. [`resolve-ksu-ref.sh`](.github/scripts/resolve-ksu-ref.sh) resolves upstream KernelSU sources at run time:
+
+- **Official (GKI):** `main` HEAD for the kernel; manager from the latest successful `build-manager` CI run on `main`.
+- **SukiSU (GKI):** kernel and manager both use `main` HEAD and the latest successful `build-manager` CI run on `main`.
+- **ReSukiSU (GKI):** compares `dev` vs `main` (uses `main` only when it is strictly ahead of `dev`); kernel and manager use the same chosen branch.
 
 If manager CI download fails, the manager job step fails but **the kernel build continues**. There is no fallback to `releases/latest` or `nightly.link` in Latest mode.
 

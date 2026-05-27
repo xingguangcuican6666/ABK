@@ -85,10 +85,9 @@ resolve_latest() {
       sha="$(head_sha_for_branch "$repo" "$source_branch")"
       ;;
     SukiSU)
+      # GKI builds use main; builtin is for OnePlus only (oneplus-build.yml, not resolve-ksu-ref).
       repo="$SUKISU_REPO"
-      primary="main"
-      secondary="builtin"
-      source_branch="$(pick_secondary_if_ahead "$repo" "$primary" "$secondary" "$GITHUB_TOKEN")"
+      source_branch="main"
       sha="$(head_sha_for_branch "$repo" "$source_branch")"
       ;;
     ReSukiSU)

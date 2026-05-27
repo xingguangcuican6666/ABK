@@ -108,13 +108,15 @@ sukisu=
 
 留空表示使用对应分支的最新提交。
 
-## KSU 分支 `Latest(最新)`
+## KSU 分支 `Latest(最新)`（仅 GKI）
 
-在 GitHub Actions 与 App 构建界面中，**Latest(最新)** 位于 **Dev** 与 **Custom** 之间，会在运行时解析上游 KernelSU 来源：
+适用于所有 GKI 的 `workflow_dispatch` 工作流（[`kernel-custom.yml`](.github/workflows/kernel-custom.yml)、[`kernel-a12-5-10.yml`](.github/workflows/kernel-a12-5-10.yml)、[`kernel-a13-5-15.yml`](.github/workflows/kernel-a13-5-15.yml)、[`kernel-a14-6-1.yml`](.github/workflows/kernel-a14-6-1.yml)、[`kernel-a15-6-6.yml`](.github/workflows/kernel-a15-6-6.yml)、[`kernel-a16-6-12.yml`](.github/workflows/kernel-a16-6-12.yml) 及 [`kernel-full-feature-matrix.yml`](.github/workflows/kernel-full-feature-matrix.yml)）。App 派发的是 [`kernel-custom.yml`](.github/workflows/kernel-custom.yml)；在 GitHub 网页上也可对固定版本工作流手动选择 **Latest(最新)**。
 
-- **Official：** 内核使用 `main` 的 HEAD；管理器取自 `main` 上最近一次成功的 `build-manager` CI 产物。
-- **SukiSU：** 比较 `main` 与 `builtin`（仅当 `builtin` 严格领先于 `main` 时使用 `builtin`）；内核与管理器使用同一选定分支。
-- **ReSukiSU：** 比较 `dev` 与 `main`（仅当 `main` 严格领先于 `dev` 时使用 `main`）；内核与管理器使用同一选定分支。
+在 GitHub Actions 与 App 的 GKI 构建界面中，**Latest(最新)** 位于 **Dev** 与 **Custom** 之间，由 [`resolve-ksu-ref.sh`](.github/scripts/resolve-ksu-ref.sh) 在运行时解析上游 KernelSU 来源：
+
+- **Official（GKI）：** 内核使用 `main` 的 HEAD；管理器取自 `main` 上最近一次成功的 `build-manager` CI 产物。
+- **SukiSU（GKI）：** 内核与管理器均使用 `main` 的 HEAD 及该分支上最近一次成功的 `build-manager` CI 产物。
+- **ReSukiSU（GKI）：** 比较 `dev` 与 `main`（仅当 `main` 严格领先于 `dev` 时使用 `main`）；内核与管理器使用同一选定分支。
 
 若管理器 CI 下载失败，管理器 job 对应步骤会失败，但**内核构建仍会继续**。Latest 模式下不会回退到 `releases/latest` 或 `nightly.link`。
 
