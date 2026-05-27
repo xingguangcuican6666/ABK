@@ -391,6 +391,13 @@
     <string name="flash_download">Download</string>
     <string name="flash_install">Install</string>
     <string name="flash_download_progress">Downloading %1$d%%</string>
+    <string name="flash_download_tasks_title">Current downloads</string>
+    <string name="flash_download_tasks_desc">Review artifact download progress or stop the current automatic download.</string>
+    <string name="flash_download_waiting_auto">Waiting for automatic download to start</string>
+    <string name="flash_stop_auto_download">Stop this auto download</string>
+    <string name="flash_cancel_download">Stop download</string>
+    <string name="flash_auto_download_badge">Automatic</string>
+    <string name="flash_manual_download_badge">Manual</string>
     <string name="flash_device_recommended">Device recommended</string>
     <string name="flash_auto_next">Auto next time</string>
     <string name="flash_workflow_label">Workflow %1$s</string>
@@ -810,6 +817,10 @@
     <string name="root_patch_ota_install_desc">Patch and write to the other slot</string>
     <string name="root_patch_anykernel">AnyKernel3 kernel</string>
     <string name="root_patch_anykernel_desc">Flash an AnyKernel3-format kernel zip package</string>
+    <string name="root_patch_ak3_slot_title">AK3 target slot</string>
+    <string name="root_patch_ak3_slot_desc">Choose whether to flash the current slot or the other slot</string>
+    <string name="root_patch_ak3_slot_current">Current slot</string>
+    <string name="root_patch_ak3_slot_inactive">Inactive slot</string>
     <string name="root_patch_select_partition">Select partition</string>
     <string name="root_patch_partition_desc">Target partition for the current slot</string>
     <string name="root_patch_use_local_lkm">Use local LKM file</string>
@@ -841,6 +852,7 @@
     <string name="root_patch_only_ko_lkm">Only .ko LKM files are supported</string>
     <string name="root_patch_output_image">[ABK] Output image: %1$s</string>
     <string name="root_patch_log_partition">Partition: %1$s</string>
+    <string name="root_patch_log_slot">Slot: %1$s</string>
     <string name="root_patch_log_module">Module: %1$s</string>
     <string name="root_patch_log_file">File: %1$s</string>
     <string name="root_patch_partition_default_multiline">%1$s\n(%2$s)</string>

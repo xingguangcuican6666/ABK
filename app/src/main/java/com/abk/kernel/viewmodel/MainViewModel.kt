@@ -25,6 +25,7 @@ import com.abk.kernel.utils.NotificationUtils
 import com.abk.kernel.utils.RootUtils
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -108,6 +109,7 @@ data class MainUiState(
     val loadingPrebuiltGkiAssetReleaseIds: Set<Long> = emptySet(),
     val isDownloading: Boolean = false,
     val downloadProgress: Map<Long, Int> = emptyMap(),
+    val activeDownloadTasks: List<ActiveDownloadTask> = emptyList(),
     val pendingAutoDownloadRunId: Long = -1L,
     val deletingWorkflowRunId: Long? = null,
     // Settings
@@ -1792,7 +1794,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun downloadArtifact(
         artifact: BuildArtifact
     ) {
-        startArtifactDownload(artifact)
+        startArtifactDownload(artifact, automatic = false)
     }
 
     fun loadPrebuiltGkiReleases(force: Boolean = false) {
@@ -1900,7 +1902,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun downloadPrebuiltGki(asset: PrebuiltGkiAsset) {
         val key = DownloadUtils.prebuiltProgressKey(asset.id)
-        artifactDownloadJobs[key]?.cancel()
+        if (key in artifactDownloadJobs) return
         artifactDownloadJobs[key] = viewModelScope.launch {
             try {
                 downloadPrebuiltGkiNow(asset, key)
@@ -1920,6 +1922,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 .sortedDownloadedForDisplay()
             _uiState.update { it.copy(downloadedArtifacts = updated) }
             prefs.saveDownloadedArtifactsJson(gson.toJson(updated))
+        }
+    }
+
+    fun cancelDownload(taskKey: Long) {
+        artifactDownloadJobs.remove(taskKey)?.cancel()
+        finishWorkflowDownloadTask(taskKey)
+    }
+
+    fun cancelAutoDownloads(runId: Long) {
+        viewModelScope.launch {
+            if (_uiState.value.pendingAutoDownloadRunId == runId) {
+                prefs.clearPendingAutoDownloadRunId()
+            }
+            _uiState.value.activeDownloadTasks
+                .filter { it.runId == runId && it.automatic }
+                .forEach { task -> cancelDownload(task.key) }
         }
     }
 
@@ -1957,8 +1975,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     .map { it.id }
                     .toSet()
                 removedRemoteIds.forEach { artifactId ->
-                    artifactDownloadJobs[artifactId]?.cancel()
-                    artifactDownloadJobs.remove(artifactId)
+                    cancelDownload(artifactId)
                 }
                 val updatedRemote = _uiState.value.artifacts
                     .filterNot { it.runId == runId }
@@ -1972,6 +1989,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         buildParameterSummaries = updatedParameterSummaries,
                         loadingBuildParameterRunIds = state.loadingBuildParameterRunIds - runId,
                         buildParameterErrors = state.buildParameterErrors - runId,
+                        activeDownloadTasks = state.activeDownloadTasks.filterNot { it.runId == runId },
                         downloadProgress = state.downloadProgress.filterKeys { it !in removedRemoteIds },
                         recentRuns = state.recentRuns.filterNot { it.id == runId },
                         currentRun = state.currentRun?.takeUnless { it.id == runId }
@@ -1980,7 +1998,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         fallbackStatus = if (state.currentRun?.id == runId) BuildStatus.IDLE else state.buildStatus,
                         fallbackProgress = state.buildProgress,
                         fallbackRun = state.currentRun?.takeUnless { it.id == runId }
-                    )
+                    ).withDownloadState()
                 }
                 if (_uiState.value.pendingAutoDownloadRunId == runId) {
                     prefs.clearPendingAutoDownloadRunId()
@@ -1996,13 +2014,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun startArtifactDownload(artifact: BuildArtifact) {
-        artifactDownloadJobs[artifact.id]?.cancel()
+    private fun startArtifactDownload(artifact: BuildArtifact, automatic: Boolean) {
+        if (artifact.id in artifactDownloadJobs) return
         artifactDownloadJobs[artifact.id] = viewModelScope.launch {
             try {
-                downloadArtifactNow(artifact)
+                downloadArtifactNow(artifact, automatic)
             } finally {
                 artifactDownloadJobs.remove(artifact.id)
+                finishWorkflowDownloadTask(artifact.id)
             }
         }
     }
@@ -2012,125 +2031,163 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val token = prefs.accessToken.first()
         val downloadDirectory = prefs.downloadDirectory.first()
         _uiState.update {
-            it.copy(
-                isDownloading = true,
+            it.withDownloadState(
                 error = null,
                 downloadProgress = it.downloadProgress + (progressKey to 0)
             )
         }
         NotificationUtils.notifyDownloadProgress(getApplication(), 0, asset.name)
-        val results = DownloadUtils.downloadDirectAsset(
-            getApplication(),
-            token,
-            asset.browserDownloadUrl,
-            asset.name,
-            asset.sizeBytes,
-            PREBUILT_GKI_RUN_ID,
-            text(R.string.vm_prebuilt_gki_label),
-            downloadDirectory
-        ) { pct ->
-            NotificationUtils.notifyDownloadProgress(getApplication(), pct, asset.name)
-            _uiState.update { s ->
-                s.copy(downloadProgress = s.downloadProgress + (progressKey to pct))
+        try {
+            val results = DownloadUtils.downloadDirectAsset(
+                getApplication(),
+                token,
+                asset.browserDownloadUrl,
+                asset.name,
+                asset.sizeBytes,
+                PREBUILT_GKI_RUN_ID,
+                text(R.string.vm_prebuilt_gki_label),
+                downloadDirectory
+            ) { pct ->
+                NotificationUtils.notifyDownloadProgress(getApplication(), pct, asset.name)
+                _uiState.update { s ->
+                    s.withDownloadState(downloadProgress = s.downloadProgress + (progressKey to pct))
+                }
             }
-        }
-        if (!_uiState.value.prebuiltGkiEnabled) {
-            _uiState.update { it.copy(isDownloading = false, downloadProgress = it.downloadProgress - progressKey) }
-            return
-        }
-        if (results.artifacts.isNotEmpty()) {
-            NotificationUtils.notifyDownloadDone(getApplication(), asset.name)
-            val updated = (_uiState.value.downloadedArtifacts + results.artifacts)
-                .distinctBy { it.filePath }
-                .sortedDownloadedForDisplay()
-            _uiState.update { s ->
-                s.copy(
-                    isDownloading = false,
-                    error = null,
-                    downloadedArtifacts = updated,
-                    downloadProgress = s.downloadProgress - progressKey
+            if (!_uiState.value.prebuiltGkiEnabled) {
+                _uiState.update {
+                    it.withDownloadState(downloadProgress = it.downloadProgress - progressKey)
+                }
+                return
+            }
+            if (results.artifacts.isNotEmpty()) {
+                NotificationUtils.notifyDownloadDone(getApplication(), asset.name)
+                val updated = (_uiState.value.downloadedArtifacts + results.artifacts)
+                    .distinctBy { it.filePath }
+                    .sortedDownloadedForDisplay()
+                _uiState.update { s ->
+                    s.withDownloadState(
+                        error = null,
+                        downloadedArtifacts = updated,
+                        downloadProgress = s.downloadProgress - progressKey
+                    )
+                }
+                prefs.saveDownloadedArtifactsJson(gson.toJson(updated))
+            } else {
+                finishArtifactDownloadWithError(
+                    progressKey,
+                    results.errorMessage ?: text(R.string.vm_prebuilt_gki_download_failed, asset.name)
                 )
             }
-            prefs.saveDownloadedArtifactsJson(gson.toJson(updated))
-        } else {
-            finishArtifactDownloadWithError(
-                progressKey,
-                results.errorMessage ?: text(R.string.vm_prebuilt_gki_download_failed, asset.name)
-            )
+        } catch (cancel: CancellationException) {
+            NotificationUtils.cancelDownloadNotification(getApplication())
+            _uiState.update {
+                it.withDownloadState(downloadProgress = it.downloadProgress - progressKey)
+            }
+            throw cancel
         }
     }
 
-    private suspend fun downloadArtifactNow(artifact: BuildArtifact) {
+    private suspend fun downloadArtifactNow(artifact: BuildArtifact, automatic: Boolean) {
         val token = prefs.accessToken.first()
         val downloadDirectory = prefs.downloadDirectory.first()
         if (token.isNullOrBlank()) {
-            _uiState.update { it.copy(isDownloading = false, error = text(R.string.vm_artifact_download_login_required)) }
+            _uiState.update {
+                it.withDownloadState(error = text(R.string.vm_artifact_download_login_required))
+            }
             return
         }
-        _uiState.update {
-            it.copy(
-                isDownloading = true,
-                error = null,
-                downloadProgress = it.downloadProgress + (artifact.id to 0)
-            )
-        }
+        startWorkflowDownloadTask(artifact, automatic)
         NotificationUtils.notifyDownloadProgress(getApplication(), 0, artifact.name)
-        val mirrorBaseUrl = prefs.downloadMirrorBaseUrl.first()
-        val mirrorEnabled = mirrorBaseUrl.isNotBlank()
-        val downloadUrl = if (mirrorEnabled) {
-            monitorMirrorAndResolveDownloadUrl(artifact, mirrorBaseUrl) ?: run {
-                finishArtifactDownloadWithError(artifact.id, text(R.string.vm_mirror_prepare_failed, artifact.name))
-                return
-            }
-        } else {
-            null
-        }
-        val results = DownloadUtils.downloadArtifact(
-            getApplication(),
-            if (downloadUrl == null) token else null,
-            artifact.toArtifact(),
-            artifact.toWorkflowRun(),
-            downloadUrl,
-            downloadDirectory
-        ) { pct ->
-            val displayProgress = if (mirrorEnabled) {
-                (50 + pct / 2).coerceIn(50, 100)
+        try {
+            val mirrorBaseUrl = prefs.downloadMirrorBaseUrl.first()
+            val mirrorEnabled = mirrorBaseUrl.isNotBlank()
+            val downloadUrl = if (mirrorEnabled) {
+                monitorMirrorAndResolveDownloadUrl(artifact, mirrorBaseUrl) ?: run {
+                    finishArtifactDownloadWithError(artifact.id, text(R.string.vm_mirror_prepare_failed, artifact.name))
+                    return
+                }
             } else {
-                pct
+                null
             }
-            NotificationUtils.notifyDownloadProgress(getApplication(), displayProgress, artifact.name)
-            _uiState.update { s ->
-                s.copy(downloadProgress = s.downloadProgress + (artifact.id to displayProgress))
+            val results = DownloadUtils.downloadArtifact(
+                getApplication(),
+                if (downloadUrl == null) token else null,
+                artifact.toArtifact(),
+                artifact.toWorkflowRun(),
+                downloadUrl,
+                downloadDirectory
+            ) { pct ->
+                val displayProgress = if (mirrorEnabled) {
+                    (50 + pct / 2).coerceIn(50, 100)
+                } else {
+                    pct
+                }
+                NotificationUtils.notifyDownloadProgress(getApplication(), displayProgress, artifact.name)
+                updateWorkflowDownloadProgress(artifact.id, displayProgress)
             }
-        }
-        if (results.artifacts.isNotEmpty()) {
-            NotificationUtils.notifyDownloadDone(getApplication(), artifact.name)
-            val updated = (_uiState.value.downloadedArtifacts + results.artifacts)
-                .distinctBy { it.filePath }
-                .sortedDownloadedForDisplay()
-            _uiState.update { s ->
-                s.copy(
-                    isDownloading = false,
-                    error = null,
-                    downloadedArtifacts = updated,
-                    downloadProgress = s.downloadProgress - artifact.id
+            if (results.artifacts.isNotEmpty()) {
+                NotificationUtils.notifyDownloadDone(getApplication(), artifact.name)
+                val updated = (_uiState.value.downloadedArtifacts + results.artifacts)
+                    .distinctBy { it.filePath }
+                    .sortedDownloadedForDisplay()
+                _uiState.update { s ->
+                    s.withDownloadState(
+                        error = null,
+                        downloadedArtifacts = updated
+                    )
+                }
+                prefs.saveDownloadedArtifactsJson(gson.toJson(updated))
+            } else {
+                finishArtifactDownloadWithError(
+                    artifact.id,
+                    results.errorMessage ?: text(R.string.vm_artifact_download_failed, artifact.name)
                 )
             }
-            prefs.saveDownloadedArtifactsJson(gson.toJson(updated))
-        } else {
-            finishArtifactDownloadWithError(
-                artifact.id,
-                results.errorMessage ?: text(R.string.vm_artifact_download_failed, artifact.name)
-            )
+        } catch (cancel: CancellationException) {
+            NotificationUtils.cancelDownloadNotification(getApplication())
+            throw cancel
         }
     }
 
     private fun finishArtifactDownloadWithError(artifactId: Long, message: String) {
         _uiState.update {
-            it.copy(
-                isDownloading = false,
+            it.withDownloadState(
                 error = it.error ?: message,
                 downloadProgress = it.downloadProgress - artifactId
+            )
+        }
+    }
+
+    private fun startWorkflowDownloadTask(artifact: BuildArtifact, automatic: Boolean) {
+        val task = artifact.toActiveDownloadTask(automatic = automatic)
+        _uiState.update { state ->
+            state.withDownloadState(
+                error = null,
+                activeDownloadTasks = (state.activeDownloadTasks.filterNot { it.key == task.key } + task)
+                    .sortedDownloadTasks(),
+                downloadProgress = state.downloadProgress + (task.key to task.progress)
+            )
+        }
+    }
+
+    private fun updateWorkflowDownloadProgress(taskKey: Long, progress: Int) {
+        _uiState.update { state ->
+            state.withDownloadState(
+                activeDownloadTasks = state.activeDownloadTasks
+                    .map { task ->
+                        if (task.key == taskKey) task.copy(progress = progress.coerceIn(0, 100)) else task
+                    }
+                    .sortedDownloadTasks(),
+                downloadProgress = state.downloadProgress + (taskKey to progress.coerceIn(0, 100))
+            )
+        }
+    }
+
+    private fun finishWorkflowDownloadTask(taskKey: Long) {
+        _uiState.update { state ->
+            state.withDownloadState(
+                activeDownloadTasks = state.activeDownloadTasks.filterNot { it.key == taskKey },
+                downloadProgress = state.downloadProgress - taskKey
             )
         }
     }
@@ -2280,9 +2337,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun markMirrorProgress(artifactId: Long, progress: Int) {
-        _uiState.update { s ->
-            s.copy(downloadProgress = s.downloadProgress + (artifactId to progress.coerceIn(0, 100)))
-        }
+        updateWorkflowDownloadProgress(artifactId, progress)
     }
 
     private suspend fun findMirrorReleaseAssetUrl(
@@ -2368,7 +2423,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         prefs.clearPendingAutoDownloadRunId()
-        targets.forEach { startArtifactDownload(it) }
+        targets.forEach { startArtifactDownload(it, automatic = true) }
     }
 
     // ── Settings ──────────────────────────────────────────────────────────
@@ -2415,7 +2470,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 prebuiltGkiAssetsByReleaseId = emptyMap(),
                 loadingPrebuiltGkiAssetReleaseIds = emptySet(),
                 downloadProgress = it.downloadProgress.filterKeys { key -> key >= 0L }
-            )
+            ).withDownloadState()
         }
         prefs.setPrebuiltGkiEnabled(v)
     }
@@ -4994,6 +5049,38 @@ private fun List<DownloadedArtifact>.sortedDownloadedForDisplay(): List<Download
             .thenByDescending { it.runId }
             .thenBy { it.name }
     )
+
+internal fun List<ActiveDownloadTask>.sortedDownloadTasks(): List<ActiveDownloadTask> =
+    sortedWith(
+        compareByDescending<ActiveDownloadTask> { it.runNumber }
+            .thenByDescending { it.runId }
+            .thenBy { it.name }
+    )
+
+internal fun BuildArtifact.toActiveDownloadTask(automatic: Boolean): ActiveDownloadTask =
+    ActiveDownloadTask(
+        key = id,
+        artifactId = id,
+        runId = runId,
+        name = name,
+        runTitle = runTitle,
+        runNumber = runNumber,
+        progress = 0,
+        automatic = automatic
+    )
+
+internal fun MainUiState.withDownloadState(
+    error: String? = this.error,
+    downloadedArtifacts: List<DownloadedArtifact> = this.downloadedArtifacts,
+    downloadProgress: Map<Long, Int> = this.downloadProgress,
+    activeDownloadTasks: List<ActiveDownloadTask> = this.activeDownloadTasks
+): MainUiState = copy(
+    error = error,
+    downloadedArtifacts = downloadedArtifacts,
+    downloadProgress = downloadProgress,
+    activeDownloadTasks = activeDownloadTasks,
+    isDownloading = downloadProgress.isNotEmpty() || activeDownloadTasks.isNotEmpty()
+)
 
 private data class Quintuple<A, B, C, D, E>(val a: A, val b: B, val c: C, val d: D, val e: E)
 

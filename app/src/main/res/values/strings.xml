@@ -391,6 +391,13 @@
     <string name="flash_download">下载</string>
     <string name="flash_install">安装</string>
     <string name="flash_download_progress">下载中 %1$d%%</string>
+    <string name="flash_download_tasks_title">当前下载</string>
+    <string name="flash_download_tasks_desc">查看构建产物下载进度，或停止当前自动下载。</string>
+    <string name="flash_download_waiting_auto">等待自动下载开始</string>
+    <string name="flash_stop_auto_download">停止本次自动下载</string>
+    <string name="flash_cancel_download">停止下载</string>
+    <string name="flash_auto_download_badge">自动下载</string>
+    <string name="flash_manual_download_badge">手动下载</string>
     <string name="flash_device_recommended">设备推荐</string>
     <string name="flash_auto_next">下次自动</string>
     <string name="flash_workflow_label">工作流 %1$s</string>
@@ -810,6 +817,10 @@
     <string name="root_patch_ota_install_desc">修补并写入另一槽位</string>
     <string name="root_patch_anykernel">AnyKernel3 内核</string>
     <string name="root_patch_anykernel_desc">刷入 AnyKernel3 格式的内核 zip 包</string>
+    <string name="root_patch_ak3_slot_title">AK3 目标槽位</string>
+    <string name="root_patch_ak3_slot_desc">选择刷入当前槽位或另一槽位</string>
+    <string name="root_patch_ak3_slot_current">当前槽位</string>
+    <string name="root_patch_ak3_slot_inactive">另一槽位</string>
     <string name="root_patch_select_partition">选择分区</string>
     <string name="root_patch_partition_desc">当前槽位目标分区</string>
     <string name="root_patch_use_local_lkm">使用本地 LKM 文件</string>
@@ -841,6 +852,7 @@
     <string name="root_patch_only_ko_lkm">仅支持 .ko LKM 文件</string>
     <string name="root_patch_output_image">[ABK] 输出镜像: %1$s</string>
     <string name="root_patch_log_partition">分区: %1$s</string>
+    <string name="root_patch_log_slot">槽位: %1$s</string>
     <string name="root_patch_log_module">模块: %1$s</string>
     <string name="root_patch_log_file">文件: %1$s</string>
     <string name="root_patch_partition_default_multiline">%1$s\n（%2$s）</string>

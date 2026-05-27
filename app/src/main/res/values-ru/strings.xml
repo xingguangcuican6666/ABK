@@ -368,6 +368,13 @@
     <string name="flash_download">Скачать</string>
     <string name="flash_install">Установить</string>
     <string name="flash_download_progress">Загрузка %1$d%%</string>
+    <string name="flash_download_tasks_title">Текущие загрузки</string>
+    <string name="flash_download_tasks_desc">Следите за загрузкой артефактов или остановите текущую автозагрузку.</string>
+    <string name="flash_download_waiting_auto">Ожидание запуска автозагрузки</string>
+    <string name="flash_stop_auto_download">Остановить эту автозагрузку</string>
+    <string name="flash_cancel_download">Остановить загрузку</string>
+    <string name="flash_auto_download_badge">Авто</string>
+    <string name="flash_manual_download_badge">Вручную</string>
     <string name="flash_device_recommended">Рекомендация для устройства</string>
     <string name="flash_auto_next">Автоматически в следующий раз</string>
     <string name="flash_workflow_label">Workflow %1$s</string>
@@ -787,6 +794,10 @@
     <string name="root_patch_ota_install_desc">Пропатчить и записать в другой слот</string>
     <string name="root_patch_anykernel">Ядро AnyKernel3</string>
     <string name="root_patch_anykernel_desc">Прошить zip-пакет ядра в формате AnyKernel3</string>
+    <string name="root_patch_ak3_slot_title">Слот назначения AK3</string>
+    <string name="root_patch_ak3_slot_desc">Выберите текущий или другой слот для прошивки</string>
+    <string name="root_patch_ak3_slot_current">Текущий слот</string>
+    <string name="root_patch_ak3_slot_inactive">Неактивный слот</string>
     <string name="root_patch_select_partition">Выбрать раздел</string>
     <string name="root_patch_partition_desc">Целевой раздел в текущем слоте</string>
     <string name="root_patch_use_local_lkm">Использовать локальный файл LKM</string>
@@ -818,6 +829,7 @@
     <string name="root_patch_only_ko_lkm">Поддерживаются только .ko LKM-файлы</string>
     <string name="root_patch_output_image">[ABK] Выходной образ: %1$s</string>
     <string name="root_patch_log_partition">Раздел: %1$s</string>
+    <string name="root_patch_log_slot">Слот: %1$s</string>
     <string name="root_patch_log_module">Модуль: %1$s</string>
     <string name="root_patch_log_file">Файл: %1$s</string>
     <string name="root_patch_partition_default_multiline">%1$s\n(%2$s)</string>

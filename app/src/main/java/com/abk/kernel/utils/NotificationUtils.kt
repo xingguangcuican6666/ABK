@@ -188,6 +188,10 @@ object NotificationUtils {
         post(context, NOTIF_ID_DOWNLOAD, notif)
     }
 
+    fun cancelDownloadNotification(context: Context) {
+        NotificationManagerCompat.from(context).cancel(NOTIF_ID_DOWNLOAD)
+    }
+
     fun cancelBuildNotification(context: Context) {
         lastBuildNotificationSignature = null
         lastBuildProgressPercent = null

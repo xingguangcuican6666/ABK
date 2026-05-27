@@ -88,6 +88,7 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -103,6 +104,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -129,6 +131,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import coil.compose.AsyncImage
 import com.abk.kernel.R
+import com.abk.kernel.data.model.ActiveDownloadTask
 import com.abk.kernel.data.model.ArtifactCategory
 import com.abk.kernel.data.model.ArtifactType
 import com.abk.kernel.data.model.BuildArtifact
@@ -185,6 +188,9 @@ fun FlashScreen(
     var deleteRemoteWorkflowRun by remember { mutableStateOf(false) }
     var showFlashConfirm by remember { mutableStateOf(false) }
     var showTerminal by remember { mutableStateOf(false) }
+    var selectedAnyKernelSlotTargetName by rememberSaveable {
+        mutableStateOf(RootUtils.Ak3SlotTarget.CURRENT.name)
+    }
     var terminalTitle by remember { mutableStateOf(context.getString(R.string.flash_terminal)) }
     var terminalCanReboot by remember { mutableStateOf(false) }
     var terminalRunning by remember { mutableStateOf(false) }
@@ -193,6 +199,20 @@ fun FlashScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val rootGranted = state.rootGranted
     val currentContentTab = if (state.prebuiltGkiEnabled) activeContentTab else FlashContentTab.Workflows
+    val supportsAnyKernelInactiveSlot by produceState(initialValue = false, rootGranted) {
+        value = withContext(Dispatchers.IO) { RootUtils.supportsAnyKernelInactiveSlot() }
+    }
+    val selectedAnyKernelSlotTarget = runCatching {
+        RootUtils.Ak3SlotTarget.valueOf(selectedAnyKernelSlotTargetName)
+    }.getOrDefault(RootUtils.Ak3SlotTarget.CURRENT)
+    val flashAnyKernelCurrentSlotLabel = stringResource(R.string.root_patch_ak3_slot_current)
+    val flashAnyKernelInactiveSlotLabel = stringResource(R.string.root_patch_ak3_slot_inactive)
+    val workflowActiveDownloads = remember(state.activeDownloadTasks) {
+        state.activeDownloadTasks.sortedByDescending { it.runNumber }
+    }
+    val pendingAutoDownloadRun = remember(state.pendingAutoDownloadRunId, state.recentRuns) {
+        state.recentRuns.firstOrNull { it.id == state.pendingAutoDownloadRunId }
+    }
 
     val remoteArtifacts = remember(state.artifacts) {
         state.artifacts.filter {
@@ -247,6 +267,12 @@ fun FlashScreen(
                 popUpTo(FLASH_ROUTE_LIST) { inclusive = false }
                 launchSingleTop = true
             }
+        }
+    }
+
+    LaunchedEffect(supportsAnyKernelInactiveSlot) {
+        if (!supportsAnyKernelInactiveSlot) {
+            selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.CURRENT.name
         }
     }
 
@@ -334,12 +360,15 @@ fun FlashScreen(
         }
     }
 
-    fun startFlash(item: DownloadedArtifact) {
+    fun startFlash(
+        item: DownloadedArtifact,
+        anyKernelSlotTarget: RootUtils.Ak3SlotTarget = RootUtils.Ak3SlotTarget.CURRENT
+    ) {
         if (!rootGranted) {
             showFailure(
                 context.getString(R.string.flash_root_unauthorized),
                 listOf(
-                    "${'$'} ${flashCommandPreview(item)}",
+                    "${'$'} ${flashCommandPreview(item, anyKernelSlotTarget)}",
                     context.getString(R.string.flash_partial_files_only),
                     context.getString(R.string.flash_grant_root_flash)
                 )
@@ -350,9 +379,23 @@ fun FlashScreen(
         terminalCanReboot = true
         terminalRunning = true
         terminalSuccess = null
+        val slotLog = if (item.type == ArtifactType.ANYKERNEL3) {
+            listOf(
+                context.getString(
+                    R.string.root_patch_log_slot,
+                    when (anyKernelSlotTarget) {
+                        RootUtils.Ak3SlotTarget.INACTIVE -> flashAnyKernelInactiveSlotLabel
+                        RootUtils.Ak3SlotTarget.CURRENT -> flashAnyKernelCurrentSlotLabel
+                    }
+                )
+            )
+        } else {
+            emptyList()
+        }
         terminalLog = listOf(
-            "${'$'} ${flashCommandPreview(item)}",
+            "${'$'} ${flashCommandPreview(item, anyKernelSlotTarget)}",
             "file: ${item.filePath}",
+        ) + slotLog + listOf(
             "",
             context.getString(R.string.flash_wait_root_shell)
         )
@@ -362,7 +405,12 @@ fun FlashScreen(
                 runCatching {
                     when (item.type) {
                         ArtifactType.KERNEL_IMG -> RootUtils.flashImage(item.filePath, onOutput = ::appendTerminalOutput)
-                        ArtifactType.ANYKERNEL3 -> RootUtils.flashAnyKernel3(context, item.filePath, ::appendTerminalOutput)
+                        ArtifactType.ANYKERNEL3 -> RootUtils.flashAnyKernel3(
+                            context,
+                            item.filePath,
+                            targetSlot = anyKernelSlotTarget,
+                            onOutput = ::appendTerminalOutput
+                        )
                         ArtifactType.SUSFS_MODULE -> RootUtils.installModule(item.filePath, ::appendTerminalOutput)
                         ArtifactType.KSU_MANAGER -> RootUtils.installApk(context, item.filePath, ::appendTerminalOutput)
                         else -> RootUtils.ShellResult(false, listOf(context.getString(R.string.flash_unsupported_auto_flash)))
@@ -374,8 +422,9 @@ fun FlashScreen(
             terminalRunning = false
             terminalSuccess = result.success
             terminalLog = listOf(
-                "${'$'} ${flashCommandPreview(item)}",
+                "${'$'} ${flashCommandPreview(item, anyKernelSlotTarget)}",
                 "file: ${item.filePath}",
+            ) + slotLog + listOf(
                 ""
             ) + result.output.ifEmpty {
                 listOf(
@@ -395,12 +444,55 @@ fun FlashScreen(
             onDismissRequest = { showFlashConfirm = false },
             icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
             title = { Text(stringResource(R.string.flash_confirm)) },
-            text = { Text(stringResource(R.string.flash_confirm_msg)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.flash_confirm_msg))
+                    if (item.type == ArtifactType.ANYKERNEL3 && supportsAnyKernelInactiveSlot) {
+                        Text(
+                            text = stringResource(R.string.root_patch_ak3_slot_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.CURRENT.name
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedAnyKernelSlotTarget == RootUtils.Ak3SlotTarget.CURRENT,
+                                onClick = {
+                                    selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.CURRENT.name
+                                }
+                            )
+                            Text(flashAnyKernelCurrentSlotLabel)
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.INACTIVE.name
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedAnyKernelSlotTarget == RootUtils.Ak3SlotTarget.INACTIVE,
+                                onClick = {
+                                    selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.INACTIVE.name
+                                }
+                            )
+                            Text(flashAnyKernelInactiveSlotLabel)
+                        }
+                    }
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = {
                         showFlashConfirm = false
-                        startFlash(item)
+                        startFlash(item, selectedAnyKernelSlotTarget)
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text(stringResource(R.string.flash_confirm)) }
@@ -599,6 +691,21 @@ fun FlashScreen(
                             }
                         }
 
+                        if (workflowActiveDownloads.isNotEmpty() || state.pendingAutoDownloadRunId > 0L) {
+                            item {
+                                WorkflowDownloadManagementCard(
+                                    tasks = workflowActiveDownloads,
+                                    pendingRunId = state.pendingAutoDownloadRunId.takeIf { it > 0L },
+                                    pendingRunLabel = pendingAutoDownloadRun?.let(::workflowRunLabel)
+                                        ?: state.pendingAutoDownloadRunId
+                                            .takeIf { it > 0L }
+                                            ?.let { "#$it" },
+                                    onCancelTask = vm::cancelDownload,
+                                    onCancelPending = vm::cancelAutoDownloads
+                                )
+                            }
+                        }
+
                         if (workflowGroups.isNotEmpty()) {
                             items(workflowGroups, key = { "workflow-${it.runId}" }) { group ->
                                 val run = recentRunById[group.runId]
@@ -791,6 +898,18 @@ fun FlashScreen(
                                         deleteRemoteWorkflowRun = false
                                     }
                                 )
+                            }
+
+                            if (workflowActiveDownloads.any { it.runId == group.runId } || state.pendingAutoDownloadRunId == group.runId) {
+                                item("downloads-${group.runId}") {
+                                    WorkflowDownloadManagementCard(
+                                        tasks = workflowActiveDownloads.filter { it.runId == group.runId },
+                                        pendingRunId = state.pendingAutoDownloadRunId.takeIf { it == group.runId },
+                                        pendingRunLabel = workflowGroupLabel(group),
+                                        onCancelTask = vm::cancelDownload,
+                                        onCancelPending = vm::cancelAutoDownloads
+                                    )
+                                }
                             }
 
                             artifactCategoryOrder.forEach { category ->
@@ -1141,6 +1260,110 @@ private fun FlashHero(
             )
         }
     )
+}
+
+@Composable
+private fun WorkflowDownloadManagementCard(
+    tasks: List<ActiveDownloadTask>,
+    pendingRunId: Long?,
+    pendingRunLabel: String?,
+    onCancelTask: (Long) -> Unit,
+    onCancelPending: (Long) -> Unit
+) {
+    if (tasks.isEmpty() && pendingRunId == null) return
+    ExpressiveSectionCard(
+        title = stringResource(R.string.flash_download_tasks_title),
+        subtitle = stringResource(R.string.flash_download_tasks_desc),
+        icon = Icons.Default.Download
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (pendingRunId != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = pendingRunLabel ?: "#$pendingRunId",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = stringResource(R.string.flash_download_waiting_auto),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    OutlinedButton(onClick = { onCancelPending(pendingRunId) }) {
+                        Icon(Icons.Default.Cancel, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.flash_stop_auto_download))
+                    }
+                }
+            }
+
+            tasks.forEachIndexed { index, task ->
+                if (index > 0) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = task.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = workflowTaskLabel(task),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        ExpressiveStatusChip(
+                            label = if (task.automatic) {
+                                stringResource(R.string.flash_auto_download_badge)
+                            } else {
+                                stringResource(R.string.flash_manual_download_badge)
+                            },
+                            color = if (task.automatic) {
+                                MaterialTheme.colorScheme.secondary
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            }
+                        )
+                    }
+                    LinearProgressIndicator(
+                        progress = { (task.progress / 100f).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = stringResource(R.string.flash_download_progress, task.progress),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        TextButton(onClick = { onCancelTask(task.key) }) {
+                            Text(stringResource(R.string.flash_cancel_download))
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -2392,6 +2615,15 @@ private data class WorkflowArtifactGroup(
     val local: List<DownloadedArtifact>
 )
 
+private fun workflowRunLabel(run: WorkflowRun): String =
+    if (run.runNumber > 0) "#${run.runNumber} · ${run.displayTitle ?: run.name ?: run.id}" else "#${run.id}"
+
+private fun workflowGroupLabel(group: WorkflowArtifactGroup): String =
+    if (group.runNumber > 0) "#${group.runNumber} · ${group.runTitle}" else "#${group.runId} · ${group.runTitle}"
+
+private fun workflowTaskLabel(task: ActiveDownloadTask): String =
+    if (task.runNumber > 0) "#${task.runNumber} · ${task.runTitle}" else "#${task.runId} · ${task.runTitle}"
+
 private fun WorkflowRun.isActiveFlashRun(): Boolean =
     status in setOf("queued", "waiting", "requested", "pending", "in_progress")
 
@@ -2430,9 +2662,12 @@ private fun flashOperationLabelRes(type: ArtifactType) = when (type) {
     else -> R.string.flash_button_execute
 }
 
-private fun flashCommandPreview(item: DownloadedArtifact) = when (item.type) {
+private fun flashCommandPreview(
+    item: DownloadedArtifact,
+    anyKernelSlotTarget: RootUtils.Ak3SlotTarget = RootUtils.Ak3SlotTarget.CURRENT
+) = when (item.type) {
     ArtifactType.KERNEL_IMG -> "dd boot <- ${item.name}"
-    ArtifactType.ANYKERNEL3 -> "flash-ak3 ${item.name}"
+    ArtifactType.ANYKERNEL3 -> "flash-ak3 ${item.name} --slot ${anyKernelSlotTarget.slotSelectValue}"
     ArtifactType.SUSFS_MODULE -> "install-module ${item.name}"
     else -> "run ${item.name}"
 }

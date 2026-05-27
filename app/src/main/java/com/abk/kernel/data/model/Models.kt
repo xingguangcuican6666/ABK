@@ -582,6 +582,17 @@ enum class BuildQueueItemStatus {
     CANCELLED
 }
 
+data class ActiveDownloadTask(
+    val key: Long,
+    val artifactId: Long,
+    val runId: Long,
+    val name: String,
+    val runTitle: String,
+    val runNumber: Int = 0,
+    val progress: Int = 0,
+    val automatic: Boolean = false
+)
+
 data class DownloadedArtifact(
     val id: Long,
     val name: String,

@@ -14,11 +14,19 @@ import com.abk.kernel.data.model.RootGrantProfile
 import com.topjohnwu.superuser.CallbackList
 import com.topjohnwu.superuser.Shell
 import org.json.JSONObject
+import java.io.BufferedInputStream
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.Collections
 import java.util.Properties
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import kotlin.concurrent.thread
 
 object RootUtils {
@@ -59,6 +67,11 @@ object RootUtils {
                     .joinToString("-")
                 return raw.replace(Regex("""[^A-Za-z0-9._-]"""), "_").ifBlank { "default" }
             }
+    }
+
+    enum class Ak3SlotTarget(val slotSelectValue: String) {
+        CURRENT("active"),
+        INACTIVE("inactive")
     }
 
     fun init(context: Context) {
@@ -254,16 +267,35 @@ object RootUtils {
     fun flashAnyKernel3(
         context: Context,
         zipPath: String,
+        targetSlot: Ak3SlotTarget = Ak3SlotTarget.CURRENT,
         onOutput: ((String) -> Unit)? = null
     ): ShellResult {
+        val sourceZip = File(zipPath)
+        if (!sourceZip.isFile) {
+            val line = tr(R.string.ru_boot_image_not_found, zipPath)
+            onOutput?.invoke(line)
+            return ShellResult(false, listOf(line))
+        }
         val workDir = File(context.filesDir, "ak3-flash").apply {
             deleteRecursively()
             mkdirs()
         }
         val scriptFile = File(workDir, "flash_ak3.sh")
         return try {
+            val preparedZip = prepareAnyKernel3Zip(sourceZip, targetSlot, workDir, onOutput)
+                ?: return ShellResult(
+                    false,
+                    listOf(
+                        if (targetSlot == Ak3SlotTarget.INACTIVE) {
+                            "[ABK] 当前 AnyKernel3 不支持切换到另一槽位"
+                        } else {
+                            "[ABK] 准备 AnyKernel3 失败"
+                        }
+                    )
+                )
+            onOutput?.invoke("[ABK] 目标槽位: ${if (targetSlot == Ak3SlotTarget.INACTIVE) "另一槽位" else "当前槽位"}")
             scriptFile.writeText(AK3_FLASH_SCRIPT)
-            val script = "F=${shellQuote(workDir.absolutePath)} Z=${shellQuote(zipPath)} /system/bin/sh ${shellQuote(scriptFile.absolutePath)}"
+            val script = "F=${shellQuote(workDir.absolutePath)} Z=${shellQuote(preparedZip.absolutePath)} /system/bin/sh ${shellQuote(scriptFile.absolutePath)}"
             execRootScript(script, timeoutSeconds = 300L, onOutput = onOutput)
         } finally {
             workDir.deleteRecursively()
@@ -313,6 +345,19 @@ object RootUtils {
             if (ota) add("--ota")
         }
         return readEmbeddedBootInfoLine(args)
+    }
+
+    fun supportsAnyKernelInactiveSlot(): Boolean {
+        val suffix = detectBootSlotSuffix()
+            ?.trim()
+            ?.lowercase()
+            ?.takeIf { it == "_a" || it == "_b" }
+            ?: detectSystemProperty("ro.boot.slot_suffix")
+                ?.trim()
+                ?.lowercase()
+                ?.takeIf { it == "_a" || it == "_b" }
+        if (suffix != null) return true
+        return BOOT_PATCH_PARTITIONS.any { partitionExists("${it}_a") && partitionExists("${it}_b") }
     }
 
     private fun detectCurrentKmiFallback(): String? {
@@ -1918,10 +1963,125 @@ object RootUtils {
         ).any { File(it).exists() }
     }
 
+    private fun detectSystemProperty(name: String): String? {
+        return runCatching {
+            Runtime.getRuntime()
+                .exec(arrayOf("/system/bin/getprop", name))
+                .inputStream
+                .bufferedReader()
+                .use { it.readText().trim() }
+                .ifBlank { null }
+        }.getOrNull()
+    }
+
     private fun buildShellCommand(args: List<String>): String =
         args.joinToString(" ") { shellQuote(it) }
 
     private fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
+
+    internal fun rewriteAnyKernelSlotSelect(
+        scriptContent: String,
+        targetSlot: Ak3SlotTarget
+    ): String? {
+        val lineRegex = Regex("""(?m)^([ \t]*slot_select=)[^\r\n]*$""")
+        val match = lineRegex.find(scriptContent) ?: return null
+        return buildString {
+            append(scriptContent.substring(0, match.range.first))
+            append(match.groupValues[1])
+            append(targetSlot.slotSelectValue)
+            append(scriptContent.substring(match.range.last + 1))
+        }
+    }
+
+    private fun prepareAnyKernel3Zip(
+        sourceZip: File,
+        targetSlot: Ak3SlotTarget,
+        workDir: File,
+        onOutput: ((String) -> Unit)?
+    ): File? {
+        val expandDir = File(workDir, "anykernel-src").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        unzipToDirectory(sourceZip, expandDir)
+        val anyKernelScript = expandDir.walkTopDown()
+            .firstOrNull { it.isFile && it.name.equals("anykernel.sh", ignoreCase = true) }
+        if (anyKernelScript == null) {
+            onOutput?.invoke("[ABK] AnyKernel3 缺少 anykernel.sh")
+            return null
+        }
+
+        val original = anyKernelScript.readText()
+        val rewritten = rewriteAnyKernelSlotSelect(original, targetSlot)
+        if (rewritten == null) {
+            return if (targetSlot == Ak3SlotTarget.CURRENT) {
+                onOutput?.invoke("[ABK] 未找到 slot_select，沿用 AK3 默认当前槽位行为")
+                sourceZip
+            } else {
+                onOutput?.invoke("[ABK] AnyKernel3 未声明 slot_select，无法切换到另一槽位")
+                null
+            }
+        }
+        if (rewritten == original) {
+            return sourceZip
+        }
+
+        anyKernelScript.writeText(rewritten)
+        onOutput?.invoke("[ABK] 已将 AnyKernel3 slot_select 设置为 ${targetSlot.slotSelectValue}")
+        val targetZip = File(workDir, "AnyKernel3-target.zip")
+        zipDirectory(expandDir, targetZip)
+        return targetZip
+    }
+
+    private fun unzipToDirectory(zipFile: File, outputDir: File) {
+        val outputCanonical = outputDir.canonicalFile
+        ZipInputStream(BufferedInputStream(FileInputStream(zipFile))).use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null) {
+                val outputFile = File(outputDir, entry.name).canonicalFile
+                if (!outputFile.path.startsWith(outputCanonical.path + File.separator)) {
+                    throw SecurityException("Unsafe zip entry: ${entry.name}")
+                }
+                if (entry.isDirectory) {
+                    outputFile.mkdirs()
+                } else {
+                    outputFile.parentFile?.mkdirs()
+                    FileOutputStream(outputFile).use { output ->
+                        copyStream(zip, output)
+                    }
+                }
+                zip.closeEntry()
+                entry = zip.nextEntry
+            }
+        }
+    }
+
+    private fun zipDirectory(sourceDir: File, outputZip: File) {
+        val sourceCanonical = sourceDir.canonicalFile
+        ZipOutputStream(FileOutputStream(outputZip)).use { zip ->
+            sourceDir.walkTopDown()
+                .filter { it.isFile }
+                .forEach { file ->
+                    val relativePath = sourceCanonical.toPath().relativize(file.canonicalFile.toPath())
+                        .toString()
+                        .replace(File.separatorChar, '/')
+                    zip.putNextEntry(ZipEntry(relativePath))
+                    FileInputStream(file).use { input ->
+                        copyStream(input, zip)
+                    }
+                    zip.closeEntry()
+                }
+        }
+    }
+
+    private fun copyStream(input: InputStream, output: OutputStream) {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (true) {
+            val read = input.read(buffer)
+            if (read == -1) break
+            output.write(buffer, 0, read)
+        }
+    }
 
     private val AK3_FLASH_SCRIPT = """
 #!/system/bin/sh
