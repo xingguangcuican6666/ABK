@@ -34,6 +34,10 @@ github_api_curl() {
   curl -fsSL "${auth[@]}" -H "Accept: application/vnd.github+json" "$@"
 }
 
+workflow_run_id_from_json() {
+  printf '%s' "$1" | jq -r '.workflow_runs[0].id // empty'
+}
+
 find_build_manager_run_id() {
   local sha="$1"
   local run_json run_id
@@ -43,12 +47,23 @@ find_build_manager_run_id() {
   fi
   run_json="$(github_api_curl \
     "https://api.github.com/repos/${REPO}/actions/workflows/build-manager.yml/runs?head_sha=${sha}&status=success&per_page=1")"
-  run_id="$(printf '%s' "$run_json" | jq -r '.workflow_runs[0].id // empty')"
+  run_id="$(workflow_run_id_from_json "$run_json")"
+  if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
+    MANAGER_RUN_FALLBACK_MAIN=0
+    printf '%s\n' "$run_id"
+    return 0
+  fi
+
+  echo "::notice::No successful build-manager run for ${REPO} at head_sha=${sha}; falling back to latest successful run on main" >&2
+  run_json="$(github_api_curl \
+    "https://api.github.com/repos/${REPO}/actions/workflows/build-manager.yml/runs?branch=main&status=success&per_page=1")"
+  run_id="$(workflow_run_id_from_json "$run_json")"
   if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
-    echo "::error::No successful build-manager run for ${REPO} at head_sha=${sha}" >&2
+    echo "::error::No successful build-manager run for ${REPO} on main either" >&2
     printf '%s' "$run_json" | jq -r '.message // empty' >&2 || true
     return 1
   fi
+  MANAGER_RUN_FALLBACK_MAIN=1
   printf '%s\n' "$run_id"
 }
 
@@ -76,13 +91,6 @@ try_download_artifact_api() {
     "https://api.github.com/repos/${REPO}/actions/runs/${run_id}/artifacts")"
   artifact_id="$(printf '%s' "$artifacts_json" | jq -r --arg name "$artifact_name" '
     (.artifacts[] | select(.name == $name) | .id) // empty')"
-  if [ -z "$artifact_id" ] || [ "$artifact_id" = "null" ]; then
-    artifact_id="$(printf '%s' "$artifacts_json" | jq -r '
-      ([.artifacts[]
-        | select((.name | ascii_downcase | contains("manager"))
-          or (.name | ascii_downcase | endswith(".apk")))]
-      | .[0].id) // empty')"
-  fi
   if [ -z "$artifact_id" ] || [ "$artifact_id" = "null" ]; then
     echo "::warning::No manager artifact on run ${run_id} for ${REPO}" >&2
     return 1
@@ -117,7 +125,11 @@ try_download_nightly_run() {
   echo "Downloaded manager from ${REPO}@${KSU_SHA} (run ${run_id}) via nightly.link"
 }
 
+MANAGER_RUN_FALLBACK_MAIN=0
 run_id="$(find_build_manager_run_id "$KSU_SHA")"
+if [ "${MANAGER_RUN_FALLBACK_MAIN}" = "1" ]; then
+  echo "::notice::Manager APK from latest successful build-manager on main (KSU ref was ${KSU_SHA})"
+fi
 echo "build-manager run for ${REPO}@${KSU_SHA}: https://github.com/${REPO}/actions/runs/${run_id}"
 
 if [ -n "${GITHUB_REPOSITORY:-}" ] && [ "$REPO" = "$GITHUB_REPOSITORY" ]; then
