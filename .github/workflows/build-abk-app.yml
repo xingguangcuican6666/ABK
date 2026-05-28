@@ -10,6 +10,7 @@ on:
       - "settings.gradle.kts"
       - "gradle/**"
       - ".github/workflows/build-abk-app.yml"
+      - ".github/actions/prepare-abk-app-inputs/**"
   pull_request:
     paths:
       - "app/**"
@@ -18,6 +19,7 @@ on:
       - "settings.gradle.kts"
       - "gradle/**"
       - ".github/workflows/build-abk-app.yml"
+      - ".github/actions/prepare-abk-app-inputs/**"
 
 jobs:
   build:
@@ -50,13 +52,60 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,aarch64-unknown-linux-musl,x86_64-unknown-linux-musl
 
+      - name: Prepare ABK app inputs
+        id: abk-inputs
+        uses: ./.github/actions/prepare-abk-app-inputs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: abk-cargo-registry-v1-linux
+          restore-keys: abk-cargo-registry-v1-
+
+      - name: Cache ksud outputs
+        id: ksud-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/build/generated/abk-assets/main
+            app/build/generated/abk-jniLibs/main
+          key: abk-ksud-v1-${{ steps.abk-inputs.outputs.sukisu_commit }}-${{ steps.abk-inputs.outputs.ksud_abis_key }}-${{ steps.abk-inputs.outputs.workflow_digest }}
+
+      - name: Verify ksud cache
+        id: ksud-verify
+        run: |
+          set -euo pipefail
+          expected="${{ steps.abk-inputs.outputs.sukisu_commit }}"
+          props="app/build/generated/abk-assets/main/ksud/source.properties"
+          if [ "${{ steps.ksud-cache.outputs.cache-hit }}" != "true" ] || [ ! -f "$props" ]; then
+            echo "needs_rebuild=true" >> "$GITHUB_OUTPUT"
+            echo "ksud cache: miss"
+            exit 0
+          fi
+          actual="$(grep '^commit=' "$props" | cut -d= -f2- | tr -d '\r')"
+          if [ "$actual" != "$expected" ]; then
+            echo "ksud cache: stale (expected=$expected actual=$actual)"
+            rm -rf app/build/generated/abk-assets/main app/build/generated/abk-jniLibs/main
+            echo "needs_rebuild=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ksud cache: hit (commit=$actual)"
+            echo "needs_rebuild=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build bundled SukiSU-Ultra ksud assets
+        if: steps.ksud-verify.outputs.needs_rebuild == 'true'
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
         run: |
@@ -246,7 +295,37 @@ jobs:
             echo "- magiskboot: removed upstream (ksud uses bootimg crate)"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Cache LKM assets
+        id: lkm-cache
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/assets/abk_lkm
+          key: abk-lkm-v1-${{ steps.abk-inputs.outputs.lkm_head_sha }}
+
+      - name: Verify LKM cache
+        id: lkm-verify
+        run: |
+          set -euo pipefail
+          expected="${{ steps.abk-inputs.outputs.lkm_head_sha }}"
+          props="app/src/main/assets/abk_lkm/source.properties"
+          if [ "${{ steps.lkm-cache.outputs.cache-hit }}" != "true" ] || [ ! -f "$props" ]; then
+            echo "needs_rebundle=true" >> "$GITHUB_OUTPUT"
+            echo "lkm cache: miss"
+            exit 0
+          fi
+          actual="$(grep '^head_sha=' "$props" | cut -d= -f2- | tr -d '\r')"
+          if [ "$actual" != "$expected" ]; then
+            echo "lkm cache: stale (expected=$expected actual=$actual)"
+            rm -rf app/src/main/assets/abk_lkm
+            mkdir -p app/src/main/assets/abk_lkm
+            echo "needs_rebundle=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "lkm cache: hit (head_sha=$actual)"
+            echo "needs_rebundle=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Bundle ABK LKM artifacts
+        if: steps.lkm-verify.outputs.needs_rebundle == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |

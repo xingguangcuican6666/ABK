@@ -1,0 +1,77 @@
+name: Prepare ABK app inputs
+description: Resolve SukiSU-Ultra and ABK LKM SHAs for CI cache keys
+outputs:
+  sukisu_commit:
+    description: Resolved commit for SUKISU_ULTRA_REF
+    value: ${{ steps.resolve.outputs.sukisu_commit }}
+  lkm_head_sha:
+    description: head_sha of latest successful ABK_control_module lkm.yml run
+    value: ${{ steps.resolve.outputs.lkm_head_sha }}
+  workflow_digest:
+    description: Hash of workflow and ksud build logic inputs
+    value: ${{ steps.resolve.outputs.workflow_digest }}
+  ksud_abis_key:
+    description: SUKISU_KSUD_ABIS with commas replaced for actions/cache keys
+    value: ${{ steps.resolve.outputs.ksud_abis_key }}
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      env:
+        SUKISU_ULTRA_REPO: ${{ env.SUKISU_ULTRA_REPO }}
+        SUKISU_ULTRA_REF: ${{ env.SUKISU_ULTRA_REF }}
+        SUKISU_KSUD_ABIS: ${{ env.SUKISU_KSUD_ABIS }}
+        GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "${SUKISU_ULTRA_REPO:-}" ] || [ -z "${SUKISU_ULTRA_REF:-}" ]; then
+          echo "::error::SUKISU_ULTRA_REPO and SUKISU_ULTRA_REF must be set on the job"
+          exit 1
+        fi
+
+        sukisu_commit="$(git ls-remote "$SUKISU_ULTRA_REPO" "refs/heads/${SUKISU_ULTRA_REF}" 2>/dev/null | awk '{print $1}' || true)"
+        if [ -z "$sukisu_commit" ]; then
+          sukisu_commit="$(git ls-remote "$SUKISU_ULTRA_REPO" "$SUKISU_ULTRA_REF" | awk '{print $1}')"
+        fi
+        if [ -z "$sukisu_commit" ]; then
+          echo "::error::Could not resolve SukiSU commit for ref ${SUKISU_ULTRA_REF}"
+          exit 1
+        fi
+
+        repo="xingguangcuican6666/ABK_control_module"
+        workflow="lkm.yml"
+        api_url="https://api.github.com/repos/${repo}/actions/workflows/${workflow}/runs?status=success&per_page=1"
+        runs_json="$(curl -fsSL \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+          "$api_url")"
+        lkm_head_sha="$(printf '%s' "$runs_json" | jq -r '.workflow_runs[0].head_sha // empty')"
+        if [ -z "$lkm_head_sha" ]; then
+          echo "::error::No successful LKM workflow run found for ${repo}"
+          exit 1
+        fi
+
+        workflow_digest="$(
+          {
+            [ -f .github/workflows/build-abk-app.yml ] && sha256sum .github/workflows/build-abk-app.yml
+            [ -f .github/workflows/build-abk-app-dev.yml ] && sha256sum .github/workflows/build-abk-app-dev.yml
+            [ -f .github/actions/prepare-abk-app-inputs/action.yml ] && sha256sum .github/actions/prepare-abk-app-inputs/action.yml
+          } | sha256sum | awk '{print $1}'
+        )"
+
+        ksud_abis_key="${SUKISU_KSUD_ABIS:-arm64-v8a,armeabi-v7a,x86_64}"
+        ksud_abis_key="${ksud_abis_key//,/-}"
+
+        echo "sukisu_commit=$sukisu_commit" >> "$GITHUB_OUTPUT"
+        echo "lkm_head_sha=$lkm_head_sha" >> "$GITHUB_OUTPUT"
+        echo "workflow_digest=$workflow_digest" >> "$GITHUB_OUTPUT"
+        echo "ksud_abis_key=$ksud_abis_key" >> "$GITHUB_OUTPUT"
+
+        {
+          echo "### Resolved ABK app inputs"
+          echo "- sukisu_commit: \`$sukisu_commit\`"
+          echo "- lkm_head_sha: \`$lkm_head_sha\`"
+          echo "- workflow_digest: \`$workflow_digest\`"
+        } >> "$GITHUB_STEP_SUMMARY"
