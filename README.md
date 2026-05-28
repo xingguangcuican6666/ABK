@@ -114,9 +114,7 @@ sukisu=
 
 在 GitHub Actions 与 App 的 GKI 构建界面中，**Latest(最新)** 位于 **Dev** 与 **Custom** 之间，由 [`resolve-ksu-ref.sh`](.github/scripts/resolve-ksu-ref.sh) 在运行时解析上游 KernelSU 来源：
 
-- **Official（GKI）：** 内核使用 `main` 的 HEAD；管理器通过 [nightly.link](https://nightly.link/) 拉取 `main` 上最近一次成功的 `build-manager` 产物（`manager.zip`）。
-- **SukiSU（GKI）：** 内核与管理器均使用 `main` 的 HEAD；管理器同样经 nightly.link 拉取 `build-manager` 产物。
-- **ReSukiSU（GKI）：** 内核与管理器均使用 `main` 的 HEAD；管理器经 nightly.link 拉取 `build-manager` / `main` / `Manager-release.zip`（与 Stable 下 ReSukiSU 相同分支）。
+- **Official / SukiSU / ReSukiSU（GKI）：** 内核与管理器共用上游 `main` 上最近一次成功的 `build-manager` 的 `head_sha`（非分支 HEAD）。管理器经 [nightly.link](https://nightly.link/) 拉取（`manager.zip` 或 `Manager-release.zip`）。若 `main` 上无成功的 `build-manager`，Latest 解析阶段直接失败。
 
 若管理器下载失败，管理器 job 对应步骤会失败，但**内核构建仍会继续**。Latest 不会回退到 `releases/latest`（Stable/Dev 用的发布包路径）。
 

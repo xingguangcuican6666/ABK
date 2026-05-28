@@ -115,9 +115,7 @@ Applies to every GKI `workflow_dispatch` workflow ([`kernel-custom.yml`](.github
 
 On GitHub Actions and the app GKI build screen, **Latest(最新)** sits between **Dev** and **Custom**. [`resolve-ksu-ref.sh`](.github/scripts/resolve-ksu-ref.sh) resolves upstream KernelSU sources at run time:
 
-- **Official (GKI):** `main` HEAD for the kernel; manager via [nightly.link](https://nightly.link/) from the latest successful `build-manager` run on `main` (`manager.zip`).
-- **SukiSU (GKI):** kernel and manager both use `main` HEAD; manager via nightly.link from `build-manager`.
-- **ReSukiSU (GKI):** kernel and manager both use `main` HEAD; manager via nightly.link `build-manager` / `main` / `Manager-release.zip` (same branch as Stable ReSukiSU).
+- **Official / SukiSU / ReSukiSU (GKI):** kernel and manager share the `head_sha` of the latest successful upstream `build-manager` run on `main` (not raw branch HEAD). Manager APK via [nightly.link](https://nightly.link/) (`manager.zip` or `Manager-release.zip`). If there is no green `build-manager` on `main`, Latest resolution fails early.
 
 If manager download fails, the manager job step fails but **the kernel build continues**. Latest does not fall back to `releases/latest` (the Stable/Dev release path).
 

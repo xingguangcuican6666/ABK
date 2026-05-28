@@ -24,18 +24,6 @@ emit_env() {
   export "${key}=${value}"
 }
 
-head_sha_for_branch() {
-  local repo="$1"
-  local branch="$2"
-  local sha
-  sha="$(git ls-remote "https://github.com/${repo}.git" "refs/heads/${branch}" | awk '{print $1}')"
-  if [ -z "$sha" ]; then
-    echo "::error::Cannot resolve HEAD for ${repo}@${branch}" >&2
-    return 1
-  fi
-  printf '%s\n' "$sha"
-}
-
 get_success_action_sha() {
   local repo="$1"
   local branch="$2"
@@ -49,6 +37,18 @@ get_success_action_sha() {
     -H "Accept: application/vnd.github+json" \
     "https://api.github.com/repos/${repo}/actions/workflows/build-manager.yml/runs?status=success&branch=${branch}&per_page=${nabe}" \
     | jq -r --argjson idx "$index" '.workflow_runs[$idx].head_sha'
+}
+
+latest_sha_from_build_manager() {
+  local repo="$1"
+  local branch="$2"
+  local sha
+  sha="$(get_success_action_sha "$repo" "$branch" 1)"
+  if [ -z "$sha" ] || [ "$sha" = "null" ]; then
+    echo "::error::No successful build-manager run on ${repo}@${branch} (required for Latest)" >&2
+    return 1
+  fi
+  printf '%s\n' "$sha"
 }
 
 check_ref() {
@@ -78,18 +78,18 @@ resolve_latest() {
     Official)
       repo="tiann/KernelSU"
       source_branch="main"
-      sha="$(head_sha_for_branch "$repo" "$source_branch")"
+      sha="$(latest_sha_from_build_manager "$repo" "$source_branch")"
       ;;
     SukiSU)
       # GKI builds use main; builtin is for OnePlus only (oneplus-build.yml, not resolve-ksu-ref).
       repo="$SUKISU_REPO"
       source_branch="main"
-      sha="$(head_sha_for_branch "$repo" "$source_branch")"
+      sha="$(latest_sha_from_build_manager "$repo" "$source_branch")"
       ;;
     ReSukiSU)
       repo="ReSukiSU/ReSukiSU"
       source_branch="main"
-      sha="$(head_sha_for_branch "$repo" "$source_branch")"
+      sha="$(latest_sha_from_build_manager "$repo" "$source_branch")"
       ;;
     *)
       echo "::error::Unknown KSU variant for Latest: ${KSU_VARIANT}" >&2
