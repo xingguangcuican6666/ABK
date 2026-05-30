@@ -107,6 +107,10 @@
   "artifacts_list": "Артефакты сборки #{id}:\n",
   "artifacts_downloading": "Загрузка {name}...",
   "artifacts_download_to": "Загрузка в: {dir}",
+  "list_title": "Доступные цели сборки:\n",
+  "list_matrix_item": "--matrix {key:9} - {name} (матрица всех подуровней)",
+  "list_oneplus_item": "--oneplus        - Устройства OnePlus (требуется --device)",
+  "list_custom_default": "По умолчанию: произвольная сборка (kernel-custom.yml), требуется --sub-level и --os-patch-level",
 
   "available_targets": "Доступные цели сборки:\n",
   "list_matrix_item": "--matrix {key:9} - {name} (матрица всех подуровней)",
