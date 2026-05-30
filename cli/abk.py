@@ -36,6 +36,7 @@ KERNEL_VERSIONS = ["5.10", "5.15", "6.1", "6.6", "6.12"]
 
 MATRIX_TARGETS = ["a12", "a13", "a14", "a15", "a16"]
 MATRIX_TARGETS_ALL = MATRIX_TARGETS + ["both"]
+KSU_ALL_VARIANTS = ["Official", "SukiSU", "ReSukiSU"]
 
 KSU_VARIANTS = ["None", "Official", "SukiSU", "ReSukiSU"]
 KSU_BRANCHES = ["Stable(标准)", "Dev(开发)", "Custom(自定义)"]
