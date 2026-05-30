@@ -746,82 +746,176 @@ def cmd_list(args):
 def main():
     parser = argparse.ArgumentParser(
         prog="abk",
-        description="ABK CLI - 用于非Android设备快速触发内核编译",
+        description="""ABK CLI - 用于非Android设备快速触发内核编译
+
+ABK (AnyBase Kernel) 是一个用于构建、分发和管理 GKI KernelSU/SUSFS 内核的自动化工具。
+CLI 工具允许你通过命令行触发 GitHub Actions 构建，无需 Android 设备。""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""示例:
-  abk login                                # 登录 GitHub (Device Flow)
-  abk fork                                 # 创建/检查 fork 并同步
-  abk build a15 --ksu ReSukiSU             # 构建 Android 15 内核
-  abk build a14 --ksu Official --no-zram   # 构建 Android 14 内核
-  abk status                               # 查看构建状态
-  abk artifacts --run-id 12345 --download  # 下载构建产物"""
+        epilog="""
+使用示例:
+  账户管理:
+    abk login                                # 登录 GitHub (自动打开浏览器)
+    abk logout                               # 登出并清除 Token
+    abk whoami                               # 显示当前用户和 fork 状态
+
+  Fork 管理:
+    abk fork                                 # 创建 fork 或检查状态
+    abk fork --no-sync                       # 检查 fork 但不同步
+    abk sync                                 # 同步 fork 与上游仓库
+
+  构建内核:
+    abk build a15                            # 构建 Android 15 (默认 ReSukiSU)
+    abk build a14 --ksu Official             # 使用 Official KernelSU
+    abk build a15 --zram --kpm               # 启用 ZRAM 和 KPM
+    abk build a15 --no-susfs                 # 禁用 SUSFS
+    abk build a15 --virt 678                 # 启用虚拟化支持
+    abk build oneplus --device oneplus12     # 构建 OnePlus 设备内核
+    abk build a15 --ksu Custom --custom-ref "main:5"  # 使用自定义引用
+
+  查看状态:
+    abk status                               # 查看最近构建
+    abk status --run-id 12345                # 查看特定构建详情
+    abk status --status in_progress          # 只显示进行中的构建
+
+  下载产物:
+    abk artifacts --run-id 12345             # 列出构建产物
+    abk artifacts --run-id 12345 --download  # 下载所有产物
+    abk artifacts --run-id 12345 -o ./output # 下载到指定目录
+
+认证方式 (优先级从高到低):
+  1. 命令行参数: abk --token "ghp_xxx" ...
+  2. 环境变量: export GITHUB_TOKEN="ghp_xxx"
+  3. 配置文件: ~/.config/abk/config.json (abk login 自动保存)
+
+更多信息: https://github.com/xingguangcuican6666/ABK"""
     )
-    parser.add_argument("--token", help="GitHub Token")
-    parser.add_argument("--repo", help=f"GitHub 仓库 (默认: {DEFAULT_REPO})")
+    parser.add_argument("--token", help="GitHub Token (也可通过 GITHUB_TOKEN 环境变量设置)")
+    parser.add_argument("--repo", help=f"GitHub 仓库 (默认: 自动检测 fork，或 {DEFAULT_REPO})")
+    parser.add_argument("--verbose", "-v", action="store_true", help="显示详细输出")
 
-    subparsers = parser.add_subparsers(dest="command", help="可用命令")
+    subparsers = parser.add_subparsers(dest="command", help="可用命令 (使用 abk <command> --help 查看详细帮助)")
 
-    login_parser = subparsers.add_parser("login", help="登录 GitHub (Device Flow)")
+    # login
+    login_parser = subparsers.add_parser("login", 
+        help="登录 GitHub (Device Flow)",
+        description="使用 GitHub Device Flow 登录，自动打开浏览器进行授权")
     login_parser.set_defaults(func=cmd_login)
 
-    logout_parser = subparsers.add_parser("logout", help="登出 GitHub")
+    # logout
+    logout_parser = subparsers.add_parser("logout", 
+        help="登出 GitHub",
+        description="清除保存的 GitHub Token")
     logout_parser.set_defaults(func=cmd_logout)
 
-    whoami_parser = subparsers.add_parser("whoami", help="显示当前登录用户")
+    # whoami
+    whoami_parser = subparsers.add_parser("whoami", 
+        help="显示当前登录用户",
+        description="显示当前登录的 GitHub 用户名和 fork 仓库状态")
     whoami_parser.set_defaults(func=cmd_whoami)
 
-    fork_parser = subparsers.add_parser("fork", help="创建/检查 fork")
-    fork_parser.add_argument("--no-sync", action="store_true", help="不同步")
+    # fork
+    fork_parser = subparsers.add_parser("fork", 
+        help="创建/检查 fork",
+        description="检查是否已 fork ABK 仓库，如果没有则创建 fork")
+    fork_parser.add_argument("--no-sync", action="store_true", help="不同步 fork (即使落后上游)")
     fork_parser.set_defaults(func=cmd_fork)
 
-    sync_parser = subparsers.add_parser("sync", help="同步 fork 与上游")
+    # sync
+    sync_parser = subparsers.add_parser("sync", 
+        help="同步 fork 与上游",
+        description="将 fork 仓库同步到上游最新状态")
     sync_parser.set_defaults(func=cmd_sync)
 
-    build_parser = subparsers.add_parser("build", help="触发内核构建")
+    # build
+    build_parser = subparsers.add_parser("build", 
+        help="触发内核构建",
+        description="触发 GitHub Actions 内核构建工作流",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+构建目标:
+  a12        Android 12 (5.10)
+  a13        Android 13 (5.15)
+  a14        Android 14 (6.1)
+  a15        Android 15 (6.6)
+  a16        Android 16 (6.12)
+  oneplus    OnePlus/Oplus 设备
+
+KernelSU 变体:
+  None       无 Root
+  Official   KernelSU 官方版
+  SukiSU     SukiSU Ultra
+  ReSukiSU   ReSukiSU (默认)
+
+KernelSU 分支:
+  Stable(标准)    稳定版 (默认)
+  Dev(开发)       开发版
+  Custom(自定义)  自定义引用
+
+虚拟化支持:
+  off        关闭 (默认)
+  678        使用 6_7_8 槽位补丁 (推荐)
+  123        使用 1_2_3 槽位补丁 (备用)
+  345        使用 3_4_5 槽位补丁 (备用)
+
+示例:
+  abk build a15                            # 基本构建
+  abk build a15 --ksu Official --zram      # 使用 Official + ZRAM
+  abk build a15 --virt 678 --networking    # 启用虚拟化和网络增强
+  abk build oneplus --device oneplus12     # OnePlus 设备构建""")
     build_parser.add_argument("target", choices=WORKFLOWS.keys(), help="构建目标")
     build_parser.add_argument("--ref", default="main", help="Git 分支 (默认: main)")
-    build_parser.add_argument("--ksu", dest="ksu_variant", choices=KSU_VARIANTS, help="KernelSU 变体")
-    build_parser.add_argument("--ksu-branch", choices=KSU_BRANCHES, help="KernelSU 分支")
-    build_parser.add_argument("--custom-ref", help="自定义 KSU 引用")
+    build_parser.add_argument("--ksu", dest="ksu_variant", choices=KSU_VARIANTS, help="KernelSU 变体 (默认: ReSukiSU)")
+    build_parser.add_argument("--ksu-branch", choices=KSU_BRANCHES, help="KernelSU 分支 (默认: Stable)")
+    build_parser.add_argument("--custom-ref", help="自定义 KSU 引用 (commit/branch/tag)")
     build_parser.add_argument("--version", help="自定义版本名")
-    build_parser.add_argument("--device", help="OnePlus 设备名")
-    build_parser.add_argument("--virt", choices=VIRT_OPTIONS, default="off", help="虚拟化支持")
-    build_parser.add_argument("--kpm-password", help="KPM 密码")
-    build_parser.add_argument("--force", action="store_true", help="跳过 fork 检查")
-    build_parser.add_argument("--zram", action="store_true", default=False, help="启用 ZRAM")
+    build_parser.add_argument("--device", help="OnePlus 设备名 (仅 oneplus 目标)")
+    build_parser.add_argument("--virt", choices=VIRT_OPTIONS, default="off", help="虚拟化支持 (默认: off)")
+    build_parser.add_argument("--kpm-password", help="KPM 超级密码")
+    build_parser.add_argument("--force", action="store_true", help="跳过 fork 检查和同步提示")
+    
+    build_parser.add_argument("--zram", action="store_true", default=False, help="启用 ZRAM 增强算法")
     build_parser.add_argument("--no-zram", dest="zram", action="store_false", help="禁用 ZRAM (默认)")
-    build_parser.add_argument("--bbg", action="store_true", default=False, help="启用 BBG")
+    build_parser.add_argument("--bbg", action="store_true", default=False, help="启用 BBG 防格机")
     build_parser.add_argument("--no-bbg", dest="bbg", action="store_false", help="禁用 BBG (默认)")
-    build_parser.add_argument("--ddk", action="store_true", default=False, help="启用 DDK")
+    build_parser.add_argument("--ddk", action="store_true", default=False, help="启用 DDK 防格机 LSM")
     build_parser.add_argument("--no-ddk", dest="ddk", action="store_false", help="禁用 DDK (默认)")
-    build_parser.add_argument("--kpm", action="store_true", default=False, help="启用 KPM")
+    build_parser.add_argument("--kpm", action="store_true", default=False, help="启用 KPM 功能")
     build_parser.add_argument("--no-kpm", dest="kpm", action="store_false", help="禁用 KPM (默认)")
     build_parser.add_argument("--susfs", action="store_true", default=True, help="启用 SUSFS (默认)")
     build_parser.add_argument("--no-susfs", dest="susfs", action="store_false", help="禁用 SUSFS")
-    build_parser.add_argument("--rekernel", action="store_true", default=False, help="启用 Re-Kernel")
+    build_parser.add_argument("--rekernel", action="store_true", default=False, help="启用 Re-Kernel 驱动")
     build_parser.add_argument("--no-rekernel", dest="rekernel", action="store_false", help="禁用 Re-Kernel (默认)")
-    build_parser.add_argument("--oneplus-8e", action="store_true", default=False, help="启用一加 8E 支持")
+    build_parser.add_argument("--oneplus-8e", action="store_true", default=False, help="启用一加 8E 处理器支持")
     build_parser.add_argument("--ntsync", action="store_true", default=False, help="启用 NTsync")
-    build_parser.add_argument("--networking", action="store_true", default=False, help="启用网络增强")
+    build_parser.add_argument("--networking", action="store_true", default=False, help="启用网络增强 (IPSet + BBR)")
     build_parser.add_argument("--zram-full-algo", action="store_true", default=False, help="ZRAM 完整算法支持")
-    build_parser.add_argument("--zram-extra-algos", help="自定义 ZRAM 算法 (逗号分隔)")
+    build_parser.add_argument("--zram-extra-algos", help="自定义 ZRAM 算法 (逗号分隔，如 lzo,lz4,zstd)")
     build_parser.add_argument("--custom-modules", help="自定义外部模块 (格式: url;stage|url;stage)")
     build_parser.set_defaults(func=cmd_build)
 
-    status_parser = subparsers.add_parser("status", help="查看构建状态")
-    status_parser.add_argument("--run-id", type=int, help="查看特定构建")
-    status_parser.add_argument("--target", choices=WORKFLOWS.keys(), help="按目标过滤")
-    status_parser.add_argument("--status", choices=["all", "queued", "in_progress", "completed"], default="all", help="按状态过滤")
+    # status
+    status_parser = subparsers.add_parser("status", 
+        help="查看构建状态",
+        description="查看 GitHub Actions 构建状态")
+    status_parser.add_argument("--run-id", type=int, help="查看特定构建运行")
+    status_parser.add_argument("--target", choices=WORKFLOWS.keys(), help="按构建目标过滤")
+    status_parser.add_argument("--status", choices=["all", "queued", "in_progress", "completed"], default="all", help="按状态过滤 (默认: all)")
     status_parser.add_argument("--limit", type=int, default=10, help="显示数量 (默认: 10)")
     status_parser.set_defaults(func=cmd_status)
 
-    artifacts_parser = subparsers.add_parser("artifacts", help="管理构建产物")
+    # artifacts
+    artifacts_parser = subparsers.add_parser("artifacts", 
+        help="管理构建产物",
+        description="查看和下载构建产物 (AnyKernel3 包、img 文件等)")
     artifacts_parser.add_argument("--run-id", type=int, help="构建运行 ID")
-    artifacts_parser.add_argument("--download", action="store_true", help="下载产物")
-    artifacts_parser.add_argument("--output", "-o", help="输出目录")
+    artifacts_parser.add_argument("--download", action="store_true", help="下载所有产物")
+    artifacts_parser.add_argument("--output", "-o", help="输出目录 (默认: ./abk-artifacts)")
     artifacts_parser.set_defaults(func=cmd_artifacts)
 
-    list_parser = subparsers.add_parser("list", help="列出可用选项")
+    # list
+    list_parser = subparsers.add_parser("list", 
+        help="列出可用选项",
+        description="列出所有可用的构建目标、KernelSU 变体和功能选项")
     list_parser.set_defaults(func=cmd_list)
 
     args = parser.parse_args()
