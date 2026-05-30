@@ -35,6 +35,7 @@ ANDROID_VERSIONS = ["android12", "android13", "android14", "android15", "android
 KERNEL_VERSIONS = ["5.10", "5.15", "6.1", "6.6", "6.12"]
 
 MATRIX_TARGETS = ["a12", "a13", "a14", "a15", "a16"]
+MATRIX_TARGETS_ALL = MATRIX_TARGETS + ["both"]
 
 KSU_VARIANTS = ["None", "Official", "SukiSU", "ReSukiSU"]
 KSU_BRANCHES = ["Stable(标准)", "Dev(开发)", "Custom(自定义)"]
@@ -601,30 +602,24 @@ def cmd_build(args):
     
     client = GitHubClient(token=token)
     
+    # 确定矩阵目标列表
     if args.matrix:
-        target = args.matrix
-        if target not in MATRIX_TARGETS:
-            print(f"错误: 未知矩阵目标 '{target}'", file=sys.stderr)
-            print(f"可用矩阵目标: {', '.join(MATRIX_TARGETS)}", file=sys.stderr)
-            sys.exit(1)
-        workflow = WORKFLOWS[target]
+        if args.matrix == "both":
+            matrix_targets = MATRIX_TARGETS
+        else:
+            matrix_targets = [args.matrix]
     elif args.oneplus:
-        target = "oneplus"
-        workflow = WORKFLOWS[target]
+        matrix_targets = ["oneplus"]
     else:
-        if not args.sub_level:
-            print("错误: 需要 --sub-level (子版本号)", file=sys.stderr)
-            print("例如: abk build --sub-level 162 --os-patch-level 2026-03", file=sys.stderr)
-            print("或使用矩阵构建: abk build --matrix a15", file=sys.stderr)
-            sys.exit(1)
-        if not args.os_patch_level:
-            print("错误: 需要 --os-patch-level (安全补丁级别)", file=sys.stderr)
-            print("例如: abk build --sub-level 162 --os-patch-level 2026-03", file=sys.stderr)
-            print("或使用矩阵构建: abk build --matrix a15", file=sys.stderr)
-            sys.exit(1)
-        target = "custom"
-        workflow = WORKFLOWS[target]
+        matrix_targets = ["custom"]
     
+    # 确定 KSU 变体列表
+    if args.ksu_variant == "all":
+        ksu_variants = KSU_ALL_VARIANTS
+    else:
+        ksu_variants = [args.ksu_variant or "ReSukiSU"]
+    
+    # 检查 fork
     try:
         fork = client.get_fork()
         if not fork:
@@ -644,89 +639,87 @@ def cmd_build(args):
         print(f"检查 fork 失败: {e}", file=sys.stderr)
         if not args.force:
             sys.exit(1)
-
-    inputs = {
-        "kernelsu_variant": args.ksu_variant or "ReSukiSU",
-        "kernelsu_branch": args.ksu_branch or "Stable(标准)",
-        "use_zram": str(args.zram).lower(),
-        "use_bbg": str(args.bbg).lower(),
-        "use_ddk": str(args.ddk).lower(),
-        "use_kpm": str(args.kpm).lower(),
-        "use_rekernel": str(args.rekernel).lower(),
-        "cancel_susfs": str(not args.susfs).lower(),
-        "use_ntsync": str(args.ntsync).lower(),
-        "use_networking": str(args.networking).lower(),
-        "zram_full_algo": str(args.zram_full_algo).lower(),
-    }
     
-    if not args.matrix:
-        inputs["supp_op"] = str(args.oneplus_8e).lower()
+    total = len(matrix_targets) * len(ksu_variants)
+    count = 0
     
-    if target == "custom":
-        inputs["android_version"] = args.android_version or "android12"
-        inputs["kernel_version"] = args.kernel_version or "5.10"
-        inputs["sub_level"] = args.sub_level
-        inputs["os_patch_level"] = args.os_patch_level
-        if args.revision:
-            inputs["revision"] = args.revision
+    for tk in matrix_targets:
+        for kv in ksu_variants:
+            count += 1
+            if total > 1:
+                print(f"\n[{count}/{total}] ", end="")
+            
+            if tk == "oneplus":
+                workflow = WORKFLOWS["oneplus"]
+                if not args.device:
+                    print("错误: OnePlus 构建需要 --device", file=sys.stderr)
+                    sys.exit(1)
+            elif tk == "custom":
+                workflow = WORKFLOWS["custom"]
+                if not args.sub_level:
+                    print("错误: 需要 --sub-level (子版本号)", file=sys.stderr)
+                    sys.exit(1)
+                if not args.os_patch_level:
+                    print("错误: 需要 --os-patch-level (安全补丁级别)", file=sys.stderr)
+                    sys.exit(1)
+            else:
+                workflow = WORKFLOWS[tk]
+            
+            inputs = {
+                "kernelsu_variant": kv,
+                "kernelsu_branch": args.ksu_branch or "Stable(标准)",
+                "use_zram": str(args.zram).lower(),
+                "use_bbg": str(args.bbg).lower(),
+                "use_ddk": str(args.ddk).lower(),
+                "use_kpm": str(args.kpm).lower(),
+                "use_rekernel": str(args.rekernel).lower(),
+                "cancel_susfs": str(not args.susfs).lower(),
+                "use_ntsync": str(args.ntsync).lower(),
+                "use_networking": str(args.networking).lower(),
+                "zram_full_algo": str(args.zram_full_algo).lower(),
+            }
+            
+            if tk == "custom":
+                inputs["supp_op"] = str(args.oneplus_8e).lower()
+                inputs["android_version"] = args.android_version or "android12"
+                inputs["kernel_version"] = args.kernel_version or "5.10"
+                inputs["sub_level"] = args.sub_level
+                inputs["os_patch_level"] = args.os_patch_level
+                if args.revision:
+                    inputs["revision"] = args.revision
+            elif tk == "oneplus":
+                inputs["supp_op"] = str(args.oneplus_8e).lower()
+                inputs["device"] = args.device
+            elif not args.matrix or args.matrix == "both":
+                pass
+            
+            if args.virt and args.virt != "off":
+                inputs["virtualization_support"] = args.virt
+            if args.version:
+                inputs["version"] = args.version
+            if args.custom_ref:
+                inputs["custom_ref"] = args.custom_ref
+            if args.kpm_password:
+                inputs["kpm_password"] = args.kpm_password
+            if args.zram_extra_algos:
+                inputs["zram_extra_algos"] = args.zram_extra_algos
+            if args.custom_modules:
+                inputs["use_custom_external_modules"] = "true"
+                inputs["custom_external_modules"] = args.custom_modules
+            
+            ref = args.ref or "dev"
+            print(f"触发 {workflow['name']} ({kv})...")
+            
+            try:
+                client.trigger_workflow(workflow["file"], ref, inputs)
+                print(f"  ✓ 已触发")
+            except Exception as e:
+                print(f"  ✗ 失败: {e}")
     
-    if target == "oneplus":
-        if not args.device:
-            print("错误: OnePlus 构建需要 --device", file=sys.stderr)
-            sys.exit(1)
-        inputs["device"] = args.device
-    
-    if args.virt and args.virt != "off":
-        inputs["virtualization_support"] = args.virt
-    if args.version:
-        inputs["version"] = args.version
-    if args.custom_ref:
-        inputs["custom_ref"] = args.custom_ref
-    if args.kpm_password:
-        inputs["kpm_password"] = args.kpm_password
-    if args.zram_extra_algos:
-        inputs["zram_extra_algos"] = args.zram_extra_algos
-    if args.custom_modules:
-        inputs["use_custom_external_modules"] = "true"
-        inputs["custom_external_modules"] = args.custom_modules
-
-    ref = args.ref or "dev"
-    print(f"触发 {workflow['name']} 构建...")
-    print(f"  仓库: {client.repo}")
-    
-    if target == "custom":
-        print(f"  内核: {inputs['android_version']} / {inputs['kernel_version']}.{inputs['sub_level']} / {inputs['os_patch_level']}")
-    
-    print(f"  KSU: {inputs['kernelsu_variant']} ({inputs['kernelsu_branch']})")
-    print(f"  SUSFS: {'启用' if args.susfs else '禁用'}")
-    print(f"  ZRAM: {'启用' if args.zram else '禁用'}")
-    print(f"  BBG: {'启用' if args.bbg else '禁用'}")
-    print(f"  DDK: {'启用' if args.ddk else '禁用'}")
-    print(f"  KPM: {'启用' if args.kpm else '禁用'}")
-    print(f"  Re-Kernel: {'启用' if args.rekernel else '禁用'}")
-    print(f"  NTsync: {'启用' if args.ntsync else '禁用'}")
-    print(f"  网络增强: {'启用' if args.networking else '禁用'}")
-    print(f"  一加8E: {'启用' if args.oneplus_8e else '禁用'}")
-    print(f"  虚拟化: {args.virt if args.virt != 'off' else 'off'}")
-    if args.version:
-        print(f"  内核名: {args.version}")
-    if args.zram_full_algo:
-        print(f"  ZRAM完整算法: 启用")
-    if args.zram_extra_algos:
-        print(f"  ZRAM自定义算法: {args.zram_extra_algos}")
-    if args.kpm_password:
-        print(f"  KPM密码: 已自定义")
-    if args.custom_modules:
-        print(f"  外部模块: {args.custom_modules}")
-
-    try:
-        client.trigger_workflow(workflow["file"], ref, inputs)
-        print("\n构建已触发!")
-        print(f"查看状态: abk status")
-        print(f"GitHub Actions: https://github.com/{client.repo}/actions")
-    except Exception as e:
-        print(f"\n触发构建失败: {e}", file=sys.stderr)
-        sys.exit(1)
+    if total > 1:
+        print(f"\n共触发 {count} 个构建")
+    print(f"查看状态: abk status")
+    print(f"GitHub Actions: https://github.com/{client.repo}/actions")
 
 
 def cmd_artifacts(args):
@@ -918,10 +911,10 @@ KernelSU 分支:
   abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
   abk build --matrix a15                                    # 矩阵构建
   abk build --oneplus --device oneplus12                    # OnePlus 构建""")
-    build_parser.add_argument("--matrix", choices=MATRIX_TARGETS, help="矩阵构建目标 (构建所有子版本)")
+    build_parser.add_argument("--matrix", choices=MATRIX_TARGETS_ALL, help="矩阵构建目标 (构建所有子版本，both=全版本)")
     build_parser.add_argument("--oneplus", action="store_true", help="OnePlus 设备构建")
     build_parser.add_argument("--ref", default="dev", help="Fork 仓库的 Git 分支 (默认: dev)")
-    build_parser.add_argument("--ksu", dest="ksu_variant", choices=KSU_VARIANTS, help="KernelSU 变体 (默认: ReSukiSU)")
+    build_parser.add_argument("--ksu", dest="ksu_variant", choices=KSU_VARIANTS + ["all"], help="KernelSU 变体 (all=全变体)")
     build_parser.add_argument("--ksu-branch", choices=KSU_BRANCHES, help="KernelSU 分支 (默认: Stable)")
     build_parser.add_argument("--custom-ref", help="自定义 KSU 引用 (commit/branch/tag)")
     build_parser.add_argument("--version", help="自定义版本名")
