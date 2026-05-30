@@ -12,7 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 
 sys.path.insert(0, str(Path(__file__).parent))
-from i18n import t
+from i18n import t, load_translations, detect_language
 
 GITHUB_API = "https://api.github.com"
 GITHUB_OAUTH_DEVICE_URL = "https://github.com/login/device/code"
@@ -867,53 +867,20 @@ def cmd_list(args):
 
 
 def main():
+    # 提前检测 --lang 以确保帮助文本使用正确语言
+    if "--lang" in sys.argv:
+        idx = sys.argv.index("--lang")
+        if idx + 1 < len(sys.argv):
+            load_translations(sys.argv[idx + 1])
+    
     parser = argparse.ArgumentParser(
         prog="abk",
-        description="""ABK CLI - 用于非Android设备快速触发内核编译
-
-ABK (AnyBase Kernel) 是一个用于构建、分发和管理 GKI KernelSU/SUSFS 内核的自动化工具。
-CLI 工具允许你通过命令行触发 GitHub Actions 构建，无需 Android 设备。""",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-使用示例:
-  账户管理:
-    abk login                                # 登录 GitHub
-    abk logout                               # 登出并清除 Token
-    abk whoami                               # 显示当前用户和 fork 状态
-
-  Fork 管理:
-    abk fork                                 # 创建 fork 或检查状态
-    abk fork --no-sync                       # 检查 fork 但不同步
-    abk sync                                 # 同步 fork 与上游仓库
-
-  构建内核:
-    abk build --sub-level 162 --os-patch-level 2026-03     # 自定义构建 (默认)
-    abk build --sub-level 66 --os-patch-level 2022-01 --ksu Official
-    abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
-    abk build --matrix a15                                  # 矩阵构建
-    abk build --oneplus --device oneplus12                  # OnePlus 构建
-    abk build --sub-level 66 --os-patch-level 2022-01 --zram --kpm --virt 678
-
-  查看状态:
-    abk status                               # 查看最近构建
-    abk status --run-id 12345                # 查看特定构建详情
-    abk status --status in_progress          # 只显示进行中的构建
-
-  下载产物:
-    abk artifacts --run-id 12345             # 列出构建产物
-    abk artifacts --run-id 12345 --download  # 下载所有产物
-    abk artifacts --run-id 12345 -o ./output # 下载到指定目录
-
-认证方式 (优先级从高到低):
-  1. 命令行参数: abk --token "ghp_xxx" ...
-  2. 环境变量: export GITHUB_TOKEN="ghp_xxx"
-  3. 配置文件: ~/.config/abk/config.json (abk login 自动保存)
-
-更多信息: https://github.com/xingguangcuican6666/ABK"""
-    )
+        description=t("abk_cli_desc_full"),
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--token", help="GitHub Token (也可通过 GITHUB_TOKEN 环境变量设置)")
     parser.add_argument("--repo", help="GitHub 仓库 (默认: 自动检测 fork)")
     parser.add_argument("--verbose", "-v", action="store_true", help="显示详细输出")
+    parser.add_argument("--lang", choices=["zh-cn", "en-us"], help="界面语言")
 
     subparsers = parser.add_subparsers(dest="command", help="可用命令 (使用 abk <command> --help 查看详细帮助)")
 
@@ -1056,6 +1023,9 @@ KernelSU 分支:
         parser.print_help()
         sys.exit(0)
 
+    if args.lang:
+        load_translations(args.lang)
+    
     args.func(args)
 
 
