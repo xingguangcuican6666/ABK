@@ -30,7 +30,7 @@ def detect_language():
                 lang = v.split(".")[0].split(":")[0].replace("_", "-").lower()
                 break
     if not lang or lang not in ("zh-cn", "en-us"):
-        lang = "en-us"
+        lang = "zh-cn"
     return lang
 
 
