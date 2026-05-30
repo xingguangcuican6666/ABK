@@ -11,6 +11,9 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 
+sys.path.insert(0, str(Path(__file__).parent))
+from i18n import t
+
 GITHUB_API = "https://api.github.com"
 GITHUB_OAUTH_DEVICE_URL = "https://github.com/login/device/code"
 GITHUB_OAUTH_TOKEN_URL = "https://github.com/login/oauth/access_token"
@@ -132,11 +135,11 @@ def poll_device_token_once(device_code):
 
 
 def device_flow_login():
-    print("正在请求设备授权码...")
+    print(t("login_requesting"))
     result = request_device_code()
     
     if not result:
-        print("请求授权码失败", file=sys.stderr)
+        print(t("err_req_failed"), file=sys.stderr)
         return None
     
     device_code = result["device_code"]
@@ -147,23 +150,23 @@ def device_flow_login():
     
     print()
     print("=" * 50)
-    print("  GitHub 设备授权")
+    print(f"  {t('login_title')}")
     print("=" * 50)
     print()
-    print(f"  1. 打开浏览器访问: {verification_uri}")
-    print(f"  2. 输入授权码: {user_code}")
+    print(f"  {t('login_step1')}: {verification_uri}")
+    print(f"  {t('login_step2')}: {user_code}")
     print()
     print("=" * 50)
     print()
     
     try:
         webbrowser.open(verification_uri)
-        print("已自动打开浏览器...")
+        print(t("login_browser_open"))
     except Exception:
         pass
     
-    print(f"等待授权中... (有效期 {expires_in} 秒)")
-    print("按 Ctrl+C 取消")
+    print(t("login_waiting"))
+    print(t("press_ctrl_c"))
     print()
     
     start_time = time.time()
@@ -176,7 +179,7 @@ def device_flow_login():
             poll_result = poll_device_token_once(device_code)
             
             if poll_result.get("success"):
-                print("\n授权成功!")
+                print(f"\n{t('login_success')}")
                 return poll_result["token"]
             
             error = poll_result.get("error")
@@ -186,19 +189,19 @@ def device_flow_login():
                 current_interval += 5
                 continue
             elif error == "expired_token":
-                print("\n授权码已过期，请重试", file=sys.stderr)
+                print(f"\n{t('err_auth_expired')}", file=sys.stderr)
                 return None
             elif error == "access_denied":
-                print("\n用户拒绝授权", file=sys.stderr)
+                print(f"\n{t('err_auth_denied')}", file=sys.stderr)
                 return None
             elif error and not error.startswith("http"):
-                print(f"\n授权失败: {error}", file=sys.stderr)
+                print(f"\n{t('err_auth_failed', error=error)}", file=sys.stderr)
                 return None
     except KeyboardInterrupt:
-        print("\n已取消授权")
+        print(f"\n{t('login_cancelled')}")
         return None
     
-    print("\n授权超时，请重试", file=sys.stderr)
+    print(f"\n{t('err_auth_timeout')}", file=sys.stderr)
     return None
 
 
@@ -260,9 +263,9 @@ class GitHubClient:
                 msg = err.get("message", body)
             except json.JSONDecodeError:
                 msg = body
-            raise Exception(f"GitHub API 错误 ({e.code}): {msg}")
+            raise Exception(t("err_api_error", code=e.code, msg=msg))
         except URLError as e:
-            raise Exception(f"网络错误: {e.reason}")
+            raise Exception(t("err_network_error", reason=e.reason))
 
     def get(self, path):
         return self._request("GET", path)
