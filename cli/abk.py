@@ -1022,16 +1022,16 @@ KernelSU 分支:
     list_parser.set_defaults(func=cmd_list)
 
     args = parser.parse_args()
-    if not args.command:
-        parser.print_help()
-        sys.exit(0)
-
     if args.lang:
         load_translations(args.lang)
         config = load_config()
         config["lang"] = args.lang
         save_config(config)
-    
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(0)
+
     args.func(args)
 
 
