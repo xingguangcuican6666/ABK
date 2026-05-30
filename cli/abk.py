@@ -654,11 +654,14 @@ def cmd_build(args):
         
         ref = args.ref or "dev"
         print(f"触发 {name}...")
-        try:
-            client.trigger_workflow(wf_file, ref, inputs)
-            print("  ✓ 已触发")
-        except Exception as e:
-            print(f"  ✗ 失败: {e}")
+        if args.dry_run:
+            print("  [DRY-RUN] 跳过，去掉 --dry-run 触发")
+        else:
+            try:
+                client.trigger_workflow(wf_file, ref, inputs)
+                print("  ✓ 已触发")
+            except Exception as e:
+                print(f"  ✗ 失败: {e}")
         print(f"查看状态: abk status")
         return
     
@@ -769,12 +772,16 @@ def cmd_build(args):
             
             ref = args.ref or "dev"
             print(f"触发 {workflow['name']} ({kv})...")
+            print(f"  SUSFS: {'启用' if args.susfs else '禁用'}, ZRAM: {'启用' if args.zram else '禁用'}, BBG: {'启用' if args.bbg else '禁用'}, DDK: {'启用' if args.ddk else '禁用'}, KPM: {'启用' if args.kpm else '禁用'}, Re-Kernel: {'启用' if args.rekernel else '禁用'}, NTsync: {'启用' if args.ntsync else '禁用'}, 网络增强: {'启用' if args.networking else '禁用'}")
             
-            try:
-                client.trigger_workflow(workflow["file"], ref, inputs)
-                print(f"  ✓ 已触发")
-            except Exception as e:
-                print(f"  ✗ 失败: {e}")
+            if args.dry_run:
+                print(f"  [DRY-RUN] 跳过")
+            else:
+                try:
+                    client.trigger_workflow(workflow["file"], ref, inputs)
+                    print(f"  ✓ 已触发")
+                except Exception as e:
+                    print(f"  ✗ 失败: {e}")
     
     if total > 1:
         print(f"\n共触发 {count} 个构建")
@@ -985,6 +992,7 @@ KernelSU 分支:
     build_parser.add_argument("--virt", choices=VIRT_OPTIONS, default="off", help="虚拟化支持 (默认: off)")
     build_parser.add_argument("--kpm-password", help="KPM 超级密码")
     build_parser.add_argument("--force", action="store_true", help="跳过 fork 检查和同步提示")
+    build_parser.add_argument("--dry-run", action="store_true", help="只预览构建计划，不实际触发")
     
     build_parser.add_argument("--android-version", choices=ANDROID_VERSIONS, help="Android 版本 (默认: android12)")
     build_parser.add_argument("--kernel-version", choices=KERNEL_VERSIONS, help="内核版本 (默认: 5.10)")
