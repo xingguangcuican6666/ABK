@@ -91,6 +91,9 @@ abk build a15 --ksu Custom --custom-ref "branch:5"
 # 启用虚拟化支持
 abk build a15 --virt 678
 
+# 自定义内核构建
+abk build custom --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
+
 # 启用所有功能
 abk build a15 --zram --bbg --kpm --ntsync --networking
 ```
@@ -131,12 +134,13 @@ abk list
 
 | 目标 | 描述 |
 |------|------|
-| `a12` | Android 12 (5.10) |
-| `a13` | Android 13 (5.15) |
-| `a14` | Android 14 (6.1) |
-| `a15` | Android 15 (6.6) |
-| `a16` | Android 16 (6.12) |
-| `oneplus` | OnePlus/Oplus 设备 |
+| `a12` | Android 12 (5.10) - 矩阵构建所有子版本 |
+| `a13` | Android 13 (5.15) - 矩阵构建所有子版本 |
+| `a14` | Android 14 (6.1) - 矩阵构建所有子版本 |
+| `a15` | Android 15 (6.6) - 矩阵构建所有子版本 |
+| `a16` | Android 16 (6.12) - 矩阵构建所有子版本 |
+| `custom` | 自定义内核构建 - 需指定 android/kernel/sub/patch |
+| `oneplus` | OnePlus/Oplus 设备 - 需指定 --device |
 
 ## 功能开关
 
@@ -195,6 +199,9 @@ abk build a15 --no-susfs
 
 # 构建 OnePlus 设备内核
 abk build oneplus --device oneplus9 --ksu SukiSU --virt 678
+
+# 自定义内核构建 (指定具体子版本)
+abk build custom --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
 
 # 查看构建进度
 abk status
