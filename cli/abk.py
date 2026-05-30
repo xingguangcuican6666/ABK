@@ -1025,6 +1025,9 @@ KernelSU 分支:
 
     if args.lang:
         load_translations(args.lang)
+        config = load_config()
+        config["lang"] = args.lang
+        save_config(config)
     
     args.func(args)
 
