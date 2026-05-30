@@ -35,8 +35,13 @@ ANDROID_VERSIONS = ["android12", "android13", "android14", "android15", "android
 KERNEL_VERSIONS = ["5.10", "5.15", "6.1", "6.6", "6.12"]
 
 MATRIX_TARGETS = ["a12", "a13", "a14", "a15", "a16"]
-MATRIX_TARGETS_ALL = MATRIX_TARGETS + ["both"]
+MATRIX_TARGETS_ALL = MATRIX_TARGETS + ["both", "full", "all-managers"]
 KSU_ALL_VARIANTS = ["Official", "SukiSU", "ReSukiSU"]
+
+FULL_MATRIX_WORKFLOWS = {
+    "full": "kernel-full-feature-matrix.yml",
+    "all-managers": "all-managers-full-feature-matrix.yml",
+}
 
 KSU_VARIANTS = ["None", "Official", "SukiSU", "ReSukiSU"]
 KSU_BRANCHES = ["Stable(标准)", "Dev(开发)", "Custom(自定义)"]
@@ -603,6 +608,43 @@ def cmd_build(args):
     
     client = GitHubClient(token=token)
     
+    # 处理特殊全量工作流
+    if args.matrix in ("full", "all-managers"):
+        wf_file = FULL_MATRIX_WORKFLOWS[args.matrix]
+        name = "全属性内核构建矩阵" if args.matrix == "full" else "全管理器全矩阵编译"
+        
+        inputs = {
+            "kernelsu_variant": args.ksu_variant or "ReSukiSU",
+            "kernelsu_branch": args.ksu_branch or "Dev(开发)",
+            "version": args.version or "",
+            "revision": args.revision or "r11",
+            "kpm_password": args.kpm_password or "",
+            "enable_susfs": str(args.susfs).lower(),
+            "use_zram": str(args.zram).lower(),
+            "use_bbg": str(args.bbg).lower(),
+            "use_ddk": str(args.ddk).lower(),
+            "use_kpm": str(args.kpm).lower(),
+            "use_rekernel": str(args.rekernel).lower(),
+            "use_ntsync": str(args.ntsync).lower(),
+            "use_networking": str(args.networking).lower(),
+            "zram_full_algo": str(args.zram_full_algo).lower(),
+            "zram_extra_algos": args.zram_extra_algos or "",
+        }
+        
+        if args.matrix == "all-managers":
+            inputs["build_scope"] = args.build_scope or "Both"
+            inputs["manager_variants"] = args.manager_variants or "all"
+        
+        ref = args.ref or "dev"
+        print(f"触发 {name}...")
+        try:
+            client.trigger_workflow(wf_file, ref, inputs)
+            print("  ✓ 已触发")
+        except Exception as e:
+            print(f"  ✗ 失败: {e}")
+        print(f"查看状态: abk status")
+        return
+    
     # 确定矩阵目标列表
     if args.matrix:
         if args.matrix == "both":
@@ -911,8 +953,11 @@ KernelSU 分支:
   abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram
   abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
   abk build --matrix a15                                    # 矩阵构建
+  abk build --matrix both                                   # 全版本矩阵构建
+  abk build --matrix full                                   # 全属性内核构建矩阵
+  abk build --matrix all-managers                           # 全管理器全矩阵编译
   abk build --oneplus --device oneplus12                    # OnePlus 构建""")
-    build_parser.add_argument("--matrix", choices=MATRIX_TARGETS_ALL, help="矩阵构建目标 (构建所有子版本，both=全版本)")
+    build_parser.add_argument("--matrix", choices=MATRIX_TARGETS_ALL, help="矩阵构建目标 (both=全版本, full=全属性矩阵, all-managers=全管理器全矩阵)")
     build_parser.add_argument("--oneplus", action="store_true", help="OnePlus 设备构建")
     build_parser.add_argument("--ref", default="dev", help="Fork 仓库的 Git 分支 (默认: dev)")
     build_parser.add_argument("--ksu", dest="ksu_variant", choices=KSU_VARIANTS + ["all"], help="KernelSU 变体 (all=全变体)")
@@ -929,6 +974,9 @@ KernelSU 分支:
     build_parser.add_argument("--sub-level", help="子版本号，如 66, 198")
     build_parser.add_argument("--os-patch-level", help="安全补丁级别，如 2022-01")
     build_parser.add_argument("--revision", help="修订版本，如 r11 (仅 5.10 内核)")
+    
+    build_parser.add_argument("--build-scope", choices=["Both", "GKI", "OnePlus"], help="构建范围 (仅 all-managers)")
+    build_parser.add_argument("--manager-variants", help="管理器变体，逗号分隔 (仅 all-managers)")
     
     build_parser.add_argument("--zram", action="store_true", default=False, help="启用 ZRAM 增强算法")
     build_parser.add_argument("--no-zram", dest="zram", action="store_false", help="禁用 ZRAM (默认)")
