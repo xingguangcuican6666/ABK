@@ -116,10 +116,45 @@ jobs:
           jni_target_dir="$GITHUB_WORKSPACE/app/build/generated/abk-jniLibs/main"
           cargo_target_dir="$source_dir/target"
           repo_url="${SUKISU_ULTRA_REPO%.git}"
+          repo_slug="${repo_url#https://github.com/}"
+          archive_url="https://codeload.github.com/${repo_slug}/tar.gz/${SUKISU_ULTRA_REF}"
+          source_fetch_mode="git"
 
           rm -rf "$source_dir" "$target_dir" "$jni_target_dir"
-          git clone --depth 1 --branch "$SUKISU_ULTRA_REF" "$SUKISU_ULTRA_REPO" "$source_dir"
-          commit="$(git -C "$source_dir" rev-parse HEAD)"
+          clone_sukisu_ultra() {
+            local attempt
+            for attempt in 1 2 3; do
+              if git clone --depth 1 --branch "$SUKISU_ULTRA_REF" "$SUKISU_ULTRA_REPO" "$source_dir"; then
+                return 0
+              fi
+              echo "::warning::SukiSU-Ultra git clone failed (attempt $attempt), retrying..."
+              rm -rf "$source_dir"
+              sleep "$attempt"
+            done
+            return 1
+          }
+
+          download_sukisu_ultra_archive() {
+            local archive_file="$RUNNER_TEMP/sukisu-ultra.tar.gz"
+            local extract_dir="$RUNNER_TEMP/sukisu-ultra-extract"
+            local archive_root
+            rm -rf "$archive_file" "$extract_dir" "$source_dir"
+            curl --fail --location --retry 3 --retry-all-errors "$archive_url" -o "$archive_file"
+            mkdir -p "$extract_dir" "$source_dir"
+            tar -xzf "$archive_file" -C "$extract_dir"
+            archive_root="$(find "$extract_dir" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+            [ -n "$archive_root" ] || { echo "::error::Failed to locate extracted SukiSU-Ultra archive root"; return 1; }
+            cp -a "$archive_root"/. "$source_dir"/
+          }
+
+          if clone_sukisu_ultra; then
+            commit="$(git -C "$source_dir" rev-parse HEAD)"
+          else
+            echo "::warning::Falling back to source archive for SukiSU-Ultra ref $SUKISU_ULTRA_REF"
+            source_fetch_mode="archive"
+            download_sukisu_ultra_archive
+            commit="archive:$SUKISU_ULTRA_REF"
+          fi
           mkdir -p "$target_dir" "$jni_target_dir"
 
           setup_rust_build() {
@@ -219,6 +254,7 @@ jobs:
             echo "source_repo=$repo_url"
             echo "ref=$SUKISU_ULTRA_REF"
             echo "commit=$commit"
+            echo "fetch_mode=$source_fetch_mode"
             echo "abis=$SUKISU_KSUD_ABIS"
             echo "built_by=.github/workflows/build-abk-app-dev.yml"
           } > "$target_dir/source.properties"

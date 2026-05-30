@@ -31,6 +31,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -81,6 +83,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -137,6 +140,11 @@ enum class ModuleRepositoryMode {
     RUNTIME_STANDARD
 }
 
+private data class ModuleListComputation<T>(
+    val items: List<T> = emptyList(),
+    val loading: Boolean = false
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModuleRepositoryScreen(
@@ -181,12 +189,46 @@ fun ModuleRepositoryScreen(
     val repositoryBackCorner = with(density) {
         (MODULE_REPOSITORY_BACK_MAX_CORNER.toPx() * visualRepositoryBackProgress).toDp()
     }
-    val mergedModules = remember(state.runtimeModuleRepositories) {
-        mergeRuntimeCatalogModules(state.runtimeModuleRepositories)
+    val mergedModulesState by produceState(
+        initialValue = ModuleListComputation<MergedRuntimeCatalogModule>(
+            loading = state.runtimeModuleRepositories.isNotEmpty()
+        ),
+        key1 = state.runtimeModuleRepositories
+    ) {
+        if (state.runtimeModuleRepositories.isEmpty()) {
+            value = ModuleListComputation(items = emptyList(), loading = false)
+            return@produceState
+        }
+        value = ModuleListComputation(loading = true)
+        val merged = withContext(Dispatchers.Default) {
+            mergeRuntimeCatalogModules(state.runtimeModuleRepositories)
+        }
+        value = ModuleListComputation(items = merged, loading = false)
     }
-    val filteredModules = remember(mergedModules, searchQuery) {
-        mergedModules.filter { it.matchesQuery(searchQuery) }
+    val mergedModules = mergedModulesState.items
+    val filteredModulesState by produceState(
+        initialValue = ModuleListComputation<MergedRuntimeCatalogModule>(
+            loading = mergedModulesState.loading
+        ),
+        key1 = mergedModulesState,
+        key2 = searchQuery
+    ) {
+        if (mergedModulesState.loading) {
+            value = ModuleListComputation(loading = true)
+            return@produceState
+        }
+        value = ModuleListComputation(loading = true)
+        val filtered = withContext(Dispatchers.Default) {
+            if (searchQuery.isBlank()) {
+                mergedModules
+            } else {
+                mergedModules.filter { it.matchesQuery(searchQuery) }
+            }
+        }
+        value = ModuleListComputation(items = filtered, loading = false)
     }
+    val filteredModules = filteredModulesState.items
+    val listComputing = mergedModulesState.loading
 
     fun openRepositorySettings() {
         repositoryBackProgress = 0f
@@ -354,6 +396,7 @@ fun ModuleRepositoryScreen(
                 padding = padding,
                 modules = filteredModules,
                 totalModules = mergedModules.size,
+                computing = listComputing,
                 repositories = state.runtimeModuleRepositories,
                 refreshing = state.refreshingRuntimeModuleRepositoryIds.isNotEmpty(),
                 searchQuery = searchQuery,
@@ -476,12 +519,46 @@ private fun BuildModuleRepositoryScreenContent(
     val repositoryBackCorner = with(density) {
         (MODULE_REPOSITORY_BACK_MAX_CORNER.toPx() * visualRepositoryBackProgress).toDp()
     }
-    val mergedModules = remember(state.buildModuleRepositories) {
-        mergeBuildPageCatalogModules(state.buildModuleRepositories)
+    val mergedModulesState by produceState(
+        initialValue = ModuleListComputation<BuildPageMergedCatalogModule>(
+            loading = state.buildModuleRepositories.isNotEmpty()
+        ),
+        key1 = state.buildModuleRepositories
+    ) {
+        if (state.buildModuleRepositories.isEmpty()) {
+            value = ModuleListComputation(items = emptyList(), loading = false)
+            return@produceState
+        }
+        value = ModuleListComputation(loading = true)
+        val merged = withContext(Dispatchers.Default) {
+            mergeBuildPageCatalogModules(state.buildModuleRepositories)
+        }
+        value = ModuleListComputation(items = merged, loading = false)
     }
-    val filteredModules = remember(mergedModules, searchQuery) {
-        mergedModules.filter { it.matchesQuery(searchQuery) }
+    val mergedModules = mergedModulesState.items
+    val filteredModulesState by produceState(
+        initialValue = ModuleListComputation<BuildPageMergedCatalogModule>(
+            loading = mergedModulesState.loading
+        ),
+        key1 = mergedModulesState,
+        key2 = searchQuery
+    ) {
+        if (mergedModulesState.loading) {
+            value = ModuleListComputation(loading = true)
+            return@produceState
+        }
+        value = ModuleListComputation(loading = true)
+        val filtered = withContext(Dispatchers.Default) {
+            if (searchQuery.isBlank()) {
+                mergedModules
+            } else {
+                mergedModules.filter { it.matchesQuery(searchQuery) }
+            }
+        }
+        value = ModuleListComputation(items = filtered, loading = false)
     }
+    val filteredModules = filteredModulesState.items
+    val listComputing = mergedModulesState.loading
     val selectedModules = remember(state.buildConfig.customExternalModules) {
         state.buildConfig.customExternalModules
             .map { it.url.trim().lowercase() to CustomExternalModuleStage.normalize(it.stage) }
@@ -657,6 +734,7 @@ private fun BuildModuleRepositoryScreenContent(
                 padding = padding,
                 modules = filteredModules,
                 totalModules = mergedModules.size,
+                computing = listComputing,
                 repositories = state.buildModuleRepositories,
                 refreshing = state.refreshingBuildModuleRepositoryIds.isNotEmpty(),
                 selectedModules = selectedModules,
@@ -747,6 +825,7 @@ private fun RuntimeModuleRepositoryListContent(
     padding: PaddingValues,
     modules: List<MergedRuntimeCatalogModule>,
     totalModules: Int,
+    computing: Boolean,
     repositories: List<RuntimeModuleRepository>,
     refreshing: Boolean,
     searchQuery: String,
@@ -757,33 +836,49 @@ private fun RuntimeModuleRepositoryListContent(
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
     bottomPadding: Dp
 ) {
-    Column(
+    val showInitialLoading = computing || (refreshing && totalModules == 0 && searchQuery.isBlank())
+    LazyColumn(
         modifier = Modifier
             .padding(padding)
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection)
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = AbkScreenHorizontalPadding),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(bottom = bottomPadding + 24.dp)
     ) {
-        CompactModuleSearchField(
-            value = searchQuery,
-            onValueChange = onSearchQueryChange
-        )
-
-        if (refreshing) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        item(key = "search") {
+            CompactModuleSearchField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange
+            )
         }
 
-        if (modules.isEmpty()) {
-            RuntimeModuleRepositoryEmptyState(
-                totalModules = totalModules,
-                repositoryCount = repositories.size,
-                hasQuery = searchQuery.isNotBlank(),
-                onOpenRepositorySettings = onOpenRepositorySettings
-            )
+        if (refreshing && !showInitialLoading) {
+            item(key = "refreshing") {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+
+        if (showInitialLoading) {
+            item(key = "initial-loading") {
+                ModuleRepositoryInitialLoading()
+            }
+        } else if (modules.isEmpty()) {
+            item(key = "empty") {
+                RuntimeModuleRepositoryEmptyState(
+                    totalModules = totalModules,
+                    repositoryCount = repositories.size,
+                    hasQuery = searchQuery.isNotBlank(),
+                    onOpenRepositorySettings = onOpenRepositorySettings
+                )
+            }
         } else {
-            modules.forEach { merged ->
+            items(
+                items = modules,
+                key = { merged ->
+                    "${merged.module.id.trim().lowercase().ifBlank { merged.module.name.trim().lowercase() }}-${merged.sources.joinToString("|")}"
+                }
+            ) { merged ->
                 RuntimeModuleRepositoryListItem(
                     merged = merged,
                     onOpen = { onOpenModule(merged) },
@@ -791,8 +886,28 @@ private fun RuntimeModuleRepositoryListContent(
                 )
             }
         }
+    }
+}
 
-        Spacer(Modifier.height(bottomPadding + 24.dp))
+@Composable
+private fun ModuleRepositoryInitialLoading() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 48.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            LoadingIndicator(Modifier.size(42.dp))
+            Text(
+                text = stringResource(R.string.module_repo_building_list),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -1525,6 +1640,7 @@ private fun BuildModuleRepositoryListContent(
     padding: PaddingValues,
     modules: List<BuildPageMergedCatalogModule>,
     totalModules: Int,
+    computing: Boolean,
     repositories: List<ModuleCatalogRepository>,
     refreshing: Boolean,
     selectedModules: Set<Pair<String, String>>,
@@ -1537,56 +1653,72 @@ private fun BuildModuleRepositoryListContent(
     bottomPadding: Dp
 ) {
     val context = LocalContext.current
-    Column(
+    val showInitialLoading = computing || (refreshing && totalModules == 0 && searchQuery.isBlank())
+    LazyColumn(
         modifier = Modifier
             .padding(padding)
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection)
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = AbkScreenHorizontalPadding),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(bottom = bottomPadding + 24.dp)
     ) {
-        CompactModuleSearchField(
-            value = searchQuery,
-            onValueChange = onSearchQueryChange
-        )
-
-        if (refreshing) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        item(key = "search") {
+            CompactModuleSearchField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange
+            )
         }
 
-        if (modules.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Extension,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(38.dp)
-                )
-                Text(
-                    text = when {
-                        searchQuery.isNotBlank() -> context.getString(R.string.module_repo_no_matching)
-                        repositories.isEmpty() -> buildRepoEmptyTitleLabel(context)
-                        totalModules == 0 -> context.getString(R.string.module_repo_refresh_hint)
-                        else -> context.getString(R.string.module_repo_no_display)
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                TextButton(onClick = onOpenRepositorySettings) {
-                    Icon(Icons.Default.Dns, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(buildRepoManageLabel(context))
+        if (refreshing && !showInitialLoading) {
+            item(key = "refreshing") {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+
+        if (showInitialLoading) {
+            item(key = "initial-loading") {
+                ModuleRepositoryInitialLoading()
+            }
+        } else if (modules.isEmpty()) {
+            item(key = "empty") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Extension,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(38.dp)
+                    )
+                    Text(
+                        text = when {
+                            searchQuery.isNotBlank() -> context.getString(R.string.module_repo_no_matching)
+                            repositories.isEmpty() -> buildRepoEmptyTitleLabel(context)
+                            totalModules == 0 -> context.getString(R.string.module_repo_refresh_hint)
+                            else -> context.getString(R.string.module_repo_no_display)
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    TextButton(onClick = onOpenRepositorySettings) {
+                        Icon(Icons.Default.Dns, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(buildRepoManageLabel(context))
+                    }
                 }
             }
         } else {
-            modules.forEach { merged ->
+            items(
+                items = modules,
+                key = { merged ->
+                    merged.module.repoUrl.trim().lowercase()
+                }
+            ) { merged ->
                 val module = merged.module
                 val supportedStages = module.buildNormalizedSupportedStages()
                 val allStagesAdded = supportedStages.all { stage ->
@@ -1706,8 +1838,6 @@ private fun BuildModuleRepositoryListContent(
                 }
             }
         }
-
-        Spacer(Modifier.height(bottomPadding + 24.dp))
     }
 }
 

@@ -45,8 +45,10 @@ class PreferencesRepository(private val context: Context) {
         val KEY_PREBUILT_GKI_ENABLED = booleanPreferencesKey("prebuilt_gki_enabled")
         val KEY_PREDICTIVE_BACK_ENABLED = booleanPreferencesKey("predictive_back_enabled")
         val KEY_RUNTIME_NAVIGATION_ENABLED = booleanPreferencesKey("runtime_navigation_enabled")
+        val KEY_MANAGER_SURFACE_MODE = stringPreferencesKey("manager_surface_mode")
         val KEY_WEBVIEW_DEBUG_ENABLED = booleanPreferencesKey("webview_debug_enabled")
         val KEY_TERMS_ACCEPTED_VERSION = intPreferencesKey("terms_accepted_version")
+        val KEY_OOBE_COMPLETED = booleanPreferencesKey("oobe_completed")
     }
 
     val accessToken: Flow<String?> = context.dataStore.data.map { it[KEY_ACCESS_TOKEN] }
@@ -85,10 +87,14 @@ class PreferencesRepository(private val context: Context) {
     val runtimeNavigationEnabled: Flow<Boolean> = context.dataStore.data.map {
         it[KEY_RUNTIME_NAVIGATION_ENABLED] ?: false
     }
+    val managerSurfaceMode: Flow<String> = context.dataStore.data.map {
+        it[KEY_MANAGER_SURFACE_MODE] ?: "build"
+    }
     val webViewDebugEnabled: Flow<Boolean> = context.dataStore.data.map {
         it[KEY_WEBVIEW_DEBUG_ENABLED] ?: false
     }
     val termsAcceptedVersion: Flow<Int> = context.dataStore.data.map { it[KEY_TERMS_ACCEPTED_VERSION] ?: 0 }
+    val oobeCompleted: Flow<Boolean> = context.dataStore.data.map { it[KEY_OOBE_COMPLETED] ?: false }
 
     suspend fun saveToken(token: String) = context.dataStore.edit { it[KEY_ACCESS_TOKEN] = token }
     suspend fun saveUsername(name: String) = context.dataStore.edit { it[KEY_USERNAME] = name }
@@ -158,11 +164,18 @@ class PreferencesRepository(private val context: Context) {
     suspend fun setRuntimeNavigationEnabled(v: Boolean) = context.dataStore.edit {
         it[KEY_RUNTIME_NAVIGATION_ENABLED] = v
     }
+    suspend fun setManagerSurfaceMode(mode: String) = context.dataStore.edit {
+        it[KEY_MANAGER_SURFACE_MODE] = mode
+        it[KEY_RUNTIME_NAVIGATION_ENABLED] = mode != "build"
+    }
     suspend fun setWebViewDebugEnabled(v: Boolean) = context.dataStore.edit {
         it[KEY_WEBVIEW_DEBUG_ENABLED] = v
     }
     suspend fun acceptCurrentTerms() = context.dataStore.edit {
         it[KEY_TERMS_ACCEPTED_VERSION] = CURRENT_TERMS_VERSION
+    }
+    suspend fun setOobeCompleted(v: Boolean) = context.dataStore.edit {
+        it[KEY_OOBE_COMPLETED] = v
     }
     suspend fun clearPendingAutoDownloadRunId() = context.dataStore.edit { it.remove(KEY_PENDING_AUTO_DOWNLOAD_RUN_ID) }
 

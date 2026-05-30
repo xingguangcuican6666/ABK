@@ -91,9 +91,24 @@
     <string name="sync_action">立即同步</string>
     <string name="sync_behind_commits">落后 %1$d 个提交。</string>
     <string name="skip">跳过</string>
+    <string name="oobe_title">开始使用 AnyBase Kernel</string>
+    <string name="oobe_desc">首次启动只展示一次。你可以先跳过，之后需要构建时再登录 GitHub。</string>
+    <string name="oobe_first_launch">首次启动</string>
+    <string name="oobe_build_title">构建功能需要 GitHub</string>
+    <string name="oobe_build_desc">登录后 ABK 才能检查 fork、触发工作流并同步构建状态。</string>
+    <string name="oobe_build_detail">如果暂时不构建内核，可以先跳过。切到构建页时再继续登录和 fork 流程。</string>
+    <string name="oobe_flash_title">刷写页可直接浏览预编译 GKI</string>
+    <string name="oobe_flash_desc">未登录时，刷写页只保留 Release 里的预编译 GKI 下载。</string>
+    <string name="oobe_flash_detail">工作流构建产物、fork 仓库和 Actions 记录会在登录并完成 fork 检查后恢复可用。</string>
+    <string name="oobe_continue_setup">继续配置 GitHub</string>
+    <string name="oobe_skip_for_now">暂时跳过</string>
 
     <!-- Build -->
     <string name="build_title">构建内核</string>
+    <string name="build_login_required_title">登录 GitHub 后才能构建</string>
+    <string name="build_login_required_desc">ABK 现在不会在启动时强制登录。需要构建内核时，再进入 OOBE 完成 GitHub 授权即可。</string>
+    <string name="build_fork_required_title">还需要完成 fork 配置</string>
+    <string name="build_fork_required_desc">当前账号已登录，但还没有可用的 fork 仓库。继续 OOBE 后，ABK 会检查并引导完成 fork。</string>
     <string name="build_target_title">构建目标</string>
     <string name="build_target_desc">选择标准 GKI 构建或 OnePlus/Oplus 机型构建。</string>
     <string name="build_target_gki">GKI</string>
@@ -329,6 +344,8 @@
     <string name="flash_loading_release">正在获取 Release</string>
     <string name="flash_empty_prebuilt_title">暂无预编译 GKI Release</string>
     <string name="flash_empty_prebuilt_desc">本仓库 Release 中暂未发现可浏览的版本。</string>
+    <string name="flash_prebuilt_disabled_title">预编译 GKI 已关闭</string>
+    <string name="flash_prebuilt_disabled_desc">未登录状态下，刷写页只保留预编译 GKI 下载。可在设置里重新开启该功能。</string>
     <string name="flash_workflow_unavailable">工作流记录不可用</string>
     <string name="flash_workflow_unavailable_desc">该工作流产物已被刷新或删除。</string>
     <string name="flash_loading_prebuilt">正在获取 %1$s 的预编译 GKI</string>
@@ -742,6 +759,7 @@
     <string name="module_repo_back">返回模块仓库</string>
     <string name="module_repo_no_matching">没有匹配的模块</string>
     <string name="module_repo_no_central">还没有中央仓库</string>
+    <string name="module_repo_building_list">正在构建模块列表</string>
     <string name="module_repo_refresh_hint">刷新中央仓库后会显示模块</string>
     <string name="module_repo_no_display">没有可显示的模块</string>
     <string name="module_repo_manage_central">管理中央仓库</string>
@@ -873,6 +891,7 @@
     <string name="vm_runtime_module_uninstall_unsupported">当前模块不支持卸载</string>
     <string name="vm_runtime_module_default_name">模块</string>
     <string name="vm_auth_failed">授权失败: %1$s</string>
+    <string name="vm_build_login_required">请先完成 GitHub 登录和 fork 配置，再提交构建。</string>
     <string name="vm_workflow_still_disabled">工作流仍未启用，当前状态: %1$s</string>
     <string name="vm_workflow_dispatch_failed">触发工作流失败: %1$s</string>
     <string name="vm_build_dispatch_no_result">触发构建未返回结果</string>

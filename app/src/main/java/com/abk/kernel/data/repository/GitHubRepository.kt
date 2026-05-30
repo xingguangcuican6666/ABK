@@ -27,7 +27,7 @@ sealed class Result<out T> {
 
 class GitHubRepository(
     private val authService: GitHubAuthService = NetworkClient.createAuthService(),
-    private var apiService: GitHubApiService? = null
+    private var apiService: GitHubApiService = NetworkClient.createApiService()
 ) {
     private val clientId = BuildConfig.GITHUB_CLIENT_ID
     private val publicHttpClient = OkHttpClient.Builder()
@@ -35,7 +35,7 @@ class GitHubRepository(
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    fun updateToken(token: String) {
+    fun updateToken(token: String?) {
         apiService = NetworkClient.createApiService(token)
     }
 
@@ -193,7 +193,7 @@ class GitHubRepository(
     // ── User ──────────────────────────────────────────────────────────────
 
     suspend fun getAuthenticatedUser(): Result<GitHubUser> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching {
             val resp = api.getAuthenticatedUser()
             if (resp.isSuccessful && resp.body() != null) Result.Success(resp.body()!!)
@@ -204,7 +204,7 @@ class GitHubRepository(
     // ── Fork ──────────────────────────────────────────────────────────────
 
     suspend fun getUserFork(sourceOwner: String, sourceRepo: String, username: String): Result<GitHubRepo?> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching {
             val resp = api.getRepo(username, sourceRepo)
             val repo = resp.body()
@@ -220,7 +220,7 @@ class GitHubRepository(
     }
 
     suspend fun forkRepo(owner: String, repo: String): Result<GitHubRepo> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching {
             val resp = api.forkRepo(owner, repo)
             if (resp.isSuccessful && resp.body() != null) Result.Success(resp.body()!!)
@@ -235,7 +235,7 @@ class GitHubRepository(
         headOwner: String,
         headBranch: String
     ): Result<CompareResult> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching {
             val resp = api.compareCommits(
                 sourceOwner,
@@ -248,7 +248,7 @@ class GitHubRepository(
     }
 
     suspend fun syncFork(username: String, repo: String, branch: String): Result<SyncForkResponse> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching {
             val resp = api.syncFork(username, repo, SyncForkRequest(branch))
             if (resp.isSuccessful && resp.body() != null) Result.Success(resp.body()!!)
@@ -259,7 +259,7 @@ class GitHubRepository(
     // ── Workflows ─────────────────────────────────────────────────────────
 
     suspend fun getWorkflow(owner: String, repo: String, workflowFile: String): Result<Workflow> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching {
             val resp = api.listWorkflows(owner, repo)
             if (resp.isSuccessful) {
@@ -287,7 +287,7 @@ class GitHubRepository(
         inputs: Map<String, String>,
         ref: String = "main"
     ): Result<Unit> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching {
             val resp = api.dispatchWorkflow(owner, repo, workflowId.toString(), WorkflowDispatchRequest(ref, inputs))
             if (resp.isSuccessful) Result.Success(Unit)
@@ -296,7 +296,7 @@ class GitHubRepository(
     }
 
     suspend fun enableWorkflow(owner: String, repo: String, workflowId: Long): Result<Unit> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching {
             val resp = api.enableWorkflow(owner, repo, workflowId.toString())
             if (resp.isSuccessful) Result.Success(Unit)
@@ -310,7 +310,7 @@ class GitHubRepository(
         perPage: Int = 10,
         workflowId: Long? = null
     ): Result<List<WorkflowRun>> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching<Result<List<WorkflowRun>>> {
             val resp = api.listWorkflowRuns(
                 owner,
@@ -328,7 +328,7 @@ class GitHubRepository(
     }
 
     suspend fun getWorkflowRun(owner: String, repo: String, runId: Long): Result<WorkflowRun> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching {
             val resp = api.getWorkflowRun(owner, repo, runId)
             if (resp.isSuccessful && resp.body() != null) Result.Success(resp.body()!!)
@@ -337,7 +337,7 @@ class GitHubRepository(
     }
 
     suspend fun deleteWorkflowRun(owner: String, repo: String, runId: Long): Result<Unit> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching {
             val resp = api.deleteWorkflowRun(owner, repo, runId)
             when {
@@ -348,7 +348,7 @@ class GitHubRepository(
     }
 
     suspend fun cancelWorkflowRun(owner: String, repo: String, runId: Long): Result<Unit> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching {
             val resp = api.cancelWorkflowRun(owner, repo, runId)
             when {
@@ -359,7 +359,7 @@ class GitHubRepository(
     }
 
     suspend fun listRunJobs(owner: String, repo: String, runId: Long): Result<List<WorkflowJob>> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching<Result<List<WorkflowJob>>> {
             val resp = api.listRunJobs(owner, repo, runId)
             if (resp.isSuccessful) {
@@ -372,7 +372,7 @@ class GitHubRepository(
     }
 
     suspend fun downloadJobLogs(owner: String, repo: String, jobId: Long): Result<String> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching<Result<String>> {
             val resp = api.downloadJobLogs(owner, repo, jobId)
             if (resp.isSuccessful) {
@@ -385,7 +385,7 @@ class GitHubRepository(
     }
 
     suspend fun downloadRunLogs(owner: String, repo: String, runId: Long): Result<String> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching<Result<String>> {
             val resp = api.downloadRunLogs(owner, repo, runId)
             if (resp.isSuccessful) {
@@ -398,7 +398,7 @@ class GitHubRepository(
     }
 
     suspend fun listArtifacts(owner: String, repo: String, runId: Long): Result<List<Artifact>> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching<Result<List<Artifact>>> {
             val resp = api.listArtifacts(owner, repo, runId)
             if (resp.isSuccessful) {
@@ -411,7 +411,7 @@ class GitHubRepository(
     }
 
     suspend fun listReleases(owner: String, repo: String, perPage: Int = 100): Result<List<GitHubReleaseSummary>> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching<Result<List<GitHubReleaseSummary>>> {
             val collected = mutableListOf<GitHubReleaseSummary>()
             var page = 1
@@ -430,7 +430,7 @@ class GitHubRepository(
     }
 
     suspend fun getReleaseByTag(owner: String, repo: String, tag: String): Result<GitHubRelease?> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching<Result<GitHubRelease?>> {
             val resp = api.getReleaseByTag(owner, repo, tag)
             when {
@@ -447,7 +447,7 @@ class GitHubRepository(
         releaseId: Long,
         perPage: Int = 100
     ): Result<List<ReleaseAsset>> {
-        val api = apiService ?: return Result.Error("Not authenticated")
+        val api = apiService
         return runCatching<Result<List<ReleaseAsset>>> {
             val collected = mutableListOf<ReleaseAsset>()
             var page = 1

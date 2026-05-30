@@ -91,9 +91,24 @@
     <string name="sync_action">Sync now</string>
     <string name="sync_behind_commits">Behind by %1$d commits.</string>
     <string name="skip">Skip</string>
+    <string name="oobe_title">Get started with AnyBase Kernel</string>
+    <string name="oobe_desc">This is shown only on first launch. You can skip now and sign in to GitHub later when you actually need builds.</string>
+    <string name="oobe_first_launch">First launch</string>
+    <string name="oobe_build_title">Build features need GitHub</string>
+    <string name="oobe_build_desc">After signing in, ABK can check your fork, trigger workflows, and sync build status.</string>
+    <string name="oobe_build_detail">If you do not need to build right now, skip for now. The Build tab can resume the GitHub sign-in and fork flow later.</string>
+    <string name="oobe_flash_title">The Flash tab can still browse prebuilt GKI</string>
+    <string name="oobe_flash_desc">When signed out, the Flash tab keeps only prebuilt GKI downloads from Releases.</string>
+    <string name="oobe_flash_detail">Workflow artifacts, fork repository access, and Actions records return after sign-in and fork checks complete.</string>
+    <string name="oobe_continue_setup">Continue GitHub setup</string>
+    <string name="oobe_skip_for_now">Skip for now</string>
 
     <!-- Build -->
     <string name="build_title">Build Kernel</string>
+    <string name="build_login_required_title">Sign in to GitHub before building</string>
+    <string name="build_login_required_desc">ABK no longer forces GitHub sign-in at startup. Enter OOBE here when you are ready to build.</string>
+    <string name="build_fork_required_title">Fork setup is still required</string>
+    <string name="build_fork_required_desc">This account is already signed in, but there is no usable fork yet. Continue OOBE so ABK can check and finish the fork setup.</string>
     <string name="build_target_title">Build target</string>
     <string name="build_target_desc">Choose the standard GKI build or a OnePlus/Oplus device build.</string>
     <string name="build_target_gki">GKI</string>
@@ -329,6 +344,8 @@
     <string name="flash_loading_release">Fetching releases</string>
     <string name="flash_empty_prebuilt_title">No prebuilt GKI releases</string>
     <string name="flash_empty_prebuilt_desc">No browsable releases were found in this repository.</string>
+    <string name="flash_prebuilt_disabled_title">Prebuilt GKI is disabled</string>
+    <string name="flash_prebuilt_disabled_desc">When signed out, the Flash tab keeps only prebuilt GKI downloads. Re-enable this feature in Settings.</string>
     <string name="flash_workflow_unavailable">Workflow record unavailable</string>
     <string name="flash_workflow_unavailable_desc">This workflow artifact was refreshed or deleted.</string>
     <string name="flash_loading_prebuilt">Fetching prebuilt GKI for %1$s</string>
@@ -742,6 +759,7 @@
     <string name="module_repo_back">Back to module repositories</string>
     <string name="module_repo_no_matching">No matching modules</string>
     <string name="module_repo_no_central">No central repositories yet</string>
+    <string name="module_repo_building_list">Building module list</string>
     <string name="module_repo_refresh_hint">Modules appear after refreshing a central repository</string>
     <string name="module_repo_no_display">No modules to show</string>
     <string name="module_repo_manage_central">Manage central repositories</string>
@@ -873,6 +891,7 @@
     <string name="vm_runtime_module_uninstall_unsupported">This module does not support uninstall</string>
     <string name="vm_runtime_module_default_name">Module</string>
     <string name="vm_auth_failed">Authorization failed: %1$s</string>
+    <string name="vm_build_login_required">Finish GitHub sign-in and fork setup before submitting a build.</string>
     <string name="vm_workflow_still_disabled">Workflow is still not enabled. Current state: %1$s</string>
     <string name="vm_workflow_dispatch_failed">Failed to trigger workflow: %1$s</string>
     <string name="vm_build_dispatch_no_result">Build dispatch returned no result</string>

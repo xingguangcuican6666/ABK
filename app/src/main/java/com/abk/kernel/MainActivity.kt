@@ -34,6 +34,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FolderOpen
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.filled.LibraryBooks
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -78,11 +80,15 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import com.abk.kernel.ui.screens.AuthGateScreen
 import com.abk.kernel.ui.screens.BuildScreen
 import com.abk.kernel.ui.screens.FlashScreen
 import com.abk.kernel.ui.screens.InstalledModulesScreen
+import com.abk.kernel.ui.screens.LspLogsScreen
+import com.abk.kernel.ui.screens.LspManagerHomeScreen
+import com.abk.kernel.ui.screens.LspModulesScreen
+import com.abk.kernel.ui.screens.LspScopeScreen
 import com.abk.kernel.ui.screens.ModuleRepositoryScreen
+import com.abk.kernel.ui.screens.OobeScreen
 import com.abk.kernel.ui.screens.RootAuthorizationScreen
 import com.abk.kernel.ui.screens.RuntimeHomeScreen
 import com.abk.kernel.ui.screens.SettingsScreen
@@ -90,8 +96,10 @@ import com.abk.kernel.ui.screens.StatusScreen
 import com.abk.kernel.ui.theme.AbkTheme
 import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
 import com.abk.kernel.ui.theme.uiSurfaceColor
-import com.abk.kernel.viewmodel.AuthStep
 import com.abk.kernel.viewmodel.MainViewModel
+import com.abk.kernel.data.model.MANAGER_SURFACE_BUILD
+import com.abk.kernel.data.model.MANAGER_SURFACE_LSP
+import com.abk.kernel.data.model.MANAGER_SURFACE_ROOT
 
 class MainActivity : ComponentActivity() {
 
@@ -113,9 +121,19 @@ class MainActivity : ComponentActivity() {
             val vm: MainViewModel = viewModel()
             val state by vm.uiState.collectAsState()
 
+            LaunchedEffect(Unit) {
+                vm.checkRoot()
+            }
+
             LaunchedEffect(state.termsAccepted) {
                 if (state.termsAccepted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+
+            LaunchedEffect(state.termsAccepted, state.oobeCompleted) {
+                if (state.termsAccepted && !state.oobeCompleted) {
+                    vm.maybeShowInitialOobe()
                 }
             }
 
@@ -139,12 +157,32 @@ class MainActivity : ComponentActivity() {
                             onAccept = vm::acceptTerms,
                             onDecline = { finishAffinity() }
                         )
-                        state.authStep != AuthStep.READY -> AuthGateScreen(vm)
-                        else -> AbkMainScaffold(
-                            vm = vm,
-                            pendingModuleInstallUri = pendingModuleInstallUri,
-                            onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
-                        )
+                        else -> Box(modifier = Modifier.fillMaxSize()) {
+                            AbkMainScaffold(
+                                vm = vm,
+                                pendingModuleInstallUri = pendingModuleInstallUri,
+                                onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
+                            )
+                            if (state.showSyncPrompt && !state.showOobe) {
+                                SyncPromptDialog(
+                                    behindBy = state.behindBy,
+                                    onSync = vm::syncFork,
+                                    onDismiss = vm::dismissSyncPrompt
+                                )
+                            }
+                            if (state.showOobe) {
+                                CompositionLocalProvider(LocalUiSurfaceAlpha provides 1f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(MaterialTheme.colorScheme.surface)
+                                            .zIndex(4f)
+                                    ) {
+                                        OobeScreen(vm)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -156,6 +194,34 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         pendingModuleInstallUri = extractModuleInstallUri(intent)?.toString()
     }
+}
+
+@Composable
+private fun SyncPromptDialog(
+    behindBy: Int,
+    onSync: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.sync_title)) },
+        text = {
+            Text(
+                "${stringResource(R.string.sync_desc)}\n\n" +
+                    stringResource(R.string.sync_behind_commits, behindBy)
+            )
+        },
+        confirmButton = {
+            Button(onClick = onSync) {
+                Text(stringResource(R.string.sync_action))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.skip))
+            }
+        }
+    )
 }
 
 @Composable
@@ -305,6 +371,10 @@ private enum class AbkTab(@StringRes val labelRes: Int) {
     Modules(R.string.nav_modules),
     Flash(R.string.nav_flash),
     RuntimeHome(R.string.nav_home),
+    LspHome(R.string.nav_home),
+    LspModules(R.string.nav_modules),
+    LspScope(R.string.nav_settings),
+    LspLogs(R.string.nav_status),
     InstalledModules(R.string.nav_installed_modules),
     RootAuth(R.string.nav_root_auth),
     Settings(R.string.nav_settings)
@@ -325,22 +395,29 @@ private fun AbkMainScaffold(
     var moduleRepositoryPageVisible by rememberSaveable { mutableStateOf(false) }
     var rootAuthDetailPageVisible by rememberSaveable { mutableStateOf(false) }
     var managerPatchPageVisible by rememberSaveable { mutableStateOf(false) }
+    var showManagerSurfaceDialog by rememberSaveable { mutableStateOf(false) }
     var lastBackAt by remember { mutableStateOf(0L) }
     val runtimeNativeManagerActive = state.hasNativeManagerPermission
-    val visibleTabs = remember(state.runtimeNavigationEnabled, state.rootGranted, runtimeNativeManagerActive) {
-        if (state.runtimeNavigationEnabled) {
-            buildList {
+    val visibleTabs = remember(state.managerSurfaceMode, state.rootGranted, runtimeNativeManagerActive) {
+        when (state.managerSurfaceMode) {
+            MANAGER_SURFACE_ROOT -> buildList {
                 add(AbkTab.RuntimeHome)
                 if (state.rootGranted) add(AbkTab.InstalledModules)
                 add(AbkTab.Modules)
                 if (runtimeNativeManagerActive) add(AbkTab.RootAuth)
                 add(AbkTab.Settings)
             }
-        } else {
-            listOf(AbkTab.Status, AbkTab.Build, AbkTab.Modules, AbkTab.Flash, AbkTab.Settings)
+            MANAGER_SURFACE_LSP -> buildList {
+                add(AbkTab.LspHome)
+                add(AbkTab.LspModules)
+                add(AbkTab.LspLogs)
+                add(AbkTab.Settings)
+            }
+            else -> listOf(AbkTab.Status, AbkTab.Build, AbkTab.Modules, AbkTab.Flash, AbkTab.Settings)
         }
     }
-    val activeTab = if (selectedTab in visibleTabs) selectedTab else visibleTabs.first()
+    val isLspChildPage = state.managerSurfaceMode == MANAGER_SURFACE_LSP && selectedTab == AbkTab.LspScope
+    val activeTab = if (selectedTab in visibleTabs || isLspChildPage) selectedTab else visibleTabs.first()
     val motionScheme = MaterialTheme.motionScheme
     val density = LocalDensity.current
     var bottomBarHeightPx by remember { mutableIntStateOf(0) }
@@ -354,6 +431,8 @@ private fun AbkMainScaffold(
         AbkTab.Settings -> settingsThemePageVisible
         AbkTab.RootAuth -> rootAuthDetailPageVisible
         AbkTab.RuntimeHome -> managerPatchPageVisible
+        AbkTab.LspScope -> true
+        AbkTab.LspHome, AbkTab.LspModules, AbkTab.LspLogs -> false
         else -> false
     }
 
@@ -420,9 +499,18 @@ private fun AbkMainScaffold(
     }
 
     LaunchedEffect(visibleTabs, selectedTab, state.runtimeNavigationEnabled) {
-        if (selectedTab !in visibleTabs) {
-            selectedTab = if (state.runtimeNavigationEnabled) AbkTab.RuntimeHome else AbkTab.Status
+        val keepInternalLspPage = state.managerSurfaceMode == MANAGER_SURFACE_LSP && selectedTab == AbkTab.LspScope
+        if (selectedTab !in visibleTabs && !keepInternalLspPage) {
+            selectedTab = when (state.managerSurfaceMode) {
+                MANAGER_SURFACE_ROOT -> AbkTab.RuntimeHome
+                MANAGER_SURFACE_LSP -> AbkTab.LspHome
+                else -> AbkTab.Status
+            }
         }
+    }
+
+    fun openManagerSurfaceDialog() {
+        showManagerSurfaceDialog = true
     }
 
     fun handleTopLevelBack() {
@@ -476,6 +564,10 @@ private fun AbkMainScaffold(
                                     AbkTab.Modules -> Icons.Default.LibraryBooks
                                     AbkTab.Flash -> if (state.rootGranted) Icons.Default.FlashOn else Icons.Default.FolderOpen
                                     AbkTab.RuntimeHome -> Icons.Default.Memory
+                                    AbkTab.LspHome -> Icons.Default.Memory
+                                    AbkTab.LspModules -> Icons.Default.Extension
+                                    AbkTab.LspScope -> Icons.Default.Tune
+                                    AbkTab.LspLogs -> Icons.Default.Article
                                     AbkTab.InstalledModules -> Icons.Default.Extension
                                     AbkTab.RootAuth -> Icons.Default.AdminPanelSettings
                                     AbkTab.Settings -> Icons.Default.Settings
@@ -525,8 +617,8 @@ private fun AbkMainScaffold(
                         AbkTab.Status -> StatusScreen(
                             vm = vm,
                             outerPadding = contentPadding,
-                            runtimeNavigationEnabled = state.runtimeNavigationEnabled,
-                            onToggleRuntimeNavigation = { vm.setRuntimeNavigationEnabled(true) }
+                            runtimeNavigationEnabled = state.managerSurfaceMode != MANAGER_SURFACE_BUILD,
+                            onToggleRuntimeNavigation = ::openManagerSurfaceDialog
                         )
                         AbkTab.Build -> BuildScreen(
                             vm = vm,
@@ -551,8 +643,30 @@ private fun AbkMainScaffold(
                         AbkTab.RuntimeHome -> RuntimeHomeScreen(
                             vm = vm,
                             outerPadding = contentPadding,
-                            onSwitchToClassic = { vm.setRuntimeNavigationEnabled(false) },
+                            onSwitchToClassic = ::openManagerSurfaceDialog,
                             onManagerPatchPageVisibleChange = { managerPatchPageVisible = it }
+                        )
+                        AbkTab.LspHome -> LspManagerHomeScreen(
+                            vm = vm,
+                            outerPadding = contentPadding,
+                            onOpenManagerSurfacePicker = ::openManagerSurfaceDialog
+                        )
+                        AbkTab.LspModules -> LspModulesScreen(
+                            vm = vm,
+                            outerPadding = contentPadding,
+                            onOpenScope = {
+                                vm.setSelectedLspModulePackage(it)
+                                selectedTab = AbkTab.LspScope
+                            }
+                        )
+                        AbkTab.LspScope -> LspScopeScreen(
+                            vm = vm,
+                            outerPadding = contentPadding,
+                            onBack = { selectedTab = AbkTab.LspModules }
+                        )
+                        AbkTab.LspLogs -> LspLogsScreen(
+                            vm = vm,
+                            outerPadding = contentPadding
                         )
                         AbkTab.InstalledModules -> InstalledModulesScreen(
                             vm = vm,
@@ -570,11 +684,19 @@ private fun AbkMainScaffold(
                             outerPadding = contentPadding,
                             onThemePageVisibleChange = { settingsThemePageVisible = it },
                             onOpenInstalledModules = {
-                                if (!state.runtimeNavigationEnabled) vm.setRuntimeNavigationEnabled(true)
-                                selectedTab = if (state.rootGranted) {
-                                    AbkTab.InstalledModules
-                                } else {
-                                    AbkTab.RuntimeHome
+                                when (state.managerSurfaceMode) {
+                                    MANAGER_SURFACE_LSP -> selectedTab = AbkTab.LspModules
+                                    MANAGER_SURFACE_ROOT -> {
+                                        selectedTab = if (state.rootGranted) {
+                                            AbkTab.InstalledModules
+                                        } else {
+                                            AbkTab.RuntimeHome
+                                        }
+                                    }
+                                    else -> {
+                                        vm.setManagerSurfaceMode(MANAGER_SURFACE_ROOT)
+                                        selectedTab = if (state.rootGranted) AbkTab.InstalledModules else AbkTab.RuntimeHome
+                                    }
                                 }
                             }
                         )
@@ -582,12 +704,58 @@ private fun AbkMainScaffold(
                 }
             }
         }
+
+        if (showManagerSurfaceDialog) {
+            AlertDialog(
+                onDismissRequest = { showManagerSurfaceDialog = false },
+                title = { Text("切换管理侧") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                showManagerSurfaceDialog = false
+                                vm.setManagerSurfaceMode(MANAGER_SURFACE_LSP)
+                                selectedTab = AbkTab.LspHome
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("LSP 管理器") }
+                        Button(
+                            onClick = {
+                                showManagerSurfaceDialog = false
+                                vm.setManagerSurfaceMode(MANAGER_SURFACE_ROOT)
+                                selectedTab = AbkTab.RuntimeHome
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Root 管理器") }
+                        Button(
+                            onClick = {
+                                showManagerSurfaceDialog = false
+                                vm.setManagerSurfaceMode(MANAGER_SURFACE_BUILD)
+                                selectedTab = AbkTab.Status
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("构建管理器") }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { showManagerSurfaceDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
     }
 }
 
 @Composable
 private fun AbkTab.displayLabel(rootGranted: Boolean): String = when (this) {
     AbkTab.Flash -> stringResource(if (rootGranted) labelRes else R.string.nav_files)
+    AbkTab.RuntimeHome -> "Root"
+    AbkTab.LspHome -> "LSP"
+    AbkTab.LspModules -> "LSP 模块"
+    AbkTab.LspScope -> "作用域"
+    AbkTab.LspLogs -> "日志"
     else -> stringResource(labelRes)
 }
 

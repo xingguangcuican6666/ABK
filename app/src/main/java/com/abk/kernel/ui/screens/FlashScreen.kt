@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -198,7 +199,12 @@ fun FlashScreen(
     var terminalSuccess by remember { mutableStateOf<Boolean?>(null) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val rootGranted = state.rootGranted
-    val currentContentTab = if (state.prebuiltGkiEnabled) activeContentTab else FlashContentTab.Workflows
+    val prebuiltOnlyMode = !state.isLoggedIn
+    val currentContentTab = when {
+        prebuiltOnlyMode -> FlashContentTab.PrebuiltGki
+        state.prebuiltGkiEnabled -> activeContentTab
+        else -> FlashContentTab.Workflows
+    }
     val supportsAnyKernelInactiveSlot by produceState(initialValue = false, rootGranted) {
         value = withContext(Dispatchers.IO) { RootUtils.supportsAnyKernelInactiveSlot() }
     }
@@ -214,13 +220,19 @@ fun FlashScreen(
         state.recentRuns.firstOrNull { it.id == state.pendingAutoDownloadRunId }
     }
 
-    val remoteArtifacts = remember(state.artifacts) {
-        state.artifacts.filter {
-            !it.expired && DownloadUtils.classifyCategory(DownloadUtils.classifyArtifact(it.name)) != null
+    val remoteArtifacts = remember(state.artifacts, state.isLoggedIn) {
+        if (!state.isLoggedIn) {
+            emptyList()
+        } else {
+            state.artifacts.filter {
+                !it.expired && DownloadUtils.classifyCategory(DownloadUtils.classifyArtifact(it.name)) != null
+            }
         }
     }
-    val workflowDownloadedArtifacts = remember(state.downloadedArtifacts, state.prebuiltGkiEnabled) {
-        if (state.prebuiltGkiEnabled) {
+    val workflowDownloadedArtifacts = remember(state.downloadedArtifacts, state.prebuiltGkiEnabled, state.isLoggedIn) {
+        if (!state.isLoggedIn) {
+            emptyList()
+        } else if (state.prebuiltGkiEnabled) {
             state.downloadedArtifacts.filterNot { it.runId == PREBUILT_GKI_RUN_ID }
         } else {
             state.downloadedArtifacts
@@ -255,8 +267,8 @@ fun FlashScreen(
         }
     }
 
-    LaunchedEffect(state.forkRepo?.fullName) {
-        if (state.forkRepo != null) vm.loadRecentRuns()
+    LaunchedEffect(state.isLoggedIn, state.forkRepo?.fullName) {
+        if (state.isLoggedIn && state.forkRepo != null) vm.loadRecentRuns()
     }
 
     LaunchedEffect(state.prebuiltGkiEnabled) {
@@ -276,8 +288,8 @@ fun FlashScreen(
         }
     }
 
-    LaunchedEffect(currentContentTab, state.prebuiltGkiEnabled, state.isLoggedIn) {
-        if (currentContentTab == FlashContentTab.PrebuiltGki && state.prebuiltGkiEnabled && state.isLoggedIn) {
+    LaunchedEffect(currentContentTab, state.prebuiltGkiEnabled) {
+        if (currentContentTab == FlashContentTab.PrebuiltGki && state.prebuiltGkiEnabled) {
             vm.loadPrebuiltGkiReleases()
         }
     }
@@ -669,7 +681,7 @@ fun FlashScreen(
                     )
                 }
 
-                if (state.prebuiltGkiEnabled) {
+                if (state.prebuiltGkiEnabled && state.isLoggedIn) {
                     item {
                         FlashContentTabs(
                             active = activeContentTab,
@@ -804,6 +816,14 @@ fun FlashScreen(
                                         allowRootActions = rootGranted
                                     )
                                 }
+                            }
+                        } else {
+                            item {
+                                ExpressiveEmptyState(
+                                    title = stringResource(R.string.flash_prebuilt_disabled_title),
+                                    subtitle = stringResource(R.string.flash_prebuilt_disabled_desc),
+                                    icon = Icons.Default.CloudOff
+                                )
                             }
                         }
                     }
@@ -1006,8 +1026,8 @@ fun FlashScreen(
                     selectedPrebuiltReleaseId = releaseId
                     selectedRunId = null
                 }
-                LaunchedEffect(release?.id, state.prebuiltGkiEnabled, state.isLoggedIn) {
-                    if (release != null && state.prebuiltGkiEnabled && state.isLoggedIn) {
+                LaunchedEffect(release?.id, state.prebuiltGkiEnabled) {
+                    if (release != null && state.prebuiltGkiEnabled) {
                         vm.loadPrebuiltGkiAssets(release)
                     }
                 }

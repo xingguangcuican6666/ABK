@@ -1286,6 +1286,10 @@ private fun runtimeCapabilityLabel(key: String): String =
             "safe_mode" -> stringResource(R.string.runtime_cap_safe_mode)
             "modules" -> stringResource(R.string.runtime_cap_modules)
             "module_control" -> stringResource(R.string.runtime_cap_module_control)
+            "lsp_bridge" -> "LSP Bridge"
+            "zygote_helper" -> "Zygote Helper"
+            "plugin_bridge" -> "Plugin Bridge"
+            "hook_policies" -> "Hook Policies"
             "susfs" -> "SUSFS"
             "kpm" -> "KPM"
             "features" -> stringResource(R.string.runtime_cap_features)
@@ -1299,6 +1303,7 @@ private fun runtimeBackendLabel(backend: String): String = when (backend) {
     "ksud" -> stringResource(R.string.runtime_backend_ksud)
     "su" -> stringResource(R.string.runtime_backend_su)
     "kernel" -> stringResource(R.string.runtime_backend_kernel)
+    "lsp_bridge" -> "LSP Bridge"
     else -> backend
 }
 

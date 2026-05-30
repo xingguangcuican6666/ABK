@@ -9,6 +9,8 @@ import android.net.Uri
 import android.os.Build
 import androidx.annotation.StringRes
 import com.abk.kernel.utils.LocaleHelper
+import com.abk.kernel.utils.LspManagerService
+import com.abk.kernel.utils.LspModuleUtils
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.abk.kernel.BuildConfig
@@ -32,6 +34,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.charset.StandardCharsets
@@ -40,7 +43,7 @@ import java.util.UUID
 
 // ── UI State ─────────────────────────────────────────────────────────────────
 
-enum class AuthStep { CHECK_ROOT, LOGIN, FORK_CHECK, READY }
+enum class AuthStep { INTRO, LOGIN, FORK_CHECK }
 
 enum class ManagerAccessState {
     UNKNOWN,
@@ -63,13 +66,15 @@ data class BuildPlanImportPreview(
 )
 
 data class MainUiState(
-    val authStep: AuthStep = AuthStep.LOGIN,
+    val authStep: AuthStep = AuthStep.INTRO,
     val rootGranted: Boolean = false,
     val isLoggedIn: Boolean = false,
     val user: GitHubUser? = null,
     val forkRepo: GitHubRepo? = null,
     val behindBy: Int = 0,
-    val showSyncDialog: Boolean = false,
+    val showSyncPrompt: Boolean = false,
+    val showOobe: Boolean = false,
+    val oobeCompleted: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
     // Device-flow OAuth
@@ -129,6 +134,7 @@ data class MainUiState(
     val prebuiltGkiEnabled: Boolean = true,
     val predictiveBackEnabled: Boolean = true,
     val runtimeNavigationEnabled: Boolean = false,
+    val managerSurfaceMode: String = MANAGER_SURFACE_BUILD,
     val webViewDebugEnabled: Boolean = false,
     val managerAccessState: ManagerAccessState = ManagerAccessState.UNKNOWN,
     val managerAccessError: String? = null,
@@ -148,6 +154,14 @@ data class MainUiState(
     val managerToolsLoading: Boolean = false,
     val managerToolsError: String? = null,
     val managerToolActionId: String? = null,
+    val lspInstalledModules: List<LspInstalledModule> = emptyList(),
+    val lspInstalledModulesLoading: Boolean = false,
+    val lspInstalledModulesError: String? = null,
+    val lspBridgeStatus: LspBridgeStatus? = null,
+    val lspScopeApps: List<LspScopeApp> = emptyList(),
+    val lspScopeAppsLoading: Boolean = false,
+    val selectedLspModulePackage: String? = null,
+    val lspModuleActionPackage: String? = null,
     val selinuxEnforcing: Boolean = true,
     val selinuxModeText: String = "",
     val umountPaths: List<String> = emptyList(),
@@ -175,6 +189,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val preparedMirrorArtifacts = mutableMapOf<Long, Set<String>>()
     private val artifactDownloadJobs = mutableMapOf<Long, Job>()
     private var hasCheckedWorkflowEnablementThisLaunch = false
+    private var hasShownInitialOobeThisLaunch = false
+    private var hasRefreshedGitHubSessionThisLaunch = false
     private var buildQueueJob: Job? = null
 
     private val _uiState = MutableStateFlow(MainUiState())
@@ -258,8 +274,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.collect { (token, name, avatar, autoDl, notify) ->
                 if (!token.isNullOrBlank()) {
                     github.updateToken(token)
-                    val shouldResumeSetup = !_uiState.value.isPollingToken &&
-                        _uiState.value.authStep in setOf(AuthStep.CHECK_ROOT, AuthStep.LOGIN)
                     _uiState.update {
                         it.copy(
                             isLoggedIn = true,
@@ -275,19 +289,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             )
                         }
                     }
-                    if (shouldResumeSetup) {
-                        if (name.isNullOrBlank()) {
-                            fetchUserAndContinue()
-                        } else {
-                            advanceStep()
+                    if (!_uiState.value.isPollingToken && !hasRefreshedGitHubSessionThisLaunch) {
+                        hasRefreshedGitHubSessionThisLaunch = true
+                        viewModelScope.launch {
+                            refreshGitHubSessionOnLaunch(name.isNullOrBlank())
                         }
                     }
                 } else {
+                    github.updateToken(null)
                     hasCheckedWorkflowEnablementThisLaunch = false
+                    hasRefreshedGitHubSessionThisLaunch = false
                     _uiState.update {
                         it.copy(
                             isLoggedIn = false,
                             user = null,
+                            forkRepo = null,
+                            behindBy = 0,
+                            showSyncPrompt = false,
                             autoDownload = autoDl,
                             notifyBuild = notify
                         )
@@ -303,6 +321,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         termsAccepted = version >= PreferencesRepository.CURRENT_TERMS_VERSION
                     )
                 }
+            }
+        }
+        viewModelScope.launch {
+            prefs.oobeCompleted.collect { completed ->
+                _uiState.update { state -> state.copy(oobeCompleted = completed) }
             }
         }
         viewModelScope.launch {
@@ -442,8 +465,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch {
-            prefs.runtimeNavigationEnabled.collect { enabled ->
-                _uiState.update { it.copy(runtimeNavigationEnabled = enabled) }
+            prefs.managerSurfaceMode.collect { mode ->
+                val normalized = normalizeManagerSurfaceMode(mode)
+                _uiState.update {
+                    it.copy(
+                        managerSurfaceMode = normalized,
+                        runtimeNavigationEnabled = normalized != MANAGER_SURFACE_BUILD
+                    )
+                }
             }
         }
         viewModelScope.launch {
@@ -466,7 +495,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun checkRoot() {
         viewModelScope.launch {
-            val shouldAdvance = _uiState.value.authStep != AuthStep.READY
             val granted = RootUtils.isRootAvailable()
             val recommended = detectRecommendedBuildConfig()
             val initialConfig = applyInitialBuildConfigIfNeeded(recommended)
@@ -477,13 +505,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     buildConfig = initialConfig ?: it.buildConfig
                 )
             }
-            if (shouldAdvance) advanceStep()
         }
     }
 
     fun requestRoot() {
         viewModelScope.launch {
-            val shouldAdvance = _uiState.value.authStep != AuthStep.READY
             _uiState.update { it.copy(isLoading = true) }
             val granted = RootUtils.requestRoot()
             val recommended = detectRecommendedBuildConfig()
@@ -496,14 +522,178 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     buildConfig = initialConfig ?: it.buildConfig
                 )
             }
-            if (shouldAdvance) advanceStep()
         }
     }
 
     fun setRuntimeNavigationEnabled(enabled: Boolean) {
-        _uiState.update { it.copy(runtimeNavigationEnabled = enabled) }
-        viewModelScope.launch { prefs.setRuntimeNavigationEnabled(enabled) }
-        if (enabled) refreshAbkRuntimeStatus()
+        setManagerSurfaceMode(if (enabled) MANAGER_SURFACE_ROOT else MANAGER_SURFACE_BUILD)
+    }
+
+    fun setManagerSurfaceMode(mode: String) {
+        val normalized = normalizeManagerSurfaceMode(mode)
+        _uiState.update {
+            it.copy(
+                managerSurfaceMode = normalized,
+                runtimeNavigationEnabled = normalized != MANAGER_SURFACE_BUILD
+            )
+        }
+        viewModelScope.launch { prefs.setManagerSurfaceMode(normalized) }
+        if (normalized != MANAGER_SURFACE_BUILD) {
+            refreshAbkRuntimeStatus()
+        }
+        if (normalized == MANAGER_SURFACE_LSP) {
+            refreshLspInstalledModules()
+            refreshLspScopeApps()
+        }
+        refreshManagerSettings(force = true)
+    }
+
+    private fun normalizeManagerSurfaceMode(mode: String): String = when (mode.trim().lowercase()) {
+        MANAGER_SURFACE_ROOT -> MANAGER_SURFACE_ROOT
+        MANAGER_SURFACE_LSP, "lp" -> MANAGER_SURFACE_LSP
+        else -> MANAGER_SURFACE_BUILD
+    }
+
+    fun refreshLspInstalledModules() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(lspInstalledModulesLoading = true, lspInstalledModulesError = null) }
+            val rootGranted = _uiState.value.rootGranted
+            val modules = withContext(Dispatchers.IO) {
+                runCatching {
+                    LspModuleUtils.listInstalledModules(getApplication()) to if (rootGranted) {
+                        LspManagerService.readPersistedState()
+                    } else {
+                        LspManagerService.PersistedState()
+                    }
+                }
+            }
+            _uiState.update {
+                modules.fold(
+                    onSuccess = { (list, persistedState) ->
+                        val merged = mergeLspInstalledModules(
+                            installed = list,
+                            bridgeStatus = it.lspBridgeStatus,
+                            persistedModules = persistedState.modules
+                        )
+                        val selectedPackage = resolveSelectedLspModule(
+                            current = it.selectedLspModulePackage,
+                            modules = merged
+                        )
+                        it.copy(
+                            lspInstalledModules = merged,
+                            lspInstalledModulesLoading = false,
+                            lspInstalledModulesError = null,
+                            selectedLspModulePackage = selectedPackage
+                        )
+                    },
+                    onFailure = { error ->
+                        it.copy(
+                            lspInstalledModulesLoading = false,
+                            lspInstalledModulesError = error.message?.takeIf { msg -> msg.isNotBlank() }
+                                ?: text(R.string.settings_manager_load_failed)
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    fun refreshLspScopeApps() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(lspScopeAppsLoading = true) }
+            val apps = withContext(Dispatchers.IO) {
+                runCatching { LspModuleUtils.listScopeApps(getApplication()) }
+            }
+            _uiState.update { state ->
+                apps.fold(
+                    onSuccess = { list ->
+                        state.copy(
+                            lspScopeApps = list,
+                            lspScopeAppsLoading = false
+                        )
+                    },
+                    onFailure = {
+                        state.copy(lspScopeAppsLoading = false)
+                    }
+                )
+            }
+        }
+    }
+
+    fun setSelectedLspModulePackage(packageName: String?) {
+        _uiState.update { state ->
+            state.copy(
+                selectedLspModulePackage = packageName
+                    ?.takeIf { target -> state.lspInstalledModules.any { it.packageName == target } }
+                    ?: resolveSelectedLspModule(state.selectedLspModulePackage, state.lspInstalledModules)
+            )
+        }
+    }
+
+    fun setLspModuleEnabled(packageName: String, enabled: Boolean) {
+        val cleanPackage = sanitizeLspPackageToken(packageName) ?: return
+        if (_uiState.value.lspModuleActionPackage != null) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(lspModuleActionPackage = cleanPackage, abkRuntimeError = null)
+            }
+            val result = withContext(Dispatchers.IO) {
+                LspManagerService.setModuleEnabled(cleanPackage, enabled)
+            }
+            _uiState.update {
+                it.copy(
+                    lspModuleActionPackage = null,
+                    abkRuntimeError = if (result.success) null else result.output.lastOrNull() ?: text(R.string.ru_not_active)
+                )
+            }
+            if (result.success) {
+                refreshAbkRuntimeStatus()
+                refreshLspInstalledModules()
+            }
+        }
+    }
+
+    fun setLspModuleScope(packageName: String, scopePackages: Collection<String>) {
+        val cleanPackage = sanitizeLspPackageToken(packageName) ?: return
+        if (_uiState.value.lspModuleActionPackage != null) return
+        val cleanedScope = scopePackages.mapNotNull(::sanitizeLspPackageToken).distinct().sorted()
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(lspModuleActionPackage = cleanPackage, abkRuntimeError = null)
+            }
+            val result = withContext(Dispatchers.IO) {
+                LspManagerService.setModuleScope(cleanPackage, cleanedScope)
+            }
+            _uiState.update {
+                it.copy(
+                    lspModuleActionPackage = null,
+                    abkRuntimeError = if (result.success) null else result.output.lastOrNull() ?: text(R.string.ru_not_active)
+                )
+            }
+            if (result.success) {
+                refreshAbkRuntimeStatus()
+                refreshLspInstalledModules()
+            }
+        }
+    }
+
+    fun syncLspBridgeConfiguration() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(abkRuntimeLoading = true, abkRuntimeError = null) }
+            val result = withContext(Dispatchers.IO) {
+                LspManagerService.syncBridgeFromPersistedState()
+            }
+            _uiState.update {
+                it.copy(
+                    abkRuntimeLoading = false,
+                    abkRuntimeError = if (result.success) null else result.output.lastOrNull() ?: text(R.string.ru_not_active)
+                )
+            }
+            if (result.success) {
+                refreshAbkRuntimeStatus()
+                refreshLspInstalledModules()
+            }
+        }
     }
 
     fun setWebViewDebugEnabled(enabled: Boolean) {
@@ -515,10 +705,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _uiState.update { it.copy(abkRuntimeLoading = true, abkRuntimeError = null) }
             val rootGranted = _uiState.value.rootGranted
-            val (access, runtimeStatus, runtimeError) = withContext(Dispatchers.IO) {
+            val preferLspBridge = _uiState.value.managerSurfaceMode == MANAGER_SURFACE_LSP
+            val (access, runtimeStatus, runtimeError, lspBridgeStatus, persistedLspState) = withContext(Dispatchers.IO) {
                 val managerAccess = resolveManagerAccess(rootGranted)
+                val persistedState = if (rootGranted) {
+                    LspManagerService.readPersistedState()
+                } else {
+                    LspManagerService.PersistedState()
+                }
+                if (rootGranted && preferLspBridge && managerAccess.hasNativeManagerPermission) {
+                    RootUtils.probeAndReportLspRuntimeState()
+                }
                 if (!managerAccess.hasNativeManagerPermission) {
-                    val snapshot = if (rootGranted) RootUtils.readManagerRuntimeSnapshot() else null
+                    val snapshot = if (rootGranted) RootUtils.readManagerRuntimeSnapshot(preferLspBridge) else null
                     val compatStatus = snapshot
                         ?.takeIf { it.manager.active }
                         ?.let {
@@ -528,32 +727,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 ksuModulesJson = it.ksuModulesJson
                             )
                         }
-                    return@withContext Triple(
+                    return@withContext Quintuple(
                         managerAccess,
                         compatStatus,
-                        managerAccessErrorMessage(managerAccess, rootGranted)
+                        managerAccessErrorMessage(managerAccess, rootGranted),
+                        snapshot?.controlStatusJson?.let(::parseLspBridgeControlState),
+                        persistedState
                     )
                 }
-                val snapshot = RootUtils.readManagerRuntimeSnapshot()
+                val snapshot = RootUtils.readManagerRuntimeSnapshot(preferLspBridge)
                 if (!snapshot.manager.active) {
-                    Triple(
+                    Quintuple(
                         managerAccess,
                         null as AbkRuntimeStatus?,
-                        snapshot.manager.diagnostics.firstOrNull()
+                        snapshot.manager.diagnostics.firstOrNull(),
+                        snapshot.controlStatusJson?.let(::parseLspBridgeControlState),
+                        persistedState
                     )
                 } else {
-                    Triple(
+                    Quintuple(
                         managerAccess,
                         mergeRuntimeStatus(
                             manager = snapshot.manager,
                             controlJson = snapshot.controlStatusJson,
                             ksuModulesJson = snapshot.ksuModulesJson
                         ),
-                        null as String?
+                        null as String?,
+                        snapshot.controlStatusJson?.let(::parseLspBridgeControlState),
+                        persistedState
                     )
                 }
             }
             _uiState.update {
+                val mergedLspModules = mergeLspInstalledModules(
+                    installed = it.lspInstalledModules,
+                    bridgeStatus = lspBridgeStatus,
+                    persistedModules = persistedLspState.modules
+                )
+                val selectedPackage = resolveSelectedLspModule(it.selectedLspModulePackage, mergedLspModules)
                 if (runtimeStatus != null) {
                     it.copy(
                         managerAccessState = access.toUiState(),
@@ -561,7 +772,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         hasNativeManagerPermission = access.hasNativeManagerPermission,
                         abkRuntimeStatus = runtimeStatus,
                         abkRuntimeLoading = false,
-                        abkRuntimeError = if (access.hasNativeManagerPermission) null else runtimeError
+                        abkRuntimeError = if (access.hasNativeManagerPermission) null else runtimeError,
+                        lspBridgeStatus = lspBridgeStatus,
+                        lspInstalledModules = mergedLspModules,
+                        selectedLspModulePackage = selectedPackage
                     )
                 } else {
                     it.copy(
@@ -570,7 +784,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         hasNativeManagerPermission = access.hasNativeManagerPermission,
                         abkRuntimeStatus = null,
                         abkRuntimeLoading = false,
-                        abkRuntimeError = runtimeError ?: text(R.string.runtime_manager_inactive)
+                        abkRuntimeError = runtimeError ?: text(R.string.runtime_manager_inactive),
+                        lspBridgeStatus = lspBridgeStatus,
+                        lspInstalledModules = mergedLspModules,
+                        selectedLspModulePackage = selectedPackage
                     )
                 }
             }
@@ -711,10 +928,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val kpmModules = parseKpmModules()
         val mergedModules = mergeRuntimeModules(controlModules, ksuModules, kpmModules)
         val runtimeBackendInfo = manager.toRuntimeInfo()
-        val managerInfo = controlStatus?.manager?.let { compilerManager ->
+        val controlManagerInfo = controlStatus?.manager?.let { compilerManager ->
             val extraCaps = when (manager.backend) {
                 "native" -> listOf("native_manager", "root_policy")
                 "su", "ksud" -> listOf("root_shell")
+                "lsp_bridge" -> listOf("abk_control")
                 else -> emptyList()
             }
             compilerManager.copy(
@@ -722,13 +940,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 capabilities = (compilerManager.capabilities + extraCaps).distinct(),
                 diagnostics = (compilerManager.diagnostics + manager.diagnostics).distinct()
             )
-        } ?: runtimeBackendInfo
+        }
+        val managerInfo = if (manager.backend == "lsp_bridge") {
+            runtimeBackendInfo.copy(
+                capabilities = (runtimeBackendInfo.capabilities + controlManagerInfo?.capabilities.orEmpty()).distinct(),
+                diagnostics = (runtimeBackendInfo.diagnostics + controlManagerInfo?.diagnostics.orEmpty()).distinct()
+            )
+        } else {
+            controlManagerInfo ?: runtimeBackendInfo
+        }
+        val compatBackendInfo = if (manager.backend == "lsp_bridge") {
+            controlManagerInfo
+        } else {
+            runtimeBackendInfo
+        }
         return (controlStatus ?: AbkRuntimeStatus()).copy(
             schema = maxOf(controlStatus?.schema ?: 0, 4),
             abkVersion = controlStatus?.abkVersion?.ifBlank { BuildConfig.VERSION_NAME } ?: BuildConfig.VERSION_NAME,
             workMode = resolveRuntimeWorkMode(controlStatus?.workMode, manager),
             manager = managerInfo,
-            runtimeBackend = runtimeBackendInfo,
+            runtimeBackend = compatBackendInfo,
             modules = mergedModules
         )
     }
@@ -1153,18 +1384,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return normalized
     }
 
-    private fun advanceStep() {
+    fun maybeShowInitialOobe() {
         val state = _uiState.value
-        when {
-            !state.isLoggedIn -> _uiState.update { it.copy(authStep = AuthStep.LOGIN) }
-            state.user == null -> {
-                _uiState.update { it.copy(authStep = AuthStep.LOGIN) }
-                viewModelScope.launch { fetchUserAndContinue() }
+        if (!state.termsAccepted || state.oobeCompleted || hasShownInitialOobeThisLaunch) return
+        hasShownInitialOobeThisLaunch = true
+        _uiState.update {
+            it.copy(
+                showOobe = true,
+                authStep = AuthStep.INTRO,
+                error = null
+            )
+        }
+    }
+
+    fun openBuildOobe() {
+        val state = _uiState.value
+        val nextStep = if (state.isLoggedIn && state.user != null) AuthStep.FORK_CHECK else AuthStep.LOGIN
+        _uiState.update {
+            it.copy(
+                showOobe = true,
+                authStep = nextStep,
+                error = null
+            )
+        }
+        if (state.isLoggedIn && state.user == null) {
+            viewModelScope.launch {
+                val user = fetchAuthenticatedUserAndStore() ?: return@launch
+                _uiState.update { it.copy(authStep = AuthStep.FORK_CHECK, user = user, isLoggedIn = true) }
+                checkFork(showSyncPrompt = true, closeOobeWhenReady = true)
             }
-            else -> {
-                _uiState.update { it.copy(authStep = AuthStep.FORK_CHECK) }
-                checkFork()
+        } else if (nextStep == AuthStep.FORK_CHECK) {
+            checkFork(showSyncPrompt = true, closeOobeWhenReady = true)
+        }
+    }
+
+    fun continueOobeToLogin() {
+        _uiState.update {
+            it.copy(
+                showOobe = true,
+                authStep = AuthStep.LOGIN,
+                error = null
+            )
+        }
+    }
+
+    fun skipOobe() {
+        viewModelScope.launch {
+            if (!_uiState.value.oobeCompleted) {
+                prefs.setOobeCompleted(true)
             }
+            closeOobe()
         }
     }
 
@@ -1202,10 +1471,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         when (tokenResp.error) {
                             null -> {
                                 val token = tokenResp.accessToken ?: continue
+                                hasRefreshedGitHubSessionThisLaunch = true
                                 prefs.saveToken(token)
                                 github.updateToken(token)
                                 _uiState.update { it.copy(isPollingToken = false) }
-                                fetchUserAndContinue()
+                                fetchUserAndContinueOobe()
                             }
                             "authorization_pending", "slow_down" -> {
                                 if (tokenResp.error == "slow_down") delay(5000)
@@ -1228,30 +1498,80 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun fetchUserAndContinue() {
+    private suspend fun fetchAuthenticatedUserAndStore(reportError: Boolean = true): GitHubUser? {
         when (val r = github.getAuthenticatedUser()) {
             is Result.Success -> {
                 val user = r.data
                 prefs.saveUsername(user.login)
                 prefs.saveAvatarUrl(user.avatarUrl)
                 _uiState.update { it.copy(user = user, isLoggedIn = true) }
-                advanceStep()
+                return user
             }
-            is Result.Error -> _uiState.update { it.copy(error = r.message) }
-            else -> {}
+            is Result.Error -> if (reportError) {
+                _uiState.update { it.copy(error = r.message) }
+            }
+            Result.Loading -> {}
         }
+        return null
+    }
+
+    private suspend fun refreshGitHubSessionOnLaunch(fetchUser: Boolean) {
+        val user = if (fetchUser || _uiState.value.user == null) {
+            fetchAuthenticatedUserAndStore(reportError = false)
+        } else {
+            _uiState.value.user
+        } ?: return
+        _uiState.update { it.copy(isLoggedIn = true, user = user) }
+        checkFork(showSyncPrompt = true, closeOobeWhenReady = false)
+    }
+
+    private suspend fun fetchUserAndContinueOobe() {
+        val user = fetchAuthenticatedUserAndStore() ?: return
+        _uiState.update {
+            it.copy(
+                user = user,
+                isLoggedIn = true,
+                showOobe = true,
+                authStep = AuthStep.FORK_CHECK
+            )
+        }
+        checkFork(showSyncPrompt = true, closeOobeWhenReady = true)
+    }
+
+    private fun closeOobe() {
+        _uiState.update {
+            it.copy(
+                showOobe = false,
+                authStep = AuthStep.INTRO,
+                deviceCode = null,
+                userCode = null,
+                verificationUri = null,
+                isPollingToken = false,
+                error = null
+            )
+        }
+    }
+
+    private fun completeOobe() {
+        if (!_uiState.value.oobeCompleted) {
+            viewModelScope.launch { prefs.setOobeCompleted(true) }
+        }
+        closeOobe()
     }
 
     fun logout() {
         viewModelScope.launch {
             prefs.clearAuth()
+            github.updateToken(null)
             hasCheckedWorkflowEnablementThisLaunch = false
+            hasRefreshedGitHubSessionThisLaunch = false
             _uiState.update {
                 MainUiState(
                     rootGranted = it.rootGranted,
-                    authStep = AuthStep.LOGIN,
+                    authStep = AuthStep.INTRO,
                     termsLoaded = it.termsLoaded,
                     termsAccepted = it.termsAccepted,
+                    oobeCompleted = it.oobeCompleted,
                     autoDownload = it.autoDownload,
                     notifyBuild = it.notifyBuild,
                     themeMode = it.themeMode,
@@ -1265,6 +1585,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     downloadMirrorBaseUrl = it.downloadMirrorBaseUrl,
                     prebuiltGkiEnabled = it.prebuiltGkiEnabled,
                     predictiveBackEnabled = it.predictiveBackEnabled,
+                    runtimeNavigationEnabled = it.runtimeNavigationEnabled,
+                    webViewDebugEnabled = it.webViewDebugEnabled,
                     runtimeModuleRepositories = it.runtimeModuleRepositories,
                     buildModuleRepositories = it.buildModuleRepositories
                 )
@@ -1274,17 +1596,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Fork Management ───────────────────────────────────────────────────
 
-    fun checkFork() {
+    fun checkFork(showSyncPrompt: Boolean = true, closeOobeWhenReady: Boolean = false) {
         val username = _uiState.value.user?.login ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    error = null,
+                    authStep = if (it.showOobe) AuthStep.FORK_CHECK else it.authStep
+                )
+            }
             val forkResult = github.getUserFork(
                 BuildConfig.SOURCE_REPO_OWNER, BuildConfig.SOURCE_REPO_NAME, username
             )
             when (forkResult) {
                 is Result.Success -> {
                     if (forkResult.data == null) {
-                        _uiState.update { it.copy(isLoading = false, forkRepo = null) }
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                forkRepo = null,
+                                behindBy = 0,
+                                showSyncPrompt = false
+                            )
+                        }
                     } else {
                         val fork = forkResult.data
                         val upstreamBranch = fork.parent?.defaultBranch ?: fork.defaultBranch
@@ -1302,11 +1637,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 isLoading = false,
                                 forkRepo = fork,
                                 behindBy = behind,
-                                showSyncDialog = behind > 0
+                                showSyncPrompt = showSyncPrompt && behind > 0
                             )
                         }
-                        ensureBuildWorkflowEnabled()
-                        if (behind == 0) finishSetup()
+                        onForkContextReady()
+                        if (closeOobeWhenReady) {
+                            completeOobe()
+                        }
                     }
                 }
                 is Result.Error -> _uiState.update { it.copy(isLoading = false, error = forkResult.message) }
@@ -1321,8 +1658,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             when (val r = github.forkRepo(BuildConfig.SOURCE_REPO_OWNER, BuildConfig.SOURCE_REPO_NAME)) {
                 is Result.Success -> {
                     prefs.saveForkRepoName(r.data.name)
-                    _uiState.update { it.copy(isLoading = false, forkRepo = r.data) }
-                    finishSetup()
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            forkRepo = r.data,
+                            behindBy = 0,
+                            showSyncPrompt = false
+                        )
+                    }
+                    onForkContextReady()
+                    completeOobe()
                 }
                 is Result.Error -> _uiState.update { it.copy(isLoading = false, error = r.message) }
                 else -> {}
@@ -1335,11 +1680,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val username = state.user?.login ?: return
         val fork = state.forkRepo ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, showSyncDialog = false) }
+            _uiState.update { it.copy(isLoading = true, showSyncPrompt = false) }
             when (val r = github.syncFork(username, fork.name, fork.defaultBranch)) {
                 is Result.Success -> {
                     _uiState.update { it.copy(isLoading = false, behindBy = 0) }
-                    finishSetup()
+                    onForkContextReady()
                 }
                 is Result.Error -> _uiState.update { it.copy(isLoading = false, error = r.message) }
                 else -> {}
@@ -1347,13 +1692,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun dismissSyncDialog() {
-        _uiState.update { it.copy(showSyncDialog = false) }
-        finishSetup()
+    fun dismissSyncPrompt() {
+        _uiState.update { it.copy(showSyncPrompt = false) }
     }
 
-    private fun finishSetup() {
-        _uiState.update { it.copy(authStep = AuthStep.READY) }
+    private fun onForkContextReady() {
         loadRecentRuns()
         ensureBuildWorkflowEnabled()
         processBuildQueue()
@@ -1446,6 +1789,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // ── Build ─────────────────────────────────────────────────────────────
 
     fun dispatchBuild(config: KernelBuildConfig) {
+        val state = _uiState.value
+        if (!state.isLoggedIn || state.user == null || state.forkRepo == null) {
+            _uiState.update { it.copy(error = text(R.string.vm_build_login_required)) }
+            return
+        }
         enqueueBuild(config)
     }
 
@@ -1467,7 +1815,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun processBuildQueue() {
         val snapshot = _uiState.value
-        if (!snapshot.isLoggedIn || snapshot.authStep != AuthStep.READY) return
+        if (!snapshot.isLoggedIn || snapshot.user == null || snapshot.forkRepo == null) return
         if (snapshot.buildQueueProcessing || buildQueueJob?.isActive == true) return
         val next = snapshot.buildQueue.firstOrNull { it.status == BuildQueueItemStatus.PENDING } ?: return
         val username = snapshot.user?.login ?: return
@@ -1799,7 +2147,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadPrebuiltGkiReleases(force: Boolean = false) {
         val state = _uiState.value
-        if (!state.prebuiltGkiEnabled || !state.isLoggedIn) return
+        if (!state.prebuiltGkiEnabled) return
         if (state.isLoadingPrebuiltGkiReleases || (!force && state.prebuiltGkiReleases.isNotEmpty())) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingPrebuiltGkiReleases = true, error = null) }
@@ -1838,7 +2186,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadPrebuiltGkiAssets(release: PrebuiltGkiRelease, force: Boolean = false) {
         val state = _uiState.value
-        if (!state.prebuiltGkiEnabled || !state.isLoggedIn) return
+        if (!state.prebuiltGkiEnabled) return
         if (release.id in state.loadingPrebuiltGkiAssetReleaseIds) return
         if (!force && state.prebuiltGkiAssetsByReleaseId.containsKey(release.id)) return
         viewModelScope.launch {
@@ -2536,6 +2884,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         return@withContext RootUtils.ShellResult(false, listOf(managerAccessErrorMessage(access, rootGranted)))
                     }
                     when (settingId) {
+                        MANAGER_SETTING_LSP_SAFE_MODE ->
+                            RootUtils.writeAbkControlCommand(if (checked) "lsp safe_mode on" else "lsp safe_mode off")
                         MANAGER_SETTING_KERNEL_UMOUNT -> RootUtils.setKsuFeatureEnabled("kernel_umount", checked)
                         MANAGER_SETTING_SULOG -> RootUtils.setKsuFeatureEnabled("sulog", checked)
                         MANAGER_SETTING_ADB_ROOT -> RootUtils.setKsuFeatureEnabled("adb_root", checked)
@@ -2556,6 +2906,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (result.success) {
                 refreshManagerSettings(force = true)
+                if (settingId == MANAGER_SETTING_LSP_SAFE_MODE) {
+                    refreshAbkRuntimeStatus()
+                }
             } else {
                 _uiState.update {
                     it.copy(
@@ -2901,15 +3254,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadManagerSettings(): ManagerSettingsLoad =
         runCatching {
-            if (!RootUtils.isNativeManagerActive()) {
+            val mode = _uiState.value.managerSurfaceMode
+            if (mode == MANAGER_SURFACE_BUILD) {
                 return@runCatching ManagerSettingsLoad()
             }
-            val snapshot = RootUtils.readManagerRuntimeSnapshot()
+            val snapshot = RootUtils.readManagerRuntimeSnapshot(mode == MANAGER_SURFACE_LSP)
             val manager = snapshot.manager.normalizedForManagerSettings()
             if (!manager.active) {
                 ManagerSettingsLoad()
             } else {
                 when {
+                    manager.isAbkLspBridge() -> ManagerSettingsLoad(
+                        backend = "lsp_bridge",
+                        title = "ABK LSP Bridge",
+                        items = buildLspBridgeSettings(snapshot.controlStatusJson)
+                    )
                     manager.isReSukiSu() -> ManagerSettingsLoad(
                         backend = "resukisu",
                         title = "ReSukiSU",
@@ -2937,6 +3296,191 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 error = error.message?.takeIf { it.isNotBlank() } ?: text(R.string.settings_manager_load_failed)
             )
         }
+
+    private fun buildLspBridgeSettings(controlJson: String?): List<ManagerSettingItem> {
+        val bridge = parseLspBridgeControlState(controlJson)
+        val subtitle = buildString {
+            append("开启后暂停 LSP bridge 注入。")
+            if (bridge == null) {
+                append(" 当前状态未同步，请先刷新。")
+            } else {
+                append(
+                    if (bridge.safeMode) {
+                        " 当前已处于安全模式。"
+                    } else {
+                        " 当前桥接处于活动状态。"
+                    }
+                )
+                append(" helper")
+                append(if (bridge.helperActive) "已激活" else "未激活")
+                append("，daemon")
+                append(if (bridge.daemonActive) "已激活" else "未激活")
+                append("，已托管模块 ${bridge.managedModuleCount} 个。")
+                append(" 目标规则 ${bridge.targetCount} 条，插件 ${bridge.pluginCount} 个。")
+                if (bridge.lastError.isNotBlank()) {
+                    append(" 最近错误：")
+                    append(bridge.lastError)
+                }
+            }
+        }
+        return listOf(
+            ManagerSettingItem(
+                id = MANAGER_SETTING_LSP_SAFE_MODE,
+                title = text(R.string.runtime_cap_safe_mode),
+                subtitle = subtitle,
+                checked = bridge?.safeMode == true
+            )
+        )
+    }
+
+    private fun parseLspBridgeControlState(controlJson: String?): LspBridgeStatus? =
+        runCatching {
+            val root = JSONObject(controlJson ?: return@runCatching null)
+            val lsp = root.optJSONObject("lsp_bridge")
+            val modules = root.optJSONArray("modules")
+            var bridgeModule: JSONObject? = null
+            if (modules != null) {
+                for (index in 0 until modules.length()) {
+                    val module = modules.optJSONObject(index) ?: continue
+                    if (module.optString("id") == "abk_lsp_bridge") {
+                        bridgeModule = module
+                        break
+                    }
+                }
+            }
+            if (lsp == null && bridgeModule == null) {
+                return@runCatching null
+            }
+            val diagnostics = buildList {
+                val lspDiagnostics = lsp?.optJSONArray("diagnostics")
+                if (lspDiagnostics != null) {
+                    for (index in 0 until lspDiagnostics.length()) {
+                        lspDiagnostics.optString(index)
+                            .trim()
+                            .takeIf { it.isNotBlank() }
+                            ?.let(::add)
+                    }
+                }
+                bridgeModule?.optString("description")
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let(::add)
+            }.distinct()
+            val logs = buildList {
+                val logEntries = lsp?.optJSONArray("logs")
+                if (logEntries != null) {
+                    for (index in 0 until logEntries.length()) {
+                        logEntries.optString(index)
+                            .trim()
+                            .takeIf { it.isNotBlank() }
+                            ?.let(::add)
+                    }
+                }
+            }
+            val managedModules = buildList {
+                val managedEntries = lsp?.optJSONArray("managed_modules")
+                if (managedEntries != null) {
+                    for (index in 0 until managedEntries.length()) {
+                        val module = managedEntries.optJSONObject(index) ?: continue
+                        add(
+                            LspBridgeManagedModule(
+                                packageName = module.optString("package").trim(),
+                                enabled = module.optBoolean("enabled", false),
+                                selectedScope = module.optString("scope_csv")
+                                    .split(',')
+                                    .map { it.trim() }
+                                    .filter { it.isNotBlank() },
+                                loaded = module.optBoolean("loaded", false),
+                                hookActive = module.optBoolean("hook_active", false),
+                                lastError = module.optString("last_error").trim()
+                            )
+                        )
+                    }
+                }
+            }
+            val targetStates = buildList {
+                val targetEntries = lsp?.optJSONArray("target_states")
+                if (targetEntries != null) {
+                    for (index in 0 until targetEntries.length()) {
+                        val target = targetEntries.optJSONObject(index) ?: continue
+                        add(
+                            LspTargetState(
+                                packageName = target.optString("package").trim(),
+                                processName = target.optString("process").trim(),
+                                pid = target.optInt("pid", 0),
+                                uid = target.optInt("uid", 0),
+                                payloadInjected = target.optBoolean("payload_injected", false),
+                                runtimeReady = target.optBoolean("runtime_ready", false),
+                                hookActive = target.optBoolean("hook_active", false),
+                                loadedModuleCount = target.optInt("loaded_module_count", 0),
+                                activeHookCount = target.optInt("active_hook_count", 0),
+                                lastError = target.optString("last_error").trim()
+                            )
+                        )
+                    }
+                }
+            }
+            LspBridgeStatus(
+                safeMode = when {
+                    lsp?.has("safe_mode") == true -> lsp.optBoolean("safe_mode")
+                    bridgeModule != null -> !bridgeModule.optBoolean("enabled", true)
+                    else -> false
+                },
+                helperActive = lsp?.optBoolean("helper_active") == true,
+                daemonActive = lsp?.optBoolean("daemon_active") == true,
+                zygoteAttached = lsp?.optBoolean("zygote_attached") == true,
+                payloadReady = lsp?.optBoolean("payload_ready") == true,
+                runtimeReady = lsp?.optBoolean("runtime_ready") == true,
+                targetCount = lsp?.optInt("target_count") ?: 0,
+                pluginCount = lsp?.optInt("plugin_count") ?: 0,
+                managedModuleCount = lsp?.optInt("managed_module_count") ?: managedModules.size,
+                scopeCount = lsp?.optInt("scope_count") ?: managedModules.sumOf { it.selectedScope.size },
+                targetStateCount = lsp?.optInt("target_state_count") ?: targetStates.size,
+                loadedModuleCount = lsp?.optInt("loaded_module_count") ?: managedModules.count { it.loaded },
+                activeHookCount = lsp?.optInt("active_hook_count") ?: managedModules.count { it.hookActive },
+                protocolVersion = lsp?.optInt("protocol_version") ?: 0,
+                lastError = lsp?.optString("last_error").orEmpty().trim(),
+                diagnostics = diagnostics,
+                logs = logs,
+                managedModules = managedModules,
+                targetStates = targetStates
+            )
+        }.getOrNull()
+
+    private fun mergeLspInstalledModules(
+        installed: List<LspInstalledModule>,
+        bridgeStatus: LspBridgeStatus?,
+        persistedModules: List<LspBridgeManagedModule> = emptyList()
+    ): List<LspInstalledModule> {
+        val managed = bridgeStatus?.managedModules.orEmpty().associateBy { it.packageName }
+        val persisted = persistedModules.associateBy { it.packageName }
+        return installed.map { module ->
+            val liveState = managed[module.packageName]
+            val persistedState = persisted[module.packageName]
+            module.copy(
+                enabled = persistedState?.enabled ?: liveState?.enabled ?: false,
+                selectedScope = persistedState?.selectedScope ?: liveState?.selectedScope.orEmpty(),
+                loaded = liveState?.loaded ?: persistedState?.loaded ?: false,
+                hookActive = liveState?.hookActive ?: persistedState?.hookActive ?: false,
+                lastError = liveState?.lastError?.takeIf { it.isNotBlank() }
+                    ?: persistedState?.lastError.orEmpty()
+            )
+        }
+    }
+
+    private fun resolveSelectedLspModule(
+        current: String?,
+        modules: List<LspInstalledModule>
+    ): String? {
+        current?.takeIf { selected -> modules.any { it.packageName == selected } }?.let { return it }
+        return modules.firstOrNull()?.packageName
+    }
+
+    private fun sanitizeLspPackageToken(value: String?): String? {
+        val clean = value?.trim().orEmpty()
+        if (clean.isBlank()) return null
+        return clean.takeIf { it.matches(Regex("[A-Za-z0-9._:-]+")) }
+    }
 
     private fun buildReSukiSuSettings(): List<ManagerSettingItem> {
         val suCompat = RootUtils.readKsuFeature("su_compat")
@@ -3222,6 +3766,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "official" in text ||
             (backend == "native" && "native_manager" in capabilities) ||
             (backend == "ksud" && capabilities.any { it == "features" || it == "module_control" || it == "modules" })
+    }
+
+    private fun RootUtils.ManagerRuntimeProbe.isAbkLspBridge(): Boolean {
+        val text = listOf(displayName, variant, version, backend).joinToString(" ").lowercase()
+        return "abk lsp" in text ||
+            "lsp bridge" in text ||
+            backend == "lsp_bridge" ||
+            capabilities.any { it.equals("lsp_bridge", ignoreCase = true) } ||
+            capabilities.any { it.equals("zygote_helper", ignoreCase = true) }
     }
 
     private fun RootUtils.ManagerRuntimeProbe.normalizedForManagerSettings(): RootUtils.ManagerRuntimeProbe =
@@ -4966,6 +5519,7 @@ private val ACTIVE_BUILD_STATUSES = setOf(BuildStatus.QUEUED, BuildStatus.IN_PRO
 private const val MANAGER_SETTING_APP_PROFILE_TEMPLATES = "app_profile_templates"
 private const val MANAGER_SETTING_TOOLS = "manager_tools"
 private const val MANAGER_SETTING_KPM = "kpm"
+private const val MANAGER_SETTING_LSP_SAFE_MODE = "lsp_safe_mode"
 private const val MANAGER_SETTING_SU_COMPAT = "su_compat"
 private const val MANAGER_SETTING_KERNEL_UMOUNT = "kernel_umount"
 private const val MANAGER_SETTING_ADB_ROOT = "adb_root"

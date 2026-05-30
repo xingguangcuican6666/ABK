@@ -1119,6 +1119,7 @@ private fun AppProfileTemplateSettingsScreen(
 }
 
 private fun managerSettingIcon(id: String) = when (id) {
+    "lsp_safe_mode" -> Icons.Default.Shield
     "app_profile_templates" -> Icons.Default.Apps
     "manager_tools" -> Icons.Default.Build
     "kpm" -> Icons.Default.Extension

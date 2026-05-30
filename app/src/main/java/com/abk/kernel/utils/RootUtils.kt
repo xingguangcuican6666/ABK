@@ -5,10 +5,13 @@ import com.abk.kernel.R
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.database.sqlite.SQLiteDatabase
 import android.os.Build
 import android.os.Environment
+import android.os.Process
 import android.util.Base64
 import android.util.Log
+import com.abk.kernel.data.model.LspBridgeManagedModule
 import com.abk.kernel.data.model.RootGrantApp
 import com.abk.kernel.data.model.RootGrantProfile
 import com.topjohnwu.superuser.CallbackList
@@ -22,6 +25,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.Collections
 import java.util.Properties
+import java.util.zip.ZipFile
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipEntry
@@ -46,8 +50,11 @@ object RootUtils {
     private const val ABK_META_MOUNT_WEB_ROOT = "/data/adb/modules/meta-abk-mount/webroot"
     private const val ABK_META_MOUNT_SYSFS_ENABLED = "/sys/kernel/abk_meta_mount/enabled"
     private const val ABK_META_MOUNT_SYSFS_PREPARE = "/sys/kernel/abk_meta_mount/prepare"
+    private const val ABK_LSP_BRIDGE_DIR = "/data/adb/abk/lsp_bridge"
+    private const val LSPOSED_CONFIG_DB = "/data/adb/lspd/config/modules_config.db"
     private val BOOT_PATCH_PARTITIONS = listOf("init_boot", "boot", "vendor_boot")
     private val KSU_FEATURE_NAME_REGEX = Regex("^[a-z0-9_]+$")
+    private val ABK_LSP_FILE_NAME_REGEX = Regex("^[A-Za-z0-9._-]+$")
     private var appContext: Context? = null
     private val bundledKsudLock = Any()
     @Volatile
@@ -565,13 +572,38 @@ object RootUtils {
         }
     }
 
-    fun readManagerRuntimeSnapshot(): ManagerRuntimeSnapshot {
-        val manager = detectManagerRuntime()
+    private fun readAbkLspBridgeStatus(): ShellResult? {
+        val control = readAbkControlStatus()
+        if (!control.success) return null
+        val body = control.output.joinToString("\n").trim()
+        if (!body.startsWith("{")) return null
+        return runCatching {
+            val root = JSONObject(body)
+            val modules = root.optJSONArray("modules") ?: return@runCatching null
+            for (index in 0 until modules.length()) {
+                val item = modules.optJSONObject(index) ?: continue
+                if (item.optString("id") == "abk_lsp_bridge") {
+                    return@runCatching ShellResult(true, listOf(body))
+                }
+            }
+            null
+        }.getOrNull()
+    }
+
+    fun readManagerRuntimeSnapshot(preferLspBridge: Boolean = true): ManagerRuntimeSnapshot {
+        val manager = detectManagerRuntime(preferLspBridge)
         if (!manager.active) {
             return ManagerRuntimeSnapshot(manager = manager)
         }
 
-        val control = if (manager.workMode == "lkm") {
+        val control = if (manager.backend == "lsp_bridge") {
+            readAbkLspBridgeStatus()
+                ?.takeIf { it.success }
+                ?.output
+                ?.joinToString("\n")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() && it.startsWith("{") }
+        } else if (manager.workMode == "lkm") {
             null
         } else {
             readAbkControlStatus().takeIf { it.success }
@@ -880,6 +912,160 @@ object RootUtils {
         }
     }
 
+    fun readLspBridgeDataFile(fileName: String): ShellResult {
+        val cleanName = fileName.trim()
+        if (!cleanName.matches(ABK_LSP_FILE_NAME_REGEX)) {
+            return ShellResult(false, listOf("invalid LSP bridge file name"))
+        }
+        val safePath = shellQuote("$ABK_LSP_BRIDGE_DIR/$cleanName")
+        val script = """
+            set -e
+            file=$safePath
+            [ -f "${'$'}file" ] || exit 3
+            base64 "${'$'}file" 2>/dev/null | tr -d '\n'
+        """.trimIndent()
+        val result = execRootScript(script, timeoutSeconds = 15L)
+        if (!result.success) return result
+        val encoded = result.output.joinToString("").trim()
+        val decoded = runCatching {
+            if (encoded.isBlank()) "" else String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8)
+        }.getOrElse { error ->
+            return ShellResult(false, listOf(error.message ?: "failed to decode LSP bridge file"))
+        }
+        return ShellResult(true, listOf(decoded))
+    }
+
+    fun writeLspBridgeDataFile(fileName: String, content: String): ShellResult {
+        val cleanName = fileName.trim()
+        if (!cleanName.matches(ABK_LSP_FILE_NAME_REGEX)) {
+            return ShellResult(false, listOf("invalid LSP bridge file name"))
+        }
+        val encoded = Base64.encodeToString(content.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+        val safeDir = shellQuote(ABK_LSP_BRIDGE_DIR)
+        val safeFile = shellQuote("$ABK_LSP_BRIDGE_DIR/$cleanName")
+        val safeTmp = shellQuote("$ABK_LSP_BRIDGE_DIR/.$cleanName.tmp")
+        val safeEncoded = shellQuote(encoded)
+        val script = """
+            set -e
+            dir=$safeDir
+            file=$safeFile
+            tmp=$safeTmp
+            mkdir -p "${'$'}dir"
+            chmod 0700 "${'$'}dir" 2>/dev/null || true
+            printf %s $safeEncoded | base64 -d > "${'$'}tmp"
+            chmod 0600 "${'$'}tmp" 2>/dev/null || true
+            mv "${'$'}tmp" "${'$'}file"
+        """.trimIndent()
+        return execRootScript(script, timeoutSeconds = 15L)
+    }
+
+    fun appendLspBridgeLog(line: String): ShellResult {
+        val trimmed = line.trim().take(512)
+        if (trimmed.isBlank()) return ShellResult(true, emptyList())
+        val safeDir = shellQuote(ABK_LSP_BRIDGE_DIR)
+        val safeLog = shellQuote("$ABK_LSP_BRIDGE_DIR/runtime.log")
+        val safeLine = shellQuote(trimmed)
+        val script = """
+            set -e
+            dir=$safeDir
+            log=$safeLog
+            mkdir -p "${'$'}dir"
+            chmod 0700 "${'$'}dir" 2>/dev/null || true
+            printf '%s %s\n' "${'$'}(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || echo unknown-time)" $safeLine >> "${'$'}log"
+            chmod 0600 "${'$'}log" 2>/dev/null || true
+        """.trimIndent()
+        return execRootScript(script, timeoutSeconds = 15L)
+    }
+
+    fun probeAndReportLspRuntimeState(): ShellResult {
+        val probe = probeOfficialLsposedRuntime()
+        val state = parseShellKeyValueOutput(probe.output)
+        val modulePresent = state["module_present"] == "1"
+        val payloadAvailable = state["payload_available"] == "1"
+        val zygoteRunning = state["zygote_running"] == "1"
+        val daemonActive = state["daemon_active"] == "1"
+        val payloadReady = modulePresent && payloadAvailable
+        val runtimeReady = payloadReady && zygoteRunning && daemonActive
+
+        val outputs = mutableListOf<String>()
+        outputs += probe.output
+        if (!isNativeManagerActive()) {
+            outputs += "abk_control unavailable; runtime probe was not reported to kernel bridge"
+            return ShellResult(false, outputs)
+        }
+
+        val commands = buildList {
+            add(if (payloadReady) "lsp helper active" else "lsp helper inactive")
+            add(if (payloadReady) "lsp payload ready" else "lsp payload detached")
+            add(if (zygoteRunning) "lsp zygote attached" else "lsp zygote detached")
+            add(if (daemonActive) "lsp daemon active" else "lsp daemon inactive")
+            add(if (runtimeReady) "lsp runtime ready" else "lsp runtime not_ready")
+        }
+        var success = probe.success
+        commands.forEach { command ->
+            val result = writeAbkControlCommand(command)
+            success = success && result.success
+            if (!result.success) outputs += "failed: $command"
+            outputs += result.output
+        }
+
+        val summary = "official LSPosed runtime: module=${state["module_dir"].orEmpty().ifBlank { "absent" }}, " +
+            "payload=${if (payloadReady) "ready" else "not_ready"}, " +
+            "daemon=${if (daemonActive) "active" else "inactive"}, " +
+            "zygote=${if (zygoteRunning) "running" else "missing"}"
+        appendLspBridgeLog(summary)
+        outputs += summary
+        return ShellResult(success, outputs)
+    }
+
+    fun syncOfficialLsposedDatabaseFromPersistedState(
+        modules: List<LspBridgeManagedModule>
+    ): ShellResult {
+        val context = appContext
+            ?: return ShellResult(false, listOf("application context is not initialized"))
+        val tempDir = File(context.cacheDir, "lsposed-sync")
+        if (!tempDir.exists() && !tempDir.mkdirs()) {
+            return ShellResult(false, listOf("failed to create LSPosed sync cache"))
+        }
+        val tempDb = File(tempDir, "modules_config.db")
+        val outputs = mutableListOf<String>()
+        val rows = modules.mapNotNull { module ->
+            val apkPath = resolveOfficialLsposedModuleApkPath(module.packageName)
+            if (apkPath == null) {
+                outputs += "skip ${module.packageName}: installed Xposed module APK not found"
+                null
+            } else {
+                OfficialLsposedModuleRow(
+                    packageName = module.packageName,
+                    apkPath = apkPath,
+                    enabled = module.enabled,
+                    scopes = module.selectedScope
+                )
+            }
+        }
+
+        val prepare = prepareOfficialLsposedDatabase(tempDb)
+        outputs += prepare.output
+        if (!prepare.success) {
+            return ShellResult(false, outputs)
+        }
+
+        return runCatching {
+            writeOfficialLsposedDatabase(tempDb, rows)
+            val commit = commitOfficialLsposedDatabase(tempDb)
+            outputs += commit.output
+            if (commit.success) {
+                outputs += "synced ${rows.size} module(s) to official LSPosed config"
+                probeAndReportLspRuntimeState().also { probe ->
+                    outputs += probe.output
+                }
+            }
+            ShellResult(commit.success, outputs)
+        }.getOrElse { error ->
+            ShellResult(false, outputs + (error.message ?: error::class.java.simpleName))
+        }
+    }
+
     fun setAbkMetaMountEnabled(enabled: Boolean): ShellResult {
         val ensureResult = ensureAbkMetaMountPlaceholder(force = true)
         if (!ensureResult.success) return ensureResult
@@ -1063,6 +1249,13 @@ object RootUtils {
     }
 
     data class ShellResult(val success: Boolean, val output: List<String>)
+
+    private data class OfficialLsposedModuleRow(
+        val packageName: String,
+        val apkPath: String,
+        val enabled: Boolean,
+        val scopes: List<String>
+    )
 
     data class BootPatchResult(
         val success: Boolean,
@@ -1357,8 +1550,302 @@ object RootUtils {
         return ShellResult(result.isSuccess, lines)
     }
 
-    private fun detectManagerRuntime(): ManagerRuntimeProbe {
+    private fun probeOfficialLsposedRuntime(): ShellResult {
+        val script = """
+            set +e
+            module_dir=""
+            module_present=0
+            payload_available=0
+            zygote_running=0
+            daemon_active=0
+            daemon_pid=""
+            service_started=0
+            module_version=""
+
+            for candidate in \
+                /data/adb/modules/zygisk_lsposed \
+                /data/adb/modules/riru_lsposed \
+                /data/adb/modules/lsposed \
+                /data/adb/modules/*_lsposed \
+                /data/adb/modules_update/zygisk_lsposed \
+                /data/adb/modules_update/riru_lsposed
+            do
+                [ -d "${'$'}candidate" ] || continue
+                [ -f "${'$'}candidate/remove" ] && continue
+                [ -f "${'$'}candidate/disable" ] && continue
+                module_dir="${'$'}candidate"
+                module_present=1
+                break
+            done
+
+            if [ "${'$'}module_present" = 1 ]; then
+                [ -f "${'$'}module_dir/module.prop" ] && module_version=${'$'}(grep '^version=' "${'$'}module_dir/module.prop" 2>/dev/null | head -n 1 | cut -d= -f2-)
+                if [ -f "${'$'}module_dir/daemon.apk" ] && [ -f "${'$'}module_dir/daemon" ]; then
+                    payload_available=1
+                fi
+                if ls "${'$'}module_dir"/zygisk/*.so >/dev/null 2>&1; then
+                    payload_available=1
+                fi
+                if ls "${'$'}module_dir"/riru/lib*/liblspd.so >/dev/null 2>&1; then
+                    payload_available=1
+                fi
+            fi
+
+            find_lspd_pid() {
+                pid=${'$'}(pidof lspd 2>/dev/null | sed 's/[[:space:]].*//')
+                if [ -n "${'$'}pid" ]; then
+                    printf '%s\n' "${'$'}pid"
+                    return
+                fi
+                for proc in /proc/[0-9]*; do
+                    [ -r "${'$'}proc/cmdline" ] || continue
+                    cmd=${'$'}(tr '\000' ' ' < "${'$'}proc/cmdline" 2>/dev/null)
+                    case "${'$'}cmd" in
+                        *org.lsposed.lspd.Main*|*--nice-name=lspd*)
+                            printf '%s\n' "${'$'}{proc##*/}"
+                            return
+                            ;;
+                    esac
+                done
+            }
+
+            if pidof zygote64 zygote >/dev/null 2>&1 || [ -S /dev/socket/zygote ]; then
+                zygote_running=1
+            fi
+
+            daemon_pid=${'$'}(find_lspd_pid)
+            if [ -n "${'$'}daemon_pid" ]; then
+                daemon_active=1
+            elif [ "${'$'}module_present" = 1 ] && [ -f "${'$'}module_dir/service.sh" ]; then
+                ( cd "${'$'}module_dir" && sh ./service.sh --system-server-max-retry=-1 >/dev/null 2>&1 ) &
+                service_started=1
+                sleep 1
+                daemon_pid=${'$'}(find_lspd_pid)
+                [ -n "${'$'}daemon_pid" ] && daemon_active=1
+            fi
+
+            config_db=0
+            [ -f ${shellQuote(LSPOSED_CONFIG_DB)} ] && config_db=1
+            printf 'module_present=%s\n' "${'$'}module_present"
+            printf 'module_dir=%s\n' "${'$'}module_dir"
+            printf 'module_version=%s\n' "${'$'}module_version"
+            printf 'payload_available=%s\n' "${'$'}payload_available"
+            printf 'zygote_running=%s\n' "${'$'}zygote_running"
+            printf 'daemon_active=%s\n' "${'$'}daemon_active"
+            printf 'daemon_pid=%s\n' "${'$'}daemon_pid"
+            printf 'service_started=%s\n' "${'$'}service_started"
+            printf 'config_db=%s\n' "${'$'}config_db"
+            exit 0
+        """.trimIndent()
+        return execRootScript(script, timeoutSeconds = 20L)
+    }
+
+    private fun prepareOfficialLsposedDatabase(tempDb: File): ShellResult {
+        tempDb.delete()
+        val parent = tempDb.parentFile ?: return ShellResult(false, listOf("invalid LSPosed sync cache path"))
+        val safeParent = shellQuote(parent.absolutePath)
+        val safeTempDb = shellQuote(tempDb.absolutePath)
+        val safeSourceDb = shellQuote(LSPOSED_CONFIG_DB)
+        val appUid = Process.myUid()
+        val script = """
+            set -e
+            mkdir -p $safeParent
+            module_present=0
+            for candidate in /data/adb/modules/zygisk_lsposed /data/adb/modules/riru_lsposed /data/adb/modules/lsposed /data/adb/modules/*_lsposed; do
+                [ -d "${'$'}candidate" ] || continue
+                [ -f "${'$'}candidate/remove" ] && continue
+                [ -f "${'$'}candidate/disable" ] && continue
+                module_present=1
+                break
+            done
+            if [ -f $safeSourceDb ]; then
+                cp -f $safeSourceDb $safeTempDb
+                [ -f $safeSourceDb-wal ] && cp -f $safeSourceDb-wal $safeTempDb-wal || true
+                [ -f $safeSourceDb-shm ] && cp -f $safeSourceDb-shm $safeTempDb-shm || true
+                echo "copied official LSPosed config DB"
+            elif [ "${'$'}module_present" = 1 ]; then
+                : > $safeTempDb
+                echo "created official LSPosed config DB"
+            else
+                echo "official LSPosed module/config not found"
+                exit 4
+            fi
+            chown $appUid:$appUid $safeTempDb $safeTempDb-wal $safeTempDb-shm 2>/dev/null || true
+            chmod 0600 $safeTempDb $safeTempDb-wal $safeTempDb-shm 2>/dev/null || true
+        """.trimIndent()
+        return execRootScript(script, timeoutSeconds = 15L)
+    }
+
+    private fun commitOfficialLsposedDatabase(tempDb: File): ShellResult {
+        val safeTempDb = shellQuote(tempDb.absolutePath)
+        val safeSourceDb = shellQuote(LSPOSED_CONFIG_DB)
+        val script = """
+            set -e
+            src=$safeTempDb
+            dst=$safeSourceDb
+            [ -f "${'$'}src" ] || { echo "temporary LSPosed config DB missing"; exit 4; }
+            mkdir -p /data/adb/lspd/config
+            if [ -f "${'$'}dst" ]; then
+                cp -af "${'$'}dst" "${'$'}dst.abk.bak" 2>/dev/null || true
+            fi
+            rm -f "${'$'}dst-wal" "${'$'}dst-shm"
+            cp -f "${'$'}src" "${'$'}dst"
+            chown 0:0 "${'$'}dst" 2>/dev/null || true
+            chmod 0600 "${'$'}dst" 2>/dev/null || true
+            restorecon "${'$'}dst" 2>/dev/null || chcon u:object_r:system_file:s0 "${'$'}dst" 2>/dev/null || true
+            killall lspd 2>/dev/null || true
+            restarted=0
+            for service in /data/adb/modules/zygisk_lsposed/service.sh /data/adb/modules/riru_lsposed/service.sh /data/adb/modules/lsposed/service.sh /data/adb/modules/*_lsposed/service.sh; do
+                [ -f "${'$'}service" ] || continue
+                moddir=${'$'}{service%/*}
+                [ -f "${'$'}moddir/remove" ] && continue
+                [ -f "${'$'}moddir/disable" ] && continue
+                ( cd "${'$'}moddir" && sh ./service.sh --system-server-max-retry=-1 >/dev/null 2>&1 ) &
+                echo "restarted lspd via ${'$'}service"
+                restarted=1
+                break
+            done
+            [ "${'$'}restarted" = 1 ] || echo "official LSPosed service script not found; config will apply after next daemon start"
+        """.trimIndent()
+        return execRootScript(script, timeoutSeconds = 20L)
+    }
+
+    private fun writeOfficialLsposedDatabase(
+        dbFile: File,
+        modules: List<OfficialLsposedModuleRow>
+    ) {
+        val db = SQLiteDatabase.openDatabase(
+            dbFile.absolutePath,
+            null,
+            SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.CREATE_IF_NECESSARY
+        )
+        try {
+            db.rawQuery("PRAGMA journal_mode=DELETE", null).use { cursor ->
+                cursor.moveToFirst()
+            }
+            db.execSQL("PRAGMA foreign_keys=ON")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS modules (" +
+                    "mid integer PRIMARY KEY AUTOINCREMENT," +
+                    "module_pkg_name text NOT NULL UNIQUE," +
+                    "apk_path text NOT NULL," +
+                    "enabled BOOLEAN DEFAULT 0 CHECK (enabled IN (0, 1))" +
+                    ")"
+            )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS scope (" +
+                    "mid integer," +
+                    "app_pkg_name text NOT NULL," +
+                    "user_id integer NOT NULL," +
+                    "PRIMARY KEY (mid, app_pkg_name, user_id)," +
+                    "CONSTRAINT scope_module_constraint FOREIGN KEY (mid) REFERENCES modules (mid) ON DELETE CASCADE" +
+                    ")"
+            )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS configs (" +
+                    "module_pkg_name text NOT NULL," +
+                    "user_id integer NOT NULL," +
+                    "`group` text NOT NULL," +
+                    "`key` text NOT NULL," +
+                    "data blob NOT NULL," +
+                    "PRIMARY KEY (module_pkg_name, user_id, `group`, `key`)," +
+                    "CONSTRAINT config_module_constraint FOREIGN KEY (module_pkg_name) REFERENCES modules (module_pkg_name) ON DELETE CASCADE" +
+                    ")"
+            )
+            db.beginTransaction()
+            try {
+                modules.forEach { module ->
+                    db.execSQL(
+                        "INSERT OR IGNORE INTO modules(module_pkg_name, apk_path, enabled) VALUES(?, ?, ?)",
+                        arrayOf<Any>(module.packageName, module.apkPath, if (module.enabled) 1 else 0)
+                    )
+                    db.execSQL(
+                        "UPDATE modules SET apk_path = ?, enabled = ? WHERE module_pkg_name = ?",
+                        arrayOf<Any>(module.apkPath, if (module.enabled) 1 else 0, module.packageName)
+                    )
+                    val mid = queryOfficialLsposedModuleId(db, module.packageName) ?: return@forEach
+                    db.execSQL("DELETE FROM scope WHERE mid = ?", arrayOf<Any>(mid))
+                    module.scopes
+                        .mapNotNull(::parseOfficialLsposedScope)
+                        .distinct()
+                        .forEach { (packageName, userId) ->
+                            db.execSQL(
+                                "INSERT OR IGNORE INTO scope(mid, app_pkg_name, user_id) VALUES(?, ?, ?)",
+                                arrayOf<Any>(mid, packageName, userId)
+                            )
+                        }
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+            db.rawQuery("PRAGMA wal_checkpoint(FULL)", null).use { cursor ->
+                cursor.moveToFirst()
+            }
+        } finally {
+            db.close()
+        }
+    }
+
+    private fun queryOfficialLsposedModuleId(db: SQLiteDatabase, packageName: String): Long? {
+        db.rawQuery("SELECT mid FROM modules WHERE module_pkg_name = ?", arrayOf(packageName)).use { cursor ->
+            return if (cursor.moveToFirst()) cursor.getLong(0) else null
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun resolveOfficialLsposedModuleApkPath(packageName: String): String? {
+        val context = appContext ?: return null
+        val info = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getApplicationInfo(
+                    packageName,
+                    PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
+                )
+            } else {
+                context.packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
+            }
+        }.getOrNull() ?: return null
+        val splitSourceDirs = info.splitSourceDirs ?: emptyArray()
+        val apks = (splitSourceDirs.toList() + info.sourceDir)
+            .filter { it.isNotBlank() }
+            .distinct()
+        return apks.firstOrNull { apk ->
+            runCatching {
+                ZipFile(apk).use { zip ->
+                    zip.getEntry("META-INF/xposed/java_init.list") != null ||
+                        zip.getEntry("assets/xposed_init") != null
+                }
+            }.getOrDefault(false)
+        }
+    }
+
+    private fun parseOfficialLsposedScope(raw: String): Pair<String, Int>? {
+        val clean = raw.trim()
+        if (clean.isBlank()) return null
+        val match = Regex("""^u?(\d+):(.+)$""").matchEntire(clean)
+        val packageName = match?.groupValues?.getOrNull(2)?.trim() ?: clean
+        val userId = match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+        if (packageName == "system" && userId != 0) return null
+        if (!packageName.matches(Regex("[A-Za-z0-9._:-]+"))) return null
+        return packageName to userId
+    }
+
+    private fun parseShellKeyValueOutput(lines: List<String>): Map<String, String> =
+        lines.mapNotNull { line ->
+            val index = line.indexOf('=')
+            if (index <= 0) null else line.substring(0, index).trim() to line.substring(index + 1).trim()
+        }.toMap()
+
+    private fun detectManagerRuntime(preferLspBridge: Boolean = true): ManagerRuntimeProbe {
         val nativeRuntime = detectNativeManagerRuntime()
+        if (preferLspBridge) {
+            val lspBridgeRuntime = detectLspBridgeRuntime(nativeRuntime)
+            if (lspBridgeRuntime != null) {
+                return lspBridgeRuntime
+            }
+        }
+
         if (nativeRuntime?.active == true) {
             return nativeRuntime
         }
@@ -1371,6 +1858,65 @@ object RootUtils {
         return nativeRuntime ?: ManagerRuntimeProbe(
             diagnostics = listOf(tr(R.string.ru_no_manager_interface))
         )
+    }
+
+    private fun detectLspBridgeRuntime(
+        nativeRuntime: ManagerRuntimeProbe?
+    ): ManagerRuntimeProbe? {
+        if (nativeRuntime?.active != true) return null
+        val raw = readAbkLspBridgeStatus()
+            ?.takeIf { it.success }
+            ?.output
+            ?.joinToString("\n")
+            ?.trim()
+            ?.takeIf { it.startsWith("{") }
+            ?: return null
+
+        return runCatching {
+            val root = JSONObject(raw)
+            val modules = root.optJSONArray("modules") ?: return@runCatching null
+            var module: JSONObject? = null
+            for (index in 0 until modules.length()) {
+                val item = modules.optJSONObject(index) ?: continue
+                if (item.optString("id") == "abk_lsp_bridge") {
+                    module = item
+                    break
+                }
+            }
+            val bridge = module ?: return@runCatching null
+
+            val displayName = bridge.optString("name").ifBlank { "ABK LSP Bridge" }
+            val variant = "ABK LSP Bridge"
+            val backend = "lsp_bridge"
+            val version = bridge.optString("version").ifBlank { "0.1.0" }
+            val capabilities = buildList {
+                add("lsp_bridge")
+                add("zygote_helper")
+                add("plugin_bridge")
+                add("hook_policies")
+                add("abk_control")
+                add("native_manager")
+                add("root_policy")
+            }.distinct()
+            val diagnostics = buildList {
+                bridge.optString("description")
+                    .trim()
+                    .takeIf { it.isNotBlank() }
+                    ?.let(::add)
+                add("rpc bridge via abk_control active")
+            }
+
+            ManagerRuntimeProbe(
+                active = bridge.optBoolean("enabled", true),
+                displayName = displayName,
+                variant = variant,
+                backend = backend,
+                version = version,
+                workMode = root.optString("work_mode").orEmpty().ifBlank { nativeRuntime.workMode.ifBlank { "built-in" } },
+                capabilities = capabilities,
+                diagnostics = diagnostics
+            )
+        }.getOrNull()
     }
 
     private fun detectShellManagerRuntime(

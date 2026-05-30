@@ -642,6 +642,81 @@ fun BuildScreen(
         )
     }
 
+    if (!state.isLoggedIn || state.forkRepo == null) {
+        val needsLogin = !state.isLoggedIn
+        Scaffold(
+            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surface),
+            topBar = {
+                ExpressiveTopBar(
+                    title = stringResource(R.string.build_title),
+                    scrollBehavior = scrollBehavior
+                )
+            }
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .padding(horizontal = AbkScreenHorizontalPadding)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                ExpressiveHeroCard(
+                    title = stringResource(
+                        if (needsLogin) {
+                            R.string.build_login_required_title
+                        } else {
+                            R.string.build_fork_required_title
+                        }
+                    ),
+                    subtitle = stringResource(
+                        if (needsLogin) {
+                            R.string.build_login_required_desc
+                        } else {
+                            R.string.build_fork_required_desc
+                        }
+                    ),
+                    icon = if (needsLogin) Icons.Default.Code else Icons.Default.ForkRight,
+                    badge = {
+                        ExpressiveStatusChip(
+                            label = stringResource(
+                                if (needsLogin) {
+                                    R.string.github_auth_required
+                                } else {
+                                    R.string.fork_create_badge
+                                }
+                            ),
+                            icon = if (needsLogin) Icons.Default.VerifiedUser else Icons.Default.CallSplit,
+                            color = if (needsLogin) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                )
+                Button(
+                    onClick = vm::openBuildOobe,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                ) {
+                    Icon(
+                        if (needsLogin) Icons.Default.Code else Icons.Default.ForkRight,
+                        contentDescription = null
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        stringResource(
+                            if (needsLogin) {
+                                R.string.login_github
+                            } else {
+                                R.string.oobe_continue_setup
+                            }
+                        )
+                    )
+                }
+            }
+        }
+        return
+    }
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val childPageTopInset = outerPadding.calculateTopPadding()
         val childPageBottomInset = outerPadding.calculateBottomPadding()
