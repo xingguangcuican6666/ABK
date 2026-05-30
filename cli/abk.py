@@ -503,7 +503,7 @@ def cmd_fork(args):
             
             behind = client.check_behind()
             if behind.get("behind_by", 0) > 0:
-                print(t("fork_behind", n=behind['behind_by'])))
+                print(t("fork_behind", n=behind['behind_by']))
                 if not args.no_sync:
                     print(t("fork_syncing"))
                     client.sync_fork()
