@@ -73,6 +73,10 @@ on:
         description: "自定义引用 (仅在KSU分支为'Custom(自定义)'时使用)"
         required: false
         type: string
+      add_defconfig:
+        description: "自定义内核参数"
+        required: false
+        type: string
       version:
         description: "自定义版本名 (可选)"
         required: false
@@ -183,6 +187,7 @@ jobs:
       ksu_variant: ${{ inputs.kernelsu_variant }}
       ksu_branch: ${{ inputs.kernelsu_branch }}
       custom_ref: ${{ inputs.custom_ref || '' }}
+      add_defconfig: ${{ inputs.add_defconfig || '' }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}

@@ -4727,7 +4727,7 @@ internal fun parseBuildParameterSummary(
         ksuVariant = values["ksuVariant"].orEmpty(),
         ksuBranch = values["ksuBranch"].orEmpty(),
         buildTime = values["buildTime"].orEmpty(),
-        add_defconfig = values["addDefconfig"].orEmpty(),
+        addDefconfig = values["addDefconfig"].orEmpty(),
         susfsEnabled = values["susfsEnabled"].orEmpty(),
         zramEnabled = values["zramEnabled"].orEmpty(),
         zramFullAlgo = values["zramFullAlgo"].orEmpty(),

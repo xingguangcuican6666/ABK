@@ -33,6 +33,9 @@ on:
       custom_ref:
         required: false
         type: string
+      add_defconfig:
+        required: false
+        type: string
       version:
         required: false
         type: string
@@ -179,6 +182,7 @@ jobs:
           echo "KSU 分支      : $effective_ksu_branch"
           echo "管理器包名    : ${{ inputs.manager_package || 'app/signing/abk-manager-cert.env' }}"
           echo "构建时间      : ${{ inputs.build_time }}"
+          echo "额外内核参数   : $(printf "%s" "${{ inputs.add_defconfig }}" | tr '\n' ' ')"
           echo "SUSFS 状态    : ${{ inputs.enable_susfs }}"
           echo "ZRAM 增强     : $effective_use_zram"
           echo "ZRAM 完整算法 : $effective_zram_full_algo"
@@ -2594,6 +2598,40 @@ jobs:
       - name: 配置内核选项
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
+          ensure_defconfig_value() {
+            local cfg="$1"
+            local value="$2"
+            local line="${cfg}=${value}"
+
+            if [ "$value" = "n" ]; then
+              line="# ${cfg} is not set"
+            fi
+
+            if grep -qxF "$line" "$DEFCONFIG"; then
+              return 0
+            fi
+
+            if grep -Eq "^${cfg}=|^# ${cfg} is not set$" "$DEFCONFIG"; then
+              sed -i -E "s|^${cfg}=.*|${line}|; s|^# ${cfg} is not set$|${line}|" "$DEFCONFIG"
+            else
+              echo "$line" >> "$DEFCONFIG"
+            fi
+          }
+ 
+          if [ "${{ inputs.add_defconfig }}" != "" ]; then
+            echo "set custom kernel config:"
+            echo "${{ inputs.add_defconfig }}" | tr ' ' '\n' | while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            if echo "$line" | grep -Eq "^CONFIG_[A-Za-z0-9_]+=.+$"; then
+              cfg=$(echo "$line" | cut -d= -f1)
+              val=$(echo "$line" | cut -d= -f2-)
+              echo "$cfg=$val"
+              ensure_defconfig_value "$cfg" "$val"
+              continue
+            fi
+            done
+          fi
+
           if [ "${{ inputs.ksu_variant }}" != "None" ]; then
             cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_KSU=y
