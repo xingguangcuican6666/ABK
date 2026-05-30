@@ -67,6 +67,9 @@
   "build_ksu_info": "KSU: {variant} ({branch})",
   "build_feat_line": "SUSFS: {susfs}, ZRAM: {zram}, BBG: {bbg}, DDK: {ddk}, KPM: {kpm}, Re-Kernel: {rekernel}, NTsync: {ntsync}, Networking: {networking}",
 
+  "enabled": "enabled",
+  "disabled": "disabled",
+
   "status_no_builds": "No build records",
   "status_recent": "Recent {n} builds:\n",
 

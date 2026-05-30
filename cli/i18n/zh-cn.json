@@ -68,6 +68,9 @@
   "build_ksu_info": "KSU: {variant} ({branch})",
   "build_feat_line": "SUSFS: {susfs}, ZRAM: {zram}, BBG: {bbg}, DDK: {ddk}, KPM: {kpm}, Re-Kernel: {rekernel}, NTsync: {ntsync}, 网络增强: {networking}",
 
+  "enabled": "启用",
+  "disabled": "禁用",
+
   "status_no_builds": "没有构建记录",
   "status_recent": "最近 {n} 个构建:\n",
 

@@ -426,7 +426,7 @@ def cmd_login(args):
                 sync = input("是否同步? (y/n): ").strip().lower()
                 if sync == 'y':
                     client.sync_fork()
-                    print("同步完成!")
+                    print(t("fork_sync_done"))
             elif fork_status and not fork_status.get("needs_fork"):
                 print("Fork 已存在且是最新的")
         except Exception as e:
@@ -441,9 +441,9 @@ def cmd_logout(args):
             save_config(config)
             print("已登出，Token 已移除")
         else:
-            print("未登录")
+            print(t("logout_not"))
     else:
-        print("未登录")
+        print(t("logout_not"))
 
 
 def cmd_whoami(args):
@@ -456,7 +456,7 @@ def cmd_whoami(args):
     )
     
     if not token:
-        print("未登录")
+        print(t("logout_not"))
         print("请运行 'abk login' 登录")
         return
     
@@ -491,7 +491,7 @@ def cmd_fork(args):
     )
     
     if not token:
-        print("未登录，请先运行 'abk login'", file=sys.stderr)
+        print(t("err_no_token"), file=sys.stderr)
         sys.exit(1)
     
     client = GitHubClient(token=token)
@@ -499,23 +499,23 @@ def cmd_fork(args):
     try:
         fork = client.get_fork()
         if fork:
-            print(f"Fork 已存在: {fork.get('full_name')}")
+            print(t("fork_exists", fork=fork.get('full_name')))
             
             behind = client.check_behind()
             if behind.get("behind_by", 0) > 0:
-                print(f"落后上游 {behind['behind_by']} 个提交")
+                print(t("fork_behind", n=behind['behind_by'])))
                 if not args.no_sync:
-                    print("正在同步...")
+                    print(t("fork_syncing"))
                     client.sync_fork()
-                    print("同步完成!")
+                    print(t("fork_sync_done"))
             else:
-                print("Fork 已是最新的")
+                print(t("fork_already_latest"))
         else:
-            print("正在创建 fork...")
+            print(t("fork_creating"))
             result = client.create_fork()
-            print(f"Fork 已创建: {result.get('full_name')}")
+            print(t("fork_created", fork=result.get('full_name')))
     except Exception as e:
-        print(f"操作失败: {e}", file=sys.stderr)
+        print(t("err_fork_failed", error=e), file=sys.stderr)
         sys.exit(1)
 
 
@@ -529,7 +529,7 @@ def cmd_sync(args):
     )
     
     if not token:
-        print("未登录，请先运行 'abk login'", file=sys.stderr)
+        print(t("err_no_token"), file=sys.stderr)
         sys.exit(1)
     
     client = GitHubClient(token=token)
@@ -542,14 +542,14 @@ def cmd_sync(args):
         
         behind = client.check_behind()
         if behind.get("behind_by", 0) == 0:
-            print("Fork 已是最新的")
+            print(t("fork_already_latest"))
             return
         
         print(f"正在同步 (落后 {behind['behind_by']} 个提交)...")
         client.sync_fork()
-        print("同步完成!")
+        print(t("fork_sync_done"))
     except Exception as e:
-        print(f"同步失败: {e}", file=sys.stderr)
+        print(t("err_sync_failed", error=e), file=sys.stderr)
         sys.exit(1)
 
 
@@ -563,7 +563,7 @@ def cmd_status(args):
     )
     
     if not token:
-        print("未登录，请先运行 'abk login'", file=sys.stderr)
+        print(t("err_no_token"), file=sys.stderr)
         sys.exit(1)
     
     client = GitHubClient(token=token)
@@ -584,10 +584,10 @@ def cmd_status(args):
         workflow_runs = runs.get("workflow_runs", [])
         
         if not workflow_runs:
-            print("没有构建记录")
+            print(t("status_no_builds"))
             return
         
-        print(f"最近 {len(workflow_runs)} 个构建:\n")
+        print(t("status_recent", n=len(workflow_runs)))
         for run in workflow_runs:
             status_icon = "✓" if run.get("conclusion") == "success" else "✗" if run.get("conclusion") == "failure" else "…" if run["status"] == "in_progress" else "○"
             created = run["created_at"][:19].replace("T", " ")
@@ -606,7 +606,7 @@ def cmd_build(args):
     )
     
     if not token:
-        print("未登录，请先运行 'abk login'", file=sys.stderr)
+        print(t("err_no_token"), file=sys.stderr)
         sys.exit(1)
     
     client = GitHubClient(token=token)
@@ -664,8 +664,8 @@ def cmd_build(args):
                 client.trigger_workflow(wf_file, ref, inputs)
                 print("  ✓ 已触发")
             except Exception as e:
-                print(f"  ✗ 失败: {e}")
-        print(f"查看状态: abk status")
+                print(t("build_triggered_fail", error=e))
+        print(t("build_check_status"))
         return
     
     # 确定矩阵目标列表
@@ -700,7 +700,7 @@ def cmd_build(args):
                     sync = input("是否先同步? (y/n): ").strip().lower()
                     if sync == 'y':
                         client.sync_fork()
-                        print("同步完成!")
+                        print(t("fork_sync_done"))
     except Exception as e:
         print(f"检查 fork 失败: {e}", file=sys.stderr)
         if not args.force:
@@ -718,15 +718,15 @@ def cmd_build(args):
             if tk == "oneplus":
                 workflow = WORKFLOWS["oneplus"]
                 if not args.device:
-                    print("错误: OnePlus 构建需要 --device", file=sys.stderr)
+                    print(t("err_need_device"), file=sys.stderr)
                     sys.exit(1)
             elif tk == "custom":
                 workflow = WORKFLOWS["custom"]
                 if not args.sub_level:
-                    print("错误: 需要 --sub-level (子版本号)", file=sys.stderr)
+                    print(t("err_need_sub_level"), file=sys.stderr)
                     sys.exit(1)
                 if not args.os_patch_level:
-                    print("错误: 需要 --os-patch-level (安全补丁级别)", file=sys.stderr)
+                    print(t("err_need_os_patch"), file=sys.stderr)
                     sys.exit(1)
             else:
                 workflow = WORKFLOWS[tk]
@@ -775,21 +775,21 @@ def cmd_build(args):
             
             ref = args.ref or "dev"
             print(f"触发 {workflow['name']} ({kv})...")
-            print(f"  SUSFS: {'启用' if args.susfs else '禁用'}, ZRAM: {'启用' if args.zram else '禁用'}, BBG: {'启用' if args.bbg else '禁用'}, DDK: {'启用' if args.ddk else '禁用'}, KPM: {'启用' if args.kpm else '禁用'}, Re-Kernel: {'启用' if args.rekernel else '禁用'}, NTsync: {'启用' if args.ntsync else '禁用'}, 网络增强: {'启用' if args.networking else '禁用'}")
+            print(f"  " + t("build_feat_line", susfs=('启用' if args.susfs else '禁用'), zram=('启用' if args.zram else '禁用'), bbg=('启用' if args.bbg else '禁用'), ddk=('启用' if args.ddk else '禁用'), kpm=('启用' if args.kpm else '禁用'), rekernel=('启用' if args.rekernel else '禁用'), ntsync=('启用' if args.ntsync else '禁用'), networking=('启用' if args.networking else '禁用')))
             
             if args.dry_run:
-                print(f"  [DRY-RUN] 跳过")
+                print(f"  " + t("build_triggered_dry"))
             else:
                 try:
                     client.trigger_workflow(workflow["file"], ref, inputs)
-                    print(f"  ✓ 已触发")
+                    print(t("build_triggered_ok"))
                 except Exception as e:
-                    print(f"  ✗ 失败: {e}")
+                    print(t("build_triggered_fail", error=e))
     
     if total > 1:
-        print(f"\n共触发 {count} 个构建")
-    print(f"查看状态: abk status")
-    print(f"GitHub Actions: https://github.com/{client.repo}/actions")
+        print(t("build_multiple_count", count=count))
+    print(t("build_check_status"))
+    print(t("build_actions_url", repo=client.repo))
 
 
 def cmd_artifacts(args):
@@ -802,22 +802,22 @@ def cmd_artifacts(args):
     )
     
     if not token:
-        print("未登录，请先运行 'abk login'", file=sys.stderr)
+        print(t("err_no_token"), file=sys.stderr)
         sys.exit(1)
     
     client = GitHubClient(token=token)
 
     if not args.run_id:
-        print("错误: 需要指定 --run-id", file=sys.stderr)
+        print(t("err_need_run_id"), file=sys.stderr)
         sys.exit(1)
 
     try:
         artifacts = client.list_artifacts(args.run_id)
         if not artifacts.get("artifacts"):
-            print("该构建没有产物")
+            print(t("artifacts_no_artifacts"))
             return
 
-        print(f"构建 #{args.run_id} 的产物:\n")
+        print(t("artifacts_list", id=args.run_id))
         for art in artifacts["artifacts"]:
             size_kb = art["size_in_bytes"] / 1024
             print(f"  {art['id']} | {art['name']} | {size_kb:.1f} KB")
@@ -825,14 +825,14 @@ def cmd_artifacts(args):
         if args.download:
             output_dir = args.output or "."
             Path(output_dir).mkdir(parents=True, exist_ok=True)
-            print(f"\n下载到: {output_dir}")
+            print(f"\n" + t("artifacts_download_to", dir=output_dir))
             for art in artifacts["artifacts"]:
                 print(f"  下载 {art['name']}...")
                 path = client.download_artifact(art["id"], output_dir)
                 if path:
                     print(f"    -> {path}")
     except Exception as e:
-        print(f"操作失败: {e}", file=sys.stderr)
+        print(t("err_fork_failed", error=e), file=sys.stderr)
 
 
 def cmd_list(args):
