@@ -1,0 +1,836 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+import sys
+import time
+import webbrowser
+from pathlib import Path
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+
+GITHUB_API = "https://api.github.com"
+GITHUB_OAUTH_DEVICE_URL = "https://github.com/login/device/code"
+GITHUB_OAUTH_TOKEN_URL = "https://github.com/login/oauth/access_token"
+SOURCE_REPO_OWNER = "xingguangcuican6666"
+SOURCE_REPO_NAME = "ABK"
+DEFAULT_REPO = f"{SOURCE_REPO_OWNER}/{SOURCE_REPO_NAME}"
+CONFIG_DIR = Path.home() / ".config" / "abk"
+CONFIG_FILE = CONFIG_DIR / "config.json"
+CLIENT_ID_FALLBACK = "Ov23li8skGo6AFPBeSTh"
+
+WORKFLOWS = {
+    "a12": {"file": "kernel-a12-5-10.yml", "name": "Android 12 (5.10)", "android": "android12", "kernel": "5.10"},
+    "a13": {"file": "kernel-a13-5-15.yml", "name": "Android 13 (5.15)", "android": "android13", "kernel": "5.15"},
+    "a14": {"file": "kernel-a14-6-1.yml", "name": "Android 14 (6.1)", "android": "android14", "kernel": "6.1"},
+    "a15": {"file": "kernel-a15-6-6.yml", "name": "Android 15 (6.6)", "android": "android15", "kernel": "6.6"},
+    "a16": {"file": "kernel-a16-6-12.yml", "name": "Android 16 (6.12)", "android": "android16", "kernel": "6.12"},
+    "oneplus": {"file": "oneplus-custom.yml", "name": "OnePlus/Oplus"},
+}
+
+KSU_VARIANTS = ["None", "Official", "SukiSU", "ReSukiSU"]
+KSU_BRANCHES = ["Stable(标准)", "Dev(开发)", "Custom(自定义)"]
+VIRT_OPTIONS = ["off", "678", "123", "345"]
+
+
+def load_config():
+    if CONFIG_FILE.exists():
+        try:
+            return json.loads(CONFIG_FILE.read_text())
+        except json.JSONDecodeError:
+            pass
+    return {}
+
+
+def save_config(config):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.write_text(json.dumps(config, indent=2, ensure_ascii=False))
+
+
+def get_client_id():
+    config = load_config()
+    return config.get("client_id") or os.environ.get("ABK_CLIENT_ID") or CLIENT_ID_FALLBACK
+
+
+def request_device_code():
+    client_id = get_client_id()
+    data = urlencode({
+        "client_id": client_id,
+        "scope": "repo workflow"
+    }).encode()
+    
+    req = Request(
+        GITHUB_OAUTH_DEVICE_URL,
+        data=data,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "ABK-CLI"
+        }
+    )
+    
+    try:
+        with urlopen(req) as resp:
+            return json.loads(resp.read())
+    except Exception as e:
+        print(f"请求授权码失败: {e}", file=sys.stderr)
+        return None
+
+
+def poll_device_token_once(device_code):
+    client_id = get_client_id()
+    
+    data = urlencode({
+        "client_id": client_id,
+        "device_code": device_code,
+        "grant_type": "urn:ietf:params:oauth:grant-type:device_code"
+    }).encode()
+    
+    req = Request(
+        GITHUB_OAUTH_TOKEN_URL,
+        data=data,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "ABK-CLI"
+        }
+    )
+    
+    try:
+        with urlopen(req) as resp:
+            result = json.loads(resp.read())
+    except HTTPError as e:
+        return {"success": False, "error": f"http_{e.code}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    
+    if "access_token" in result:
+        return {"success": True, "token": result["access_token"]}
+    
+    error = result.get("error")
+    if error == "authorization_pending":
+        return {"success": False, "error": "pending"}
+    elif error == "slow_down":
+        return {"success": False, "error": "slow_down"}
+    elif error in ["expired_token", "access_denied"]:
+        return {"success": False, "error": error}
+    
+    return {"success": False, "error": "unknown"}
+
+
+def device_flow_login():
+    print("正在请求设备授权码...")
+    result = request_device_code()
+    
+    if not result:
+        print("请求授权码失败", file=sys.stderr)
+        return None
+    
+    device_code = result["device_code"]
+    user_code = result["user_code"]
+    verification_uri = result["verification_uri"]
+    interval = result.get("interval", 5)
+    expires_in = result.get("expires_in", 900)
+    
+    print()
+    print("=" * 50)
+    print("  GitHub 设备授权")
+    print("=" * 50)
+    print()
+    print(f"  1. 打开浏览器访问: {verification_uri}")
+    print(f"  2. 输入授权码: {user_code}")
+    print()
+    print("=" * 50)
+    print()
+    
+    try:
+        webbrowser.open(verification_uri)
+        print("已自动打开浏览器...")
+    except Exception:
+        pass
+    
+    print(f"等待授权中... (有效期 {expires_in} 秒)")
+    print("按 Ctrl+C 取消")
+    print()
+    
+    start_time = time.time()
+    current_interval = interval
+    
+    try:
+        while time.time() - start_time < expires_in:
+            time.sleep(current_interval)
+            
+            poll_result = poll_device_token_once(device_code)
+            
+            if poll_result.get("success"):
+                print("\n授权成功!")
+                return poll_result["token"]
+            
+            error = poll_result.get("error")
+            if error == "pending":
+                continue
+            elif error == "slow_down":
+                current_interval += 5
+                continue
+            elif error == "expired_token":
+                print("\n授权码已过期，请重试", file=sys.stderr)
+                return None
+            elif error == "access_denied":
+                print("\n用户拒绝授权", file=sys.stderr)
+                return None
+            elif error and not error.startswith("http"):
+                print(f"\n授权失败: {error}", file=sys.stderr)
+                return None
+    except KeyboardInterrupt:
+        print("\n已取消授权")
+        return None
+    
+    print("\n授权超时，请重试", file=sys.stderr)
+    return None
+
+
+class GitHubClient:
+    def __init__(self, token=None, repo=None):
+        config = load_config()
+        self.token = (
+            token 
+            or os.environ.get("GITHUB_TOKEN") 
+            or os.environ.get("GH_TOKEN")
+            or config.get("token")
+        )
+        self.repo = repo
+        self.username = None
+        self.fork_repo = None
+        
+        if self.token:
+            self._detect_user()
+        
+        if not self.repo:
+            if self.fork_repo:
+                self.repo = self.fork_repo.get("full_name")
+            else:
+                self.repo = os.environ.get("ABK_REPO", DEFAULT_REPO)
+
+    def _detect_user(self):
+        try:
+            user = self.get("/user")
+            self.username = user.get("login")
+            
+            fork = self.get_fork()
+            if fork:
+                self.fork_repo = fork
+        except Exception:
+            pass
+
+    def _request(self, method, path, data=None):
+        url = f"{GITHUB_API}{path}" if not path.startswith("http") else path
+        headers = {
+            "Authorization": f"token {self.token}",
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "ABK-CLI",
+        }
+        if data:
+            headers["Content-Type"] = "application/json"
+            data = json.dumps(data).encode()
+
+        req = Request(url, data=data, headers=headers, method=method)
+        try:
+            with urlopen(req) as resp:
+                return json.loads(resp.read())
+        except HTTPError as e:
+            body = e.read().decode()
+            try:
+                err = json.loads(body)
+                msg = err.get("message", body)
+            except json.JSONDecodeError:
+                msg = body
+            raise Exception(f"GitHub API 错误 ({e.code}): {msg}")
+        except URLError as e:
+            raise Exception(f"网络错误: {e.reason}")
+
+    def get(self, path):
+        return self._request("GET", path)
+
+    def post(self, path, data=None):
+        return self._request("POST", path, data)
+
+    def put(self, path, data=None):
+        return self._request("PUT", path, data)
+
+    def get_user(self):
+        return self.get("/user")
+
+    def get_fork(self, owner=None, repo=None):
+        if not self.username:
+            return None
+        
+        owner = owner or SOURCE_REPO_OWNER
+        repo = repo or SOURCE_REPO_NAME
+        
+        try:
+            user_repo = self.get(f"/repos/{self.username}/{repo}")
+            if user_repo.get("fork") and user_repo.get("parent", {}).get("full_name") == f"{owner}/{repo}":
+                return user_repo
+        except Exception:
+            pass
+        return None
+
+    def create_fork(self, owner=None, repo=None):
+        owner = owner or SOURCE_REPO_OWNER
+        repo = repo or SOURCE_REPO_NAME
+        return self.post(f"/repos/{owner}/{repo}/forks")
+
+    def check_behind(self, fork_owner=None, fork_repo=None, upstream_owner=None, upstream_repo=None):
+        fork_owner = fork_owner or self.username
+        fork_repo = fork_repo or SOURCE_REPO_NAME
+        upstream_owner = upstream_owner or SOURCE_REPO_OWNER
+        upstream_repo = upstream_repo or SOURCE_REPO_NAME
+        
+        try:
+            result = self.get(f"/repos/{upstream_owner}/{upstream_repo}/compare/main...{fork_owner}:main")
+            return {
+                "behind_by": result.get("behind_by", 0),
+                "ahead_by": result.get("ahead_by", 0),
+                "status": result.get("status", "identical")
+            }
+        except Exception as e:
+            return {"behind_by": 0, "ahead_by": 0, "error": str(e)}
+
+    def sync_fork(self, owner=None, repo=None, branch="main"):
+        owner = owner or self.username
+        repo = repo or SOURCE_REPO_NAME
+        return self.put(f"/repos/{owner}/{repo}/merge-upstream", {"branch": branch})
+
+    def trigger_workflow(self, workflow_file, ref, inputs):
+        path = f"/repos/{self.repo}/actions/workflows/{workflow_file}/dispatches"
+        return self.post(path, {"ref": ref, "inputs": inputs})
+
+    def list_runs(self, workflow_file=None, status=None, per_page=10):
+        params = {"per_page": per_page}
+        if status:
+            params["status"] = status
+        if workflow_file:
+            path = f"/repos/{self.repo}/actions/workflows/{workflow_file}/runs?{urlencode(params)}"
+        else:
+            path = f"/repos/{self.repo}/actions/runs?{urlencode(params)}"
+        return self.get(path)
+
+    def get_run(self, run_id):
+        return self.get(f"/repos/{self.repo}/actions/runs/{run_id}")
+
+    def list_artifacts(self, run_id):
+        return self.get(f"/repos/{self.repo}/actions/runs/{run_id}/artifacts")
+
+    def download_artifact(self, artifact_id, output_dir="."):
+        url = f"{GITHUB_API}/repos/{self.repo}/actions/artifacts/{artifact_id}/zip"
+        headers = {
+            "Authorization": f"token {self.token}",
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "ABK-CLI",
+        }
+        req = Request(url, headers=headers)
+        try:
+            with urlopen(req) as resp:
+                content = resp.read()
+                filename = f"artifact-{artifact_id}.zip"
+                output_path = Path(output_dir) / filename
+                output_path.write_bytes(content)
+                return str(output_path)
+        except HTTPError as e:
+            if e.code == 302:
+                redirect_url = e.headers.get("Location")
+                if redirect_url:
+                    with urlopen(redirect_url) as resp:
+                        content = resp.read()
+                        filename = f"artifact-{artifact_id}.zip"
+                        output_path = Path(output_dir) / filename
+                        output_path.write_bytes(content)
+                        return str(output_path)
+            return None
+
+    def ensure_fork(self):
+        if not self.token:
+            raise Exception("未登录，请先运行 'abk login'")
+        
+        if not self.username:
+            raise Exception("无法获取用户信息")
+        
+        fork = self.get_fork()
+        if fork:
+            return {"action": "exists", "fork": fork}
+        
+        print(f"未检测到 fork，正在创建...")
+        result = self.create_fork()
+        return {"action": "created", "fork": result}
+
+    def check_and_prompt_sync(self):
+        if not self.username:
+            return None
+        
+        fork = self.get_fork()
+        if not fork:
+            return {"needs_fork": True}
+        
+        behind = self.check_behind()
+        return {
+            "needs_fork": False,
+            "fork": fork,
+            "behind_by": behind.get("behind_by", 0),
+            "needs_sync": behind.get("behind_by", 0) > 0
+        }
+
+
+def cmd_login(args):
+    token = device_flow_login()
+    if token:
+        config = load_config()
+        config["token"] = token
+        save_config(config)
+        print()
+        print(f"Token 已保存到: {CONFIG_FILE}")
+        
+        client = GitHubClient(token=token)
+        try:
+            user = client.get_user()
+            print(f"登录为: {user.get('login', 'Unknown')}")
+            
+            print("\n检查 fork 状态...")
+            fork_status = client.check_and_prompt_sync()
+            
+            if fork_status and fork_status.get("needs_fork"):
+                create = input("是否创建 fork? (y/n): ").strip().lower()
+                if create == 'y':
+                    client.create_fork()
+                    print("Fork 已创建!")
+            elif fork_status and fork_status.get("needs_sync"):
+                print(f"你的 fork 落后上游 {fork_status['behind_by']} 个提交")
+                sync = input("是否同步? (y/n): ").strip().lower()
+                if sync == 'y':
+                    client.sync_fork()
+                    print("同步完成!")
+            elif fork_status and not fork_status.get("needs_fork"):
+                print("Fork 已存在且是最新的")
+        except Exception as e:
+            print(f"验证失败: {e}", file=sys.stderr)
+
+
+def cmd_logout(args):
+    if CONFIG_FILE.exists():
+        config = load_config()
+        if "token" in config:
+            del config["token"]
+            save_config(config)
+            print("已登出，Token 已移除")
+        else:
+            print("未登录")
+    else:
+        print("未登录")
+
+
+def cmd_whoami(args):
+    config = load_config()
+    token = (
+        args.token 
+        or os.environ.get("GITHUB_TOKEN") 
+        or os.environ.get("GH_TOKEN")
+        or config.get("token")
+    )
+    
+    if not token:
+        print("未登录")
+        print("请运行 'abk login' 登录")
+        return
+    
+    client = GitHubClient(token=token)
+    try:
+        user = client.get_user()
+        print(f"用户: {user.get('login', 'Unknown')}")
+        
+        fork = client.get_fork()
+        if fork:
+            print(f"Fork: {fork.get('full_name')}")
+            
+            behind = client.check_behind()
+            if behind.get("behind_by", 0) > 0:
+                print(f"状态: 落后上游 {behind['behind_by']} 个提交 (需要同步)")
+            else:
+                print("状态: 已同步")
+        else:
+            print("Fork: 未检测到")
+            print("提示: 运行 'abk fork' 创建 fork")
+    except Exception as e:
+        print(f"验证失败: {e}", file=sys.stderr)
+
+
+def cmd_fork(args):
+    config = load_config()
+    token = (
+        args.token 
+        or os.environ.get("GITHUB_TOKEN") 
+        or os.environ.get("GH_TOKEN")
+        or config.get("token")
+    )
+    
+    if not token:
+        print("未登录，请先运行 'abk login'", file=sys.stderr)
+        sys.exit(1)
+    
+    client = GitHubClient(token=token)
+    
+    try:
+        fork = client.get_fork()
+        if fork:
+            print(f"Fork 已存在: {fork.get('full_name')}")
+            
+            behind = client.check_behind()
+            if behind.get("behind_by", 0) > 0:
+                print(f"落后上游 {behind['behind_by']} 个提交")
+                if not args.no_sync:
+                    print("正在同步...")
+                    client.sync_fork()
+                    print("同步完成!")
+            else:
+                print("Fork 已是最新的")
+        else:
+            print("正在创建 fork...")
+            result = client.create_fork()
+            print(f"Fork 已创建: {result.get('full_name')}")
+    except Exception as e:
+        print(f"操作失败: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_sync(args):
+    config = load_config()
+    token = (
+        args.token 
+        or os.environ.get("GITHUB_TOKEN") 
+        or os.environ.get("GH_TOKEN")
+        or config.get("token")
+    )
+    
+    if not token:
+        print("未登录，请先运行 'abk login'", file=sys.stderr)
+        sys.exit(1)
+    
+    client = GitHubClient(token=token)
+    
+    try:
+        fork = client.get_fork()
+        if not fork:
+            print("未检测到 fork，请先运行 'abk fork'", file=sys.stderr)
+            sys.exit(1)
+        
+        behind = client.check_behind()
+        if behind.get("behind_by", 0) == 0:
+            print("Fork 已是最新的")
+            return
+        
+        print(f"正在同步 (落后 {behind['behind_by']} 个提交)...")
+        client.sync_fork()
+        print("同步完成!")
+    except Exception as e:
+        print(f"同步失败: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_status(args):
+    config = load_config()
+    token = (
+        args.token 
+        or os.environ.get("GITHUB_TOKEN") 
+        or os.environ.get("GH_TOKEN")
+        or config.get("token")
+    )
+    
+    if not token:
+        print("未登录，请先运行 'abk login'", file=sys.stderr)
+        sys.exit(1)
+    
+    client = GitHubClient(token=token)
+    
+    try:
+        fork = client.get_fork()
+        if not fork:
+            print("未检测到 fork，请先运行 'abk fork'")
+            return
+        
+        behind = client.check_behind()
+        if behind.get("behind_by", 0) > 0:
+            print(f"警告: Fork 落后上游 {behind['behind_by']} 个提交")
+            print("运行 'abk sync' 同步")
+            print()
+        
+        runs = client.list_runs(per_page=args.limit)
+        workflow_runs = runs.get("workflow_runs", [])
+        
+        if not workflow_runs:
+            print("没有构建记录")
+            return
+        
+        print(f"最近 {len(workflow_runs)} 个构建:\n")
+        for run in workflow_runs:
+            status_icon = "✓" if run.get("conclusion") == "success" else "✗" if run.get("conclusion") == "failure" else "…" if run["status"] == "in_progress" else "○"
+            created = run["created_at"][:19].replace("T", " ")
+            print(f"  {status_icon} #{run['id']} | {run.get('name', '')} | {created}")
+    except Exception as e:
+        print(f"获取状态失败: {e}", file=sys.stderr)
+
+
+def cmd_build(args):
+    config = load_config()
+    token = (
+        args.token 
+        or os.environ.get("GITHUB_TOKEN") 
+        or os.environ.get("GH_TOKEN")
+        or config.get("token")
+    )
+    
+    if not token:
+        print("未登录，请先运行 'abk login'", file=sys.stderr)
+        sys.exit(1)
+    
+    client = GitHubClient(token=token)
+    target = args.target
+    if target not in WORKFLOWS:
+        print(f"错误: 未知目标 '{target}'", file=sys.stderr)
+        print(f"可用目标: {', '.join(WORKFLOWS.keys())}", file=sys.stderr)
+        sys.exit(1)
+
+    workflow = WORKFLOWS[target]
+    
+    try:
+        fork = client.get_fork()
+        if not fork:
+            print("未检测到 fork，正在创建...")
+            client.create_fork()
+            print("Fork 已创建!")
+        else:
+            behind = client.check_behind()
+            if behind.get("behind_by", 0) > 0:
+                print(f"警告: Fork 落后上游 {behind['behind_by']} 个提交")
+                if not args.force:
+                    sync = input("是否先同步? (y/n): ").strip().lower()
+                    if sync == 'y':
+                        client.sync_fork()
+                        print("同步完成!")
+    except Exception as e:
+        print(f"检查 fork 失败: {e}", file=sys.stderr)
+        if not args.force:
+            sys.exit(1)
+
+    inputs = {
+        "kernelsu_variant": args.ksu_variant or "ReSukiSU",
+        "kernelsu_branch": args.ksu_branch or "Stable(标准)",
+        "use_zram": str(args.zram).lower(),
+        "use_bbg": str(args.bbg).lower(),
+        "use_ddk": str(args.ddk).lower(),
+        "use_kpm": str(args.kpm).lower(),
+        "use_rekernel": str(args.rekernel).lower(),
+        "cancel_susfs": str(not args.susfs).lower(),
+        "supp_op": str(args.oneplus_8e).lower(),
+        "use_ntsync": str(args.ntsync).lower(),
+        "use_networking": str(args.networking).lower(),
+        "zram_full_algo": str(args.zram_full_algo).lower(),
+    }
+    
+    if args.virt and args.virt != "off":
+        inputs["virtualization_support"] = args.virt
+    if args.version:
+        inputs["version"] = args.version
+    if args.custom_ref:
+        inputs["custom_ref"] = args.custom_ref
+    if args.kpm_password:
+        inputs["kpm_password"] = args.kpm_password
+    if args.zram_extra_algos:
+        inputs["zram_extra_algos"] = args.zram_extra_algos
+    if args.device and target == "oneplus":
+        inputs["device"] = args.device
+    if args.custom_modules:
+        inputs["use_custom_external_modules"] = "true"
+        inputs["custom_external_modules"] = args.custom_modules
+
+    ref = args.ref or "main"
+    print(f"触发 {workflow['name']} 构建...")
+    print(f"  仓库: {client.repo}")
+    print(f"  KSU: {inputs['kernelsu_variant']} ({inputs['kernelsu_branch']})")
+    print(f"  SUSFS: {'启用' if args.susfs else '禁用'}")
+    print(f"  ZRAM: {'启用' if args.zram else '禁用'}")
+    print(f"  KPM: {'启用' if args.kpm else '禁用'}")
+    print(f"  BBG: {'启用' if args.bbg else '禁用'}")
+    print(f"  DDK: {'启用' if args.ddk else '禁用'}")
+    print(f"  NTsync: {'启用' if args.ntsync else '禁用'}")
+    print(f"  网络增强: {'启用' if args.networking else '禁用'}")
+
+    try:
+        client.trigger_workflow(workflow["file"], ref, inputs)
+        print("\n构建已触发!")
+        print(f"查看状态: abk status")
+        print(f"GitHub Actions: https://github.com/{client.username}/{SOURCE_REPO_NAME}/actions")
+    except Exception as e:
+        print(f"\n触发构建失败: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_artifacts(args):
+    config = load_config()
+    token = (
+        args.token 
+        or os.environ.get("GITHUB_TOKEN") 
+        or os.environ.get("GH_TOKEN")
+        or config.get("token")
+    )
+    
+    if not token:
+        print("未登录，请先运行 'abk login'", file=sys.stderr)
+        sys.exit(1)
+    
+    client = GitHubClient(token=token)
+
+    if not args.run_id:
+        print("错误: 需要指定 --run-id", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        artifacts = client.list_artifacts(args.run_id)
+        if not artifacts.get("artifacts"):
+            print("该构建没有产物")
+            return
+
+        print(f"构建 #{args.run_id} 的产物:\n")
+        for art in artifacts["artifacts"]:
+            size_kb = art["size_in_bytes"] / 1024
+            print(f"  {art['id']} | {art['name']} | {size_kb:.1f} KB")
+
+        if args.download:
+            output_dir = args.output or "."
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            print(f"\n下载到: {output_dir}")
+            for art in artifacts["artifacts"]:
+                print(f"  下载 {art['name']}...")
+                path = client.download_artifact(art["id"], output_dir)
+                if path:
+                    print(f"    -> {path}")
+    except Exception as e:
+        print(f"操作失败: {e}", file=sys.stderr)
+
+
+def cmd_list(args):
+    print("可用构建目标:\n")
+    for key, wf in WORKFLOWS.items():
+        print(f"  {key:12} - {wf['name']}")
+
+    print("\nKernelSU 变体:")
+    for v in KSU_VARIANTS:
+        print(f"  {v}")
+
+    print("\nKernelSU 分支:")
+    for b in KSU_BRANCHES:
+        print(f"  {b}")
+
+    print("\n虚拟化支持选项:")
+    for o in VIRT_OPTIONS:
+        print(f"  {o}")
+
+    print("\n命令:")
+    print("  abk login                                # 登录 GitHub")
+    print("  abk logout                               # 登出")
+    print("  abk whoami                               # 显示当前用户")
+    print("  abk fork                                 # 创建/检查 fork")
+    print("  abk sync                                 # 同步 fork 与上游")
+    print("  abk build a15 --ksu ReSukiSU             # 构建内核")
+    print("  abk status                               # 查看构建状态")
+    print("  abk artifacts --run-id 12345 --download  # 下载构建产物")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="abk",
+        description="ABK CLI - 用于非Android设备快速触发内核编译",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""示例:
+  abk login                                # 登录 GitHub (Device Flow)
+  abk fork                                 # 创建/检查 fork 并同步
+  abk build a15 --ksu ReSukiSU             # 构建 Android 15 内核
+  abk build a14 --ksu Official --no-zram   # 构建 Android 14 内核
+  abk status                               # 查看构建状态
+  abk artifacts --run-id 12345 --download  # 下载构建产物"""
+    )
+    parser.add_argument("--token", help="GitHub Token")
+    parser.add_argument("--repo", help=f"GitHub 仓库 (默认: {DEFAULT_REPO})")
+
+    subparsers = parser.add_subparsers(dest="command", help="可用命令")
+
+    login_parser = subparsers.add_parser("login", help="登录 GitHub (Device Flow)")
+    login_parser.set_defaults(func=cmd_login)
+
+    logout_parser = subparsers.add_parser("logout", help="登出 GitHub")
+    logout_parser.set_defaults(func=cmd_logout)
+
+    whoami_parser = subparsers.add_parser("whoami", help="显示当前登录用户")
+    whoami_parser.set_defaults(func=cmd_whoami)
+
+    fork_parser = subparsers.add_parser("fork", help="创建/检查 fork")
+    fork_parser.add_argument("--no-sync", action="store_true", help="不同步")
+    fork_parser.set_defaults(func=cmd_fork)
+
+    sync_parser = subparsers.add_parser("sync", help="同步 fork 与上游")
+    sync_parser.set_defaults(func=cmd_sync)
+
+    build_parser = subparsers.add_parser("build", help="触发内核构建")
+    build_parser.add_argument("target", choices=WORKFLOWS.keys(), help="构建目标")
+    build_parser.add_argument("--ref", default="main", help="Git 分支 (默认: main)")
+    build_parser.add_argument("--ksu", dest="ksu_variant", choices=KSU_VARIANTS, help="KernelSU 变体")
+    build_parser.add_argument("--ksu-branch", choices=KSU_BRANCHES, help="KernelSU 分支")
+    build_parser.add_argument("--custom-ref", help="自定义 KSU 引用")
+    build_parser.add_argument("--version", help="自定义版本名")
+    build_parser.add_argument("--device", help="OnePlus 设备名")
+    build_parser.add_argument("--virt", choices=VIRT_OPTIONS, default="off", help="虚拟化支持")
+    build_parser.add_argument("--kpm-password", help="KPM 密码")
+    build_parser.add_argument("--force", action="store_true", help="跳过 fork 检查")
+    build_parser.add_argument("--zram", action="store_true", default=False, help="启用 ZRAM")
+    build_parser.add_argument("--no-zram", dest="zram", action="store_false", help="禁用 ZRAM (默认)")
+    build_parser.add_argument("--bbg", action="store_true", default=False, help="启用 BBG")
+    build_parser.add_argument("--no-bbg", dest="bbg", action="store_false", help="禁用 BBG (默认)")
+    build_parser.add_argument("--ddk", action="store_true", default=False, help="启用 DDK")
+    build_parser.add_argument("--no-ddk", dest="ddk", action="store_false", help="禁用 DDK (默认)")
+    build_parser.add_argument("--kpm", action="store_true", default=False, help="启用 KPM")
+    build_parser.add_argument("--no-kpm", dest="kpm", action="store_false", help="禁用 KPM (默认)")
+    build_parser.add_argument("--susfs", action="store_true", default=True, help="启用 SUSFS (默认)")
+    build_parser.add_argument("--no-susfs", dest="susfs", action="store_false", help="禁用 SUSFS")
+    build_parser.add_argument("--rekernel", action="store_true", default=False, help="启用 Re-Kernel")
+    build_parser.add_argument("--no-rekernel", dest="rekernel", action="store_false", help="禁用 Re-Kernel (默认)")
+    build_parser.add_argument("--oneplus-8e", action="store_true", default=False, help="启用一加 8E 支持")
+    build_parser.add_argument("--ntsync", action="store_true", default=False, help="启用 NTsync")
+    build_parser.add_argument("--networking", action="store_true", default=False, help="启用网络增强")
+    build_parser.add_argument("--zram-full-algo", action="store_true", default=False, help="ZRAM 完整算法支持")
+    build_parser.add_argument("--zram-extra-algos", help="自定义 ZRAM 算法 (逗号分隔)")
+    build_parser.add_argument("--custom-modules", help="自定义外部模块 (格式: url;stage|url;stage)")
+    build_parser.set_defaults(func=cmd_build)
+
+    status_parser = subparsers.add_parser("status", help="查看构建状态")
+    status_parser.add_argument("--run-id", type=int, help="查看特定构建")
+    status_parser.add_argument("--target", choices=WORKFLOWS.keys(), help="按目标过滤")
+    status_parser.add_argument("--status", choices=["all", "queued", "in_progress", "completed"], default="all", help="按状态过滤")
+    status_parser.add_argument("--limit", type=int, default=10, help="显示数量 (默认: 10)")
+    status_parser.set_defaults(func=cmd_status)
+
+    artifacts_parser = subparsers.add_parser("artifacts", help="管理构建产物")
+    artifacts_parser.add_argument("--run-id", type=int, help="构建运行 ID")
+    artifacts_parser.add_argument("--download", action="store_true", help="下载产物")
+    artifacts_parser.add_argument("--output", "-o", help="输出目录")
+    artifacts_parser.set_defaults(func=cmd_artifacts)
+
+    list_parser = subparsers.add_parser("list", help="列出可用选项")
+    list_parser.set_defaults(func=cmd_list)
+
+    args = parser.parse_args()
+    if not args.command:
+        parser.print_help()
+        sys.exit(0)
+
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
