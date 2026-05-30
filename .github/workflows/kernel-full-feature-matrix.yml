@@ -113,11 +113,6 @@ on:
           - "123"
           - "345"
         default: "off"
-      use_custom_external_modules:
-        description: "启用自定义外部模块注入"
-        required: false
-        type: boolean
-        default: false
       custom_external_modules:
         description: "自定义外部模块（repo;stage|repo;stage，stage=after_patch/before_build）"
         required: false
@@ -205,10 +200,6 @@ on:
         required: false
         type: string
         default: "off"
-      use_custom_external_modules:
-        required: false
-        type: boolean
-        default: false
       custom_external_modules:
         required: false
         type: string
@@ -254,7 +245,6 @@ jobs:
           MATRIX_KPM_PASSWORD: ${{ inputs.kpm_password || '' }}
           MATRIX_USE_REKERNEL: ${{ inputs.use_rekernel }}
           MATRIX_SUPP_OP: ${{ inputs.supp_op }}
-          MATRIX_USE_CUSTOM_EXTERNAL_MODULES: ${{ inputs.use_custom_external_modules }}
           MATRIX_CUSTOM_EXTERNAL_MODULES: ${{ inputs.custom_external_modules || '' }}
           MATRIX_UPLOAD_AUX_ARTIFACTS: ${{ inputs.upload_aux_artifacts }}
         run: |
@@ -353,7 +343,6 @@ jobs:
               summary.write(f"- KPM 密码: {'已自定义' if os.environ.get('MATRIX_KPM_PASSWORD', '') else '默认'}\n")
               summary.write(f"- Re-Kernel: {env_enabled('MATRIX_USE_REKERNEL')}\n")
               summary.write(f"- 一加 8E: {env_enabled('MATRIX_SUPP_OP')}\n")
-              summary.write(f"- 自定义外部模块: {env_enabled('MATRIX_USE_CUSTOM_EXTERNAL_MODULES')}\n")
               summary.write(f"- 自定义外部模块参数: {env_value('MATRIX_CUSTOM_EXTERNAL_MODULES')}\n")
               summary.write(f"- 上传辅助产物: {env_enabled('MATRIX_UPLOAD_AUX_ARTIFACTS')}\n")
               summary.write("- Android16/6.12: ZRAM off\n")
@@ -397,7 +386,6 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo && matrix.kernel_version != '6.12' }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
-      use_custom_external_modules: ${{ inputs.use_custom_external_modules }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       upload_aux_artifacts: ${{ inputs.upload_aux_artifacts }}
 
@@ -429,7 +417,6 @@ jobs:
       USE_KPM: ${{ inputs.use_kpm }}
       USE_REKERNEL: ${{ inputs.use_rekernel }}
       SUPP_OP: ${{ inputs.supp_op }}
-      USE_CUSTOM_EXTERNAL_MODULES: ${{ inputs.use_custom_external_modules }}
       CUSTOM_EXTERNAL_MODULES: ${{ inputs.custom_external_modules || '' }}
       USE_NTSYNC: ${{ inputs.use_ntsync }}
       USE_NETWORKING: ${{ inputs.use_networking }}
@@ -494,7 +481,6 @@ jobs:
               --arg kpm_password "$kpm_password_label" \
               --arg use_rekernel "$USE_REKERNEL" \
               --arg supp_op "$SUPP_OP" \
-              --arg use_custom_external_modules "$USE_CUSTOM_EXTERNAL_MODULES" \
               --arg custom_external_modules "$custom_modules_label" \
               --arg use_ntsync "$USE_NTSYNC" \
               --arg use_networking "$USE_NETWORKING" \
@@ -516,7 +502,6 @@ jobs:
                 kpm_password: $kpm_password,
                 use_rekernel: $use_rekernel,
                 supp_op: $supp_op,
-                use_custom_external_modules: $use_custom_external_modules,
                 custom_external_modules: $custom_external_modules,
                 use_ntsync: $use_ntsync,
                 use_networking: $use_networking,
@@ -553,7 +538,6 @@ jobs:
             echo "- KPM: ${USE_KPM}"
             echo "- Re-Kernel: ${USE_REKERNEL}"
             echo "- 一加 8E: ${SUPP_OP}"
-            echo "- 自定义注入: ${USE_CUSTOM_EXTERNAL_MODULES}"
             echo "- 自定义注入参数列表: ${custom_modules_label}"
             echo "- 上传辅助产物: ${UPLOAD_AUX_ARTIFACTS}"
           } >> "$GITHUB_STEP_SUMMARY"

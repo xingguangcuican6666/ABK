@@ -152,7 +152,6 @@ jobs:
           kpm_password="$(metadata_value kpm_password "默认")"
           use_rekernel="$(metadata_value use_rekernel "true")"
           supp_op="$(metadata_value supp_op "true")"
-          use_custom_external_modules="$(metadata_value use_custom_external_modules "false")"
           custom_external_modules="$(metadata_value custom_external_modules "无")"
           use_ntsync="$(metadata_value use_ntsync "true")"
           use_networking="$(metadata_value use_networking "true")"
@@ -269,7 +268,6 @@ jobs:
           | Re-Kernel | $use_rekernel |
           | 虚拟化支持 | $virtualization_support |
           | 一加 8E 支持 | $supp_op |
-          | 自定义注入 | $use_custom_external_modules |
           | 自定义注入参数列表 | $custom_external_modules |
 
           > Android 16 / 6.12 构建会自动关闭 ZRAM 增强与 ZRAM 完整算法；虚拟化支持在 6.12 上使用开关模式。

@@ -131,7 +131,6 @@ class BuildPlanLogicTest {
         assertEquals("true", inputs["use_ddk"])
         assertEquals(KSU_BRANCH_CUSTOM, inputs["kernelsu_branch"])
         assertEquals("main:5", inputs["custom_ref"])
-        assertEquals("true", inputs["use_custom_external_modules"])
         assertEquals(
             "https://github.com/example/a.git;after_patch|https://github.com/example/b.git;before_build",
             inputs["custom_external_modules"]

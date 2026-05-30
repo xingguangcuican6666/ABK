@@ -163,11 +163,6 @@ on:
         default: ""
 
       # ==================== 自定义外部模块 ====================
-      use_custom_external_modules:
-        description: "启用自定义外部模块注入"
-        required: false
-        type: boolean
-        default: false
       custom_external_modules:
         description: "自定义外部模块（链接;阶段，用 | 分隔多个，如 https://github.com/user/mod;after_patch|https://github.com/user/mod2;before_build）"
         required: false
@@ -203,7 +198,6 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo || false }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
-      use_custom_external_modules: ${{ inputs.use_custom_external_modules || false }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
 
   get-ksu-manager:
