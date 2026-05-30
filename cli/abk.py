@@ -1002,7 +1002,7 @@ KernelSU 分支:
     build_parser.add_argument("--ksu", dest="ksu_variant", choices=KSU_VARIANTS, help="KernelSU 变体 (默认: ReSukiSU)")
     build_parser.add_argument("--ksu-branch", choices=KSU_BRANCHES, help="KernelSU 分支 (默认: Stable)")
     build_parser.add_argument("--custom-ref", help="自定义 KSU 引用 (commit/branch/tag)")
-    build_parser.add_argument("--version", help="自定义版本名")
+    build_parser.add_argument("--version", help="自定义内核名 (可选)")
     build_parser.add_argument("--device", help="OnePlus 设备名 (需 --oneplus)")
     build_parser.add_argument("--virt", choices=VIRT_OPTIONS, default="off", help="虚拟化支持 (默认: off)")
     build_parser.add_argument("--kpm-password", help="KPM 超级密码")
