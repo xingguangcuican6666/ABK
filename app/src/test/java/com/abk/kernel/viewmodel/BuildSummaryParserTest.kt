@@ -62,6 +62,7 @@ class BuildSummaryParserTest {
         assertEquals("ReSukiSU", summary.ksuVariant)
         assertEquals("Stable(标准)", summary.ksuBranch)
         assertEquals("无", summary.buildTime)
+        assertEquals("无", summary.addDefconfig)
         assertEquals("true", summary.networkingEnabled)
         assertEquals("已设置", summary.kpmPassword)
         assertEquals("678", summary.virtualizationSupport)

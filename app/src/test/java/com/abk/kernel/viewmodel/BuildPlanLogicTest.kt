@@ -29,6 +29,7 @@ class BuildPlanLogicTest {
                 customRef = "feature:5",
                 version = "test-build",
                 buildTime = "Sun Dec 01 08:10:00 UTC 2024",
+                addDefconfig = "",
                 useZram = true,
                 useBbg = true,
                 useDdk = true,
@@ -63,6 +64,7 @@ class BuildPlanLogicTest {
         assertEquals(config.customRef, decoded.config.customRef)
         assertEquals(config.version, decoded.config.version)
         assertEquals(config.buildTime, decoded.config.buildTime)
+        assertEquals(config.addDefconfig, decoded.config.addDefconfig)
         assertEquals(config.zramExtraAlgos, decoded.config.zramExtraAlgos)
         assertEquals(config.kpmPassword, decoded.config.kpmPassword)
         assertEquals(config.virtualizationSupport, decoded.config.virtualizationSupport)

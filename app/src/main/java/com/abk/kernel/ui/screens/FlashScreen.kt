@@ -1532,6 +1532,7 @@ private fun ParameterSummarySections(summary: BuildParameterSummary) {
         ParameterRow(stringResource(R.string.build_sub_level), summary.subLevel)
         ParameterRow(stringResource(R.string.runtime_patch_level), summary.osPatchLevel)
         ParameterRow(stringResource(R.string.flash_build_time), summary.buildTime)
+        ParameterRow(stringResource(R.string.flash_add_defconfig), summary.addDefconfig)
     }
     ParameterSection("KernelSU") {
         ParameterRow(stringResource(R.string.flash_ksu_variant), summary.ksuVariant)
@@ -1659,6 +1660,7 @@ private fun parsePrebuiltGkiParameterSummary(release: PrebuiltGkiRelease): Build
         ksuVariant = values["ksuVariant"].orEmpty(),
         ksuBranch = values["ksuBranch"].orEmpty(),
         buildTime = values["buildTime"].orEmpty(),
+        addDefconfig = values["addDefconfig"].orEmpty(),
         susfsEnabled = values["susfsEnabled"].orEmpty(),
         zramEnabled = values["zramEnabled"].orEmpty(),
         zramFullAlgo = values["zramFullAlgo"].orEmpty(),
@@ -1724,6 +1726,7 @@ private fun normalizeReleaseParameterLabel(label: String): String? {
         compact.contains("ksu变体") -> "ksuVariant"
         compact.contains("ksu分支") -> "ksuBranch"
         compact.contains("构建时间") -> "buildTime"
+        compact.contains("额外内核参数") -> "addDefconfig"
         compact.contains("susfs状态") -> "susfsEnabled"
         compact.contains("zram增强") -> "zramEnabled"
         compact.contains("zram完整算法") -> "zramFullAlgo"

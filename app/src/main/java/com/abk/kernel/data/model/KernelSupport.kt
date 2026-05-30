@@ -293,6 +293,7 @@ object KernelSupport {
             customRef = if (isOnePlus) "" else config.customRef.trim(),
             version = if (isOnePlus) "" else config.version,
             buildTime = if (isOnePlus) "" else config.buildTime,
+            addDefconfig = if (isOnePlus) "" else config.addDefconfig,
             useZram = if (isOnePlus) false else config.useZram,
             useDdk = if (isOnePlus) false else config.useDdk,
             useNtsync = if (isOnePlus) false else config.useNtsync,

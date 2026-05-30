@@ -117,6 +117,7 @@ data class BuildParameterSummary(
     val ksuVariant: String = "",
     val ksuBranch: String = "",
     val buildTime: String = "",
+    val addDefconfig: String = "",
     val susfsEnabled: String = "",
     val zramEnabled: String = "",
     val zramFullAlgo: String = "",
@@ -422,6 +423,7 @@ data class KernelBuildConfig(
     val customRef: String = "",
     val version: String = "",
     val buildTime: String = "",
+    val addDefconfig: String = "",
     val useZram: Boolean = false,
     val useBbg: Boolean = false,
     val useDdk: Boolean = false,
@@ -476,6 +478,7 @@ data class AbkRuntimeBuildInfo(
     @SerializedName("kernelsu_branch") val kernelsuBranch: String = "",
     val version: String = "",
     @SerializedName("build_time") val buildTime: String = "",
+    @SerializedName("add_defconfig") val addDefconfig: String = "",
     @SerializedName("virtualization_support") val virtualizationSupport: String = "",
     @SerializedName("zram_extra_algos") val zramExtraAlgos: String = "",
     val features: Map<String, Boolean> = emptyMap()
