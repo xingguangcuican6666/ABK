@@ -400,6 +400,41 @@ def patch_selinux_hide(path, changed_files):
         "bool ksu_selinux_hide_running __read_mostly = false;",
     )
     text = text.replace(
+        "static bool ksu_selinux_hide_enabled __read_mostly = false;",
+        "bool ksu_selinux_hide_enabled __read_mostly = false;",
+    )
+    text = text.replace(
+        "static DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
+        "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
+    )
+    text = text.replace(
+        "static struct page *fake_status = NULL;",
+        "struct page *fake_status = NULL;",
+    )
+    text = re.sub(
+        r"(?m)^static void initialize_fake_status\s*\(\s*(?:void)?\s*\)",
+        "void initialize_fake_status(void)",
+        text,
+    )
+    if "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)" not in text:
+        if "jump_label.h" not in text:
+            text = ensure_include(text, "#include <linux/jump_label.h>", "#include <linux/mutex.h>\n")
+        anchor = "bool ksu_selinux_hide_running __read_mostly = false;\n"
+        if anchor not in text:
+            die(f"missing selinux_hide fake status anchor: {path}")
+        block = r'''
+
+#ifdef CONFIG_KSU_SUSFS
+DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);
+struct page *fake_status = NULL;
+
+void initialize_fake_status(void)
+{
+}
+#endif
+'''
+        text = text.replace(anchor, anchor + block, 1)
+    text = text.replace(
         "static int security_context_to_sid_with_policy(",
         "int security_context_to_sid_with_policy(",
     )
@@ -674,7 +709,11 @@ def verify(ksu_dir):
         ),
         ksu_dir / "feature/selinux_hide.c": (
             "struct selinux_state fake_state;",
+            "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)",
+            "struct page *fake_status",
+            "bool ksu_selinux_hide_enabled __read_mostly",
             "bool ksu_selinux_hide_running __read_mostly",
+            "void initialize_fake_status(",
             "int security_context_to_sid_with_policy(",
             "int security_sid_to_context_with_policy(",
         ),
