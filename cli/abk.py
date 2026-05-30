@@ -698,8 +698,24 @@ def cmd_build(args):
     print(f"  KSU: {inputs['kernelsu_variant']} ({inputs['kernelsu_branch']})")
     print(f"  SUSFS: {'启用' if args.susfs else '禁用'}")
     print(f"  ZRAM: {'启用' if args.zram else '禁用'}")
-    print(f"  KPM: {'启用' if args.kpm else '禁用'}")
     print(f"  BBG: {'启用' if args.bbg else '禁用'}")
+    print(f"  DDK: {'启用' if args.ddk else '禁用'}")
+    print(f"  KPM: {'启用' if args.kpm else '禁用'}")
+    print(f"  Re-Kernel: {'启用' if args.rekernel else '禁用'}")
+    print(f"  NTsync: {'启用' if args.ntsync else '禁用'}")
+    print(f"  网络增强: {'启用' if args.networking else '禁用'}")
+    print(f"  一加8E: {'启用' if args.oneplus_8e else '禁用'}")
+    print(f"  虚拟化: {args.virt if args.virt != 'off' else 'off'}")
+    if args.version:
+        print(f"  内核名: {args.version}")
+    if args.zram_full_algo:
+        print(f"  ZRAM完整算法: 启用")
+    if args.zram_extra_algos:
+        print(f"  ZRAM自定义算法: {args.zram_extra_algos}")
+    if args.kpm_password:
+        print(f"  KPM密码: 已自定义")
+    if args.custom_modules:
+        print(f"  外部模块: {args.custom_modules}")
 
     try:
         client.trigger_workflow(workflow["file"], ref, inputs)
