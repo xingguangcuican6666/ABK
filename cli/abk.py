@@ -169,37 +169,6 @@ def device_flow_login():
     print(t("press_ctrl_c"))
     print()
     
-    if not result:
-        print(t("err_req_failed"), file=sys.stderr)
-        return None
-    
-    device_code = result["device_code"]
-    user_code = result["user_code"]
-    verification_uri = result["verification_uri"]
-    interval = result.get("interval", 5)
-    expires_in = result.get("expires_in", 900)
-    
-    print()
-    print("=" * 50)
-    print(f"  {t('login_title')}")
-    print("=" * 50)
-    print()
-    print(f"  {t('login_step1')}: {verification_uri}")
-    print(f"  {t('login_step2')}: {user_code}")
-    print()
-    print("=" * 50)
-    print()
-    
-    try:
-        webbrowser.open(verification_uri)
-        print(t("login_browser_open"))
-    except Exception:
-        pass
-    
-    print(t("login_waiting"))
-    print(t("press_ctrl_c"))
-    print()
-    
     start_time = time.time()
     current_interval = interval
     
