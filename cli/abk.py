@@ -25,13 +25,13 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 CLIENT_ID_FALLBACK = "Ov23li8skGo6AFPBeSTh"
 
 WORKFLOWS = {
-    "a12": {"file": "kernel-a12-5-10.yml", "name": "Android 12 (5.10)", "android": "android12", "kernel": "5.10"},
-    "a13": {"file": "kernel-a13-5-15.yml", "name": "Android 13 (5.15)", "android": "android13", "kernel": "5.15"},
-    "a14": {"file": "kernel-a14-6-1.yml", "name": "Android 14 (6.1)", "android": "android14", "kernel": "6.1"},
-    "a15": {"file": "kernel-a15-6-6.yml", "name": "Android 15 (6.6)", "android": "android15", "kernel": "6.6"},
-    "a16": {"file": "kernel-a16-6-12.yml", "name": "Android 16 (6.12)", "android": "android16", "kernel": "6.12"},
-    "custom": {"file": "kernel-custom.yml", "name": "自定义内核构建"},
-    "oneplus": {"file": "oneplus-custom.yml", "name": "OnePlus/Oplus"},
+    "a12": {"file": "kernel-a12-5-10.yml", "name": t("build_target_a12"), "android": "android12", "kernel": "5.10"},
+    "a13": {"file": "kernel-a13-5-15.yml", "name": t("build_target_a13"), "android": "android13", "kernel": "5.15"},
+    "a14": {"file": "kernel-a14-6-1.yml", "name": t("build_target_a14"), "android": "android14", "kernel": "6.1"},
+    "a15": {"file": "kernel-a15-6-6.yml", "name": t("build_target_a15"), "android": "android15", "kernel": "6.6"},
+    "a16": {"file": "kernel-a16-6-12.yml", "name": t("build_target_a16"), "android": "android16", "kernel": "6.12"},
+    "custom": {"file": "kernel-custom.yml", "name": t("build_target_custom")},
+    "oneplus": {"file": "oneplus-custom.yml", "name": t("build_target_oneplus")},
 }
 
 ANDROID_VERSIONS = ["android12", "android13", "android14", "android15", "android16"]
@@ -901,7 +901,7 @@ def main():
     # 提前检测 --lang 以确保帮助文本使用正确语言
     if "--lang" in sys.argv:
         idx = sys.argv.index("--lang")
-        if idx + 1 < len(sys.argv):
+        if idx + 1 < len(sys.argv) and sys.argv[idx + 1] in ("zh-cn", "en-us", "ru-ru"):
             load_translations(sys.argv[idx + 1])
     
     parser = argparse.ArgumentParser(
@@ -914,7 +914,7 @@ def main():
     parser.add_argument("--token", help=t("help_token"))
     parser.add_argument("--repo", help=t("help_repo"))
     parser.add_argument("--verbose", "-v", action="store_true", help=t("help_verbose"))
-    parser.add_argument("--lang", choices=["zh-cn", "en-us"], help=t("help_lang"))
+    parser.add_argument("--lang", choices=["zh-cn", "en-us", "ru-ru"], help=t("help_lang"))
 
     subparsers = parser.add_subparsers(dest="command", help=t("help_subcommands"))
 
