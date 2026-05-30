@@ -754,7 +754,7 @@ CLI 工具允许你通过命令行触发 GitHub Actions 构建，无需 Android 
         epilog="""
 使用示例:
   账户管理:
-    abk login                                # 登录 GitHub (自动打开浏览器)
+    abk login                                # 登录 GitHub
     abk logout                               # 登出并清除 Token
     abk whoami                               # 显示当前用户和 fork 状态
 
@@ -790,7 +790,7 @@ CLI 工具允许你通过命令行触发 GitHub Actions 构建，无需 Android 
 更多信息: https://github.com/xingguangcuican6666/ABK"""
     )
     parser.add_argument("--token", help="GitHub Token (也可通过 GITHUB_TOKEN 环境变量设置)")
-    parser.add_argument("--repo", help=f"GitHub 仓库 (默认: 自动检测 fork，或 {DEFAULT_REPO})")
+    parser.add_argument("--repo", help="GitHub 仓库 (默认: 自动检测 fork)")
     parser.add_argument("--verbose", "-v", action="store_true", help="显示详细输出")
 
     subparsers = parser.add_subparsers(dest="command", help="可用命令 (使用 abk <command> --help 查看详细帮助)")
