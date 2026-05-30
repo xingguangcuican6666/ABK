@@ -2,7 +2,32 @@
 
 用于非Android设备快速触发ABK内核编译的命令行工具。
 
-## 安装
+A command-line tool to trigger ABK kernel builds from non-Android devices.
+
+## 支持的语言 / Supported Languages
+
+| Code | Language |
+|------|----------|
+| `zh-cn` | 中文 (默认/Default) |
+| `en-us` | English |
+| `ru-ru` | Русский |
+| `ja-jp` | 日本語 |
+| `ko-kr` | 한국어 |
+| `hi-in` | हिन्दी |
+| `de-de` | Deutsch |
+| `fr-fr` | Français |
+| `es-es` | Español |
+| `pt-br` | Português |
+| `neko` | 猫娘語 🐱 |
+
+使用 `--lang` 切换语言：
+```bash
+abk --lang en-us --help    # English
+abk --lang ja-jp --help    # 日本語
+abk --lang neko --help     # 🐱
+```
+
+## 安装 / Installation
 
 确保已安装Python 3.6+，然后将 `cli/` 目录添加到PATH：
 
@@ -16,9 +41,9 @@ export PATH="$HOME/ABK/cli:$PATH"
 sudo ln -s ~/ABK/cli/abk /usr/local/bin/abk
 ```
 
-## 配置
+## 配置 / Configuration
 
-### 登录 GitHub
+### 登录 GitHub / Login to GitHub
 
 推荐使用 Device Flow 登录（类似 App）：
 
@@ -50,9 +75,9 @@ abk whoami
 abk logout
 ```
 
-## 使用方法
+## 使用方法 / Usage
 
-### 账户管理
+### 账户管理 / Account Management
 
 ```bash
 abk login                                # 登录 GitHub (Device Flow)
@@ -60,16 +85,16 @@ abk logout                               # 登出
 abk whoami                               # 显示当前用户和 fork 状态
 ```
 
-### Fork 管理
+### Fork 管理 / Fork Management
 
 ```bash
 abk fork                                 # 创建/检查 fork
 abk sync                                 # 同步 fork 与上游
 ```
 
-### 触发构建
+### 触发构建 / Trigger Build
 
-#### 自定义构建 (默认)
+#### 自定义构建 (默认) / Custom Build (Default)
 
 需指定 `--sub-level` 和 `--os-patch-level`：
 
@@ -78,41 +103,41 @@ abk build --sub-level 162 --os-patch-level 2026-03
 abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
 ```
 
-#### 预览构建计划 (只预览不触发)
+#### 预览构建计划 / Preview Build Plan
 
 ```bash
 abk build --sub-level 162 --os-patch-level 2026-03 --dry-run
 abk build --matrix both --ksu all --dry-run
 ```
 
-#### 矩阵构建 (构建所有子版本)
+#### 矩阵构建 / Matrix Build
 
 ```bash
 abk build --matrix a15                   # 单个目标
 abk build --matrix both                  # 全版本 (a12~a16)
 ```
 
-#### 全量工作流
+#### 全量工作流 / Full Workflows
 
 ```bash
 abk build --matrix full                  # 全属性内核构建矩阵
 abk build --matrix all-managers          # 全管理器全矩阵编译
 ```
 
-#### OnePlus 构建
+#### OnePlus 构建 / OnePlus Build
 
 ```bash
 abk build --oneplus --device oneplus12
 ```
 
-#### 全 KSU 变体
+#### 全 KSU 变体 / All KSU Variants
 
 ```bash
 abk build --sub-level 162 --os-patch-level 2026-03 --ksu all
 abk build --matrix both --ksu all        # 全版本 × 全 KSU
 ```
 
-### 查看构建状态
+### 查看构建状态 / Check Build Status
 
 ```bash
 abk status                               # 最近构建
@@ -120,7 +145,7 @@ abk status --run-id 12345                # 特定构建
 abk status --status in_progress          # 按状态过滤
 ```
 
-### 管理构建产物
+### 管理构建产物 / Manage Artifacts
 
 ```bash
 abk artifacts --run-id 12345             # 列出产物
@@ -128,15 +153,15 @@ abk artifacts --run-id 12345 --download  # 下载
 abk artifacts --run-id 12345 -o ./out    # 指定目录
 ```
 
-### 列出可用选项
+### 列出可用选项 / List Options
 
 ```bash
 abk list
 ```
 
-## 构建模式
+## 构建模式 / Build Modes
 
-| 选项 | 描述 |
+| 选项 / Option | 描述 / Description |
 |------|------|
 | (默认) | 自定义构建 - 需 `--sub-level` 和 `--os-patch-level` |
 | `--matrix a12~a16` | 矩阵构建 - 单个目标所有子版本 |
@@ -146,9 +171,9 @@ abk list
 | `--oneplus` | OnePlus/Oplus 设备 |
 | `--ksu all` | 全 KSU 变体 (Official + SukiSU + ReSukiSU) |
 
-## 内核版本参数
+## 内核版本参数 / Kernel Version Options
 
-| 选项 | 说明 |
+| 选项 / Option | 说明 / Description |
 |------|------|
 | `--android-version` | android12/13/14/15/16 (默认: android12) |
 | `--kernel-version` | 5.10/5.15/6.1/6.6/6.12 (默认: 5.10) |
@@ -156,9 +181,9 @@ abk list
 | `--os-patch-level` | 安全补丁级别，如 2022-01, 2026-03 |
 | `--revision` | 修订版本，如 r11 (仅 5.10) |
 
-## 功能开关
+## 功能开关 / Feature Flags
 
-| 选项 | 默认值 | 描述 |
+| 选项 / Option | 默认值 / Default | 描述 / Description |
 |------|--------|------|
 | `--zram` / `--no-zram` | 禁用 | ZRAM 增强算法 |
 | `--bbg` / `--no-bbg` | 禁用 | BBG 防格机 |
@@ -171,9 +196,9 @@ abk list
 | `--networking` | 禁用 | 网络增强 |
 | `--zram-full-algo` | 禁用 | ZRAM 完整算法支持 |
 
-## KernelSU 选项
+## KernelSU 选项 / KernelSU Options
 
-| 变体 | 描述 |
+| 变体 / Variant | 描述 / Description |
 |------|------|
 | `None` | 无 Root |
 | `Official` | KernelSU 官方版 |
@@ -181,22 +206,22 @@ abk list
 | `ReSukiSU` | ReSukiSU (默认) |
 | `all` | 全部 (Official + SukiSU + ReSukiSU) |
 
-| 分支 | 描述 |
+| 分支 / Branch | 描述 / Description |
 |------|------|
 | `Stable(标准)` | 稳定版 (默认) |
 | `Dev(开发)` | 开发版 |
 | `Custom(自定义)` | 自定义引用 |
 
-## 虚拟化支持
+## 虚拟化支持 / Virtualization
 
-| 选项 | 描述 |
+| 选项 / Option | 描述 / Description |
 |------|------|
 | `off` | 关闭（默认） |
 | `678` | 6_7_8 槽位补丁（推荐） |
 | `123` | 1_2_3 槽位补丁（备用） |
 | `345` | 3_4_5 槽位补丁（备用） |
 
-## 示例
+## 示例 / Examples
 
 ```bash
 # 登录并创建 fork
@@ -230,3 +255,7 @@ abk artifacts --run-id 12345 --download
 # 同步 fork
 abk sync
 ```
+
+## 许可证 / License
+
+GPL-2.0
