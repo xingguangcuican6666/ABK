@@ -3511,6 +3511,63 @@ jobs:
               print("Official SUSFS 源码兼容修复无需修改。")
           PY
 
+      - name: 修复 Official SUSFS 6.1-6.12 SELinux 导出
+        if: inputs.ksu_variant == 'Official' && inputs.enable_susfs && (inputs.kernel_version == '6.1' || inputs.kernel_version == '6.6' || inputs.kernel_version == '6.12')
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("common/drivers/kernelsu/feature/selinux_hide.c")
+          if not path.exists():
+              raise SystemExit(f"未找到 {path}")
+
+          text = path.read_text()
+          original = text
+
+          text = text.replace(
+              "static bool ksu_selinux_hide_enabled __read_mostly = false;",
+              "bool ksu_selinux_hide_enabled __read_mostly = false;",
+          )
+          text = text.replace(
+              "static bool ksu_selinux_hide_running __read_mostly = false;",
+              "bool ksu_selinux_hide_running __read_mostly = false;",
+          )
+          text = text.replace(
+              "static DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
+              "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
+          )
+          text = text.replace(
+              "static struct page *fake_status = NULL;",
+              "struct page *fake_status = NULL;",
+          )
+          text = re.sub(
+              r"(?m)^static void initialize_fake_status\s*\(\s*(?:void)?\s*\)",
+              "void initialize_fake_status(void)",
+              text,
+          )
+
+          required = [
+              "bool ksu_selinux_hide_enabled __read_mostly",
+              "bool ksu_selinux_hide_running __read_mostly",
+              "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)",
+              "struct page *fake_status",
+              "void initialize_fake_status(",
+          ]
+          missing = [marker for marker in required if marker not in text]
+          if missing:
+              raise SystemExit(f"{path} 缺少 Official 6.1-6.12 SELinux 导出: {missing}")
+
+          if text != original:
+              path.write_text(text)
+              print(f"已修复 {path} 的 Official 6.1-6.12 SELinux 导出")
+          else:
+              print(f"{path} 的 Official 6.1-6.12 SELinux 导出已满足要求")
+          PY
+
       - name: 补齐 SukiSU SUSFS 内联 hook 符号
         if: inputs.ksu_variant == 'SukiSU' && inputs.enable_susfs
         working-directory: ${{ env.KERNEL_ROOT }}
