@@ -35,7 +35,7 @@ abk login
 export GITHUB_TOKEN="your_github_token"
 
 # 命令行参数
-abk --token "your_github_token" build a15
+abk --token "your_github_token" build --sub-level 66 --os-patch-level 2022-01
 ```
 
 查看登录状态：
@@ -69,33 +69,23 @@ abk sync                                 # 同步 fork 与上游
 
 ### 触发构建
 
+默认使用自定义构建 (kernel-custom.yml)，需指定子版本和补丁级别：
+
 ```bash
-# 构建 Android 15 内核 (默认 ReSukiSU)
-abk build a15
+# 自定义构建 (默认)
+abk build --sub-level 162 --os-patch-level 2026-03
 
-# 构建 Android 14 内核 (Official KernelSU)
-abk build a14 --ksu Official
+# 指定 Android 和内核版本
+abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
 
-# 启用 ZRAM 和 KPM
-abk build a15 --zram --kpm
+# 矩阵构建 (所有子版本)
+abk build --matrix a15
 
-# 禁用 SUSFS
-abk build a15 --no-susfs
+# OnePlus 构建
+abk build --oneplus --device oneplus12
 
-# 构建 OnePlus 设备内核
-abk build oneplus --device <设备名> --ksu SukiSU
-
-# 使用自定义KSU引用
-abk build a15 --ksu Custom --custom-ref "branch:5"
-
-# 启用虚拟化支持
-abk build a15 --virt 678
-
-# 自定义内核构建
-abk build custom --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
-
-# 启用所有功能
-abk build a15 --zram --bbg --kpm --ntsync --networking
+# 启用功能
+abk build --sub-level 66 --os-patch-level 2022-01 --zram --kpm --virt 678
 ```
 
 ### 查看构建状态
@@ -130,17 +120,23 @@ abk artifacts --run-id 12345 --download -o ./output
 abk list
 ```
 
-## 构建目标
+## 构建模式
 
-| 目标 | 描述 |
+| 选项 | 描述 |
 |------|------|
-| `a12` | Android 12 (5.10) - 矩阵构建所有子版本 |
-| `a13` | Android 13 (5.15) - 矩阵构建所有子版本 |
-| `a14` | Android 14 (6.1) - 矩阵构建所有子版本 |
-| `a15` | Android 15 (6.6) - 矩阵构建所有子版本 |
-| `a16` | Android 16 (6.12) - 矩阵构建所有子版本 |
-| `custom` | 自定义内核构建 - 需指定 android/kernel/sub/patch |
-| `oneplus` | OnePlus/Oplus 设备 - 需指定 --device |
+| (默认) | 自定义构建 - 需 `--sub-level` 和 `--os-patch-level` |
+| `--matrix a12-a16` | 矩阵构建 - 构建所有子版本 |
+| `--oneplus` | OnePlus/Oplus 设备 - 需 `--device` |
+
+## 内核版本参数
+
+| 选项 | 说明 |
+|------|------|
+| `--android-version` | android12/13/14/15/16 (默认: android12) |
+| `--kernel-version` | 5.10/5.15/6.1/6.6/6.12 (默认: 5.10) |
+| `--sub-level` | 子版本号，如 66, 162 |
+| `--os-patch-level` | 安全补丁级别，如 2022-01, 2026-03 |
+| `--revision` | 修订版本，如 r11 (仅 5.10) |
 
 ## 功能开关
 
@@ -164,7 +160,7 @@ abk list
 | `None` | 无 Root |
 | `Official` | KernelSU 官方版 |
 | `SukiSU` | SukiSU Ultra |
-| `ReSukiSU` | ReSukiSU |
+| `ReSukiSU` | ReSukiSU (默认) |
 
 | 分支 | 描述 |
 |------|------|
@@ -188,20 +184,17 @@ abk list
 abk login
 abk fork
 
-# 快速构建 Android 15 内核
-abk build a15
+# 自定义构建
+abk build --sub-level 162 --os-patch-level 2026-03
 
-# 构建带 ZRAM 和 KPM 的内核
-abk build a15 --zram --kpm
+# 指定版本构建
+abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03 --zram --kpm
 
-# 构建精简版内核
-abk build a15 --no-susfs
+# 矩阵构建
+abk build --matrix a15
 
-# 构建 OnePlus 设备内核
-abk build oneplus --device oneplus9 --ksu SukiSU --virt 678
-
-# 自定义内核构建 (指定具体子版本)
-abk build custom --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
+# OnePlus 构建
+abk build --oneplus --device oneplus12 --ksu SukiSU
 
 # 查看构建进度
 abk status

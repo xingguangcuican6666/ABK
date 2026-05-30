@@ -34,6 +34,8 @@ WORKFLOWS = {
 ANDROID_VERSIONS = ["android12", "android13", "android14", "android15", "android16"]
 KERNEL_VERSIONS = ["5.10", "5.15", "6.1", "6.6", "6.12"]
 
+MATRIX_TARGETS = ["a12", "a13", "a14", "a15", "a16"]
+
 KSU_VARIANTS = ["None", "Official", "SukiSU", "ReSukiSU"]
 KSU_BRANCHES = ["Stable(标准)", "Dev(开发)", "Custom(自定义)"]
 VIRT_OPTIONS = ["off", "678", "123", "345"]
@@ -595,6 +597,117 @@ def cmd_build(args):
         sys.exit(1)
     
     client = GitHubClient(token=token)
+    
+    if args.matrix:
+        target = args.matrix
+        if target not in MATRIX_TARGETS:
+            print(f"错误: 未知矩阵目标 '{target}'", file=sys.stderr)
+            print(f"可用矩阵目标: {', '.join(MATRIX_TARGETS)}", file=sys.stderr)
+            sys.exit(1)
+        workflow = WORKFLOWS[target]
+    elif args.oneplus:
+        target = "oneplus"
+        workflow = WORKFLOWS[target]
+    else:
+        if not args.sub_level:
+            print("错误: 需要 --sub-level (子版本号)", file=sys.stderr)
+            print("例如: abk build --sub-level 162 --os-patch-level 2026-03", file=sys.stderr)
+            print("或使用矩阵构建: abk build --matrix a15", file=sys.stderr)
+            sys.exit(1)
+        if not args.os_patch_level:
+            print("错误: 需要 --os-patch-level (安全补丁级别)", file=sys.stderr)
+            print("例如: abk build --sub-level 162 --os-patch-level 2026-03", file=sys.stderr)
+            print("或使用矩阵构建: abk build --matrix a15", file=sys.stderr)
+            sys.exit(1)
+        target = "custom"
+        workflow = WORKFLOWS[target]
+    
+    try:
+        fork = client.get_fork()
+        if not fork:
+            print("未检测到 fork，正在创建...")
+            client.create_fork()
+            print("Fork 已创建!")
+        else:
+            behind = client.check_behind()
+            if behind.get("behind_by", 0) > 0:
+                print(f"警告: Fork 落后上游 {behind['behind_by']} 个提交")
+                if not args.force:
+                    sync = input("是否先同步? (y/n): ").strip().lower()
+                    if sync == 'y':
+                        client.sync_fork()
+                        print("同步完成!")
+    except Exception as e:
+        print(f"检查 fork 失败: {e}", file=sys.stderr)
+        if not args.force:
+            sys.exit(1)
+
+    inputs = {
+        "kernelsu_variant": args.ksu_variant or "ReSukiSU",
+        "kernelsu_branch": args.ksu_branch or "Stable(标准)",
+        "use_zram": str(args.zram).lower(),
+        "use_bbg": str(args.bbg).lower(),
+        "use_ddk": str(args.ddk).lower(),
+        "use_kpm": str(args.kpm).lower(),
+        "use_rekernel": str(args.rekernel).lower(),
+        "cancel_susfs": str(not args.susfs).lower(),
+        "supp_op": str(args.oneplus_8e).lower(),
+        "use_ntsync": str(args.ntsync).lower(),
+        "use_networking": str(args.networking).lower(),
+        "zram_full_algo": str(args.zram_full_algo).lower(),
+    }
+    
+    if target == "custom":
+        inputs["android_version"] = args.android_version or "android12"
+        inputs["kernel_version"] = args.kernel_version or "5.10"
+        inputs["sub_level"] = args.sub_level
+        inputs["os_patch_level"] = args.os_patch_level
+        if args.revision:
+            inputs["revision"] = args.revision
+    
+    if target == "oneplus":
+        if not args.device:
+            print("错误: OnePlus 构建需要 --device", file=sys.stderr)
+            sys.exit(1)
+        inputs["device"] = args.device
+    
+    if args.virt and args.virt != "off":
+        inputs["virtualization_support"] = args.virt
+    if args.version:
+        inputs["version"] = args.version
+    if args.custom_ref:
+        inputs["custom_ref"] = args.custom_ref
+    if args.kpm_password:
+        inputs["kpm_password"] = args.kpm_password
+    if args.zram_extra_algos:
+        inputs["zram_extra_algos"] = args.zram_extra_algos
+    if args.custom_modules:
+        inputs["use_custom_external_modules"] = "true"
+        inputs["custom_external_modules"] = args.custom_modules
+
+    ref = args.ref or "dev"
+    print(f"触发 {workflow['name']} 构建...")
+    print(f"  仓库: {client.repo}")
+    
+    if target == "custom":
+        print(f"  内核: {inputs['android_version']} / {inputs['kernel_version']}.{inputs['sub_level']} / {inputs['os_patch_level']}")
+    
+    print(f"  KSU: {inputs['kernelsu_variant']} ({inputs['kernelsu_branch']})")
+    print(f"  SUSFS: {'启用' if args.susfs else '禁用'}")
+    print(f"  ZRAM: {'启用' if args.zram else '禁用'}")
+    print(f"  KPM: {'启用' if args.kpm else '禁用'}")
+    print(f"  BBG: {'启用' if args.bbg else '禁用'}")
+
+    try:
+        client.trigger_workflow(workflow["file"], ref, inputs)
+        print("\n构建已触发!")
+        print(f"查看状态: abk status")
+        print(f"GitHub Actions: https://github.com/{client.repo}/actions")
+    except Exception as e:
+        print(f"\n触发构建失败: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    client = GitHubClient(token=token)
     target = args.target
     if target not in WORKFLOWS:
         print(f"错误: 未知目标 '{target}'", file=sys.stderr)
@@ -668,7 +781,7 @@ def cmd_build(args):
         inputs["use_custom_external_modules"] = "true"
         inputs["custom_external_modules"] = args.custom_modules
 
-    ref = args.ref or "main"
+    ref = args.ref or "dev"
     print(f"触发 {workflow['name']} 构建...")
     print(f"  仓库: {client.repo}")
     
@@ -739,13 +852,11 @@ def cmd_artifacts(args):
 
 def cmd_list(args):
     print("可用构建目标:\n")
-    for key, wf in WORKFLOWS.items():
-        suffix = ""
-        if key == "custom":
-            suffix = " (需指定 android/kernel/sub/patch)"
-        elif key == "oneplus":
-            suffix = " (需指定 --device)"
-        print(f"  {key:12} - {wf['name']}{suffix}")
+    for key in MATRIX_TARGETS:
+        wf = WORKFLOWS[key]
+        print(f"  --matrix {key:9} - {wf['name']} (矩阵构建所有子版本)")
+    print(f"  --oneplus        - OnePlus/Oplus 设备 (需 --device)")
+    print(f"\n默认: 自定义构建 (kernel-custom.yml)，需 --sub-level 和 --os-patch-level")
 
     print("\nKernelSU 变体:")
     for v in KSU_VARIANTS:
@@ -791,14 +902,12 @@ CLI 工具允许你通过命令行触发 GitHub Actions 构建，无需 Android 
     abk sync                                 # 同步 fork 与上游仓库
 
   构建内核:
-    abk build a15                            # 构建 Android 15 (默认 ReSukiSU)
-    abk build a14 --ksu Official             # 使用 Official KernelSU
-    abk build a15 --zram --kpm               # 启用 ZRAM 和 KPM
-    abk build a15 --no-susfs                 # 禁用 SUSFS
-    abk build a15 --virt 678                 # 启用虚拟化支持
-    abk build custom --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
-    abk build oneplus --device oneplus12     # 构建 OnePlus 设备内核
-    abk build a15 --ksu Custom --custom-ref "main:5"  # 使用自定义引用
+    abk build --sub-level 162 --os-patch-level 2026-03     # 自定义构建 (默认)
+    abk build --sub-level 66 --os-patch-level 2022-01 --ksu Official
+    abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
+    abk build --matrix a15                                  # 矩阵构建
+    abk build --oneplus --device oneplus12                  # OnePlus 构建
+    abk build --sub-level 66 --os-patch-level 2022-01 --zram --kpm --virt 678
 
   查看状态:
     abk status                               # 查看最近构建
@@ -857,56 +966,52 @@ CLI 工具允许你通过命令行触发 GitHub Actions 构建，无需 Android 
     # build
     build_parser = subparsers.add_parser("build", 
         help="触发内核构建",
-        description="触发 GitHub Actions 内核构建工作流",
+        description="触发 GitHub Actions 内核构建工作流\n\n默认使用自定义构建 (kernel-custom.yml)，需指定 --sub-level 和 --os-patch-level",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-构建目标:
-  a12        Android 12 (5.10) - 矩阵构建所有子版本
-  a13        Android 13 (5.15) - 矩阵构建所有子版本
-  a14        Android 14 (6.1)  - 矩阵构建所有子版本
-  a15        Android 15 (6.6)  - 矩阵构建所有子版本
-  a16        Android 16 (6.12) - 矩阵构建所有子版本
-  custom     自定义内核构建 - 需指定 --android-version --kernel-version --sub-level --os-patch-level
-  oneplus    OnePlus/Oplus 设备
+内核版本选项:
+  --android-version   Android 版本 (默认: android12)
+  --kernel-version    内核主版本 (默认: 5.10)
+  --sub-level         子版本号 (必需)
+  --os-patch-level    安全补丁级别 (必需)
+  --revision          修订版本 (仅 5.10)
+
+矩阵构建 (构建所有子版本):
+  --matrix android14        使用 kernel-a14-6-1.yml
+
+OnePlus 构建:
+  --oneplus                 使用 oneplus-custom.yml (需 --device)
 
 KernelSU 变体:
-  None       无 Root
-  Official   KernelSU 官方版
-  SukiSU     SukiSU Ultra
-  ReSukiSU   ReSukiSU (默认)
+  None / Official / SukiSU / ReSukiSU (默认)
 
 KernelSU 分支:
-  Stable(标准)    稳定版 (默认)
-  Dev(开发)       开发版
-  Custom(自定义)  自定义引用
+  Stable(标准) / Dev(开发) / Custom(自定义)
 
-虚拟化支持:
-  off        关闭 (默认)
-  678        使用 6_7_8 槽位补丁 (推荐)
-  123        使用 1_2_3 槽位补丁 (备用)
-  345        使用 3_4_5 槽位补丁 (备用)
+虚拟化支持: off (默认) / 678 / 123 / 345
 
 示例:
-  abk build a15                            # 基本构建
-  abk build a15 --ksu Official --zram      # 使用 Official + ZRAM
-  abk build a15 --virt 678 --networking    # 启用虚拟化和网络增强
-  abk build custom --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
-  abk build oneplus --device oneplus12     # OnePlus 设备构建""")
-    build_parser.add_argument("target", choices=WORKFLOWS.keys(), help="构建目标")
-    build_parser.add_argument("--ref", default="main", help="Git 分支 (默认: main)")
+  abk build --sub-level 162 --os-patch-level 2026-03
+  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram
+  abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
+  abk build --matrix a15                                    # 矩阵构建
+  abk build --oneplus --device oneplus12                    # OnePlus 构建""")
+    build_parser.add_argument("--matrix", choices=MATRIX_TARGETS, help="矩阵构建目标 (构建所有子版本)")
+    build_parser.add_argument("--oneplus", action="store_true", help="OnePlus 设备构建")
+    build_parser.add_argument("--ref", default="dev", help="Fork 仓库的 Git 分支 (默认: dev)")
     build_parser.add_argument("--ksu", dest="ksu_variant", choices=KSU_VARIANTS, help="KernelSU 变体 (默认: ReSukiSU)")
     build_parser.add_argument("--ksu-branch", choices=KSU_BRANCHES, help="KernelSU 分支 (默认: Stable)")
     build_parser.add_argument("--custom-ref", help="自定义 KSU 引用 (commit/branch/tag)")
     build_parser.add_argument("--version", help="自定义版本名")
-    build_parser.add_argument("--device", help="OnePlus 设备名 (仅 oneplus 目标)")
+    build_parser.add_argument("--device", help="OnePlus 设备名 (需 --oneplus)")
     build_parser.add_argument("--virt", choices=VIRT_OPTIONS, default="off", help="虚拟化支持 (默认: off)")
     build_parser.add_argument("--kpm-password", help="KPM 超级密码")
     build_parser.add_argument("--force", action="store_true", help="跳过 fork 检查和同步提示")
     
-    build_parser.add_argument("--android-version", choices=ANDROID_VERSIONS, help="Android 版本 (仅 custom 目标)")
-    build_parser.add_argument("--kernel-version", choices=KERNEL_VERSIONS, help="内核版本 (仅 custom 目标)")
-    build_parser.add_argument("--sub-level", help="子版本号，如 66, 198 (仅 custom 目标)")
-    build_parser.add_argument("--os-patch-level", help="安全补丁级别，如 2022-01 (仅 custom 目标)")
+    build_parser.add_argument("--android-version", choices=ANDROID_VERSIONS, help="Android 版本 (默认: android12)")
+    build_parser.add_argument("--kernel-version", choices=KERNEL_VERSIONS, help="内核版本 (默认: 5.10)")
+    build_parser.add_argument("--sub-level", help="子版本号，如 66, 198")
+    build_parser.add_argument("--os-patch-level", help="安全补丁级别，如 2022-01")
     build_parser.add_argument("--revision", help="修订版本，如 r11 (仅 5.10 内核)")
     
     build_parser.add_argument("--zram", action="store_true", default=False, help="启用 ZRAM 增强算法")
