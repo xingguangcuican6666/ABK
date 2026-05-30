@@ -91,6 +91,7 @@
   "build_target_all_managers": "All Managers Full Matrix",
 
   "help_subcommands": "Commands (use abk <command> --help for details)",
+  "help_flag": "Show this help message and exit",
   "help_token": "GitHub Token (or set GITHUB_TOKEN env var)",
   "help_repo": "GitHub repo (default: auto-detect fork)",
   "help_verbose": "Verbose output",

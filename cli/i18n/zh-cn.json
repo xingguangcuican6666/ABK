@@ -92,6 +92,7 @@
   "build_target_all_managers": "全管理器全矩阵编译",
 
   "help_subcommands": "可用命令 (使用 abk <command> --help 查看详细帮助)",
+  "help_flag": "显示此帮助信息并退出",
   "help_token": "GitHub Token (也可通过 GITHUB_TOKEN 环境变量设置)",
   "help_repo": "GitHub 仓库 (默认: 自动检测 fork)",
   "help_verbose": "显示详细输出",

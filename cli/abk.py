@@ -876,7 +876,10 @@ def main():
     parser = argparse.ArgumentParser(
         prog="abk",
         description=t("abk_cli_desc_full"),
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False)
+    parser.add_argument("-h", "--help", action="help", default=argparse.SUPPRESS,
+        help=t("help_flag"))
     parser.add_argument("--token", help=t("help_token"))
     parser.add_argument("--repo", help=t("help_repo"))
     parser.add_argument("--verbose", "-v", action="store_true", help=t("help_verbose"))
