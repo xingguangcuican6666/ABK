@@ -611,29 +611,46 @@ def cmd_build(args):
     # 处理特殊全量工作流
     if args.matrix in ("full", "all-managers"):
         wf_file = FULL_MATRIX_WORKFLOWS[args.matrix]
-        name = "全属性内核构建矩阵" if args.matrix == "full" else "全管理器全矩阵编译"
         
-        inputs = {
-            "kernelsu_variant": args.ksu_variant or "ReSukiSU",
-            "kernelsu_branch": args.ksu_branch or "Dev(开发)",
-            "version": args.version or "",
-            "revision": args.revision or "r11",
-            "kpm_password": args.kpm_password or "",
-            "enable_susfs": str(args.susfs).lower(),
-            "use_zram": str(args.zram).lower(),
-            "use_bbg": str(args.bbg).lower(),
-            "use_ddk": str(args.ddk).lower(),
-            "use_kpm": str(args.kpm).lower(),
-            "use_rekernel": str(args.rekernel).lower(),
-            "use_ntsync": str(args.ntsync).lower(),
-            "use_networking": str(args.networking).lower(),
-            "zram_full_algo": str(args.zram_full_algo).lower(),
-            "zram_extra_algos": args.zram_extra_algos or "",
-        }
-        
-        if args.matrix == "all-managers":
-            inputs["build_scope"] = args.build_scope or "Both"
-            inputs["manager_variants"] = args.manager_variants or "all"
+        if args.matrix == "full":
+            name = "全属性内核构建矩阵"
+            inputs = {
+                "kernelsu_variant": args.ksu_variant or "ReSukiSU",
+                "kernelsu_branch": args.ksu_branch or "Dev(开发)",
+                "version": args.version or "",
+                "revision": args.revision or "r11",
+                "kpm_password": args.kpm_password or "",
+                "enable_susfs": str(args.susfs).lower(),
+                "use_zram": str(args.zram).lower(),
+                "use_bbg": str(args.bbg).lower(),
+                "use_ddk": str(args.ddk).lower(),
+                "use_kpm": str(args.kpm).lower(),
+                "use_rekernel": str(args.rekernel).lower(),
+                "use_ntsync": str(args.ntsync).lower(),
+                "use_networking": str(args.networking).lower(),
+                "zram_full_algo": str(args.zram_full_algo).lower(),
+                "zram_extra_algos": args.zram_extra_algos or "",
+            }
+        else:
+            name = "全管理器全矩阵编译"
+            inputs = {
+                "build_scope": args.build_scope or "Both",
+                "manager_variants": args.manager_variants or "all",
+                "kernelsu_branch": args.ksu_branch or "Dev(开发)",
+                "version": args.version or "",
+                "revision": args.revision or "r11",
+                "kpm_password": args.kpm_password or "",
+                "enable_susfs": str(args.susfs).lower(),
+                "use_zram": str(args.zram).lower(),
+                "use_bbg": str(args.bbg).lower(),
+                "use_ddk": str(args.ddk).lower(),
+                "use_kpm": str(args.kpm).lower(),
+                "use_rekernel": str(args.rekernel).lower(),
+                "use_ntsync": str(args.ntsync).lower(),
+                "use_networking": str(args.networking).lower(),
+                "zram_full_algo": str(args.zram_full_algo).lower(),
+                "zram_extra_algos": args.zram_extra_algos or "",
+            }
         
         ref = args.ref or "dev"
         print(f"触发 {name}...")
