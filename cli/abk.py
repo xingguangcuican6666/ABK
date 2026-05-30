@@ -90,7 +90,7 @@ def request_device_code():
         with urlopen(req) as resp:
             return json.loads(resp.read())
     except Exception as e:
-        print(f"请求授权码失败: {e}", file=sys.stderr)
+        print(t("err_req_failed_with_error", error=e), file=sys.stderr)
         return None
 
 
@@ -137,6 +137,37 @@ def poll_device_token_once(device_code):
 def device_flow_login():
     print(t("login_requesting"))
     result = request_device_code()
+    
+    if not result:
+        print(t("err_req_failed"), file=sys.stderr)
+        return None
+    
+    device_code = result["device_code"]
+    user_code = result["user_code"]
+    verification_uri = result["verification_uri"]
+    interval = result.get("interval", 5)
+    expires_in = result.get("expires_in", 900)
+    
+    print()
+    print("=" * 50)
+    print(f"  {t('login_title')}")
+    print("=" * 50)
+    print()
+    print(f"  {t('login_step1')}: {verification_uri}")
+    print(f"  {t('login_step2')}: {user_code}")
+    print()
+    print("=" * 50)
+    print()
+    
+    try:
+        webbrowser.open(verification_uri)
+        print(t("login_browser_open"))
+    except Exception:
+        pass
+    
+    print(t("login_waiting"))
+    print(t("press_ctrl_c"))
+    print()
     
     if not result:
         print(t("err_req_failed"), file=sys.stderr)
@@ -369,16 +400,16 @@ class GitHubClient:
 
     def ensure_fork(self):
         if not self.token:
-            raise Exception("未登录，请先运行 'abk login'")
+            raise Exception(t("err_no_token"))
         
         if not self.username:
-            raise Exception("无法获取用户信息")
+            raise Exception(t("err_no_user_info"))
         
         fork = self.get_fork()
         if fork:
             return {"action": "exists", "fork": fork}
         
-        print(f"未检测到 fork，正在创建...")
+        print(t("fork_no_detect_creating"))
         result = self.create_fork()
         return {"action": "created", "fork": result}
 
@@ -406,31 +437,31 @@ def cmd_login(args):
         config["token"] = token
         save_config(config)
         print()
-        print(f"Token 已保存到: {CONFIG_FILE}")
+        print(t("token_saved_to", path=CONFIG_FILE))
         
         client = GitHubClient(token=token)
         try:
             user = client.get_user()
-            print(f"登录为: {user.get('login', 'Unknown')}")
+            print(t("logged_in_as", user=user.get('login', 'Unknown')))
             
-            print("\n检查 fork 状态...")
+            print(t("checking_fork"))
             fork_status = client.check_and_prompt_sync()
             
             if fork_status and fork_status.get("needs_fork"):
-                create = input("是否创建 fork? (y/n): ").strip().lower()
+                create = input(t("ask_create_fork")).strip().lower()
                 if create == 'y':
                     client.create_fork()
-                    print("Fork 已创建!")
+                    print(t("fork_created_generic"))
             elif fork_status and fork_status.get("needs_sync"):
-                print(f"你的 fork 落后上游 {fork_status['behind_by']} 个提交")
-                sync = input("是否同步? (y/n): ").strip().lower()
+                print(t("fork_behind_upstream", n=fork_status['behind_by']))
+                sync = input(t("ask_sync")).strip().lower()
                 if sync == 'y':
                     client.sync_fork()
                     print(t("fork_sync_done"))
             elif fork_status and not fork_status.get("needs_fork"):
-                print("Fork 已存在且是最新的")
+                print(t("fork_up_to_date"))
         except Exception as e:
-            print(f"验证失败: {e}", file=sys.stderr)
+            print(t("login_verify_failed", error=e), file=sys.stderr)
 
 
 def cmd_logout(args):
@@ -439,7 +470,7 @@ def cmd_logout(args):
         if "token" in config:
             del config["token"]
             save_config(config)
-            print("已登出，Token 已移除")
+            print(t("logged_out_token_removed"))
         else:
             print(t("logout_not"))
     else:
@@ -457,13 +488,13 @@ def cmd_whoami(args):
     
     if not token:
         print(t("logout_not"))
-        print("请运行 'abk login' 登录")
+        print(t("run_login_hint"))
         return
     
     client = GitHubClient(token=token)
     try:
         user = client.get_user()
-        print(f"用户: {user.get('login', 'Unknown')}")
+        print(t("status_user", user=user.get('login', 'Unknown')))
         
         fork = client.get_fork()
         if fork:
@@ -471,14 +502,14 @@ def cmd_whoami(args):
             
             behind = client.check_behind()
             if behind.get("behind_by", 0) > 0:
-                print(f"状态: 落后上游 {behind['behind_by']} 个提交 (需要同步)")
+                print(t("status_behind", n=behind['behind_by']))
             else:
-                print("状态: 已同步")
+                print(t("status_synced"))
         else:
-            print("Fork: 未检测到")
-            print("提示: 运行 'abk fork' 创建 fork")
+            print(t("fork_not_detected"))
+            print(t("hint_run_fork"))
     except Exception as e:
-        print(f"验证失败: {e}", file=sys.stderr)
+        print(t("login_verify_failed", error=e), file=sys.stderr)
 
 
 def cmd_fork(args):
@@ -537,7 +568,7 @@ def cmd_sync(args):
     try:
         fork = client.get_fork()
         if not fork:
-            print("未检测到 fork，请先运行 'abk fork'", file=sys.stderr)
+            print(t("err_no_fork"), file=sys.stderr)
             sys.exit(1)
         
         behind = client.check_behind()
@@ -545,7 +576,7 @@ def cmd_sync(args):
             print(t("fork_already_latest"))
             return
         
-        print(f"正在同步 (落后 {behind['behind_by']} 个提交)...")
+        print(t("syncing_n_commits", n=behind['behind_by']))
         client.sync_fork()
         print(t("fork_sync_done"))
     except Exception as e:
@@ -571,13 +602,13 @@ def cmd_status(args):
     try:
         fork = client.get_fork()
         if not fork:
-            print("未检测到 fork，请先运行 'abk fork'")
+            print(t("err_no_fork"))
             return
         
         behind = client.check_behind()
         if behind.get("behind_by", 0) > 0:
-            print(f"警告: Fork 落后上游 {behind['behind_by']} 个提交")
-            print("运行 'abk sync' 同步")
+            print(t("warn_behind_upstream", n=behind['behind_by']))
+            print(t("run_abk_sync"))
             print()
         
         runs = client.list_runs(per_page=args.limit)
@@ -593,7 +624,7 @@ def cmd_status(args):
             created = run["created_at"][:19].replace("T", " ")
             print(f"  {status_icon} #{run['id']} | {run.get('name', '')} | {created}")
     except Exception as e:
-        print(f"获取状态失败: {e}", file=sys.stderr)
+        print(t("fetch_status_failed", error=e), file=sys.stderr)
 
 
 def cmd_build(args):
@@ -616,7 +647,7 @@ def cmd_build(args):
         wf_file = FULL_MATRIX_WORKFLOWS[args.matrix]
         
         if args.matrix == "full":
-            name = "全属性内核构建矩阵"
+            name = t("build_target_full")
             inputs = {
                 "kernelsu_variant": args.ksu_variant or "ReSukiSU",
                 "kernelsu_branch": args.ksu_branch or "Dev(开发)",
@@ -635,7 +666,7 @@ def cmd_build(args):
                 "zram_extra_algos": args.zram_extra_algos or "",
             }
         else:
-            name = "全管理器全矩阵编译"
+            name = t("build_target_all_managers")
             inputs = {
                 "build_scope": args.build_scope or "Both",
                 "manager_variants": args.manager_variants or "all",
@@ -656,13 +687,13 @@ def cmd_build(args):
             }
         
         ref = args.ref or "dev"
-        print(f"触发 {name}...")
+        print(t("triggering_name", name=name))
         if args.dry_run:
-            print("  [DRY-RUN] 跳过，去掉 --dry-run 触发")
+            print(f"  " + t("dry_run_skip"))
         else:
             try:
                 client.trigger_workflow(wf_file, ref, inputs)
-                print("  ✓ 已触发")
+                print(f"  " + t("triggered_ok"))
             except Exception as e:
                 print(t("build_triggered_fail", error=e))
         print(t("build_check_status"))
@@ -689,20 +720,20 @@ def cmd_build(args):
     try:
         fork = client.get_fork()
         if not fork:
-            print("未检测到 fork，正在创建...")
+            print(t("fork_no_detect_creating"))
             client.create_fork()
-            print("Fork 已创建!")
+            print(t("fork_created_generic"))
         else:
             behind = client.check_behind()
             if behind.get("behind_by", 0) > 0:
-                print(f"警告: Fork 落后上游 {behind['behind_by']} 个提交")
+                print(t("warn_behind_upstream", n=behind['behind_by']))
                 if not args.force:
-                    sync = input("是否先同步? (y/n): ").strip().lower()
+                    sync = input(t("ask_sync")).strip().lower()
                     if sync == 'y':
                         client.sync_fork()
                         print(t("fork_sync_done"))
     except Exception as e:
-        print(f"检查 fork 失败: {e}", file=sys.stderr)
+        print(t("err_fork_failed", error=e), file=sys.stderr)
         if not args.force:
             sys.exit(1)
     
@@ -774,8 +805,8 @@ def cmd_build(args):
                 inputs["custom_external_modules"] = args.custom_modules
             
             ref = args.ref or "dev"
-            print(f"触发 {workflow['name']} ({kv})...")
-            print(f"  " + t("build_feat_line", susfs=('启用' if args.susfs else '禁用'), zram=('启用' if args.zram else '禁用'), bbg=('启用' if args.bbg else '禁用'), ddk=('启用' if args.ddk else '禁用'), kpm=('启用' if args.kpm else '禁用'), rekernel=('启用' if args.rekernel else '禁用'), ntsync=('启用' if args.ntsync else '禁用'), networking=('启用' if args.networking else '禁用')))
+            print(t("triggering_name", name=f"{workflow['name']} ({kv})"))
+            print(f"  " + t("build_feat_line", susfs=t("enabled") if args.susfs else t("disabled"), zram=t("enabled") if args.zram else t("disabled"), bbg=t("enabled") if args.bbg else t("disabled"), ddk=t("enabled") if args.ddk else t("disabled"), kpm=t("enabled") if args.kpm else t("disabled"), rekernel=t("enabled") if args.rekernel else t("disabled"), ntsync=t("enabled") if args.ntsync else t("disabled"), networking=t("enabled") if args.networking else t("disabled")))
             
             if args.dry_run:
                 print(f"  " + t("build_triggered_dry"))
@@ -827,7 +858,7 @@ def cmd_artifacts(args):
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             print(f"\n" + t("artifacts_download_to", dir=output_dir))
             for art in artifacts["artifacts"]:
-                print(f"  下载 {art['name']}...")
+                print(f"  " + t("artifacts_downloading", name=art["name"]))
                 path = client.download_artifact(art["id"], output_dir)
                 if path:
                     print(f"    -> {path}")
@@ -836,34 +867,34 @@ def cmd_artifacts(args):
 
 
 def cmd_list(args):
-    print("可用构建目标:\n")
+    print(t("available_targets"))
     for key in MATRIX_TARGETS:
         wf = WORKFLOWS[key]
-        print(f"  --matrix {key:9} - {wf['name']} (矩阵构建所有子版本)")
-    print(f"  --oneplus        - OnePlus/Oplus 设备 (需 --device)")
-    print(f"\n默认: 自定义构建 (kernel-custom.yml)，需 --sub-level 和 --os-patch-level")
+        print(f"  " + t("matrix_item_desc", key=key, name=wf["name"]))
+    print(f"  " + t("oneplus_item_desc"))
+    print(f"\n" + t("custom_default_desc"))
 
-    print("\nKernelSU 变体:")
+    print(f"\n" + t("ksu_variants_label"))
     for v in KSU_VARIANTS:
         print(f"  {v}")
 
-    print("\nKernelSU 分支:")
+    print(f"\n" + t("ksu_branches_label"))
     for b in KSU_BRANCHES:
         print(f"  {b}")
 
-    print("\n虚拟化支持选项:")
+    print(f"\n" + t("virt_options_label"))
     for o in VIRT_OPTIONS:
         print(f"  {o}")
 
-    print("\n命令:")
-    print("  abk login                                # 登录 GitHub")
-    print("  abk logout                               # 登出")
-    print("  abk whoami                               # 显示当前用户")
-    print("  abk fork                                 # 创建/检查 fork")
-    print("  abk sync                                 # 同步 fork 与上游")
-    print("  abk build a15 --ksu ReSukiSU             # 构建内核")
-    print("  abk status                               # 查看构建状态")
-    print("  abk artifacts --run-id 12345 --download  # 下载构建产物")
+    print(f"\n" + t("commands_label"))
+    print(t("cmd_example_login"))
+    print(t("cmd_example_logout"))
+    print(t("cmd_example_whoami"))
+    print(t("cmd_example_fork"))
+    print(t("cmd_example_sync"))
+    print(t("cmd_example_build"))
+    print(t("cmd_example_status"))
+    print(t("cmd_example_artifacts"))
 
 
 def main():
@@ -909,7 +940,7 @@ def main():
     fork_parser = subparsers.add_parser("fork", 
         help=t("cmd_fork_help"),
         description=t("cmd_fork_desc"))
-    fork_parser.add_argument("--no-sync", action="store_true", help="不同步 fork (即使落后上游)")
+    fork_parser.add_argument("--no-sync", action="store_true", help=t("arg_no_sync"))
     fork_parser.set_defaults(func=cmd_fork)
 
     # sync
@@ -923,37 +954,7 @@ def main():
         help=t("cmd_build_help"),
         description=t("cmd_build_desc"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-内核版本选项:
-  --android-version   Android 版本 (默认: android12)
-  --kernel-version    内核主版本 (默认: 5.10)
-  --sub-level         子版本号 (必需)
-  --os-patch-level    安全补丁级别 (必需)
-  --revision          修订版本 (仅 5.10)
-
-矩阵构建 (构建所有子版本):
-  --matrix android14        使用 kernel-a14-6-1.yml
-
-OnePlus 构建:
-  --oneplus                 使用 oneplus-custom.yml (需 --device)
-
-KernelSU 变体:
-  None / Official / SukiSU / ReSukiSU (默认)
-
-KernelSU 分支:
-  Stable(标准) / Dev(开发) / Custom(自定义)
-
-虚拟化支持: off (默认) / 678 / 123 / 345
-
-示例:
-  abk build --sub-level 162 --os-patch-level 2026-03
-  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram
-  abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
-  abk build --matrix a15                                    # 矩阵构建
-  abk build --matrix both                                   # 全版本矩阵构建
-  abk build --matrix full                                   # 全属性内核构建矩阵
-  abk build --matrix all-managers                           # 全管理器全矩阵编译
-  abk build --oneplus --device oneplus12                    # OnePlus 构建""")
+        epilog=t("build_epilog"))
     build_parser.add_argument("--matrix", choices=MATRIX_TARGETS_ALL, help=t("arg_matrix"))
     build_parser.add_argument("--oneplus", action="store_true", help=t("arg_oneplus"))
     build_parser.add_argument("--ref", default="dev", help=t("arg_ref"))
@@ -1000,17 +1001,17 @@ KernelSU 分支:
     status_parser = subparsers.add_parser("status", 
         help=t("cmd_status_help"),
         description=t("cmd_status_desc"))
-    status_parser.add_argument("--run-id", type=int, help="查看特定构建运行")
-    status_parser.add_argument("--target", choices=WORKFLOWS.keys(), help="按构建目标过滤")
-    status_parser.add_argument("--status", choices=["all", "queued", "in_progress", "completed"], default="all", help="按状态过滤 (默认: all)")
-    status_parser.add_argument("--limit", type=int, default=10, help="显示数量 (默认: 10)")
+    status_parser.add_argument("--run-id", type=int, help=t("arg_run_id_status"))
+    status_parser.add_argument("--target", choices=WORKFLOWS.keys(), help=t("arg_target"))
+    status_parser.add_argument("--status", choices=["all", "queued", "in_progress", "completed"], default="all", help=t("arg_status_filter"))
+    status_parser.add_argument("--limit", type=int, default=10, help=t("arg_limit"))
     status_parser.set_defaults(func=cmd_status)
 
     # artifacts
     artifacts_parser = subparsers.add_parser("artifacts", 
         help=t("cmd_artifacts_help"),
         description=t("cmd_artifacts_desc"))
-    artifacts_parser.add_argument("--run-id", type=int, help="构建运行 ID")
+    artifacts_parser.add_argument("--run-id", type=int, help=t("arg_run_id"))
     artifacts_parser.add_argument("--download", action="store_true", help=t("arg_download"))
     artifacts_parser.add_argument("--output", "-o", help=t("arg_output"))
     artifacts_parser.set_defaults(func=cmd_artifacts)
