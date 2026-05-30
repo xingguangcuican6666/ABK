@@ -69,49 +69,56 @@ abk sync                                 # 同步 fork 与上游
 
 ### 触发构建
 
-默认使用自定义构建 (kernel-custom.yml)，需指定子版本和补丁级别：
+#### 自定义构建 (默认)
+
+需指定 `--sub-level` 和 `--os-patch-level`：
 
 ```bash
-# 自定义构建 (默认)
 abk build --sub-level 162 --os-patch-level 2026-03
-
-# 指定 Android 和内核版本
 abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
+```
 
-# 矩阵构建 (所有子版本)
-abk build --matrix a15
+#### 矩阵构建 (构建所有子版本)
 
-# OnePlus 构建
+```bash
+abk build --matrix a15                   # 单个目标
+abk build --matrix both                  # 全版本 (a12~a16)
+```
+
+#### 全量工作流
+
+```bash
+abk build --matrix full                  # 全属性内核构建矩阵
+abk build --matrix all-managers          # 全管理器全矩阵编译
+```
+
+#### OnePlus 构建
+
+```bash
 abk build --oneplus --device oneplus12
+```
 
-# 启用功能
-abk build --sub-level 66 --os-patch-level 2022-01 --zram --kpm --virt 678
+#### 全 KSU 变体
+
+```bash
+abk build --sub-level 162 --os-patch-level 2026-03 --ksu all
+abk build --matrix both --ksu all        # 全版本 × 全 KSU
 ```
 
 ### 查看构建状态
 
 ```bash
-# 查看最近构建
-abk status
-
-# 查看特定构建详情
-abk status --run-id 12345
-
-# 按状态过滤
-abk status --status in_progress
+abk status                               # 最近构建
+abk status --run-id 12345                # 特定构建
+abk status --status in_progress          # 按状态过滤
 ```
 
 ### 管理构建产物
 
 ```bash
-# 查看构建产物
-abk artifacts --run-id 12345
-
-# 下载构建产物
-abk artifacts --run-id 12345 --download
-
-# 下载到指定目录
-abk artifacts --run-id 12345 --download -o ./output
+abk artifacts --run-id 12345             # 列出产物
+abk artifacts --run-id 12345 --download  # 下载
+abk artifacts --run-id 12345 -o ./out    # 指定目录
 ```
 
 ### 列出可用选项
@@ -125,8 +132,12 @@ abk list
 | 选项 | 描述 |
 |------|------|
 | (默认) | 自定义构建 - 需 `--sub-level` 和 `--os-patch-level` |
-| `--matrix a12-a16` | 矩阵构建 - 构建所有子版本 |
-| `--oneplus` | OnePlus/Oplus 设备 - 需 `--device` |
+| `--matrix a12~a16` | 矩阵构建 - 单个目标所有子版本 |
+| `--matrix both` | 全版本矩阵 - 同时触发 a12~a16 |
+| `--matrix full` | 全属性内核构建矩阵 |
+| `--matrix all-managers` | 全管理器全矩阵编译 |
+| `--oneplus` | OnePlus/Oplus 设备 |
+| `--ksu all` | 全 KSU 变体 (Official + SukiSU + ReSukiSU) |
 
 ## 内核版本参数
 
@@ -161,6 +172,7 @@ abk list
 | `Official` | KernelSU 官方版 |
 | `SukiSU` | SukiSU Ultra |
 | `ReSukiSU` | ReSukiSU (默认) |
+| `all` | 全部 (Official + SukiSU + ReSukiSU) |
 
 | 分支 | 描述 |
 |------|------|
@@ -173,9 +185,9 @@ abk list
 | 选项 | 描述 |
 |------|------|
 | `off` | 关闭（默认） |
-| `678` | 使用 6_7_8 槽位补丁（推荐） |
-| `123` | 使用 1_2_3 槽位补丁（备用） |
-| `345` | 使用 3_4_5 槽位补丁（备用） |
+| `678` | 6_7_8 槽位补丁（推荐） |
+| `123` | 1_2_3 槽位补丁（备用） |
+| `345` | 3_4_5 槽位补丁（备用） |
 
 ## 示例
 
@@ -187,19 +199,25 @@ abk fork
 # 自定义构建
 abk build --sub-level 162 --os-patch-level 2026-03
 
-# 指定版本构建
-abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03 --zram --kpm
+# 全版本矩阵
+abk build --matrix both
 
-# 矩阵构建
-abk build --matrix a15
+# 全属性内核构建矩阵
+abk build --matrix full
+
+# 全管理器全矩阵编译
+abk build --matrix all-managers
 
 # OnePlus 构建
 abk build --oneplus --device oneplus12 --ksu SukiSU
 
+# 全 KSU 变体
+abk build --matrix both --ksu all
+
 # 查看构建进度
 abk status
 
-# 下载完成的构建
+# 下载产物
 abk artifacts --run-id 12345 --download
 
 # 同步 fork
