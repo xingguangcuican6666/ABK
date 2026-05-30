@@ -2769,6 +2769,285 @@ jobs:
                   raise SystemExit(f"include anchor not found: {anchor.strip()}")
               return text.replace(anchor, anchor + line, 1)
 
+          def ensure_include(text, include, anchor):
+              if include in text:
+                  return text
+              if anchor in text:
+                  return text.replace(anchor, anchor + include + "\n", 1)
+              return include + "\n" + text
+
+          def replace_first_function(text, signatures, replacement):
+              for signature in signatures:
+                  pattern = re.compile(re.escape(signature) + r"\s*\{")
+                  match = pattern.search(text)
+                  if not match:
+                      continue
+                  start = match.start()
+                  brace = match.end() - 1
+                  depth = 0
+                  for index in range(brace, len(text)):
+                      if text[index] == "{":
+                          depth += 1
+                      elif text[index] == "}":
+                          depth -= 1
+                          if depth == 0:
+                              return text[:start] + replacement + text[index + 1:]
+                  raise SystemExit(f"function body is not balanced: {signature}")
+              raise SystemExit(f"function not found: {' / '.join(signatures)}")
+
+          def ensure_official_runtime_compat(ksu_dir):
+              path = ksu_dir / "runtime/ksud_integration.c"
+              if not path.exists():
+                  return False
+
+              text = path.read_text()
+              original = text
+
+              text = re.sub(
+                  r"(?m)^(?:static\s+)?void\s+ksu_handle_sys_read\s*\(\s*unsigned int fd\s*,\s*char __user \*\*buf_ptr\s*,\s*size_t \*count_ptr\s*\)",
+                  "void ksu_handle_sys_read(unsigned int fd)",
+                  text,
+                  count=1,
+              )
+              text = re.sub(
+                  r"(?m)^static void\s+ksu_handle_sys_read\s*\(\s*unsigned int fd\s*\)",
+                  "void ksu_handle_sys_read(unsigned int fd)",
+                  text,
+                  count=1,
+              )
+              text = text.replace("ksu_handle_sys_read(fd, buf_ptr, count_ptr);", "ksu_handle_sys_read(fd);")
+              text = ensure_include(text, "#include <linux/static_key.h>", "#include <linux/printk.h>\n")
+              if "register_kprobe(" in text or "unregister_kprobe(" in text or "struct kprobe" in text:
+                  text = ensure_include(text, "#include <linux/kprobes.h>", "#include <linux/input-event-codes.h>\n")
+
+              if "DEFINE_STATIC_KEY_TRUE(ksu_is_init_rc_hook_enabled);" not in text:
+                  block = dedent("""\
+
+                  #ifdef CONFIG_KSU_SUSFS
+                  DEFINE_STATIC_KEY_TRUE(ksu_is_init_rc_hook_enabled);
+                  DEFINE_STATIC_KEY_TRUE(ksu_is_input_hook_enabled);
+                  #endif
+                  """)
+                  anchor = '#include "hook/syscall_event_bridge.h"\n'
+                  if anchor not in text:
+                      raise SystemExit(f"{path} 缺少 syscall_event_bridge include，无法注入 Official runtime static key")
+                  text = text.replace(anchor, anchor + block, 1)
+
+              decls = []
+              if not re.search(r"(?m)^static void stop_init_rc_hook\s*\(\s*(?:void)?\s*\)\s*;", text):
+                  decls.append("static void stop_init_rc_hook(void);")
+              if not re.search(r"(?m)^void ksu_stop_input_hook_runtime\s*\(\s*(?:void)?\s*\)\s*;", text):
+                  decls.append("void ksu_stop_input_hook_runtime(void);")
+              if "stop_input_hook_work" in text and not re.search(r"(?m)^static struct work_struct stop_input_hook_work\s*;", text):
+                  decls.append("static struct work_struct stop_input_hook_work;")
+              if decls:
+                  block = "\n/* ABK: Official SUSFS runtime compatibility declarations. */\n" + "\n".join(decls) + "\n"
+                  for anchor in ("// clang-format on\n", '#include "hook/syscall_event_bridge.h"\n'):
+                      if anchor in text:
+                          text = text.replace(anchor, anchor + block, 1)
+                          break
+                  else:
+                      raise SystemExit(f"{path} 缺少 runtime 声明插入锚点")
+
+              if (
+                  not re.search(r"(?m)^void\s+ksu_handle_vfs_fstat\s*\(", text)
+                  or "orig_sys_fstat(" in text
+                  or "statbuf" in text
+              ):
+                  load_module = "        load_module_rc_once();\n" if "load_module_rc_once(" in text else ""
+                  extra_expr = "ksu_rc_len + module_rc_len" if "module_rc_len" in text else "ksu_rc_len"
+                  log_args = (
+                      ', orig_size, *kstat_size_ptr, ksu_rc_len, module_rc_len'
+                      if "module_rc_len" in text
+                      else ', orig_size, *kstat_size_ptr, ksu_rc_len'
+                  )
+                  log_fmt = (
+                      'adding rc len: %lld -> %lld (static=%zu module=%zu)'
+                      if "module_rc_len" in text
+                      else 'adding rc len: %lld -> %lld (static=%zu)'
+                  )
+                  block = (
+                      "void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr)\n"
+                      "{\n"
+                      "    loff_t orig_size;\n"
+                      "    size_t extra;\n"
+                      "    struct file *file;\n\n"
+                      "    if (!kstat_size_ptr)\n"
+                      "        return;\n\n"
+                      "    file = fget(fd);\n"
+                      "    if (!file)\n"
+                      "        return;\n\n"
+                      "    if (is_init_rc(file)) {\n"
+                      "        orig_size = *kstat_size_ptr;\n"
+                      f"{load_module}"
+                      f"        extra = {extra_expr};\n"
+                      "        *kstat_size_ptr = orig_size + extra;\n"
+                      f"        pr_info(\"{log_fmt}\"{log_args});\n"
+                      "    }\n"
+                      "    fput(file);\n"
+                      "}\n\n"
+                  )
+                  replaced = False
+                  for signature in (
+                      "void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr)",
+                      "static long ksu_sys_fstat(const struct pt_regs *regs)",
+                  ):
+                      if re.search(re.escape(signature) + r"\s*\{", text):
+                          text = replace_first_function(text, (signature,), block)
+                          replaced = True
+                          break
+                  if not replaced:
+                      for anchor in (
+                          "\nstatic long (*orig_sys_read)(const struct pt_regs *regs);",
+                          "\nstatic unsigned int volumedown_pressed_count",
+                      ):
+                          if anchor in text:
+                              text = text.replace(anchor, "\n" + block + anchor.lstrip("\n"), 1)
+                              replaced = True
+                              break
+                  if not replaced:
+                      raise SystemExit(f"{path} 缺少 ksu_handle_vfs_fstat 插入锚点")
+
+              if "ksu init rc inline hook disabled" not in text and "ksu_syscall_table_unhook(" in text:
+                  text = replace_first_function(
+                      text,
+                      ("static void stop_init_rc_hook()", "static void stop_init_rc_hook(void)"),
+                      dedent("""\
+                      static void stop_init_rc_hook(void)
+                      {
+                      #ifdef CONFIG_KSU_SUSFS
+                          if (static_key_enabled(&ksu_is_init_rc_hook_enabled)) {
+                              static_branch_disable(&ksu_is_init_rc_hook_enabled);
+                              pr_info("ksu init rc inline hook disabled\\n");
+                          }
+                      #else
+                          ksu_syscall_table_unhook(__NR_read);
+                          ksu_syscall_table_unhook(__NR_fstat);
+                          pr_info("unregister init_rc syscall hook\\n");
+                      #endif
+                      }
+                      """),
+                  )
+
+              if (
+                  "ksu input inline hook disabled" not in text
+                  and re.search(r"(?m)^void\s+ksu_stop_input_hook_runtime\s*\([^;{]*\)\s*\{", text)
+              ):
+                  text = replace_first_function(
+                      text,
+                      ("void ksu_stop_input_hook_runtime(void)", "void ksu_stop_input_hook_runtime()"),
+                      dedent("""\
+                      void ksu_stop_input_hook_runtime(void)
+                      {
+                          static bool input_hook_stopped = false;
+                          bool ret;
+
+                          if (input_hook_stopped) {
+                              return;
+                          }
+                          input_hook_stopped = true;
+                      #ifdef CONFIG_KSU_SUSFS
+                          if (static_key_enabled(&ksu_is_input_hook_enabled)) {
+                              static_branch_disable(&ksu_is_input_hook_enabled);
+                              pr_info("ksu input inline hook disabled\\n");
+                          }
+                      #endif
+                          ret = schedule_work(&stop_input_hook_work);
+                          pr_info("unregister input kprobe: %d!\\n", ret);
+                      }
+                      """),
+                  )
+
+              if "ksud: using SUSFS inline init.rc hooks" not in text and "ksu_syscall_table_hook(" in text:
+                  text = replace_first_function(
+                      text,
+                      ("void __init ksu_ksud_init()", "void __init ksu_ksud_init(void)"),
+                      dedent("""\
+                      void __init ksu_ksud_init(void)
+                      {
+                          int ret;
+
+                      #ifndef CONFIG_KSU_SUSFS
+                          ksu_syscall_table_hook(__NR_read, ksu_sys_read, &orig_sys_read);
+                          ksu_syscall_table_hook(__NR_fstat, ksu_sys_fstat, &orig_sys_fstat);
+                      #else
+                          pr_info("ksud: using SUSFS inline init.rc hooks\\n");
+                      #endif
+
+                          ret = register_kprobe(&input_event_kp);
+                          pr_info("ksud: input_event_kp: %d\\n", ret);
+
+                          INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
+                      }
+                      """),
+                  )
+
+              if "ksu_handle_execveat_ksud(path, &argv);" in text:
+                  text = replace_first_function(
+                      text,
+                      ("void ksu_execve_hook_ksud(const struct pt_regs *regs)",),
+                      dedent("""\
+                      void ksu_execve_hook_ksud(const struct pt_regs *regs)
+                      {
+                      #ifdef CONFIG_KSU_SUSFS
+                          /* ABK: Official SUSFS uses inline execve hooks instead. */
+                          (void)regs;
+                      #else
+                          const char __user **filename_user = (const char **)&PT_REGS_PARM1(regs);
+                          const char __user *const __user *__argv = (const char __user *const __user *)PT_REGS_PARM2(regs);
+                          struct user_arg_ptr argv = { .ptr.native = __argv };
+                          char path[32];
+                          long ret;
+                          unsigned long addr;
+                          const char __user *fn;
+
+                          if (!filename_user)
+                              return;
+
+                          addr = untagged_addr((unsigned long)*filename_user);
+                          fn = (const char __user *)addr;
+
+                          memset(path, 0, sizeof(path));
+                          ret = strncpy_from_user(path, fn, 32);
+                          if (ret < 0) {
+                              pr_err("Access filename failed for execve_handler_pre\\n");
+                              return;
+                          }
+
+                          ksu_handle_execveat_ksud(path, &argv);
+                      #endif
+                      }
+                      """),
+                  )
+
+              if text == original:
+                  return False
+
+              path.write_text(text)
+              print(f"已修复 {path} 的 Official SUSFS runtime 兼容")
+              return True
+
+          def ensure_official_boot_event_compat(ksu_dir):
+              path = ksu_dir / "runtime/boot_event.c"
+              if not path.exists():
+                  return False
+
+              text = path.read_text()
+              original = text
+              if "void ksu_stop_input_hook_runtime(void);" not in text:
+                  text = ensure_line_after(
+                      text,
+                      '#include "runtime/ksud.h"\n',
+                      "void ksu_stop_input_hook_runtime(void);\n",
+                  )
+
+              if text == original:
+                  return False
+
+              path.write_text(text)
+              print(f"已补齐 {path} 的 ksu_stop_input_hook_runtime 声明")
+              return True
+
           def patch_official_selinux_hide(ksu_dir):
               path = ksu_dir / "feature/selinux_hide.c"
               if not path.exists():
@@ -2776,6 +3055,83 @@ jobs:
 
               text = path.read_text()
               original = text
+
+              text = text.replace("static struct selinux_state fake_state;", "struct selinux_state fake_state;")
+              text = text.replace("__maybe_static struct selinux_state fake_state;", "struct selinux_state fake_state;")
+              text = text.replace(
+                  "static bool ksu_selinux_hide_running __read_mostly = false;",
+                  "bool ksu_selinux_hide_running __read_mostly = false;",
+              )
+              text = text.replace(
+                  "static bool ksu_selinux_hide_enabled __read_mostly = false;",
+                  "bool ksu_selinux_hide_enabled __read_mostly = false;",
+              )
+              if "bool ksu_selinux_hide_enabled __read_mostly" not in text:
+                  text = ensure_line_after(
+                      text,
+                      "static DEFINE_MUTEX(selinux_hide_mutex);\n",
+                      "bool ksu_selinux_hide_enabled __read_mostly = false;\n",
+                  )
+              if "bool ksu_selinux_hide_running __read_mostly" not in text:
+                  text = ensure_line_after(
+                      text,
+                      "bool ksu_selinux_hide_enabled __read_mostly = false;\n",
+                      "bool ksu_selinux_hide_running __read_mostly = false;\n",
+                  )
+              if "struct selinux_state fake_state;" not in text:
+                  text = ensure_line_after(
+                      text,
+                      "bool ksu_selinux_hide_running __read_mostly = false;\n",
+                      "struct selinux_state fake_state;\n",
+                  )
+              text = text.replace(
+                  "static DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
+                  "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
+              )
+              text = text.replace(
+                  "static struct page *fake_status = NULL;",
+                  "struct page *fake_status = NULL;",
+              )
+              text = re.sub(
+                  r"(?m)^static void initialize_fake_status\s*\(\s*(?:void)?\s*\)",
+                  "void initialize_fake_status(void)",
+                  text,
+              )
+              if "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)" not in text:
+                  if "jump_label.h" not in text:
+                      text = ensure_include(text, "#include <linux/jump_label.h>", "#include <linux/mutex.h>\n")
+                  block = dedent("""\
+
+                  #ifdef CONFIG_KSU_SUSFS
+                  DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);
+                  struct page *fake_status = NULL;
+
+                  void initialize_fake_status(void)
+                  {
+                  }
+                  #endif
+                  """)
+                  text = ensure_line_after(
+                      text,
+                      "struct selinux_state fake_state;\n",
+                      block,
+                  )
+              text = text.replace(
+                  "static int security_context_to_sid_with_policy(",
+                  "int security_context_to_sid_with_policy(",
+              )
+              text = text.replace(
+                  "static int security_sid_to_context_with_policy(",
+                  "int security_sid_to_context_with_policy(",
+              )
+              text = text.replace(
+                  "static void __nocfi security_compute_av_user_with_policy(",
+                  "void __nocfi security_compute_av_user_with_policy(",
+              )
+              text = text.replace(
+                  "static void security_compute_av_user_with_policy(",
+                  "void security_compute_av_user_with_policy(",
+              )
 
               dump_is_pointer = re.search(r"\(\s*\*\s*security_dump_masked_av_fn\s*\)", text) is not None
               compute_is_pointer = re.search(r"\(\s*\*\s*context_struct_compute_av_fn\s*\)", text) is not None
@@ -2939,8 +3295,111 @@ jobs:
           changed = patch_official_selinux_hide(ksu_dir) or changed
           changed = ensure_official_symbol_resolver_exports(ksu_dir) or changed
 
+          runtime_c = ksu_dir / "runtime/ksud_integration.c"
+          if runtime_c.exists():
+              runtime_text = runtime_c.read_text()
+              if re.search(r"(?m)^static void\s+ksu_handle_sys_read\s*\(", runtime_text):
+                  raise SystemExit(f"{runtime_c} 仍包含 static ksu_handle_sys_read，SUSFS fs/read_write.c 无法链接")
+              if not re.search(r"(?m)^void\s+ksu_handle_sys_read\s*\(\s*unsigned int fd\s*\)", runtime_text):
+                  raise SystemExit(f"{runtime_c} 缺少单参数 ksu_handle_sys_read 导出")
+              if not re.search(r"(?m)^void\s+ksu_handle_vfs_fstat\s*\(", runtime_text):
+                  raise SystemExit(f"{runtime_c} 缺少 ksu_handle_vfs_fstat 导出")
+              if "orig_sys_fstat(" in runtime_text or "statbuf" in runtime_text:
+                  raise SystemExit(f"{runtime_c} 仍残留旧版 fstat hook 体")
+              required_runtime = []
+              if "ksu_syscall_table_unhook(" in runtime_text:
+                  required_runtime.append("ksu init rc inline hook disabled")
+              if "ksu_syscall_table_hook(" in runtime_text:
+                  required_runtime.append("ksud: using SUSFS inline init.rc hooks")
+              if re.search(r"(?m)^void\s+ksu_stop_input_hook_runtime\s*\([^;{]*\)\s*\{", runtime_text):
+                  required_runtime.append("ksu input inline hook disabled")
+              missing = [marker for marker in required_runtime if marker not in runtime_text]
+              if missing:
+                  raise SystemExit(f"{runtime_c} 缺少 Official SUSFS runtime 兼容标记: {missing}")
+              if (
+                  "ksu_handle_execveat_ksud(path, &argv);" in runtime_text
+                  and "Official SUSFS uses inline execve hooks instead" not in runtime_text
+              ):
+                  raise SystemExit(f"{runtime_c} 仍包含不兼容的 2 参数 ksu_handle_execveat_ksud 调用")
+
+          boot_event_c = ksu_dir / "runtime/boot_event.c"
+          if boot_event_c.exists() and "void ksu_stop_input_hook_runtime(void);" not in boot_event_c.read_text():
+              raise SystemExit(f"{boot_event_c} 缺少 ksu_stop_input_hook_runtime 声明")
+
+          selinux_hide_c = ksu_dir / "feature/selinux_hide.c"
+          if selinux_hide_c.exists():
+              selinux_hide_text = selinux_hide_c.read_text()
+              required_selinux_hide = [
+                  "bool ksu_selinux_hide_enabled __read_mostly",
+                  "bool ksu_selinux_hide_running __read_mostly",
+                  "struct selinux_state fake_state;",
+                  "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)",
+                  "struct page *fake_status",
+                  "void initialize_fake_status(",
+              ]
+              missing = [marker for marker in required_selinux_hide if marker not in selinux_hide_text]
+              if missing:
+                  raise SystemExit(f"{selinux_hide_c} 缺少 Official SUSFS SELinux 导出: {missing}")
+
           if not changed:
               print("Official SUSFS 源码兼容修复无需修改。")
+          PY
+
+      - name: 修复 Official SUSFS 6.1-6.12 SELinux 导出
+        if: inputs.ksu_variant == 'Official' && inputs.enable_susfs && (inputs.kernel_version == '6.1' || inputs.kernel_version == '6.6' || inputs.kernel_version == '6.12')
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("common/drivers/kernelsu/feature/selinux_hide.c")
+          if not path.exists():
+              raise SystemExit(f"未找到 {path}")
+
+          text = path.read_text()
+          original = text
+
+          text = text.replace(
+              "static bool ksu_selinux_hide_enabled __read_mostly = false;",
+              "bool ksu_selinux_hide_enabled __read_mostly = false;",
+          )
+          text = text.replace(
+              "static bool ksu_selinux_hide_running __read_mostly = false;",
+              "bool ksu_selinux_hide_running __read_mostly = false;",
+          )
+          text = text.replace(
+              "static DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
+              "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
+          )
+          text = text.replace(
+              "static struct page *fake_status = NULL;",
+              "struct page *fake_status = NULL;",
+          )
+          text = re.sub(
+              r"(?m)^static void initialize_fake_status\s*\(\s*(?:void)?\s*\)",
+              "void initialize_fake_status(void)",
+              text,
+          )
+
+          required = [
+              "bool ksu_selinux_hide_enabled __read_mostly",
+              "bool ksu_selinux_hide_running __read_mostly",
+              "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)",
+              "struct page *fake_status",
+              "void initialize_fake_status(",
+          ]
+          missing = [marker for marker in required if marker not in text]
+          if missing:
+              raise SystemExit(f"{path} 缺少 Official 6.1-6.12 SELinux 导出: {missing}")
+
+          if text != original:
+              path.write_text(text)
+              print(f"已修复 {path} 的 Official 6.1-6.12 SELinux 导出")
+          else:
+              print(f"{path} 的 Official 6.1-6.12 SELinux 导出已满足要求")
           PY
 
       - name: 补齐 SukiSU SUSFS 内联 hook 符号
@@ -3525,283 +3984,6 @@ jobs:
             PY
                   ;;
               esac
-            fi
-
-            if [ "${{ inputs.ksu_variant }}" = "Official" ] \
-              && [ "${{ inputs.enable_susfs }}" = "true" ]; then
-              echo "编译前兜底修复 Official SUSFS KernelSU init.c"
-              python3 - <<'PY'
-            from pathlib import Path
-            import re
-
-            INIT_BODY = """int __init kernelsu_init(void)
-            {
-            #ifdef CONFIG_KSU_DEBUG
-                pr_alert("*************************************************************");
-                pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
-                pr_alert("**                                                         **");
-                pr_alert("**         You are running KernelSU in DEBUG mode          **");
-                pr_alert("**                                                         **");
-                pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
-                pr_alert("*************************************************************");
-            #endif
-
-                if (allow_shell) {
-                    pr_alert("shell is allowed at init!");
-                }
-
-                ksu_cred = prepare_creds();
-                if (!ksu_cred) {
-                    pr_err("prepare cred failed!\\n");
-                }
-
-            #ifdef CONFIG_KSU_SUSFS
-                susfs_init();
-            #endif // #ifdef CONFIG_KSU_SUSFS
-
-                ksu_feature_init();
-                ksu_supercalls_init();
-                ksu_sucompat_init();
-                ksu_setuid_hook_init();
-                ksu_sulog_init();
-                ksu_adb_root_init();
-                ksu_selinux_hide_init();
-                ksu_allowlist_init();
-                ksu_throne_tracker_init();
-                ksu_ksud_init();
-                ksu_file_wrapper_init();
-
-                return 0;
-            }
-            """
-
-            EXIT_BODY = """void __exit kernelsu_exit(void)
-            {
-                ksu_supercalls_exit();
-
-                synchronize_rcu();
-
-                ksu_observer_exit();
-                ksu_throne_tracker_exit();
-                ksu_allowlist_exit();
-                ksu_selinux_hide_exit();
-                ksu_adb_root_exit();
-                ksu_sulog_exit();
-                ksu_feature_exit();
-
-                if (ksu_cred) {
-                    put_cred(ksu_cred);
-                }
-            }
-            """
-
-            def replace_function(text, signature, replacement):
-                start = text.find(signature)
-                if start == -1:
-                    raise SystemExit(f"function not found: {signature}")
-                brace = text.find("{", start)
-                if brace == -1:
-                    raise SystemExit(f"function body not found: {signature}")
-                depth = 0
-                for index in range(brace, len(text)):
-                    if text[index] == "{":
-                        depth += 1
-                    elif text[index] == "}":
-                        depth -= 1
-                        if depth == 0:
-                            return text[:start] + replacement + text[index + 1:]
-                raise SystemExit(f"function body is not balanced: {signature}")
-
-            def ensure_line_after(text, anchor, line):
-                if line in text:
-                    return text
-                if anchor not in text:
-                    raise SystemExit(f"anchor not found: {anchor.strip()}")
-                return text.replace(anchor, anchor + line, 1)
-
-            def patch_official_selinux_hide(ksu_dir):
-                path = ksu_dir / "feature/selinux_hide.c"
-                if not path.exists():
-                    return False
-
-                text = path.read_text()
-                original = text
-
-                dump_is_pointer = re.search(r"\(\s*\*\s*security_dump_masked_av_fn\s*\)", text) is not None
-                compute_is_pointer = re.search(r"\(\s*\*\s*context_struct_compute_av_fn\s*\)", text) is not None
-
-                if dump_is_pointer:
-                    text = re.sub(
-                        r"(?m)^([ \t]*)if \(security_dump_masked_av_fn\)\s*$",
-                        r"\1if (security_dump_masked_av_fn != NULL)",
-                        text,
-                    )
-                else:
-                    text = re.sub(
-                        r'(?m)^([ \t]*)if \(security_dump_masked_av_fn\)\n[ \t]*security_dump_masked_av_fn\(policydb, scontext, tcontext, tclass, masked, "bounds"\);\n',
-                        r'\1security_dump_masked_av_fn(policydb, scontext, tcontext, tclass, masked, "bounds");\n',
-                        text,
-                    )
-
-                if compute_is_pointer:
-                    text = re.sub(
-                        r"(?m)^([ \t]*)if \(context_struct_compute_av_fn\) \{\s*$",
-                        r"\1if (context_struct_compute_av_fn != NULL) {",
-                        text,
-                    )
-                else:
-                    text = re.sub(
-                        r"(?m)^([ \t]*)if \(context_struct_compute_av_fn\) \{\n"
-                        r"[ \t]*context_struct_compute_av_fn\(policydb, scontext, tcontext, tclass, avd, NULL\);\n"
-                        r"[ \t]*\} else \{\n"
-                        r"[ \t]*context_struct_compute_av\(policydb, scontext, tcontext, tclass, avd, NULL\);\n"
-                        r"[ \t]*\}\n",
-                        r"\1context_struct_compute_av_fn(policydb, scontext, tcontext, tclass, avd, NULL);\n",
-                        text,
-                    )
-
-                if text == original:
-                    return False
-
-                path.write_text(text)
-                print(f"fixed {path}: normalized Official selinux_hide function checks")
-                return True
-
-            def ensure_official_susfs_objects(ksu_dir):
-                kbuild = ksu_dir / "Kbuild"
-                if not kbuild.exists():
-                    return False
-                text = kbuild.read_text()
-                missing = []
-                if "hook/lsm_hook.o" not in text:
-                    missing.append("kernelsu-objs += hook/lsm_hook.o")
-                if "hook/arm64/patch_memory.o" not in text:
-                    missing.extend([
-                        "ifeq ($(CONFIG_ARM64),y)",
-                        "kernelsu-objs += hook/arm64/patch_memory.o",
-                        "endif",
-                    ])
-                if not missing:
-                    return False
-                block = "\n".join(["", "# ABK: selinux_hide.c still needs these hook helpers."] + missing + [""])
-                kbuild.write_text(text.rstrip() + "\n" + block)
-                print(f"fixed {kbuild}: restored Official SUSFS hook helper objects")
-                return True
-
-            def ensure_official_symbol_resolver_exports(ksu_dir):
-                path = ksu_dir / "hook/lsm_hook.c"
-                if not path.exists():
-                    raise SystemExit(f"{path} not found before build")
-
-                text = path.read_text()
-                additions = []
-                if "abk_ksu_lookup_symbol(" not in text:
-                    additions.append(
-                        "#include <linux/kallsyms.h>\n"
-                        "#include <linux/kernel.h>\n\n"
-                        "static void *abk_ksu_lookup_symbol(const char *symbol_name)\n"
-                        "{\n"
-                        "#ifdef CONFIG_KALLSYMS\n"
-                        "    unsigned long addr;\n"
-                        "    char cfi_name[KSYM_NAME_LEN];\n\n"
-                        "    if (!symbol_name || !symbol_name[0])\n"
-                        "        return NULL;\n\n"
-                        "    addr = kallsyms_lookup_name(symbol_name);\n"
-                        "    if (addr)\n"
-                        "        return (void *)addr;\n\n"
-                        "    if (scnprintf(cfi_name, sizeof(cfi_name), \"%s%s\", symbol_name, \".cfi_jt\") >= sizeof(cfi_name))\n"
-                        "        return NULL;\n\n"
-                        "    addr = kallsyms_lookup_name(cfi_name);\n"
-                        "    return addr ? (void *)addr : NULL;\n"
-                        "#else\n"
-                        "    return NULL;\n"
-                        "#endif\n"
-                        "}\n"
-                    )
-                if not re.search(r"(?m)^\s*void\s+\*\s*ksu_resolve_symbol_for_functable_hook\s*\(", text):
-                    additions.append("void *ksu_resolve_symbol_for_functable_hook(const char *symbol_name)\n{\n    return abk_ksu_lookup_symbol(symbol_name);\n}\n")
-                if not re.search(r"(?m)^\s*unsigned long\s+find_kernel_symbol_exact\s*\(", text):
-                    additions.append("unsigned long find_kernel_symbol_exact(const char *symbol_name)\n{\n    return (unsigned long)abk_ksu_lookup_symbol(symbol_name);\n}\n")
-                if not re.search(r"(?m)^\s*void\s+ksu_init_symbol_resolver\s*\(", text):
-                    additions.append("void ksu_init_symbol_resolver(void)\n{\n}\n")
-
-                if not additions:
-                    return False
-
-                block = "\n/* ABK: Official SUSFS lsm_hook local symbol resolver exports. */\n" + "\n".join(additions)
-                path.write_text(text.rstrip() + "\n" + block)
-                print(f"fixed {path}: added Official SUSFS hook symbol exports")
-                return True
-
-            ksu_dir = Path("common/drivers/kernelsu")
-            if not ksu_dir.exists():
-                raise SystemExit("common/drivers/kernelsu not found before build")
-
-            fixed = False
-            init_c = ksu_dir / "core/init.c"
-            if not init_c.exists():
-                raise SystemExit(f"{init_c} not found before build")
-            text = init_c.read_text()
-            original = text
-            text = ensure_line_after(text, "#include <linux/moduleparam.h>\n", "#include <linux/susfs.h>\n")
-            text = text.replace('#include "hook/syscall_hook_manager.h"\n', "")
-            text = text.replace('#include "hook/syscall_hook.h"\n', "")
-            text = ensure_line_after(text, '#include "feature/adb_root.h"\n', '#include "hook/setuid_hook.h"\n')
-            text = ensure_line_after(text, '#include "hook/setuid_hook.h"\n', '#include "feature/sucompat.h"\n')
-            text = text.replace("bool ksu_late_loaded;\n", "")
-            text = re.sub(
-                r'\n#if defined\(__x86_64__\)\n#include <asm/cpufeature\.h>\n#include <linux/version\.h>\n#ifndef X86_FEATURE_INDIRECT_SAFE\n#error "FATAL: Your kernel is missing the indirect syscall bypass patches!"\n#endif\n#endif\n',
-                "\n",
-                text,
-                count=1,
-            )
-            text = replace_function(text, "int __init kernelsu_init(void)", INIT_BODY)
-            text = replace_function(text, "void __exit kernelsu_exit(void)", EXIT_BODY)
-            if "ksu_late_loaded" in text or "ksu_syscall_hook_manager_" in text:
-                raise SystemExit(f"{init_c} still contains incompatible Official SUSFS symbols")
-            if text != original:
-                init_c.write_text(text)
-                fixed = True
-                print(f"fixed {init_c}")
-
-            include_ksu = ksu_dir / "include/ksu.h"
-            if include_ksu.exists():
-                header = include_ksu.read_text()
-                updated = header.replace("extern bool ksu_late_loaded;\n", "")
-                if updated != header:
-                    include_ksu.write_text(updated)
-                    fixed = True
-                    print(f"fixed {include_ksu}")
-
-            fixed = ensure_official_susfs_objects(ksu_dir) or fixed
-            fixed = patch_official_selinux_hide(ksu_dir) or fixed
-            fixed = ensure_official_symbol_resolver_exports(ksu_dir) or fixed
-
-            if not fixed:
-                print("Official SUSFS KernelSU init.c already fixed")
-            PY
-
-              for ksu_check_file in \
-                common/drivers/kernelsu/core/init.c \
-                common/drivers/kernelsu/include/ksu.h; do
-                if [ -f "$ksu_check_file" ] \
-                  && grep --line-number -E 'ksu_late_loaded|ksu_syscall_hook_manager_' "$ksu_check_file"; then
-                  echo "::error::Official SUSFS 仍残留不兼容符号: $ksu_check_file"
-                  exit 1
-                fi
-              done
-              if [ -f common/drivers/kernelsu/Kbuild ] \
-                && { ! grep -qF 'hook/lsm_hook.o' common/drivers/kernelsu/Kbuild \
-                  || ! grep -qF 'hook/arm64/patch_memory.o' common/drivers/kernelsu/Kbuild; }; then
-                echo "::error::Official SUSFS 缺少 common/drivers/kernelsu Kbuild hook helper 对象"
-                exit 1
-              fi
-              if [ -f common/drivers/kernelsu/hook/lsm_hook.c ] \
-                && { ! grep -qF 'ksu_resolve_symbol_for_functable_hook' common/drivers/kernelsu/hook/lsm_hook.c \
-                  || ! grep -qF 'find_kernel_symbol_exact' common/drivers/kernelsu/hook/lsm_hook.c; }; then
-                echo "::error::Official SUSFS 缺少 lsm_hook hook 兼容符号"
-                exit 1
-              fi
             fi
 
             sed -i 's/BUILD_SYSTEM_DLKM=1/BUILD_SYSTEM_DLKM=0/' ./common/build.config.gki.aarch64

@@ -231,6 +231,139 @@ long __nocfi ksu_hook_faccessat'''
     write_if_changed(path, text, original, changed_files)
 
 
+def patch_symbol_resolver(path, changed_files):
+    original = path.read_text()
+    text = original
+
+    old = r'''void *ksu_resolve_symbol_for_functable_hook(const char *symbol_name)
+{
+    void *addr;
+    size_t symbol_len;
+
+    if (!symbol_name || !symbol_name[0])
+        return NULL;
+
+    symbol_len = strlen(symbol_name);
+
+    // Prefer find_kernel_symbol_exact since it uses binary search in higher kernel version
+
+#if !USE_KCFI
+    // Try .cfi_jt suffix first
+    char cfi_name[KSYM_NAME_LEN];
+    snprintf(cfi_name, sizeof(cfi_name), "%s.cfi_jt", symbol_name);
+    addr = (void *)find_kernel_symbol_exact(cfi_name);
+    if (addr)
+        return addr;
+
+    addr = resolve_symbol_variant(symbol_name, symbol_len);
+    if (addr)
+        return addr;
+
+    return (void *)find_kernel_symbol_exact(symbol_name);
+#else
+    addr = (void *)find_kernel_symbol_exact(symbol_name);
+    if (addr)
+        return addr;
+
+    return resolve_symbol_variant(symbol_name, symbol_len);
+#endif
+}'''
+    new = r'''void *ksu_resolve_symbol_for_functable_hook(const char *symbol_name)
+{
+    void *addr;
+    size_t symbol_len;
+    bool setprocattr_alias = false;
+    const char *alias_name = "selinux_setprocattr";
+
+    if (!symbol_name || !symbol_name[0])
+        return NULL;
+
+    symbol_len = strlen(symbol_name);
+    setprocattr_alias = !strcmp(symbol_name, "setprocattr");
+
+    // Prefer find_kernel_symbol_exact since it uses binary search in higher kernel version
+
+#if !USE_KCFI
+    // Try .cfi_jt suffix first
+    char cfi_name[KSYM_NAME_LEN];
+    snprintf(cfi_name, sizeof(cfi_name), "%s.cfi_jt", symbol_name);
+    addr = (void *)find_kernel_symbol_exact(cfi_name);
+    if (addr)
+        return addr;
+
+    if (setprocattr_alias) {
+        snprintf(cfi_name, sizeof(cfi_name), "%s.cfi_jt", alias_name);
+        addr = (void *)find_kernel_symbol_exact(cfi_name);
+        if (addr) {
+            pr_info("%s: resolved alias %s via .cfi_jt\n", __func__, alias_name);
+            return addr;
+        }
+    }
+
+    addr = resolve_symbol_variant(symbol_name, symbol_len);
+    if (addr)
+        return addr;
+
+    addr = (void *)find_kernel_symbol_exact(symbol_name);
+    if (addr)
+        return addr;
+
+    if (setprocattr_alias) {
+        addr = resolve_symbol_variant(alias_name, strlen(alias_name));
+        if (addr) {
+            pr_info("%s: resolved alias %s via variant lookup\n", __func__, alias_name);
+            return addr;
+        }
+
+        addr = (void *)find_kernel_symbol_exact(alias_name);
+        if (addr) {
+            pr_info("%s: resolved alias %s via exact lookup\n", __func__, alias_name);
+            return addr;
+        }
+    }
+
+    return NULL;
+#else
+    addr = (void *)find_kernel_symbol_exact(symbol_name);
+    if (addr)
+        return addr;
+
+    if (setprocattr_alias) {
+        addr = (void *)find_kernel_symbol_exact(alias_name);
+        if (addr) {
+            pr_info("%s: resolved alias %s via exact lookup\n", __func__, alias_name);
+            return addr;
+        }
+    }
+
+    addr = resolve_symbol_variant(symbol_name, symbol_len);
+    if (addr)
+        return addr;
+
+    if (setprocattr_alias) {
+        addr = resolve_symbol_variant(alias_name, strlen(alias_name));
+        if (addr) {
+            pr_info("%s: resolved alias %s via variant lookup\n", __func__, alias_name);
+            return addr;
+        }
+    }
+
+    return NULL;
+#endif
+}
+
+/* ABK: resolve setprocattr aliases for SukiSU selinux_hide. */'''
+    text = replace_or_confirm(
+        text,
+        old,
+        new,
+        "ABK: resolve setprocattr aliases for SukiSU selinux_hide.",
+        "symbol_resolver setprocattr alias compatibility",
+    )
+
+    write_if_changed(path, text, original, changed_files)
+
+
 def patch_runtime(path, changed_files):
     original = path.read_text()
     text = original
@@ -696,6 +829,11 @@ def verify(ksu_dir):
             "void ksu_handle_sys_read(unsigned int fd)",
             "void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr)",
         ),
+        ksu_dir / "infra/symbol_resolver.c": (
+            "ABK: resolve setprocattr aliases for SukiSU selinux_hide.",
+            'setprocattr_alias = !strcmp(symbol_name, "setprocattr")',
+            'const char *alias_name = "selinux_setprocattr";',
+        ),
         ksu_dir / "feature/sucompat.c": (
             "DEFINE_STATIC_KEY_TRUE(ksu_su_compat_enabled)",
             "int ksu_handle_execveat_sucompat",
@@ -752,6 +890,7 @@ def main():
 
     patch_sucompat_header(ksu_dir / "feature/sucompat.h", changed_files)
     patch_sucompat_c(ksu_dir / "feature/sucompat.c", changed_files)
+    patch_symbol_resolver(ksu_dir / "infra/symbol_resolver.c", changed_files)
     patch_syscall_bridge(ksu_dir / "hook/syscall_event_bridge.c", changed_files)
     patch_runtime(ksu_dir / "runtime/ksud_integration.c", changed_files)
     patch_selinux_hide(ksu_dir / "feature/selinux_hide.c", changed_files)
