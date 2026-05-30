@@ -273,13 +273,20 @@ def patch_symbol_resolver(path, changed_files):
     void *addr;
     size_t symbol_len;
     bool setprocattr_alias = false;
-    const char *alias_name = "selinux_setprocattr";
+    const char *alias_names[] = {
+        "selinux_setprocattr",
+        "__cfi_selinux_setprocattr",
+        "security_setprocattr",
+        "selinux_setprocattr_hook",
+    };
+    size_t alias_count = sizeof(alias_names) / sizeof(alias_names[0]);
+    size_t i;
 
     if (!symbol_name || !symbol_name[0])
         return NULL;
 
     symbol_len = strlen(symbol_name);
-    setprocattr_alias = !strcmp(symbol_name, "setprocattr");
+    setprocattr_alias = !strcmp(symbol_name, "setprocattr") || !strcmp(symbol_name, "selinux_setprocattr");
 
     // Prefer find_kernel_symbol_exact since it uses binary search in higher kernel version
 
@@ -292,11 +299,13 @@ def patch_symbol_resolver(path, changed_files):
         return addr;
 
     if (setprocattr_alias) {
-        snprintf(cfi_name, sizeof(cfi_name), "%s.cfi_jt", alias_name);
-        addr = (void *)find_kernel_symbol_exact(cfi_name);
-        if (addr) {
-            pr_info("%s: resolved alias %s via .cfi_jt\n", __func__, alias_name);
-            return addr;
+        for (i = 0; i < alias_count; i++) {
+            snprintf(cfi_name, sizeof(cfi_name), "%s.cfi_jt", alias_names[i]);
+            addr = (void *)find_kernel_symbol_exact(cfi_name);
+            if (addr) {
+                pr_info("%s: resolved alias %s via .cfi_jt\n", __func__, alias_names[i]);
+                return addr;
+            }
         }
     }
 
@@ -309,16 +318,18 @@ def patch_symbol_resolver(path, changed_files):
         return addr;
 
     if (setprocattr_alias) {
-        addr = resolve_symbol_variant(alias_name, strlen(alias_name));
-        if (addr) {
-            pr_info("%s: resolved alias %s via variant lookup\n", __func__, alias_name);
-            return addr;
-        }
+        for (i = 0; i < alias_count; i++) {
+            addr = resolve_symbol_variant(alias_names[i], strlen(alias_names[i]));
+            if (addr) {
+                pr_info("%s: resolved alias %s via variant lookup\n", __func__, alias_names[i]);
+                return addr;
+            }
 
-        addr = (void *)find_kernel_symbol_exact(alias_name);
-        if (addr) {
-            pr_info("%s: resolved alias %s via exact lookup\n", __func__, alias_name);
-            return addr;
+            addr = (void *)find_kernel_symbol_exact(alias_names[i]);
+            if (addr) {
+                pr_info("%s: resolved alias %s via exact lookup\n", __func__, alias_names[i]);
+                return addr;
+            }
         }
     }
 
@@ -329,10 +340,12 @@ def patch_symbol_resolver(path, changed_files):
         return addr;
 
     if (setprocattr_alias) {
-        addr = (void *)find_kernel_symbol_exact(alias_name);
-        if (addr) {
-            pr_info("%s: resolved alias %s via exact lookup\n", __func__, alias_name);
-            return addr;
+        for (i = 0; i < alias_count; i++) {
+            addr = (void *)find_kernel_symbol_exact(alias_names[i]);
+            if (addr) {
+                pr_info("%s: resolved alias %s via exact lookup\n", __func__, alias_names[i]);
+                return addr;
+            }
         }
     }
 
@@ -341,10 +354,12 @@ def patch_symbol_resolver(path, changed_files):
         return addr;
 
     if (setprocattr_alias) {
-        addr = resolve_symbol_variant(alias_name, strlen(alias_name));
-        if (addr) {
-            pr_info("%s: resolved alias %s via variant lookup\n", __func__, alias_name);
-            return addr;
+        for (i = 0; i < alias_count; i++) {
+            addr = resolve_symbol_variant(alias_names[i], strlen(alias_names[i]));
+            if (addr) {
+                pr_info("%s: resolved alias %s via variant lookup\n", __func__, alias_names[i]);
+                return addr;
+            }
         }
     }
 
@@ -831,8 +846,9 @@ def verify(ksu_dir):
         ),
         ksu_dir / "infra/symbol_resolver.c": (
             "ABK: resolve setprocattr aliases for SukiSU selinux_hide.",
-            'setprocattr_alias = !strcmp(symbol_name, "setprocattr")',
-            'const char *alias_name = "selinux_setprocattr";',
+            'setprocattr_alias = !strcmp(symbol_name, "setprocattr") || !strcmp(symbol_name, "selinux_setprocattr")',
+            'const char *alias_names[] = {',
+            '"security_setprocattr",',
         ),
         ksu_dir / "feature/sucompat.c": (
             "DEFINE_STATIC_KEY_TRUE(ksu_su_compat_enabled)",
