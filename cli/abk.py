@@ -654,11 +654,13 @@ def cmd_build(args):
         "use_kpm": str(args.kpm).lower(),
         "use_rekernel": str(args.rekernel).lower(),
         "cancel_susfs": str(not args.susfs).lower(),
-        "supp_op": str(args.oneplus_8e).lower(),
         "use_ntsync": str(args.ntsync).lower(),
         "use_networking": str(args.networking).lower(),
         "zram_full_algo": str(args.zram_full_algo).lower(),
     }
+    
+    if not args.matrix:
+        inputs["supp_op"] = str(args.oneplus_8e).lower()
     
     if target == "custom":
         inputs["android_version"] = args.android_version or "android12"
