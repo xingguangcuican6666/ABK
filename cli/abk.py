@@ -242,7 +242,10 @@ class GitHubClient:
         req = Request(url, data=data, headers=headers, method=method)
         try:
             with urlopen(req) as resp:
-                return json.loads(resp.read())
+                body = resp.read()
+                if not body:
+                    return {}
+                return json.loads(body)
         except HTTPError as e:
             body = e.read().decode()
             try:
