@@ -78,6 +78,13 @@ abk build --sub-level 162 --os-patch-level 2026-03
 abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
 ```
 
+#### 预览构建计划 (只预览不触发)
+
+```bash
+abk build --sub-level 162 --os-patch-level 2026-03 --dry-run
+abk build --matrix both --ksu all --dry-run
+```
+
 #### 矩阵构建 (构建所有子版本)
 
 ```bash
