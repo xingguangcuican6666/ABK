@@ -19,6 +19,7 @@ A command-line tool to trigger ABK kernel builds from non-Android devices.
 | `es-es` | Español |
 | `pt-br` | Português |
 | `neko` | 猫娘語 🐱 |
+| `eo` | Esperanto |
 
 使用 `--lang` 切换语言：
 ```bash
