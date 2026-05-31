@@ -255,7 +255,8 @@ abk --lang neko --help     # 🐱
 | `fr-fr` | Français |
 | `es-es` | Español |
 | `pt-br` | Português |
-| `neko` | 猫娘語 🐱 |
+| `jp-neko` | 日本語猫娘 🐱 |
+| `zh-neko` | 中文猫娘 🐱 |
 | `eo` | Esperanto |
 
 ## 添加新语言 / Adding New Languages
