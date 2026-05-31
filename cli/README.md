@@ -4,30 +4,6 @@
 
 A command-line tool to trigger ABK kernel builds from non-Android devices.
 
-## 支持的语言 / Supported Languages
-
-| Code | Language |
-|------|----------|
-| `zh-cn` | 中文 (默认/Default) |
-| `en-us` | English |
-| `ru-ru` | Русский |
-| `ja-jp` | 日本語 |
-| `ko-kr` | 한국어 |
-| `hi-in` | हिन्दी |
-| `de-de` | Deutsch |
-| `fr-fr` | Français |
-| `es-es` | Español |
-| `pt-br` | Português |
-| `neko` | 猫娘語 🐱 |
-| `eo` | Esperanto |
-
-使用 `--lang` 切换语言：
-```bash
-abk --lang en-us --help    # English
-abk --lang ja-jp --help    # 日本語
-abk --lang neko --help     # 🐱
-```
-
 ## 安装 / Installation
 
 确保已安装Python 3.6+，然后将 `cli/` 目录添加到PATH：
@@ -256,6 +232,31 @@ abk artifacts --run-id 12345 --download
 # 同步 fork
 abk sync
 ```
+
+## 语言支持 / Language Support
+
+使用 `--lang` 切换语言（持久化保存）：
+
+```bash
+abk --lang en-us --help    # English
+abk --lang ja-jp --help    # 日本語
+abk --lang neko --help     # 🐱
+```
+
+| Code | Language |
+|------|----------|
+| `zh-cn` | 中文 (默认) |
+| `en-us` | English |
+| `ru-ru` | Русский |
+| `ja-jp` | 日本語 |
+| `ko-kr` | 한국어 |
+| `hi-in` | हिन्दी |
+| `de-de` | Deutsch |
+| `fr-fr` | Français |
+| `es-es` | Español |
+| `pt-br` | Português |
+| `neko` | 猫娘語 🐱 |
+| `eo` | Esperanto |
 
 ## 添加新语言 / Adding New Languages
 
