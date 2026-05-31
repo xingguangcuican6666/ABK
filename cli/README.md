@@ -257,6 +257,28 @@ abk artifacts --run-id 12345 --download
 abk sync
 ```
 
+## 添加新语言 / Adding New Languages
+
+1. 在 `cli/i18n/` 目录下创建新的 JSON 文件，文件名使用语言代码（如 `fr-fr.json`）
+2. 复制 `zh-cn.json` 的内容，将所有值翻译为目标语言
+3. 更新 `cli/i18n/__init__.py`，将新语言代码添加到 `detect_language()` 函数的白名单
+4. 更新 `cli/abk.py` 中以下位置：
+   - `parser.add_argument("--lang", choices=[...])` 的 choices 列表
+   - `main()` 函数中早期语言检测的 `sys.argv` 检查列表
+5. 更新本 README 的语言支持表格
+
+**注意：** KernelSU 分支名（如 `Stable(标准)`、`Dev(开发)`）是 API 参数，**不能翻译**，必须保持中文原值。
+
+## 语言维护 / Language Maintenance
+
+当添加新的翻译键时：
+1. 首先在 `zh-cn.json` 中添加
+2. 同步到所有其他语言文件（保持键一致）
+3. 使用以下命令验证 JSON 格式：
+   ```bash
+   for lang in cli/i18n/*.json; do python3 -c "import json; json.loads(open('$lang').read()); print('$lang: valid')"; done
+   ```
+
 ## 许可证 / License
 
 GPL-2.0
