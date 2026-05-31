@@ -109,6 +109,16 @@ sukisu=
 
 An empty value means the latest commit of that branch will be used.
 
+## KSU branch `Latest(最新)` (GKI only)
+
+Applies to every GKI `workflow_dispatch` workflow ([`kernel-custom.yml`](.github/workflows/kernel-custom.yml), [`kernel-a12-5-10.yml`](.github/workflows/kernel-a12-5-10.yml), [`kernel-a13-5-15.yml`](.github/workflows/kernel-a13-5-15.yml), [`kernel-a14-6-1.yml`](.github/workflows/kernel-a14-6-1.yml), [`kernel-a15-6-6.yml`](.github/workflows/kernel-a15-6-6.yml), [`kernel-a16-6-12.yml`](.github/workflows/kernel-a16-6-12.yml), and [`kernel-full-feature-matrix.yml`](.github/workflows/kernel-full-feature-matrix.yml)). The app dispatches [`kernel-custom.yml`](.github/workflows/kernel-custom.yml); on github.com you can also pick **Latest(最新)** when manually running a fixed-version workflow.
+
+On GitHub Actions and the app GKI build screen, **Latest(最新)** sits between **Dev** and **Custom**. [`resolve-ksu-ref.sh`](.github/scripts/resolve-ksu-ref.sh) resolves upstream KernelSU sources at run time:
+
+- **Official / SukiSU / ReSukiSU (GKI):** kernel and manager share the `head_sha` of the latest successful upstream `build-manager` run on `main` (not raw branch HEAD). Manager APK via [nightly.link](https://nightly.link/) (`manager.zip` or `Manager-release.zip`). If there is no green `build-manager` on `main`, Latest resolution fails early.
+
+If manager download fails, the manager job step fails but **the kernel build continues**. Latest does not fall back to `releases/latest` (the Stable/Dev release path).
+
 ## Stock Config
 
 To make `/proc/config.gz` in the built kernel closer to your stock kernel configuration, export the stock kernel config from your device, decompress it, rename it to `stock_defconfig`, and commit it under [`config/`](config/).

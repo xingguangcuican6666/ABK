@@ -33,7 +33,7 @@ object NetworkClient {
             .build()
     }
 
-    fun createApiService(token: String): GitHubApiService {
+    fun createApiService(token: String? = null): GitHubApiService {
         return Retrofit.Builder()
             .baseUrl(GITHUB_API_BASE)
             .client(buildOkHttpClient(token))

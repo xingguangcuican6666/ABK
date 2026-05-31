@@ -374,114 +374,6 @@ jobs:
           fi
           exit 1
 
-      - name: 确定 KernelSU 分支
-        if: inputs.ksu_variant != 'None'
-        id: ksu-branch
-        run: |
-          variant_input="${{ inputs.ksu_variant }}"
-          branch_input="${{ inputs.ksu_branch }}"
-          custom_ref_input="${{ inputs.custom_ref }}"
-          OFFICIAL_STABLE_REF="3f388ef137c78e1ca0c92c0ada3b8717cdcc4302"
-          SUKISU_STABLE_REF="c5af9eadac43b1f0b9751471be78e6eef681554b"
-          RESUKISU_STABLE_REF="b6706363b95525acd4007da19edadb1d41b2ea27"
-          SUKISU_REPO="SukiSU-Ultra/SukiSU-Ultra"
-
-          # Dev 固定引用先完整复制 Stable 配置，后续只改这里的 *_DEV_REF 即可。
-          OFFICIAL_DEV_REF="96a72dd0107d660adcb273ab1911e1e77d87e562"
-          SUKISU_DEV_REF="aac170bcb86ce45516b3e2c0e2b32b57004b8f73"
-          RESUKISU_DEV_REF="fb771414f249ab886c09f2cfcbbf91c4b4dab2d1"
-
-          get_success_action_sha() {
-            REPO="$1"
-            BRANCH="$2"
-            NABE="$3"
-            INDEX=$((NABE - 1))
-            curl -s \
-              "https://api.github.com/repos/$REPO/actions/workflows/build-manager.yml/runs?status=success&branch=$BRANCH&per_page=$NABE" \
-              | jq -r --argjson idx "$INDEX" '.workflow_runs[$idx].head_sha'
-          }
-
-          check_ref() {
-            REPO="$1"
-            if [[ "$custom_ref_input" =~ ^[A-Fa-f0-9]{40}$ ]]; then
-              MSG=$(curl -s "https://api.github.com/repos/$REPO/commits/$custom_ref_input" \
-                      | jq -r '.message // empty')
-            elif [[ "$custom_ref_input" =~ ^[Vv]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              MSG=$(curl -s "https://api.github.com/repos/$REPO/git/ref/tags/$custom_ref_input" \
-                      | jq -r '.message // empty')
-            else
-              MSG=$(curl -s "https://api.github.com/repos/$REPO/branches/$custom_ref_input" \
-                      | jq -r '.message // empty')
-            fi
-            if echo "$MSG" | grep -qi "no.*found"; then
-              echo "error: '$custom_ref_input' 在 $REPO 中不存在"
-              exit 1
-            fi
-          }
-
-          if [ "$branch_input" = "Custom(自定义)" ]; then
-            # 分支名:数字（如 main:5 → 第 5 个成功构建）
-            if [[ "$custom_ref_input" =~ ^([A-Za-z0-9._/-]+):([0-9]+)$ ]]; then
-              BRANCH="${BASH_REMATCH[1]}"
-              NABE="${BASH_REMATCH[2]}"
-              if [ "$variant_input" = "Official" ]; then
-                OFFICIAL_CUSTOM_REF="$(get_success_action_sha "tiann/KernelSU" "$BRANCH" "$NABE")"
-              elif [ "$variant_input" = "SukiSU" ]; then
-                SUKISU_CUSTOM_REF="$(get_success_action_sha "SukiSU-Ultra/SukiSU-Ultra" "$BRANCH" "$NABE")"
-              elif [ "$variant_input" = "ReSukiSU" ]; then
-                RESUKISU_CUSTOM_REF="$(get_success_action_sha "ReSukiSU/ReSukiSU" "$BRANCH" "$NABE")"
-              fi
-            else
-              if [ "$variant_input" = "Official" ]; then
-                check_ref "tiann/KernelSU"
-              elif [ "$variant_input" = "SukiSU" ]; then
-                check_ref "$SUKISU_REPO"
-              elif [ "$variant_input" = "ReSukiSU" ]; then
-                check_ref "ReSukiSU/ReSukiSU"
-              fi
-              OFFICIAL_CUSTOM_REF="$custom_ref_input"
-              SUKISU_CUSTOM_REF="$custom_ref_input"
-              RESUKISU_CUSTOM_REF="$custom_ref_input"
-            fi
-          fi
-
-          case "$branch_input" in
-            "Stable(标准)")
-              OFFICIAL_REF="$OFFICIAL_STABLE_REF"
-              SUKISU_REF="$SUKISU_STABLE_REF"
-              RESUKISU_REF="$RESUKISU_STABLE_REF"
-              ;;
-            "Dev(开发)")
-              OFFICIAL_REF="$OFFICIAL_DEV_REF"
-              SUKISU_REF="$SUKISU_DEV_REF"
-              RESUKISU_REF="$RESUKISU_DEV_REF"
-              ;;
-            "Custom(自定义)")
-              OFFICIAL_REF="$OFFICIAL_CUSTOM_REF"
-              SUKISU_REF="$SUKISU_CUSTOM_REF"
-              RESUKISU_REF="$RESUKISU_CUSTOM_REF"
-              ;;
-            *)
-              echo "未知分支: $branch_input" >&2
-              exit 1
-              ;;
-          esac
-
-          case "$variant_input" in
-            "Official") BRANCH="$OFFICIAL_REF" ;;
-            "SukiSU") BRANCH="$SUKISU_REF" ;;
-            "ReSukiSU") BRANCH="$RESUKISU_REF" ;;
-            *) echo "未知变体: $variant_input" >&2; exit 1 ;;
-          esac
-
-          echo "EFFECTIVE_KSU_BRANCH=$branch_input" >> $GITHUB_ENV
-          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
-          if [ "$BRANCH" == "null" ]; then
-            echo "error:KernelSU分支获取失败，请检查输入"
-            exit 1
-          fi
-          echo "KSU 分支: $branch_input -> $BRANCH"
-
       - name: 清理磁盘空间
         uses: endersonmenezes/free-disk-space@v3
         with:
@@ -499,6 +391,17 @@ jobs:
 
       - name: 检出代码仓库
         uses: actions/checkout@v6
+
+      - name: 确定 KernelSU 分支
+        if: inputs.ksu_variant != 'None'
+        id: ksu-branch
+        env:
+          KSU_VARIANT: ${{ inputs.ksu_variant }}
+          KSU_BRANCH: ${{ inputs.ksu_branch }}
+          CUSTOM_REF: ${{ inputs.custom_ref }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bash .github/scripts/resolve-ksu-ref.sh
 
       - name: 准备 ABK 管理器证书元数据
         shell: bash
@@ -970,68 +873,6 @@ jobs:
                       closes += 1
               return opens - closes
 
-          def ensure_line_after(text, anchor, line):
-              if line in text:
-                  return text
-              if anchor not in text:
-                  raise SystemExit(f"anchor not found: {anchor.strip()}")
-              return text.replace(anchor, anchor + line, 1)
-
-          def patch_resukisu_fake_status_exports(kernel_dir):
-              path = kernel_dir / "feature/selinux_hide.c"
-              if not path.exists():
-                  return False
-
-              text = path.read_text()
-              original = text
-              text = text.replace(
-                  "static bool ksu_selinux_hide_enabled __read_mostly = false;",
-                  "bool ksu_selinux_hide_enabled __read_mostly = false;",
-              )
-              text = text.replace(
-                  "__maybe_static struct selinux_state fake_state;",
-                  "struct selinux_state fake_state;",
-              )
-              text = text.replace(
-                  "static DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
-                  "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
-              )
-              text = text.replace(
-                  "static struct page *fake_status = NULL;",
-                  "struct page *fake_status = NULL;",
-              )
-              text = text.replace(
-                  "static void initialize_fake_status()",
-                  "void initialize_fake_status(void)",
-              )
-              text = ensure_line_after(text, "#include <linux/version.h>\n", "#include <linux/jump_label.h>\n")
-
-              if "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)" not in text:
-                  block = "\n".join([
-                      "",
-                      "/* ABK: simonpunk SUSFS selinuxfs.c references these fake status exports. */",
-                      "#ifdef CONFIG_KSU_SUSFS",
-                      "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
-                      "struct page *fake_status = NULL;",
-                      "",
-                      "void initialize_fake_status(void)",
-                      "{",
-                      "}",
-                      "#endif",
-                      "",
-                  ])
-                  anchor = '#include "compat/kernel_compat.h"\n'
-                  if anchor not in text:
-                      raise SystemExit(f"{path} missing fake status insertion anchor")
-                  text = text.replace(anchor, anchor + block, 1)
-
-              if text == original:
-                  return False
-
-              path.write_text(text)
-              print("Injected ReSukiSU SUSFS fake status exports")
-              return True
-
           variant = "${{ inputs.ksu_variant }}"
           candidates = []
           seen = set()
@@ -1115,8 +956,6 @@ jobs:
                       print("Injected missing SukiSU/ReSukiSU SUSFS static key definitions:", ", ".join(missing_true + missing_false))
 
               if variant == "ReSukiSU":
-                  patch_resukisu_fake_status_exports(kernel_dir)
-
                   selinux_c = kernel_dir / "selinux/selinux.c"
                   if selinux_c.exists():
                       text = selinux_c.read_text()
@@ -2818,7 +2657,6 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
-          from textwrap import dedent
           import re
 
           INIT_BODY = """int __init kernelsu_init(void)
@@ -3342,8 +3180,6 @@ jobs:
 
               text = kbuild.read_text()
               missing = []
-              if "feature/selinux_hide.o" not in text:
-                  missing.append("kernelsu-objs += feature/selinux_hide.o")
               if "hook/lsm_hook.o" not in text:
                   missing.append("kernelsu-objs += hook/lsm_hook.o")
               if "hook/arm64/patch_memory.o" not in text:
@@ -3456,8 +3292,6 @@ jobs:
                   print(f"已移除 {include_ksu} 中的 ksu_late_loaded 声明")
 
           changed = ensure_official_susfs_objects(ksu_dir) or changed
-          changed = ensure_official_runtime_compat(ksu_dir) or changed
-          changed = ensure_official_boot_event_compat(ksu_dir) or changed
           changed = patch_official_selinux_hide(ksu_dir) or changed
           changed = ensure_official_symbol_resolver_exports(ksu_dir) or changed
 

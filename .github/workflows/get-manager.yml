@@ -67,115 +67,23 @@ jobs:
       - name: 安装依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y git curl jq
+          sudo apt-get install -y git curl jq unzip
+
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            .github/scripts
 
       - name: 确定 KernelSU 分支
-        if: inputs.ksu_variant != 'None'
+        if: inputs.kernelsu_variant != 'None'
         id: ksu-branch
-        run: |
-          variant_input="${{ inputs.kernelsu_variant }}"
-          branch_input="${{ inputs.ksu_branch }}"
-          custom_ref_input="${{ inputs.custom_ref }}"
-          OFFICIAL_STABLE_REF="3f388ef137c78e1ca0c92c0ada3b8717cdcc4302"
-          SUKISU_STABLE_REF="c5af9eadac43b1f0b9751471be78e6eef681554b"
-          RESUKISU_STABLE_REF="b6706363b95525acd4007da19edadb1d41b2ea27"
-          SUKISU_REPO="SukiSU-Ultra/SukiSU-Ultra"
-
-          # Dev 固定引用先完整复制 Stable 配置，后续只改这里的 *_DEV_REF 即可。
-          OFFICIAL_DEV_REF="290609c945728fc93d85735918793567588103c1"
-          SUKISU_DEV_REF="aac170bcb86ce45516b3e2c0e2b32b57004b8f73"
-          RESUKISU_DEV_REF="fb771414f249ab886c09f2cfcbbf91c4b4dab2d1"
-
-          get_success_action_sha() {
-            REPO="$1"
-            BRANCH="$2"
-            NABE="$3"
-            INDEX=$((NABE - 1))
-            curl -s \
-              "https://api.github.com/repos/$REPO/actions/workflows/build-manager.yml/runs?status=success&branch=$BRANCH&per_page=$NABE" \
-              | jq -r --argjson idx "$INDEX" '.workflow_runs[$idx].head_sha'
-          }
-
-          check_ref() {
-            REPO="$1"
-            if [[ "$custom_ref_input" =~ ^[A-Fa-f0-9]{40}$ ]]; then
-              MSG=$(curl -s "https://api.github.com/repos/$REPO/commits/$custom_ref_input" \
-                      | jq -r '.message // empty')
-            elif [[ "$custom_ref_input" =~ ^[Vv]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              MSG=$(curl -s "https://api.github.com/repos/$REPO/git/ref/tags/$custom_ref_input" \
-                      | jq -r '.message // empty')
-            else
-              MSG=$(curl -s "https://api.github.com/repos/$REPO/branches/$custom_ref_input" \
-                      | jq -r '.message // empty')
-            fi
-            if echo "$MSG" | grep -qi "no.*found"; then
-              echo "error: '$custom_ref_input' 在 $REPO 中不存在"
-              exit 1
-            fi
-          }
-
-          if [ "$branch_input" = "Custom(自定义)" ]; then
-            # 分支名:数字（如 main:5 → 第 5 个成功构建）
-            if [[ "$custom_ref_input" =~ ^([A-Za-z0-9._/-]+):([0-9]+)$ ]]; then
-              BRANCH="${BASH_REMATCH[1]}"
-              NABE="${BASH_REMATCH[2]}"
-              if [ "$variant_input" = "Official" ]; then
-                OFFICIAL_CUSTOM_REF="$(get_success_action_sha "tiann/KernelSU" "$BRANCH" "$NABE")"
-              elif [ "$variant_input" = "SukiSU" ]; then
-                SUKISU_CUSTOM_REF="$(get_success_action_sha "SukiSU-Ultra/SukiSU-Ultra" "$BRANCH" "$NABE")"
-              elif [ "$variant_input" = "ReSukiSU" ]; then
-                RESUKISU_CUSTOM_REF="$(get_success_action_sha "ReSukiSU/ReSukiSU" "$BRANCH" "$NABE")"
-              fi
-            else
-              if [ "$variant_input" = "Official" ]; then
-                check_ref "tiann/KernelSU"
-              elif [ "$variant_input" = "SukiSU" ]; then
-                check_ref "$SUKISU_REPO"
-              elif [ "$variant_input" = "ReSukiSU" ]; then
-                check_ref "ReSukiSU/ReSukiSU"
-              fi
-              OFFICIAL_CUSTOM_REF="$custom_ref_input"
-              SUKISU_CUSTOM_REF="$custom_ref_input"
-              RESUKISU_CUSTOM_REF="$custom_ref_input"
-            fi
-          fi
-
-          case "$branch_input" in
-            "Stable(标准)")
-              OFFICIAL_REF="$OFFICIAL_STABLE_REF"
-              SUKISU_REF="$SUKISU_STABLE_REF"
-              RESUKISU_REF="$RESUKISU_STABLE_REF"
-              ;;
-            "Dev(开发)")
-              OFFICIAL_REF="$OFFICIAL_DEV_REF"
-              SUKISU_REF="$SUKISU_DEV_REF"
-              RESUKISU_REF="$RESUKISU_DEV_REF"
-              ;;
-            "Custom(自定义)")
-              OFFICIAL_REF="$OFFICIAL_CUSTOM_REF"
-              SUKISU_REF="$SUKISU_CUSTOM_REF"
-              RESUKISU_REF="$RESUKISU_CUSTOM_REF"
-              ;;
-            *)
-              echo "未知分支: $branch_input" >&2
-              exit 1
-              ;;
-          esac
-
-          case "$variant_input" in
-            "Official") BRANCH="$OFFICIAL_REF" ;;
-            "SukiSU") BRANCH="$SUKISU_REF" ;;
-            "ReSukiSU") BRANCH="$RESUKISU_REF" ;;
-            *) echo "未知变体: $variant_input" >&2; exit 1 ;;
-          esac
-
-          echo "EFFECTIVE_KSU_BRANCH=$branch_input" >> $GITHUB_ENV
-          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
-          if [ "$BRANCH" == "null" ]; then
-            echo "error:KernelSU分支获取失败，请检查输入"
-            exit 1
-          fi
-          echo "KSU 分支: $branch_input -> $BRANCH"
+        env:
+          KSU_VARIANT: ${{ inputs.kernelsu_variant }}
+          KSU_BRANCH: ${{ inputs.ksu_branch }}
+          CUSTOM_REF: ${{ inputs.custom_ref }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bash .github/scripts/resolve-ksu-ref.sh
 
       - name: 获取 KSU & SUSFS 版本
         id: get_version
@@ -280,71 +188,19 @@ jobs:
             curl -fL -o "manager-artifacts/${variant}/${apk_name}" "$apk_url"
             }
 
-          download_manager_by_sha() {
+          download_manager_for_repo() {
           local repo="$1"
-          local sha="$2" 
-          local variant="$3"
-
-          echo "→ 查询 workflow runs (head_sha=$sha)..."
-          run_json="$(curl -fsSL \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${repo}/actions/workflows/build-manager.yml/runs?head_sha=${sha}&status=success&per_page=1")"
-
-          run_id="$(echo "$run_json" | jq -r '.workflow_runs[0].id // empty')"
-          # 如果指定 SHA 找不到run_id，尝试最新成功构建
-          if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
-            echo "::warning::未找到指定 SHA 的 run，尝试最新成功构建..."
-            echo "尝试从nightly.link获取"
-              mkdir -p "manager-artifacts/${variant}"
-              if ! curl -fL -o "manager.zip" \
-                "https://nightly.link/${repo}/workflows/build-manager/main/Manager-release.zip" 2>/dev/null; then
-                if ! curl -fL -o "manager.zip" \
-                "https://nightly.link/${repo}/workflows/build-manager/main/manager.zip" 2>/dev/null; then
-                   echo "::error::nightly.link 下载失败，尝试 GitHub API fallback"
-                   run_json="$(curl -fsSL \
-                    -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-                    "https://api.github.com/repos/${repo}/actions/workflows/build-manager.yml/runs?status=success&branch=main&per_page=1")"
-                   run_id="$(echo "$run_json" | jq -r '.workflow_runs[0].id // empty')"
-                fi
-              fi
-            if [ -f "manager.zip" ]; then
-              unzip -o "manager.zip" -d "manager-artifacts/${variant}"
-              rm -f "manager.zip"
-            fi
+          local variant="$2"
+          local sha="$BRANCH"
+          if ! [[ "$sha" =~ ^[A-Fa-f0-9]{40}$ ]]; then
+            sha="$(resolve_ref_to_sha "$repo" "$sha")"
+            BRANCH="$sha"
           fi
-
-          if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
-            echo "找到工作流地址：https://github.com/${repo}/actions/runs/${run_id}"
-            # 获取 artifacts 列表
-            artifacts_json="$(curl -fsSL \
-              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${repo}/actions/runs/${run_id}/artifacts")"
-            # 找 Manager.zip
-            artifact_url="$(echo "$artifacts_json" | jq -r '
-              .artifacts[] 
-              | select(
-                  # Official & SukiSU
-                  (.name == "manager")
-                  or
-                  # ReSukiSU
-                  (.name) == "Manager-release")
-              | .archive_download_url
-            ')"
-            if [ -z "$artifact_url" ] || [ "$artifact_url" = "null" ]; then
-              echo "::error::找不到 Manager artifact"
-              exit 1
-            fi
-
-            mkdir -p "manager-artifacts/${variant}"
-
-            curl -fsSL \
-              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              -o "manager-artifacts/${variant}/manager.zip" \
-              "$artifact_url"
-
-            unzip -o "manager-artifacts/${variant}/manager.zip" -d "manager-artifacts/${variant}"
-            rm "manager-artifacts/${variant}/manager.zip"
-          fi
+          echo "→ Download manager for ${repo} at head_sha=${sha}"
+          GITHUB_REPOSITORY="${{ github.repository }}" \
+          GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
+            bash .github/scripts/download-manager-from-actions.sh \
+              "$repo" "$sha" "manager-artifacts/${variant}"
           }
 
           case "${{ inputs.kernelsu_variant }}" in
@@ -352,33 +208,19 @@ jobs:
               if [[ "$BRANCH" =~ ^[Vv]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
                 download_tag_release_apk "tiann/KernelSU" "$BRANCH" "Official"
               else
-                if ! [[ "$BRANCH" =~ ^[A-Fa-f0-9]{40}$ ]]; then
-                  BRANCH="$(resolve_ref_to_sha "tiann/KernelSU" "$BRANCH")"
-                fi
-                download_manager_by_sha "tiann/KernelSU" "$BRANCH" "Official"
+                download_manager_for_repo "tiann/KernelSU" "Official"
               fi
               ;;
             "SukiSU")
               if [[ "$BRANCH" =~ ^[Vv]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
                 download_tag_release_apk "SukiSU-Ultra/SukiSU-Ultra" "$BRANCH" "SukiSU"
               else
-                if ! [[ "$BRANCH" =~ ^[A-Fa-f0-9]{40}$ ]]; then
-                  BRANCH="$(resolve_ref_to_sha "SukiSU-Ultra/SukiSU-Ultra" "$BRANCH")"
-                fi
-                download_manager_by_sha "SukiSU-Ultra/SukiSU-Ultra" "$BRANCH" "SukiSU"
+                download_manager_for_repo "SukiSU-Ultra/SukiSU-Ultra" "SukiSU"
               fi
               ;;
             "ReSukiSU")
-              if [[ "$BRANCH" =~ ^[Vv]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                # ReSukiSU无release
-                # download_tag_release_apk "ReSukiSU/ReSukiSU" "$BRANCH" "ReSukiSU"
-                download_manager_by_sha "ReSukiSU/ReSukiSU" "114514" "ReSukiSU"
-              else
-                if ! [[ "$BRANCH" =~ ^[A-Fa-f0-9]{40}$ ]]; then
-                  BRANCH="$(resolve_ref_to_sha "ReSukiSU/ReSukiSU" "$BRANCH")"
-                fi
-                download_manager_by_sha "ReSukiSU/ReSukiSU" "$BRANCH" "ReSukiSU"
-              fi
+              # ReSukiSU has no release APKs; Actions build-manager (fallback to main latest in script).
+              download_manager_for_repo "ReSukiSU/ReSukiSU" "ReSukiSU"
               ;;
             *)
               echo "::error::未知 KernelSU 变体: ${{ inputs.kernelsu_variant }}"

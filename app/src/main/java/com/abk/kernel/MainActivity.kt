@@ -78,11 +78,11 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import com.abk.kernel.ui.screens.AuthGateScreen
 import com.abk.kernel.ui.screens.BuildScreen
 import com.abk.kernel.ui.screens.FlashScreen
 import com.abk.kernel.ui.screens.InstalledModulesScreen
 import com.abk.kernel.ui.screens.ModuleRepositoryScreen
+import com.abk.kernel.ui.screens.OobeScreen
 import com.abk.kernel.ui.screens.RootAuthorizationScreen
 import com.abk.kernel.ui.screens.RuntimeHomeScreen
 import com.abk.kernel.ui.screens.SettingsScreen
@@ -90,7 +90,6 @@ import com.abk.kernel.ui.screens.StatusScreen
 import com.abk.kernel.ui.theme.AbkTheme
 import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
 import com.abk.kernel.ui.theme.uiSurfaceColor
-import com.abk.kernel.viewmodel.AuthStep
 import com.abk.kernel.viewmodel.MainViewModel
 
 class MainActivity : ComponentActivity() {
@@ -113,9 +112,19 @@ class MainActivity : ComponentActivity() {
             val vm: MainViewModel = viewModel()
             val state by vm.uiState.collectAsState()
 
+            LaunchedEffect(Unit) {
+                vm.checkRoot()
+            }
+
             LaunchedEffect(state.termsAccepted) {
                 if (state.termsAccepted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+
+            LaunchedEffect(state.termsAccepted, state.oobeCompleted) {
+                if (state.termsAccepted && !state.oobeCompleted) {
+                    vm.maybeShowInitialOobe()
                 }
             }
 
@@ -139,12 +148,32 @@ class MainActivity : ComponentActivity() {
                             onAccept = vm::acceptTerms,
                             onDecline = { finishAffinity() }
                         )
-                        state.authStep != AuthStep.READY -> AuthGateScreen(vm)
-                        else -> AbkMainScaffold(
-                            vm = vm,
-                            pendingModuleInstallUri = pendingModuleInstallUri,
-                            onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
-                        )
+                        else -> Box(modifier = Modifier.fillMaxSize()) {
+                            AbkMainScaffold(
+                                vm = vm,
+                                pendingModuleInstallUri = pendingModuleInstallUri,
+                                onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
+                            )
+                            if (state.showSyncPrompt && !state.showOobe) {
+                                SyncPromptDialog(
+                                    behindBy = state.behindBy,
+                                    onSync = vm::syncFork,
+                                    onDismiss = vm::dismissSyncPrompt
+                                )
+                            }
+                            if (state.showOobe) {
+                                CompositionLocalProvider(LocalUiSurfaceAlpha provides 1f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(MaterialTheme.colorScheme.surface)
+                                            .zIndex(4f)
+                                    ) {
+                                        OobeScreen(vm)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -156,6 +185,34 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         pendingModuleInstallUri = extractModuleInstallUri(intent)?.toString()
     }
+}
+
+@Composable
+private fun SyncPromptDialog(
+    behindBy: Int,
+    onSync: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.sync_title)) },
+        text = {
+            Text(
+                "${stringResource(R.string.sync_desc)}\n\n" +
+                    stringResource(R.string.sync_behind_commits, behindBy)
+            )
+        },
+        confirmButton = {
+            Button(onClick = onSync) {
+                Text(stringResource(R.string.sync_action))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.skip))
+            }
+        }
+    )
 }
 
 @Composable
