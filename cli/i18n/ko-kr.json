@@ -220,5 +220,6 @@
   "op_list_title": "OnePlus 디바이스:\n",
   "op_features_title": "OnePlus 전용 기능:",
   "features_title": "기능 플래그:",
-  "default_build_info": "기본값: 커스텀 빌드 (kernel-custom.yml), --sub-level 및 --os-patch-level 필요"
+  "default_build_info": "기본값: 커스텀 빌드 (kernel-custom.yml), --sub-level 및 --os-patch-level 필요",
+  "workflow_404_hint": "힌트: 404는 워크플로우가 활성화되지 않음. Actions 탭에서 활성화하거나 --ref main 시도"
 }

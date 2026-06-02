@@ -115,7 +115,7 @@ abk build --oneplus --device oneplus_12_b
 | `oneplus_12_b` | OnePlus 12 | sm8650 | 14 | 6.1 |
 | `oneplus_11_b` | OnePlus 11 | sm8550 | 13 | 5.15 |
 | `oneplus_10_pro_b` | OnePlus 10 Pro | sm8450 | 12 | 5.10 |
-| ... | (30+ 设备，见 `abk list`) | | | |
+| ... | (30+ 设备，见 `abk list --oneplus`) | | | |
 
 **OnePlus 专属功能：**
 

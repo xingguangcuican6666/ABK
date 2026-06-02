@@ -219,5 +219,6 @@
   "op_list_title": "Dispositivos OnePlus:\n",
   "op_features_title": "Funciones OnePlus:",
   "features_title": "Opciones:",
-  "default_build_info": "Por defecto: build personalizado (kernel-custom.yml), requiere --sub-level y --os-patch-level"
+  "default_build_info": "Por defecto: build personalizado (kernel-custom.yml), requiere --sub-level y --os-patch-level",
+  "workflow_404_hint": "Pista: 404 significa workflow no activado. Actívelo en Actions o pruebe --ref main"
 }

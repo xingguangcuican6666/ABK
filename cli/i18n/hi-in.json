@@ -219,5 +219,6 @@
   "op_list_title": "OnePlus डिवाइस:\n",
   "op_features_title": "OnePlus सुविधाएँ:",
   "features_title": "फीचर फ्लैग्स:",
-  "default_build_info": "डिफ़ॉल्ट: कस्टम बिल्ड (kernel-custom.yml), --sub-level और --os-patch-level आवश्यक"
+  "default_build_info": "डिफ़ॉल्ट: कस्टम बिल्ड (kernel-custom.yml), --sub-level और --os-patch-level आवश्यक",
+  "workflow_404_hint": "संकेत: 404 का मतलब वर्कफ़्लो सक्षम नहीं। Actions टैब में सक्षम करें या --ref main आज़माएं"
 }

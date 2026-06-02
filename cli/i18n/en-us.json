@@ -223,5 +223,6 @@
   "op_list_title": "OnePlus devices:\n",
   "op_features_title": "OnePlus features:",
   "features_title": "Feature flags:",
-  "default_build_info": "Default: custom build (kernel-custom.yml), --sub-level + --os-patch-level required"
+  "default_build_info": "Default: custom build (kernel-custom.yml), --sub-level + --os-patch-level required",
+  "workflow_404_hint": "Hint: 404 usually means workflow not enabled. Enable it in Actions tab or try --ref main"
 }

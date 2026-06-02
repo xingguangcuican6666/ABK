@@ -766,6 +766,8 @@ def cmd_build(args):
                 print(f"  " + t("triggered_ok"))
             except Exception as e:
                 print(t("build_triggered_fail", error=e))
+                if "404" in str(e):
+                    print(t("workflow_404_hint"))
         print(t("build_check_status"))
         return
     
@@ -909,6 +911,8 @@ def cmd_build(args):
                     print(t("build_triggered_ok"))
                 except Exception as e:
                     print(t("build_triggered_fail", error=e))
+                    if "404" in str(e):
+                        print(t("workflow_404_hint"))
     
     if total > 1:
         print(t("build_multiple_count", count=count))
