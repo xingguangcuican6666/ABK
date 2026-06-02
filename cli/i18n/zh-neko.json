@@ -224,5 +224,5 @@
   "op_features_title": "OnePlus 专属功能喵:",
   "features_title": "功能开关喵:",
   "default_build_info": "默认: 自定义构建喵, 需要 --sub-level 和 --os-patch-level 喵",
-  "workflow_404_hint": "提示喵: 404 通常是工作流没启用喵，去 Actions 页面手动触发一次或者试试 --ref main 喵"
+  "workflow_404_hint": "提示喵: 404 通常是工作流没启用喵，去 Actions 页面手动启用一下喵"
 }

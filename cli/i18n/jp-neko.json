@@ -224,5 +224,5 @@
   "op_features_title": "OnePlus専用機能ニャ:",
   "features_title": "機能フラグニャ:",
   "default_build_info": "デフォルト: カスタムビルドニャ, --sub-level と --os-patch-level が必要ニャ",
-  "workflow_404_hint": "ヒントニャ: 404はワークフローが有効化されてないニャ。Actionsで有効化するか --ref main を試すニャ"
+  "workflow_404_hint": "ヒントニャ: 404はワークフローが有効化されてないニャ。Actionsで有効化してニャ"
 }

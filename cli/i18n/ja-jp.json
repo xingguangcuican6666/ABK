@@ -221,5 +221,5 @@
   "op_features_title": "OnePlus専用機能:",
   "features_title": "機能フラグ:",
   "default_build_info": "デフォルト: カスタムビルド (kernel-custom.yml), --sub-level と --os-patch-level が必要",
-  "workflow_404_hint": "ヒント: 404はワークフローが有効化されていない可能性。Actionsタブで有効化するか --ref main を試す"
+  "workflow_404_hint": "ヒント: 404はワークフローが有効化されていません。Actionsタブで有効化してください"
 }
