@@ -285,7 +285,7 @@ abk --lang neko --help     # 🐱
 | `jp-neko` | 日本語猫娘 🐱 |
 | `zh-neko` | 中文猫娘 🐱 |
 | `eo` | Esperanto |
-| `zh-zako` | zako~zako~ |
+| `zh-zako` | zako~ zako~ |
 
 ## 添加新语言 / Adding New Languages
 
