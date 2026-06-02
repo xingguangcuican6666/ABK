@@ -89,7 +89,10 @@ try_download_nightly_run() {
   echo "Downloaded manager from ${REPO}@${KSU_SHA} (run ${run_id}, source ${MANAGER_RUN_SOURCE}) via nightly.link"
 }
 
-run_id="$(ksu_find_manager_run_id "$REPO" "$KSU_SHA")"
+if ! ksu_find_manager_run_id "$REPO" "$KSU_SHA"; then
+  exit 1
+fi
+run_id="${KSU_MANAGER_RUN_ID}"
 if [ "${MANAGER_RUN_FALLBACK_MAIN:-0}" = "1" ]; then
   echo "::notice::Manager APK from latest successful build-manager on main (KSU ref was ${KSU_SHA})" >&2
 fi

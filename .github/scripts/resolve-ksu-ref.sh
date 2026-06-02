@@ -78,10 +78,13 @@ ksu_latest_build_manager_sha_on_branch() {
   printf '%s\n' "$sha"
 }
 
-# Sets KSU_LATEST_SOURCE (main-head-release | main-head-build-manager | main-fallback).
+# Sets KSU_RESOLVED_LATEST_SHA and KSU_LATEST_SOURCE (no stdout; safe under set -u).
 ksu_resolve_latest_sha() {
   local repo="$1"
   local main_head sha
+
+  KSU_RESOLVED_LATEST_SHA=""
+  KSU_LATEST_SOURCE=""
 
   main_head="$(ksu_main_head_sha "$repo")" || {
     echo "::error::Failed to read main HEAD for ${repo}" >&2
@@ -90,13 +93,13 @@ ksu_resolve_latest_sha() {
 
   if ksu_workflow_run_id_for_head_sha "$repo" "$KSU_RELEASE_WORKFLOW" "$main_head" >/dev/null; then
     KSU_LATEST_SOURCE="main-head-release"
-    printf '%s\n' "$main_head"
+    KSU_RESOLVED_LATEST_SHA="$main_head"
     return 0
   fi
 
   if ksu_workflow_run_id_for_head_sha "$repo" "$KSU_BUILD_MANAGER_WORKFLOW" "$main_head" >/dev/null; then
     KSU_LATEST_SOURCE="main-head-build-manager"
-    printf '%s\n' "$main_head"
+    KSU_RESOLVED_LATEST_SHA="$main_head"
     return 0
   fi
 
@@ -105,10 +108,11 @@ ksu_resolve_latest_sha() {
     return 1
   }
   KSU_LATEST_SOURCE="main-fallback"
-  printf '%s\n' "$sha"
+  KSU_RESOLVED_LATEST_SHA="$sha"
+  return 0
 }
 
-# Sets MANAGER_RUN_SOURCE and MANAGER_RUN_FALLBACK_MAIN; prints workflow run id.
+# Sets KSU_MANAGER_RUN_ID, MANAGER_RUN_SOURCE, and MANAGER_RUN_FALLBACK_MAIN (no stdout; safe under set -u).
 ksu_find_manager_run_id() {
   local repo="$1"
   local sha="$2"
@@ -119,18 +123,19 @@ ksu_find_manager_run_id() {
     return 1
   fi
 
+  KSU_MANAGER_RUN_ID=""
   MANAGER_RUN_SOURCE=""
   MANAGER_RUN_FALLBACK_MAIN=0
 
   if run_id="$(ksu_workflow_run_id_for_head_sha "$repo" "$KSU_BUILD_MANAGER_WORKFLOW" "$sha")"; then
     MANAGER_RUN_SOURCE="build-manager"
-    printf '%s\n' "$run_id"
+    KSU_MANAGER_RUN_ID="$run_id"
     return 0
   fi
 
   if run_id="$(ksu_workflow_run_id_for_head_sha "$repo" "$KSU_RELEASE_WORKFLOW" "$sha")"; then
     MANAGER_RUN_SOURCE="release"
-    printf '%s\n' "$run_id"
+    KSU_MANAGER_RUN_ID="$run_id"
     return 0
   fi
 
@@ -138,7 +143,7 @@ ksu_find_manager_run_id() {
   if run_id="$(ksu_workflow_run_id_for_branch "$repo" "$KSU_BUILD_MANAGER_WORKFLOW" "main")"; then
     MANAGER_RUN_SOURCE="fallback-main"
     MANAGER_RUN_FALLBACK_MAIN=1
-    printf '%s\n' "$run_id"
+    KSU_MANAGER_RUN_ID="$run_id"
     return 0
   fi
 
@@ -223,11 +228,13 @@ resolve_latest() {
   esac
 
   source_branch="main"
-  sha="$(ksu_resolve_latest_sha "$repo")"
+  if ! ksu_resolve_latest_sha "$repo"; then
+    return 1
+  fi
 
   RESOLVED_KSU_REPO="$repo"
   RESOLVED_KSU_SOURCE_BRANCH="$source_branch"
-  RESOLVED_KSU_SHA="$sha"
+  RESOLVED_KSU_SHA="$KSU_RESOLVED_LATEST_SHA"
 }
 
 OFFICIAL_CUSTOM_REF=""
@@ -315,5 +322,6 @@ emit_env "RESOLVED_KSU_REPO" "${RESOLVED_KSU_REPO:-}"
 
 echo "KSU branch: ${KSU_BRANCH} -> ${BRANCH}"
 if [ "$KSU_BRANCH" = "Latest(最新)" ]; then
+  emit_env "KSU_LATEST_SOURCE" "${KSU_LATEST_SOURCE:-unknown}"
   echo "Latest resolved: repo=${RESOLVED_KSU_REPO} branch=${RESOLVED_KSU_SOURCE_BRANCH} sha=${RESOLVED_KSU_SHA} source=${KSU_LATEST_SOURCE:-unknown}"
 fi
