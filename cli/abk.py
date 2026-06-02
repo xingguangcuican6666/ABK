@@ -134,8 +134,8 @@ def validate_oneplus_build(args, device_info=None):
         android = device_info.get("android", "")
         kernel = device_info.get("kernel", "")
         
-        if cpu.startswith("mt") and args.networking:
-            args.networking = False
+        if cpu.startswith("mt") and args.proxy_optimization:
+            args.proxy_optimization = False
             warnings.append(t("op_mtk_no_proxy", cpu=cpu))
         
         if (android, kernel) not in ONEPLUS_SUSFS_SUPPORTED:
@@ -876,6 +876,10 @@ def cmd_build(args):
             elif tk == "oneplus":
                 inputs["supp_op"] = str(args.oneplus_8e).lower()
                 inputs["device"] = args.device
+                inputs["use_lz4kd"] = str(args.lz4kd).lower()
+                inputs["use_bbr"] = str(args.bbr).lower()
+                inputs["use_proxy_optimization"] = str(args.proxy_optimization).lower()
+                inputs["use_unicode_bypass"] = str(args.unicode_bypass).lower()
             elif not args.matrix or args.matrix == "both":
                 pass
             
@@ -1079,6 +1083,10 @@ def main():
     build_parser.add_argument("--rekernel", action="store_true", default=False, help=t("arg_rekernel"))
     build_parser.add_argument("--no-rekernel", dest="rekernel", action="store_false", help=t("arg_no_rekernel"))
     build_parser.add_argument("--oneplus-8e", action="store_true", default=False, help=t("arg_oneplus_8e"))
+    build_parser.add_argument("--lz4kd", action="store_true", help=t("arg_lz4kd"))
+    build_parser.add_argument("--bbr", action="store_true", help=t("arg_bbr"))
+    build_parser.add_argument("--proxy-optimization", action="store_true", help=t("arg_proxy"))
+    build_parser.add_argument("--unicode-bypass", action="store_true", help=t("arg_unicode"))
     build_parser.add_argument("--ntsync", action="store_true", default=False, help=t("arg_ntsync"))
     build_parser.add_argument("--networking", action="store_true", default=False, help=t("arg_networking"))
     build_parser.add_argument("--zram-full-algo", action="store_true", default=False, help=t("arg_zram_full_algo"))

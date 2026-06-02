@@ -117,6 +117,15 @@ abk build --oneplus --device oneplus_12_b
 | `oneplus_10_pro_b` | OnePlus 10 Pro | sm8450 | 12 | 5.10 |
 | ... | (30+ 设备，见 `abk list`) | | | |
 
+**OnePlus 专属功能：**
+
+| 选项 | 描述 |
+|------|------|
+| `--lz4kd` | 启用 LZ4KD 压缩 |
+| `--bbr` | 启用 BBR 拥塞控制 |
+| `--proxy-optimization` | 启用代理优化 (MTK CPU 不支持) |
+| `--unicode-bypass` | 启用 Unicode 零宽字符绕过修复 |
+
 **OnePlus 构建限制：**
 - ZRAM / DDK / NTsync / 网络增强 / Re-Kernel / 虚拟化 / 自定义外部模块 → 自动禁用
 - MTK CPU 设备 → 代理优化自动禁用

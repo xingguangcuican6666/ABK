@@ -210,5 +210,9 @@
   "op_no_kpm_password": "OnePlus KPM पासवर्ड का समर्थन नहीं करता, स्वतः साफ",
   "op_mtk_no_proxy": "MTK CPU ({cpu}) प्रॉक्सी ऑप्टिमाइजेशन असमर्थित, स्वतः अक्षम",
   "op_no_susfs": "OnePlus {android}/{kernel} SUSFS असमर्थित, स्वतः अक्षम",
-  "op_no_kpm_ksu": "KSU {ksu} OnePlus KPM असमर्थित, स्वतः अक्षम"
+  "op_no_kpm_ksu": "KSU {ksu} OnePlus KPM असमर्थित, स्वतः अक्षम",
+  "arg_lz4kd": "Enable LZ4KD (OnePlus only)",
+  "arg_bbr": "Enable BBR (OnePlus only)",
+  "arg_proxy": "Enable proxy optimization (OnePlus only)",
+  "arg_unicode": "Enable Unicode zero-width bypass (OnePlus only)"
 }

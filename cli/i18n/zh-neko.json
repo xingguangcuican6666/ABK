@@ -206,5 +206,9 @@
   "op_no_virt": "OnePlus 不支持虚拟化喵，自动关掉了",
   "op_mtk_no_proxy": "MTK CPU ({cpu}) 不支持代理优化喵，自动关掉了",
   "op_no_susfs": "OnePlus {android}/{kernel} 不支持 SUSFS 喵，自动关掉了",
-  "op_no_kpm_ksu": "KSU {ksu} 不支持 OnePlus KPM 喵，自动关掉了"
+  "op_no_kpm_ksu": "KSU {ksu} 不支持 OnePlus KPM 喵，自动关掉了",
+  "arg_lz4kd": "Enable LZ4KD (OnePlus only)",
+  "arg_bbr": "Enable BBR (OnePlus only)",
+  "arg_proxy": "Enable proxy optimization (OnePlus only)",
+  "arg_unicode": "Enable Unicode zero-width bypass (OnePlus only)"
 }
