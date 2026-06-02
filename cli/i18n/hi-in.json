@@ -211,8 +211,8 @@
   "op_mtk_no_proxy": "MTK CPU ({cpu}) प्रॉक्सी ऑप्टिमाइजेशन असमर्थित, स्वतः अक्षम",
   "op_no_susfs": "OnePlus {android}/{kernel} SUSFS असमर्थित, स्वतः अक्षम",
   "op_no_kpm_ksu": "KSU {ksu} OnePlus KPM असमर्थित, स्वतः अक्षम",
-  "arg_lz4kd": "Enable LZ4KD (OnePlus only)",
-  "arg_bbr": "Enable BBR (OnePlus only)",
-  "arg_proxy": "Enable proxy optimization (OnePlus only)",
-  "arg_unicode": "Enable Unicode zero-width bypass (OnePlus only)"
+  "arg_lz4kd": "LZ4KD सक्षम करें (केवल OnePlus)",
+  "arg_bbr": "BBR सक्षम करें (केवल OnePlus)",
+  "arg_proxy": "प्रॉक्सी ऑप्टिमाइजेशन सक्षम करें (केवल OnePlus)",
+  "arg_unicode": "Unicode ज़ीरो-विड्थ बायपास सक्षम करें (केवल OnePlus)"
 }

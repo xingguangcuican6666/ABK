@@ -207,8 +207,8 @@
   "op_mtk_no_proxy": "MTK CPU ({cpu})はプロキシ最適化非対応ニャ、自動で無効にした",
   "op_no_susfs": "OnePlus {android}/{kernel}はSUSFS非対応ニャ、自動で無効にした",
   "op_no_kpm_ksu": "KSU {ksu}はOnePlus KPM非対応ニャ、自動で無効にした",
-  "arg_lz4kd": "Enable LZ4KD (OnePlus only)",
-  "arg_bbr": "Enable BBR (OnePlus only)",
-  "arg_proxy": "Enable proxy optimization (OnePlus only)",
-  "arg_unicode": "Enable Unicode zero-width bypass (OnePlus only)"
+  "arg_lz4kd": "LZ4KDを有効にするニャ",
+  "arg_bbr": "BBRを有効にするニャ",
+  "arg_proxy": "プロキシ最適化を有効にするニャ",
+  "arg_unicode": "Unicodeゼロ幅バイパスを有効にするニャ"
 }
