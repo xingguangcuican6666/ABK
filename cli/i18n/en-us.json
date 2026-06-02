@@ -1,7 +1,6 @@
 {
   "abk_cli_desc": "ABK CLI - Trigger kernel builds from non-Android devices",
   "abk_cli_desc_full": "ABK (AnyBase Kernel) is a tool for building, distributing, and managing GKI KernelSU/SUSFS kernels.\nThe CLI allows you to trigger GitHub Actions builds without an Android device.",
-
   "err_no_token": "Not logged in, run 'abk login' first",
   "err_set_token_env": "Set GITHUB_TOKEN env var or use --token",
   "err_no_fork": "No fork detected, run 'abk fork' first",
@@ -21,7 +20,6 @@
   "err_build_failed": "Build failed: {error}",
   "err_api_error": "GitHub API error ({code}): {msg}",
   "err_network_error": "Network error: {reason}",
-
   "login_requesting": "Requesting device code...",
   "login_title": "GitHub Device Authorization",
   "login_step1": "1. Open browser and visit:",
@@ -41,7 +39,6 @@
   "whoami_status_behind": "Status: {n} commits behind upstream (needs sync)",
   "whoami_no_fork": "Fork: not detected",
   "whoami_hint_fork": "Hint: run 'abk fork' to create fork",
-
   "fork_exists": "Fork exists: {fork}",
   "fork_behind": "{n} commits behind upstream",
   "fork_syncing": "Syncing...",
@@ -54,7 +51,6 @@
   "fork_warn_sync_prompt": "Warning: fork is {n} commits behind upstream",
   "fork_ask_sync": "Sync now? (y/n): ",
   "fork_no_detect": "No fork detected, creating...",
-
   "build_triggering": "Triggering {name} build...",
   "build_triggered": "Build triggered!",
   "build_triggered_dry": "[DRY-RUN] skipped",
@@ -66,23 +62,18 @@
   "build_actions_url": "GitHub Actions: https://github.com/{repo}/actions",
   "build_ksu_info": "KSU: {variant} ({branch})",
   "build_feat_line": "SUSFS: {susfs}, ZRAM: {zram}, BBG: {bbg}, DDK: {ddk}, KPM: {kpm}, Re-Kernel: {rekernel}, NTsync: {ntsync}, Networking: {networking}",
-
   "enabled": "enabled",
   "disabled": "disabled",
-
   "status_no_builds": "No build records",
   "status_recent": "Recent {n} builds:\n",
-
   "artifacts_no_artifacts": "No artifacts for this build",
   "artifacts_list": "Build #{id} artifacts:\n",
   "artifacts_downloading": "Downloading {name}...",
   "artifacts_download_to": "Downloading to: {dir}",
-
   "list_title": "Available build targets:\n",
   "list_matrix_item": "--matrix {key:9} - {name} (matrix build all sub versions)",
   "list_oneplus_item": "--oneplus        - OnePlus/Oplus devices (--device required)",
   "list_custom_default": "Default: custom build (kernel-custom.yml), requires --sub-level and --os-patch-level",
-
   "build_target_a12": "Android 12 (5.10)",
   "build_target_a13": "Android 13 (5.15)",
   "build_target_a14": "Android 14 (6.1)",
@@ -92,14 +83,12 @@
   "build_target_oneplus": "OnePlus/Oplus",
   "build_target_full": "Full Feature Matrix",
   "build_target_all_managers": "All Managers Full Matrix",
-
   "help_subcommands": "Commands (use abk <command> --help for details)",
   "help_flag": "Show this help message and exit",
   "help_token": "GitHub Token (or set GITHUB_TOKEN env var)",
   "help_repo": "GitHub repo (default: auto-detect fork)",
   "help_verbose": "Verbose output",
   "help_lang": "Interface language",
-
   "cmd_login_help": "Login to GitHub (Device Flow)",
   "cmd_login_desc": "Login using GitHub Device Flow, automatically opens browser",
   "cmd_logout_help": "Logout from GitHub",
@@ -118,7 +107,6 @@
   "cmd_artifacts_desc": "View and download build artifacts (AnyKernel3, img, etc.)",
   "cmd_list_help": "List available options",
   "cmd_list_desc": "List all build targets, KSU variants, and feature options",
-
   "arg_matrix": "Matrix build target (both=all versions, full=full feature, all-managers=all managers)",
   "arg_oneplus": "OnePlus device build",
   "arg_ref": "Fork Git branch (default: dev)",
@@ -209,5 +197,23 @@
   "status_synced": "Status: synced",
   "ask_sync": "Sync now? (y/n): ",
   "triggered_ok": "✓ Dispatched",
-  "triggered_fail": "✗ Failed: {error}"
+  "triggered_fail": "✗ Failed: {error}",
+  "err_unknown_device": "Unknown device '{device}'",
+  "err_available_devices": "Available devices: {devices}",
+  "warning_prefix": "Warning:",
+  "error_prefix": "Error:",
+  "op_no_zram": "OnePlus build does not support ZRAM, auto-disabled",
+  "op_no_ddk": "OnePlus build does not support DDK, auto-disabled",
+  "op_no_ntsync": "OnePlus build does not support NTsync, auto-disabled",
+  "op_no_networking": "OnePlus build does not support networking, auto-disabled",
+  "op_no_rekernel": "OnePlus build does not support Re-Kernel, auto-disabled",
+  "op_no_virt": "OnePlus build does not support virtualization, auto-disabled",
+  "op_no_custom_ref": "OnePlus build does not support custom ref, auto-cleared",
+  "op_no_zram_algo": "OnePlus build does not support ZRAM full algorithm, auto-disabled",
+  "op_no_zram_extra": "OnePlus build does not support custom ZRAM algorithms, auto-cleared",
+  "op_no_custom_modules": "OnePlus build does not support custom external modules, auto-cleared",
+  "op_no_kpm_password": "OnePlus build does not support KPM password, auto-cleared",
+  "op_mtk_no_proxy": "MTK CPU ({cpu}) does not support proxy optimization, auto-disabled",
+  "op_no_susfs": "OnePlus {android}/{kernel} does not support SUSFS, auto-disabled",
+  "op_no_kpm_ksu": "KSU {ksu} does not support OnePlus KPM, auto-disabled"
 }

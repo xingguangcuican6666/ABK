@@ -1,7 +1,6 @@
 {
   "abk_cli_desc": "ABK CLI - 用于非Android设备快速触发内核编译",
   "abk_cli_desc_full": "ABK (AnyBase Kernel) 是一个用于构建、分发和管理 GKI KernelSU/SUSFS 内核的自动化工具。\nCLI 工具允许你通过命令行触发 GitHub Actions 构建，无需 Android 设备。",
-
   "err_no_token": "未登录，请先运行 'abk login'",
   "err_set_token_env": "请设置 GITHUB_TOKEN 环境变量或使用 --token 参数",
   "err_no_fork": "未检测到 fork，请先运行 'abk fork'",
@@ -21,7 +20,6 @@
   "err_build_failed": "触发构建失败: {error}",
   "err_api_error": "GitHub API 错误 ({code}): {msg}",
   "err_network_error": "网络错误: {reason}",
-
   "login_requesting": "正在请求设备授权码...",
   "login_title": "GitHub 设备授权",
   "login_step1": "1. 打开浏览器访问:",
@@ -42,7 +40,6 @@
   "whoami_status_behind": "状态: 落后上游 {n} 个提交 (需要同步)",
   "whoami_no_fork": "Fork: 未检测到",
   "whoami_hint_fork": "提示: 运行 'abk fork' 创建 fork",
-
   "fork_exists": "Fork 已存在: {fork}",
   "fork_behind": "落后上游 {n} 个提交",
   "fork_syncing": "正在同步...",
@@ -55,7 +52,6 @@
   "fork_warn_sync_prompt": "警告: Fork 落后上游 {n} 个提交",
   "fork_ask_sync": "是否先同步? (y/n): ",
   "fork_no_detect": "未检测到 fork，正在创建...",
-
   "build_triggering": "触发 {name} 构建...",
   "build_triggered": "构建已触发!",
   "build_triggered_dry": "[DRY-RUN] 跳过",
@@ -67,10 +63,8 @@
   "build_actions_url": "GitHub Actions: https://github.com/{repo}/actions",
   "build_ksu_info": "KSU: {variant} ({branch})",
   "build_feat_line": "SUSFS: {susfs}, ZRAM: {zram}, BBG: {bbg}, DDK: {ddk}, KPM: {kpm}, Re-Kernel: {rekernel}, NTsync: {ntsync}, 网络增强: {networking}",
-
   "enabled": "启用",
   "disabled": "禁用",
-
   "err_no_user_info": "无法获取用户信息",
   "fork_no_detect_creating": "未检测到 fork，正在创建...",
   "token_saved_to": "Token 已保存到: {path}",
@@ -122,7 +116,6 @@
   "arg_run_id": "构建运行 ID",
   "arg_download": "下载产物",
   "arg_output": "输出目录 (默认: ./abk-artifacts)",
-
   "status_no_builds": "没有构建记录",
   "status_recent": "最近 {n} 个构建:\n",
   "artifacts_no_artifacts": "该构建没有产物",
@@ -204,5 +197,23 @@
   "arg_zram_extra_algos": "自定义 ZRAM 算法 (逗号分隔，如 lzo,lz4,zstd)",
   "arg_custom_modules": "自定义外部模块 (格式: url;stage|url;stage)",
   "arg_no_sync": "不同步 fork (即使落后上游)",
-  "err_req_failed_with_error": "请求授权码失败: {error}"
+  "err_req_failed_with_error": "请求授权码失败: {error}",
+  "err_unknown_device": "未知设备 '{device}'",
+  "err_available_devices": "可用设备: {devices}",
+  "warning_prefix": "警告:",
+  "error_prefix": "错误:",
+  "op_no_zram": "OnePlus 构建不支持 ZRAM，已自动禁用",
+  "op_no_ddk": "OnePlus 构建不支持 DDK，已自动禁用",
+  "op_no_ntsync": "OnePlus 构建不支持 NTsync，已自动禁用",
+  "op_no_networking": "OnePlus 构建不支持网络增强，已自动禁用",
+  "op_no_rekernel": "OnePlus 构建不支持 Re-Kernel，已自动禁用",
+  "op_no_virt": "OnePlus 构建不支持虚拟化，已自动禁用",
+  "op_no_custom_ref": "OnePlus 构建不支持自定义引用，已自动清除",
+  "op_no_zram_algo": "OnePlus 构建不支持 ZRAM 完整算法，已自动禁用",
+  "op_no_zram_extra": "OnePlus 构建不支持自定义 ZRAM 算法，已自动清除",
+  "op_no_custom_modules": "OnePlus 构建不支持自定义外部模块，已自动清除",
+  "op_no_kpm_password": "OnePlus 构建不支持 KPM 密码，已自动清除",
+  "op_mtk_no_proxy": "MTK CPU ({cpu}) 不支持代理优化，已自动禁用",
+  "op_no_susfs": "OnePlus {android}/{kernel} 不支持 SUSFS，已自动禁用",
+  "op_no_kpm_ksu": "KSU {ksu} 不支持 OnePlus KPM，已自动禁用"
 }

@@ -50,6 +50,107 @@ KSU_VARIANTS = ["None", "Official", "SukiSU", "ReSukiSU"]
 KSU_BRANCHES = ["Stable(标准)", "Dev(开发)", "Custom(自定义)"]
 VIRT_OPTIONS = ["off", "678", "123", "345"]
 
+ONEPLUS_DEVICES = {
+    "oneplus_13_b": {"name": "OnePlus 13", "cpu": "sm8750", "android": "android15", "kernel": "6.6"},
+    "oneplus_13s_b": {"name": "OnePlus 13s", "cpu": "sm8750", "android": "android15", "kernel": "6.6"},
+    "oneplus_13t_b": {"name": "OnePlus 13T", "cpu": "sm8750", "android": "android15", "kernel": "6.6"},
+    "oneplus_ace5_pro_b": {"name": "OnePlus Ace5 Pro", "cpu": "sm8750", "android": "android15", "kernel": "6.6"},
+    "oneplus_ace_6": {"name": "OnePlus Ace 6", "cpu": "sm8750", "android": "android15", "kernel": "6.6"},
+    "oneplus_pad_2_pro_b": {"name": "OnePlus Pad 2 Pro", "cpu": "sm8750", "android": "android15", "kernel": "6.6"},
+    "oneplus_pad_3_b": {"name": "OnePlus Pad 3", "cpu": "sm8750", "android": "android15", "kernel": "6.6"},
+    "oneplus_ace5_ultra_b": {"name": "OnePlus Ace5 Ultra", "cpu": "mt6991", "android": "android15", "kernel": "6.6"},
+    "oneplus_turbo_6": {"name": "OnePlus Turbo 6", "cpu": "sm8735", "android": "android15", "kernel": "6.6"},
+    "oneplus_12_b": {"name": "OnePlus 12", "cpu": "sm8650", "android": "android14", "kernel": "6.1"},
+    "oneplus_ace3_pro_b": {"name": "OnePlus Ace3 Pro", "cpu": "sm8650", "android": "android14", "kernel": "6.1"},
+    "oneplus_ace5_b": {"name": "OnePlus Ace5", "cpu": "sm8650", "android": "android14", "kernel": "6.1"},
+    "oneplus_13r_b": {"name": "OnePlus 13R", "cpu": "sm8650", "android": "android14", "kernel": "6.1"},
+    "oneplus_pad2_b": {"name": "OnePlus Pad 2", "cpu": "sm8650", "android": "android14", "kernel": "6.1"},
+    "oneplus_pad_pro_b": {"name": "OnePlus Pad Pro", "cpu": "sm8650", "android": "android14", "kernel": "6.1"},
+    "oneplus_ace5_race_b": {"name": "OnePlus Ace5 Race", "cpu": "mt6989", "android": "android14", "kernel": "6.1"},
+    "oneplus_nord_5_b": {"name": "OnePlus Nord 5", "cpu": "sm8635", "android": "android14", "kernel": "6.1"},
+    "oneplus_11_b": {"name": "OnePlus 11", "cpu": "sm8550", "android": "android13", "kernel": "5.15"},
+    "oneplus_12r_b": {"name": "OnePlus 12R", "cpu": "sm8550", "android": "android13", "kernel": "5.15"},
+    "oneplus_ace2_pro_b": {"name": "OnePlus Ace2 Pro", "cpu": "sm8550", "android": "android13", "kernel": "5.15"},
+    "oneplus_ace3_b": {"name": "OnePlus Ace3", "cpu": "sm8550", "android": "android13", "kernel": "5.15"},
+    "oneplus_open_b": {"name": "OnePlus Open", "cpu": "sm8550", "android": "android13", "kernel": "5.15"},
+    "oneplus_10t_v": {"name": "OnePlus 10T", "cpu": "sm8475", "android": "android12", "kernel": "5.10"},
+    "oneplus_11r_b": {"name": "OnePlus 11R", "cpu": "sm8475", "android": "android12", "kernel": "5.10"},
+    "oneplus_ace2_b": {"name": "OnePlus Ace2", "cpu": "sm8475", "android": "android12", "kernel": "5.10"},
+    "oneplus_ace_pro_v": {"name": "OnePlus Ace Pro", "cpu": "sm8475", "android": "android12", "kernel": "5.10"},
+    "oneplus_10_pro_b": {"name": "OnePlus 10 Pro", "cpu": "sm8450", "android": "android12", "kernel": "5.10"},
+    "oneplus_ace_3v_b": {"name": "OnePlus Ace 3V", "cpu": "sm7675", "android": "android14", "kernel": "6.1"},
+    "oneplus_turbo_6v": {"name": "OnePlus Turbo 6V", "cpu": "sm7635", "android": "android14", "kernel": "6.1"},
+    "oneplus_nord_4_b": {"name": "OnePlus Nord 4", "cpu": "sm7675", "android": "android14", "kernel": "6.1"},
+    "oneplus_nord_ce4_lite_5g": {"name": "OnePlus Nord CE4 Lite 5G", "cpu": "sm6375", "android": "android14", "kernel": "6.1"},
+    "oneplus_nord_ce4_b": {"name": "OnePlus Nord CE4", "cpu": "sm7550", "android": "android13", "kernel": "5.15"},
+}
+
+ONEPLUS_SUSFS_SUPPORTED = {
+    ("android14", "6.1"),
+    ("android15", "6.6"),
+}
+
+
+def validate_oneplus_build(args, device_info=None):
+    errors = []
+    warnings = []
+    
+    if args.zram:
+        args.zram = False
+        warnings.append(t("op_no_zram"))
+    if args.ddk:
+        args.ddk = False
+        warnings.append(t("op_no_ddk"))
+    if args.ntsync:
+        args.ntsync = False
+        warnings.append(t("op_no_ntsync"))
+    if args.networking:
+        args.networking = False
+        warnings.append(t("op_no_networking"))
+    if args.rekernel:
+        args.rekernel = False
+        warnings.append(t("op_no_rekernel"))
+    if args.virt and args.virt != "off":
+        args.virt = "off"
+        warnings.append(t("op_no_virt"))
+    if args.custom_ref:
+        args.custom_ref = ""
+        warnings.append(t("op_no_custom_ref"))
+    if args.zram_full_algo:
+        args.zram_full_algo = False
+        warnings.append(t("op_no_zram_algo"))
+    if args.zram_extra_algos:
+        args.zram_extra_algos = ""
+        warnings.append(t("op_no_zram_extra"))
+    if args.custom_modules:
+        args.custom_modules = ""
+        warnings.append(t("op_no_custom_modules"))
+    if args.kpm_password:
+        args.kpm_password = ""
+        warnings.append(t("op_no_kpm_password"))
+    
+    if device_info:
+        cpu = device_info.get("cpu", "")
+        android = device_info.get("android", "")
+        kernel = device_info.get("kernel", "")
+        
+        if cpu.startswith("mt") and args.networking:
+            args.networking = False
+            warnings.append(t("op_mtk_no_proxy", cpu=cpu))
+        
+        if (android, kernel) not in ONEPLUS_SUSFS_SUPPORTED:
+            if args.susfs:
+                args.susfs = False
+                warnings.append(t("op_no_susfs", android=android, kernel=kernel))
+        
+        ksu = args.ksu_variant or "ReSukiSU"
+        if ksu not in ("SukiSU", "ReSukiSU"):
+            if args.kpm:
+                args.kpm = False
+                warnings.append(t("op_no_kpm_ksu", ksu=ksu))
+    
+    return errors, warnings
+
 
 def load_config():
     if CONFIG_FILE.exists():
@@ -668,6 +769,25 @@ def cmd_build(args):
         print(t("build_check_status"))
         return
     
+    if args.oneplus:
+        if not args.device:
+            print(t("err_need_device"), file=sys.stderr)
+            sys.exit(1)
+        
+        device_info = ONEPLUS_DEVICES.get(args.device)
+        if not device_info:
+            print(t("err_unknown_device", device=args.device), file=sys.stderr)
+            print(t("err_available_devices", devices=", ".join(ONEPLUS_DEVICES.keys())), file=sys.stderr)
+            sys.exit(1)
+        
+        errors, warnings = validate_oneplus_build(args, device_info)
+        for w in warnings:
+            print(t("warning_prefix") + " " + t(w))
+        if errors:
+            for e in errors:
+                print(t("error_prefix") + " " + t(e), file=sys.stderr)
+            sys.exit(1)
+
     # 确定矩阵目标列表
     if args.matrix:
         if args.matrix == "both":
