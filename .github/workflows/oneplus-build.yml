@@ -787,7 +787,10 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: ${{ env.ONEPLUS_ARTIFACT_NAME }}
-          path: oneplus_workspace/*.zip
+          path: |
+            oneplus_workspace/*.zip
+            LICENSE
+            THIRD_PARTY_NOTICES.md
           if-no-files-found: error
 
       - name: 上传内核 Image

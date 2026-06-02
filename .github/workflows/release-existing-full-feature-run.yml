@@ -169,6 +169,15 @@ jobs:
             ! -path '*-Rejects/*' \
             | sort > release_assets.txt
 
+          for doc in LICENSE THIRD_PARTY_NOTICES.md; do
+            file="$(find ./downloaded-artifacts -type f -name "$doc" | sort | head -n 1 || true)"
+            if [ -n "$file" ]; then
+              printf '%s\n' "$file" >> release_assets.txt
+            else
+              echo "::warning::未找到 $doc，跳过追加到 Release assets。"
+            fi
+          done
+
           asset_count="$(wc -l < release_assets.txt | tr -d '[:space:]')"
           if [ "$asset_count" -eq 0 ]; then
             echo "::error::下载后未找到可发布的内核产物"

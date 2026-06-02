@@ -116,7 +116,7 @@ on:
           - "678"
           - "123"
           - "345"
-        default: "off"
+        default: "on"
       use_custom_external_modules:
         description: "GKI 启用自定义外部模块注入"
         required: false
@@ -136,7 +136,7 @@ on:
         description: "OnePlus 专属开关 JSON；留空或 {} 使用默认"
         required: false
         type: string
-        default: '{"enable_susfs":false,"use_kpm":false,"use_lz4kd":false,"use_bbg":true,"use_bbr":false,"use_proxy_optimization":true,"use_unicode_bypass":false}'
+        default: '{"enable_susfs":true,"use_kpm":true,"use_lz4kd":true,"use_bbg":true,"use_bbr":true,"use_proxy_optimization":true,"use_unicode_bypass":true}'
 
 jobs:
   prepare-variant-matrix:

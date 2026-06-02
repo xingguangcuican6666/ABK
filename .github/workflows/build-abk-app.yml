@@ -533,3 +533,5 @@ jobs:
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/release/*.apk
             app/signing/abk-manager-cert.generated.env
+            LICENSE
+            THIRD_PARTY_NOTICES.md
