@@ -155,7 +155,7 @@
     <string name="build_ksu_branch">KSU 分支</string>
     <string name="build_custom_ksu_ref">自定义 KSU commit/ref</string>
     <string name="build_custom_ksu_ref_placeholder">例如: abc123, branch:5, 或 tag</string>
-    <string name="build_ksu_branch_latest_hint">内核与管理器使用上游 main 上最近一次成功的 build-manager 的同一提交；管理器 APK 经 nightly.link 拉取。若管理器下载失败，内核构建仍会继续。</string>
+    <string name="build_ksu_branch_latest_hint">优先使用 upstream main 的 HEAD（该提交有成功的 Release 或 build-manager CI 时）；否则回退到 main 上最近一次成功的 build-manager。管理器 APK 经 nightly.link 从对应 run 拉取。若管理器下载失败，内核构建仍会继续。</string>
     <string name="build_no_root_scheme_desc">不注入任何 Root 授权方案；KSU 分支、SUSFS 和 KPM 会自动关闭。</string>
     <string name="build_oneplus_no_root_scheme_desc">构建无 Root 的 OnePlus 内核；SUSFS 和 KPM 会自动关闭。</string>
     <string name="build_oneplus_ksu_branch_desc">OnePlus 构建使用对应 KernelSU 上游默认分支。</string>

@@ -170,7 +170,7 @@
     <string name="build_ksu_branch">KSU branch</string>
     <string name="build_custom_ksu_ref">Custom KSU commit/ref</string>
     <string name="build_custom_ksu_ref_placeholder">e.g. abc123, branch:5, or tag</string>
-    <string name="build_ksu_branch_latest_hint">Builds the kernel from the commit of the latest successful upstream build-manager run on main. The manager APK is fetched via nightly.link from that same run. If the manager download fails, the kernel build still continues.</string>
+    <string name="build_ksu_branch_latest_hint">Prefers upstream main HEAD when that commit has a successful Release or build-manager CI run; otherwise falls back to the latest successful standalone build-manager on main. The manager APK is fetched via nightly.link from that run. If the manager download fails, the kernel build still continues.</string>
     <string name="build_no_root_scheme_desc">Do not inject any root authorization scheme. KSU branch, SUSFS, and KPM will be disabled automatically.</string>
     <string name="build_oneplus_no_root_scheme_desc">Build a rootless OnePlus kernel. SUSFS and KPM will be disabled automatically.</string>
     <string name="build_oneplus_ksu_branch_desc">OnePlus builds use the upstream default branch for the selected KernelSU variant.</string>
