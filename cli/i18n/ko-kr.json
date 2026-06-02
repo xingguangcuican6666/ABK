@@ -216,9 +216,9 @@
   "arg_bbr": "BBR 활성화 (OnePlus 전용)",
   "arg_proxy": "프록시 최적화 활성화 (OnePlus 전용)",
   "arg_unicode": "Unicode 제로폭 바이패스 활성화 (OnePlus 전용)",
-  "list_title": "Available build targets:\n",
-  "op_list_title": "OnePlus devices / OnePlus 设备:\n",
-  "op_features_title": "OnePlus only / OnePlus only:",
-  "features_title": "Features / 功能开关:",
-  "default_build_info": "Default: kernel-custom.yml, --sub-level + --os-patch-level needed"
+  "list_title": "사용 가능한 타겟:\n",
+  "op_list_title": "OnePlus 디바이스:\n",
+  "op_features_title": "OnePlus 전용 기능:",
+  "features_title": "기능 플래그:",
+  "default_build_info": "기본값: 커스텀 빌드 (kernel-custom.yml), --sub-level 및 --os-patch-level 필요"
 }

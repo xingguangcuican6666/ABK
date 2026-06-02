@@ -211,9 +211,9 @@
   "arg_bbr": "Ebligi BBR (nur OnePlus)",
   "arg_proxy": "Ebligi prokurilan optimumigon (nur OnePlus)",
   "arg_unicode": "Ebligi Unicode zero-width pretervojon (nur OnePlus)",
-  "list_title": "Available build targets:\n",
-  "op_list_title": "OnePlus devices / OnePlus 设备:\n",
-  "op_features_title": "OnePlus only / OnePlus only:",
-  "features_title": "Features / 功能开关:",
-  "default_build_info": "Default: kernel-custom.yml, --sub-level + --os-patch-level needed"
+  "list_title": "Haveblaj celoj:\n",
+  "op_list_title": "OnePlus-aparatoj:\n",
+  "op_features_title": "OnePlus-funkcioj:",
+  "features_title": "Funkcio-flagoj:",
+  "default_build_info": "Defaŭlte: propra konstruo (kernel-custom.yml), --sub-level kaj --os-patch-level bezonataj"
 }

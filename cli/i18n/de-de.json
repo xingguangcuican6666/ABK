@@ -215,9 +215,9 @@
   "arg_bbr": "BBR aktivieren (nur OnePlus)",
   "arg_proxy": "Proxy-Optimierung aktivieren (nur OnePlus)",
   "arg_unicode": "Unicode Zero-Width-Bypass aktivieren (nur OnePlus)",
-  "list_title": "Available build targets:\n",
-  "op_list_title": "OnePlus devices / OnePlus 设备:\n",
-  "op_features_title": "OnePlus only / OnePlus only:",
-  "features_title": "Features / 功能开关:",
-  "default_build_info": "Default: kernel-custom.yml, --sub-level + --os-patch-level needed"
+  "list_title": "Verfügbare Ziele:\n",
+  "op_list_title": "OnePlus-Geräte:\n",
+  "op_features_title": "OnePlus-Funktionen:",
+  "features_title": "Feature-Flags:",
+  "default_build_info": "Standard: Custom-Build (kernel-custom.yml), --sub-level und --os-patch-level benötigt"
 }

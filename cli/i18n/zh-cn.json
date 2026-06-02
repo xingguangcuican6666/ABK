@@ -220,8 +220,8 @@
   "arg_bbr": "启用 BBR (仅 OnePlus)",
   "arg_proxy": "启用代理优化 (仅 OnePlus)",
   "arg_unicode": "启用 Unicode 零宽绕过 (仅 OnePlus)",
-  "op_list_title": "OnePlus devices / OnePlus 设备:\n",
-  "op_features_title": "OnePlus only / OnePlus only:",
-  "features_title": "Features / 功能开关:",
-  "default_build_info": "Default: kernel-custom.yml, --sub-level + --os-patch-level needed"
+  "op_list_title": "OnePlus 设备列表:\n",
+  "op_features_title": "OnePlus 专属功能:",
+  "features_title": "功能开关:",
+  "default_build_info": "默认: 自定义构建 (kernel-custom.yml)，需要 --sub-level 和 --os-patch-level"
 }

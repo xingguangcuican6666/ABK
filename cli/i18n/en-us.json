@@ -70,7 +70,7 @@
   "artifacts_list": "Build #{id} artifacts:\n",
   "artifacts_downloading": "Downloading {name}...",
   "artifacts_download_to": "Downloading to: {dir}",
-  "list_title": "Available build targets:\n",
+  "list_title": "Available targets:\n",
   "list_matrix_item": "--matrix {k:9} - {name} (matrix build all sub versions)",
   "list_oneplus_item": "--oneplus        - OnePlus/Oplus devices (--device required)",
   "list_custom_default": "Default: custom build (kernel-custom.yml), requires --sub-level and --os-patch-level",
@@ -220,8 +220,8 @@
   "arg_bbr": "Enable BBR (OnePlus only)",
   "arg_proxy": "Enable proxy optimization (OnePlus only)",
   "arg_unicode": "Enable Unicode zero-width bypass (OnePlus only)",
-  "op_list_title": "OnePlus devices / OnePlus 设备:\n",
-  "op_features_title": "OnePlus only / OnePlus only:",
-  "features_title": "Features / 功能开关:",
-  "default_build_info": "Default: kernel-custom.yml, --sub-level + --os-patch-level needed"
+  "op_list_title": "OnePlus devices:\n",
+  "op_features_title": "OnePlus features:",
+  "features_title": "Feature flags:",
+  "default_build_info": "Default: custom build (kernel-custom.yml), --sub-level + --os-patch-level required"
 }
