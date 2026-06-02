@@ -876,28 +876,44 @@ def cmd_build(args):
                 if args.revision:
                     inputs["revision"] = args.revision
             elif tk == "oneplus":
-                inputs["supp_op"] = str(args.oneplus_8e).lower()
-                inputs["device"] = args.device
+                inputs["ksu_variant"] = kv
+                inputs["device_manifest"] = args.device
+                inputs["cpu"] = device_info["cpu"]
+                inputs["android_version"] = device_info["android"]
+                inputs["kernel_version"] = device_info["kernel"]
+                inputs["enable_susfs"] = str(args.susfs).lower()
+                inputs["use_kpm"] = str(args.kpm).lower()
                 inputs["use_lz4kd"] = str(args.lz4kd).lower()
+                inputs["use_bbg"] = str(args.bbg).lower()
                 inputs["use_bbr"] = str(args.bbr).lower()
                 inputs["use_proxy_optimization"] = str(args.proxy_optimization).lower()
                 inputs["use_unicode_bypass"] = str(args.unicode_bypass).lower()
+                inputs.pop("kernelsu_variant", None)
+                inputs.pop("cancel_susfs", None)
+                inputs.pop("supp_op", None)
+                inputs.pop("use_zram", None)
+                inputs.pop("use_ddk", None)
+                inputs.pop("use_ntsync", None)
+                inputs.pop("use_networking", None)
+                inputs.pop("use_rekernel", None)
+                inputs.pop("zram_full_algo", None)
             elif not args.matrix or args.matrix == "both":
                 pass
             
-            if args.virt and args.virt != "off":
-                inputs["virtualization_support"] = args.virt
-            if args.version:
-                inputs["version"] = args.version
-            if args.custom_ref:
-                inputs["custom_ref"] = args.custom_ref
-            if args.kpm_password:
-                inputs["kpm_password"] = args.kpm_password
-            if args.zram_extra_algos:
-                inputs["zram_extra_algos"] = args.zram_extra_algos
-            if args.custom_modules:
-                inputs["use_custom_external_modules"] = "true"
-                inputs["custom_external_modules"] = args.custom_modules
+            if tk != "oneplus":
+                if args.virt and args.virt != "off":
+                    inputs["virtualization_support"] = args.virt
+                if args.version:
+                    inputs["version"] = args.version
+                if args.custom_ref:
+                    inputs["custom_ref"] = args.custom_ref
+                if args.kpm_password:
+                    inputs["kpm_password"] = args.kpm_password
+                if args.zram_extra_algos:
+                    inputs["zram_extra_algos"] = args.zram_extra_algos
+                if args.custom_modules:
+                    inputs["use_custom_external_modules"] = "true"
+                    inputs["custom_external_modules"] = args.custom_modules
             
             ref = args.ref or "dev"
             print(t("triggering_name", name=f"{workflow['name']} ({kv})"))
