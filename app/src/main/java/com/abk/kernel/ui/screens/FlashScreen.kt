@@ -154,6 +154,7 @@ import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.RootUtils
+import java.io.File
 import com.abk.kernel.viewmodel.MainViewModel
 import kotlin.math.pow
 import kotlinx.coroutines.CancellationException
@@ -323,6 +324,22 @@ fun FlashScreen(
         }
     }
 
+    suspend fun executeWithPreparedArtifact(
+        item: DownloadedArtifact,
+        block: (File) -> RootUtils.ShellResult
+    ): RootUtils.ShellResult = withContext(Dispatchers.IO) {
+        val prepared = DownloadUtils.prepareDownloadedArtifact(context, item)
+        try {
+            if (prepared.cleanupDir != null) {
+                appendTerminalOutput("[ABK] 已解包下载包到缓存目录")
+                appendTerminalOutput("[ABK] Payload: ${prepared.file.absolutePath}")
+            }
+            block(prepared.file)
+        } finally {
+            prepared.cleanupDir?.deleteRecursively()
+        }
+    }
+
     fun installManager(item: DownloadedArtifact) {
         if (!rootGranted) {
             showFailure(
@@ -347,12 +364,12 @@ fun FlashScreen(
         )
         showTerminal = true
         scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    RootUtils.installApk(context, item.filePath, ::appendTerminalOutput)
-                }.getOrElse { error ->
-                    RootUtils.ShellResult(false, listOf(error.message ?: error::class.java.simpleName))
+            val result = runCatching {
+                executeWithPreparedArtifact(item) { preparedFile ->
+                    RootUtils.installApk(context, preparedFile.absolutePath, ::appendTerminalOutput)
                 }
+            }.getOrElse { error ->
+                RootUtils.ShellResult(false, listOf(error.message ?: error::class.java.simpleName))
             }
             terminalRunning = false
             terminalSuccess = result.success
@@ -413,23 +430,23 @@ fun FlashScreen(
         )
         showTerminal = true
         scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
+            val result = runCatching {
+                executeWithPreparedArtifact(item) { preparedFile ->
                     when (item.type) {
-                        ArtifactType.KERNEL_IMG -> RootUtils.flashImage(item.filePath, onOutput = ::appendTerminalOutput)
+                        ArtifactType.KERNEL_IMG -> RootUtils.flashImage(preparedFile.absolutePath, onOutput = ::appendTerminalOutput)
                         ArtifactType.ANYKERNEL3 -> RootUtils.flashAnyKernel3(
                             context,
-                            item.filePath,
+                            preparedFile.absolutePath,
                             targetSlot = anyKernelSlotTarget,
                             onOutput = ::appendTerminalOutput
                         )
-                        ArtifactType.SUSFS_MODULE -> RootUtils.installModule(item.filePath, ::appendTerminalOutput)
-                        ArtifactType.KSU_MANAGER -> RootUtils.installApk(context, item.filePath, ::appendTerminalOutput)
+                        ArtifactType.SUSFS_MODULE -> RootUtils.installModule(preparedFile.absolutePath, ::appendTerminalOutput)
+                        ArtifactType.KSU_MANAGER -> RootUtils.installApk(context, preparedFile.absolutePath, ::appendTerminalOutput)
                         else -> RootUtils.ShellResult(false, listOf(context.getString(R.string.flash_unsupported_auto_flash)))
                     }
-                }.getOrElse { error ->
-                    RootUtils.ShellResult(false, listOf(error.message ?: error::class.java.simpleName))
                 }
+            }.getOrElse { error ->
+                RootUtils.ShellResult(false, listOf(error.message ?: error::class.java.simpleName))
             }
             terminalRunning = false
             terminalSuccess = result.success

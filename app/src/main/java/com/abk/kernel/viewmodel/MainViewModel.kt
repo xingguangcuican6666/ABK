@@ -2170,7 +2170,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 asset.sizeBytes,
                 PREBUILT_GKI_RUN_ID,
                 text(R.string.vm_prebuilt_gki_label),
-                downloadDirectory
+                downloadDirectory,
+                bundleWithNotices = true
             ) { pct ->
                 NotificationUtils.notifyDownloadProgress(getApplication(), pct, asset.name)
                 _uiState.update { s ->
@@ -2239,7 +2240,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 artifact.toArtifact(),
                 artifact.toWorkflowRun(),
                 downloadUrl,
-                downloadDirectory
+                downloadDirectory,
+                bundleWithNotices = true
             ) { pct ->
                 val displayProgress = if (mirrorEnabled) {
                     (50 + pct / 2).coerceIn(50, 100)
