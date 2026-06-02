@@ -310,4 +310,4 @@ abk --lang neko --help     # 🐱
 
 ## 许可证 / License
 
-GPL-2.0
+GPL-3.0
