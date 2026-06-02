@@ -1,7 +1,6 @@
 {
   "abk_cli_desc": "ABK CLI - Android가 아닌 기기에서 커널 빌드 트리거",
   "abk_cli_desc_full": "ABK (AnyBase Kernel)는 GKI KernelSU/SUSFS 커널의 빌드, 배포, 관리를 위한 도구입니다.\nCLI를 통해 Android 기기 없이 GitHub Actions 빌드를 트리거할 수 있습니다.",
-
   "err_no_token": "로그인되지 않음. 'abk login'을 먼저 실행하세요",
   "err_set_token_env": "GITHUB_TOKEN 환경변수를 설정하거나 --token을 사용하세요",
   "err_no_fork": "Fork가 감지되지 않음. 'abk fork'를 먼저 실행하세요",
@@ -23,7 +22,6 @@
   "err_build_failed": "빌드 실패: {error}",
   "err_api_error": "GitHub API 오류 ({code}): {msg}",
   "err_network_error": "네트워크 오류: {reason}",
-
   "login_requesting": "디바이스 코드 요청 중...",
   "login_title": "GitHub 디바이스 인증",
   "login_step1": "1. 브라우저에서 열기:",
@@ -38,13 +36,11 @@
   "login_token_saved": "토큰 저장됨: {path}",
   "login_as": "로그인: {user}",
   "login_verify_failed": "검증 실패: {error}",
-
   "logged_out_token_removed": "로그아웃 완료. 토큰 삭제됨",
   "not_logged_in": "로그인되지 않음",
   "logout_ok": "로그아웃 완료. 토큰 삭제됨",
   "logout_not": "로그인되지 않음",
   "run_login_hint": "'abk login'을 실행하세요",
-
   "whoami_user": "사용자: {user}",
   "whoami_fork": "Fork: {fork}",
   "whoami_status_synced": "상태: 동기화됨",
@@ -56,7 +52,6 @@
   "status_synced": "상태: 동기화됨",
   "fork_not_detected": "Fork: 감지되지 않음",
   "hint_run_fork": "힌트: 'abk fork'로 Fork 생성",
-
   "fork_exists": "Fork 존재: {fork}",
   "fork_behind": "상위보다 {n} 커밋 뒤처짐",
   "fork_syncing": "동기화 중...",
@@ -79,7 +74,6 @@
   "syncing_n_commits": "동기화 중 ({n} 커밋 뒤처짐)...",
   "warn_behind_upstream": "경고: Fork가 상위보다 {n} 커밋 뒤처져 있습니다",
   "run_abk_sync": "'abk sync'로 동기화하세요",
-
   "build_triggering": "{name} 빌드 트리거 중...",
   "build_triggered": "빌드 트리거됨!",
   "build_triggered_dry": "[DRY-RUN] 건너뜀",
@@ -97,22 +91,18 @@
   "triggered_fail": "✗ 실패: {error}",
   "downloading_name": "{name} 다운로드 중...",
   "fetch_status_failed": "상태 가져오기 실패: {error}",
-
   "enabled": "활성",
   "disabled": "비활성",
-
   "status_no_builds": "빌드 기록 없음",
   "status_recent": "최근 {n}개 빌드:\n",
   "artifacts_no_artifacts": "이 빌드에는 아티팩트가 없습니다",
   "artifacts_list": "빌드 #{id} 아티팩트:\n",
   "artifacts_downloading": "{name} 다운로드 중...",
   "artifacts_download_to": "다운로드 위치: {dir}",
-
   "available_targets": "사용 가능한 빌드 타겟:\n",
   "list_matrix_item": "--matrix {key:9} - {name} (모든 서브레벨 매트릭스)",
   "list_oneplus_item": "--oneplus        - OnePlus/Oplus 기기 (--device 필요)",
   "list_custom_default": "기본: 커스텀 빌드 (kernel-custom.yml), --sub-level 및 --os-patch-level 필요",
-
   "build_target_a12": "Android 12 (5.10)",
   "build_target_a13": "Android 13 (5.15)",
   "build_target_a14": "Android 14 (6.1)",
@@ -122,14 +112,12 @@
   "build_target_oneplus": "OnePlus/Oplus",
   "build_target_full": "풀 피처 매트릭스",
   "build_target_all_managers": "전체 매니저 매트릭스",
-
   "help_subcommands": "명령어 (자세한 도움말: abk <command> --help)",
   "help_flag": "이 도움말을 표시하고 종료",
   "help_token": "GitHub Token (또는 GITHUB_TOKEN)",
   "help_repo": "GitHub 저장소 (기본: fork 자동 감지)",
   "help_verbose": "상세 출력",
   "help_lang": "인터페이스 언어",
-
   "cmd_login_help": "GitHub 로그인 (Device Flow)",
   "cmd_login_desc": "GitHub Device Flow로 로그인. 브라우저를 자동으로 엽니다",
   "cmd_logout_help": "GitHub 로그아웃",
@@ -148,7 +136,6 @@
   "cmd_artifacts_desc": "빌드 아티팩트 보기 및 다운로드 (AnyKernel3, img 등)",
   "cmd_list_help": "사용 가능한 옵션 표시",
   "cmd_list_desc": "빌드 타겟, KSU 변형, 기능 옵션 목록",
-
   "ksu_variants_label": "KernelSU 변형:",
   "ksu_branches_label": "KernelSU 브랜치:",
   "virt_options_label": "가상화 지원 옵션:",
@@ -161,7 +148,6 @@
   "cmd_example_build": "abk build a15 --ksu ReSukiSU             # 커널 빌드",
   "cmd_example_status": "abk status                               # 빌드 상태",
   "cmd_example_artifacts": "abk artifacts --run-id 12345 --download  # 아티팩트 다운로드",
-
   "arg_matrix": "매트릭스 빌드 타겟 (both=전체, full=풀 매트릭스, all-managers=전체 매니저)",
   "arg_oneplus": "OnePlus 기기 빌드",
   "arg_ref": "Fork Git 브랜치 (기본: dev)",
@@ -207,6 +193,23 @@
   "arg_limit": "표시 수 (기본: 10)",
   "arg_download": "아티팩트 다운로드",
   "arg_output": "출력 디렉토리 (기본: ./abk-artifacts)",
-
-  "build_epilog": "커널 버전 옵션:\n  --android-version   Android 버전 (기본: android12)\n  --kernel-version    메인 커널 버전 (기본: 5.10)\n  --sub-level         서브레벨 (필수)\n  --os-patch-level    보안 패치 레벨 (필수)\n  --revision          리비전 (5.10만)\n\n매트릭스 빌드 (모든 서브레벨):\n  --matrix android14        kernel-a14-6-1.yml 사용\n\nOnePlus 빌드:\n  --oneplus                 oneplus-custom.yml 사용 (--device 필요)\n\nKernelSU 변형:\n  None / Official / SukiSU / ReSukiSU (기본)\n\nKernelSU 브랜치:\n  Stable(标准) / Dev(开发) / Custom(自定义)\n\n가상화: off (기본) / 678 / 123 / 345\n\n예시:\n  abk build --sub-level 162 --os-patch-level 2026-03\n  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram\n  abk build --matrix a15                                    # 매트릭스\n  abk build --matrix both                                   # 전체 버전\n  abk build --matrix full                                   # 풀 매트릭스\n  abk build --matrix all-managers                           # 전체 매니저\n  abk build --oneplus --device oneplus12                    # OnePlus"
+  "build_epilog": "커널 버전 옵션:\n  --android-version   Android 버전 (기본: android12)\n  --kernel-version    메인 커널 버전 (기본: 5.10)\n  --sub-level         서브레벨 (필수)\n  --os-patch-level    보안 패치 레벨 (필수)\n  --revision          리비전 (5.10만)\n\n매트릭스 빌드 (모든 서브레벨):\n  --matrix android14        kernel-a14-6-1.yml 사용\n\nOnePlus 빌드:\n  --oneplus                 oneplus-custom.yml 사용 (--device 필요)\n\nKernelSU 변형:\n  None / Official / SukiSU / ReSukiSU (기본)\n\nKernelSU 브랜치:\n  Stable(标准) / Dev(开发) / Custom(自定义)\n\n가상화: off (기본) / 678 / 123 / 345\n\n예시:\n  abk build --sub-level 162 --os-patch-level 2026-03\n  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram\n  abk build --matrix a15                                    # 매트릭스\n  abk build --matrix both                                   # 전체 버전\n  abk build --matrix full                                   # 풀 매트릭스\n  abk build --matrix all-managers                           # 전체 매니저\n  abk build --oneplus --device oneplus12                    # OnePlus",
+  "err_unknown_device": "알 수 없는 장치 '{device}'",
+  "err_available_devices": "사용 가능한 장치: {devices}",
+  "warning_prefix": "경고:",
+  "error_prefix": "오류:",
+  "op_no_zram": "OnePlus는 ZRAM을 지원하지 않습니다, 자동 비활성화",
+  "op_no_ddk": "OnePlus는 DDK를 지원하지 않습니다, 자동 비활성화",
+  "op_no_ntsync": "OnePlus는 NTsync를 지원하지 않습니다, 자동 비활성화",
+  "op_no_networking": "OnePlus는 네트워크 강화를 지원하지 않습니다, 자동 비활성화",
+  "op_no_rekernel": "OnePlus는 Re-Kernel을 지원하지 않습니다, 자동 비활성화",
+  "op_no_virt": "OnePlus는 가상화를 지원하지 않습니다, 자동 비활성화",
+  "op_no_custom_ref": "OnePlus는 사용자 정의 참조를 지원하지 않습니다, 자동 제거",
+  "op_no_zram_algo": "OnePlus는 ZRAM 전체 알고리즘을 지원하지 않습니다, 자동 비활성화",
+  "op_no_zram_extra": "OnePlus는 사용자 정의 ZRAM을 지원하지 않습니다, 자동 제거",
+  "op_no_custom_modules": "OnePlus는 사용자 정의 모듈을 지원하지 않습니다, 자동 제거",
+  "op_no_kpm_password": "OnePlus는 KPM 비밀번호를 지원하지 않습니다, 자동 제거",
+  "op_mtk_no_proxy": "MTK CPU ({cpu})는 프록시 최적화 미지원, 자동 비활성화",
+  "op_no_susfs": "OnePlus {android}/{kernel}은 SUSFS 미지원, 자동 비활성화",
+  "op_no_kpm_ksu": "KSU {ksu}는 OnePlus KPM 미지원, 자동 비활성화"
 }

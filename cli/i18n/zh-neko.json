@@ -1,7 +1,6 @@
 {
   "abk_cli_desc": "ABK CLI - 从非Android设备触发内核编译喵～",
   "abk_cli_desc_full": "ABK (AnyBase Kernel) 是一个用来构建、分发和管理 GKI KernelSU/SUSFS 内核的工具喵～🐱\nCLI 可以让你不用 Android 设备就能触发 GitHub Actions 构建喵！",
-
   "err_no_token": "没有登录喵！先运行 'abk login' 吧～",
   "err_set_token_env": "请设置 GITHUB_TOKEN 环境变量或使用 --token 喵",
   "err_no_fork": "没有检测到 fork 喵！先运行 'abk fork' 吧～",
@@ -23,7 +22,6 @@
   "err_build_failed": "构建失败喵: {error} 😿",
   "err_api_error": "GitHub API 错误喵 ({code}): {msg}",
   "err_network_error": "网络错误喵: {reason}",
-
   "login_requesting": "正在请求设备授权码喵...",
   "login_title": "GitHub 设备授权喵 🐱",
   "login_step1": "1. 打开浏览器访问喵:",
@@ -38,13 +36,11 @@
   "login_token_saved": "Token 保存好了喵: {path}",
   "login_as": "登录为: {user} 喵 🐱",
   "login_verify_failed": "验证失败喵: {error}",
-
   "logged_out_token_removed": "已登出，Token 删除了喵～下次再来呀👋",
   "not_logged_in": "没有登录喵...",
   "logout_ok": "已登出，Token 删除了喵～下次再来呀👋",
   "logout_not": "没有登录喵...",
   "run_login_hint": "请运行 'abk login' 登录喵～",
-
   "whoami_user": "用户: {user} 喵 🐱",
   "whoami_fork": "Fork: {fork}",
   "whoami_status_synced": "状态: 已同步喵 ✨",
@@ -56,7 +52,6 @@
   "status_synced": "状态: 已同步喵 ✨",
   "fork_not_detected": "Fork: 未检测到喵...",
   "hint_run_fork": "提示: 运行 'abk fork' 创建 fork 喵",
-
   "fork_exists": "Fork 已存在喵: {fork}",
   "fork_behind": "落后上游 {n} 个提交喵...",
   "fork_syncing": "同步中喵...",
@@ -79,7 +74,6 @@
   "syncing_n_commits": "同步中喵（落后 {n} 个提交）...",
   "warn_behind_upstream": "警告喵！Fork 落后上游 {n} 个提交",
   "run_abk_sync": "运行 'abk sync' 同步喵",
-
   "build_triggering": "正在触发 {name} 构建喵...",
   "build_triggered": "构建已触发喵！🎉",
   "build_triggered_dry": "[DRY-RUN] 跳过了喵",
@@ -97,22 +91,18 @@
   "triggered_fail": "✗ 失败了喵: {error} 😿",
   "downloading_name": "正在下载 {name} 喵...",
   "fetch_status_failed": "获取状态失败喵: {error}",
-
   "enabled": "开启喵 ✓",
   "disabled": "关闭喵 ✗",
-
   "status_no_builds": "没有构建记录喵...",
   "status_recent": "最近 {n} 个构建喵:\n",
   "artifacts_no_artifacts": "这个构建没有产物喵",
   "artifacts_list": "构建 #{id} 的产物喵:\n",
   "artifacts_downloading": "正在下载 {name} 喵...",
   "artifacts_download_to": "下载到: {dir}",
-
   "available_targets": "可用的构建目标喵:\n",
   "list_matrix_item": "--matrix {key:9} - {name} (矩阵构建所有子版本)",
   "list_oneplus_item": "--oneplus        - OnePlus/Oplus 设备 (需要 --device)",
   "list_custom_default": "默认: 自定义构建 (kernel-custom.yml)，需要 --sub-level 和 --os-patch-level",
-
   "build_target_a12": "Android 12 (5.10)",
   "build_target_a13": "Android 13 (5.15)",
   "build_target_a14": "Android 14 (6.1)",
@@ -122,14 +112,12 @@
   "build_target_oneplus": "OnePlus/Oplus",
   "build_target_full": "全属性内核构建矩阵",
   "build_target_all_managers": "全管理器全矩阵编译",
-
   "help_subcommands": "可用命令喵 (用 abk <command> --help 查看详情)",
   "help_flag": "显示帮助并退出喵",
   "help_token": "GitHub Token (或 GITHUB_TOKEN)",
   "help_repo": "GitHub 仓库 (默认: 自动检测 fork)",
   "help_verbose": "详细输出",
   "help_lang": "界面语言",
-
   "cmd_login_help": "登录 GitHub (Device Flow) 喵",
   "cmd_login_desc": "使用 GitHub Device Flow 登录，自动打开浏览器喵 🐱",
   "cmd_logout_help": "登出 GitHub 喵",
@@ -148,7 +136,6 @@
   "cmd_artifacts_desc": "查看和下载构建产物 (AnyKernel3, img 等)",
   "cmd_list_help": "显示可用选项喵",
   "cmd_list_desc": "列出所有构建目标、KernelSU 变体和功能选项",
-
   "ksu_variants_label": "KernelSU 变体喵:",
   "ksu_branches_label": "KernelSU 分支喵:",
   "virt_options_label": "虚拟化支持选项喵:",
@@ -161,7 +148,6 @@
   "cmd_example_build": "abk build a15 --ksu ReSukiSU             # 构建内核",
   "cmd_example_status": "abk status                               # 构建状态",
   "cmd_example_artifacts": "abk artifacts --run-id 12345 --download  # 下载产物",
-
   "arg_matrix": "矩阵构建目标 (both=全部, full=全属性矩阵, all-managers=全管理器)",
   "arg_oneplus": "OnePlus 设备构建",
   "arg_ref": "Fork Git 分支 (默认: dev)",
@@ -207,6 +193,18 @@
   "arg_limit": "显示数量 (默认: 10)",
   "arg_download": "下载产物",
   "arg_output": "输出目录 (默认: ./abk-artifacts)",
-
-  "build_epilog": "内核版本选项喵:\n  --android-version   Android 版本 (默认: android12)\n  --kernel-version    内核主版本 (默认: 5.10)\n  --sub-level         子版本号 (必需)\n  --os-patch-level    安全补丁级别 (必需)\n  --revision          修订版本 (仅 5.10)\n\n矩阵构建 (所有子版本):\n  --matrix android14        使用 kernel-a14-6-1.yml\n\nOnePlus 构建:\n  --oneplus                 使用 oneplus-custom.yml (需要 --device)\n\nKernelSU 变体:\n  None / Official / SukiSU / ReSukiSU (默认)\n\nKernelSU 分支:\n  Stable(标准) / Dev(开发) / Custom(自定义)\n\n虚拟化支持: off (默认) / 678 / 123 / 345\n\n示例喵:\n  abk build --sub-level 162 --os-patch-level 2026-03\n  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram\n  abk build --matrix a15                                    # 矩阵构建\n  abk build --matrix both                                   # 全版本\n  abk build --matrix full                                   # 全属性矩阵\n  abk build --matrix all-managers                           # 全管理器\n  abk build --oneplus --device oneplus12                    # OnePlus 🐱"
+  "build_epilog": "内核版本选项喵:\n  --android-version   Android 版本 (默认: android12)\n  --kernel-version    内核主版本 (默认: 5.10)\n  --sub-level         子版本号 (必需)\n  --os-patch-level    安全补丁级别 (必需)\n  --revision          修订版本 (仅 5.10)\n\n矩阵构建 (所有子版本):\n  --matrix android14        使用 kernel-a14-6-1.yml\n\nOnePlus 构建:\n  --oneplus                 使用 oneplus-custom.yml (需要 --device)\n\nKernelSU 变体:\n  None / Official / SukiSU / ReSukiSU (默认)\n\nKernelSU 分支:\n  Stable(标准) / Dev(开发) / Custom(自定义)\n\n虚拟化支持: off (默认) / 678 / 123 / 345\n\n示例喵:\n  abk build --sub-level 162 --os-patch-level 2026-03\n  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram\n  abk build --matrix a15                                    # 矩阵构建\n  abk build --matrix both                                   # 全版本\n  abk build --matrix full                                   # 全属性矩阵\n  abk build --matrix all-managers                           # 全管理器\n  abk build --oneplus --device oneplus12                    # OnePlus 🐱",
+  "err_unknown_device": "不认识这个设备 '{device}' 喵...",
+  "err_available_devices": "可用的设备: {devices} 喵",
+  "warning_prefix": "警告喵:",
+  "error_prefix": "错误喵:",
+  "op_no_zram": "OnePlus 不支持 ZRAM 喵，自动关掉了",
+  "op_no_ddk": "OnePlus 不支持 DDK 喵，自动关掉了",
+  "op_no_ntsync": "OnePlus 不支持 NTsync 喵，自动关掉了",
+  "op_no_networking": "OnePlus 不支持网络增强喵，自动关掉了",
+  "op_no_rekernel": "OnePlus 不支持 Re-Kernel 喵，自动关掉了",
+  "op_no_virt": "OnePlus 不支持虚拟化喵，自动关掉了",
+  "op_mtk_no_proxy": "MTK CPU ({cpu}) 不支持代理优化喵，自动关掉了",
+  "op_no_susfs": "OnePlus {android}/{kernel} 不支持 SUSFS 喵，自动关掉了",
+  "op_no_kpm_ksu": "KSU {ksu} 不支持 OnePlus KPM 喵，自动关掉了"
 }

@@ -1,7 +1,6 @@
 {
   "abk_cli_desc": "ABK CLI - Сборка ядра с не-Android устройств",
   "abk_cli_desc_full": "ABK (AnyBase Kernel) - инструмент для сборки, распространения и управления ядрами GKI KernelSU/SUSFS.\nCLI позволяет запускать сборки GitHub Actions без Android-устройства.",
-
   "err_no_token": "Не выполнен вход, сначала выполните 'abk login'",
   "err_set_token_env": "Установите GITHUB_TOKEN или используйте --token",
   "err_no_fork": "Fork не найден, сначала выполните 'abk fork'",
@@ -23,7 +22,6 @@
   "err_build_failed": "Ошибка сборки: {error}",
   "err_api_error": "Ошибка GitHub API ({code}): {msg}",
   "err_network_error": "Ошибка сети: {reason}",
-
   "login_requesting": "Запрос кода устройства...",
   "login_title": "Авторизация GitHub",
   "login_step1": "1. Откройте в браузере:",
@@ -38,13 +36,11 @@
   "login_token_saved": "Токен сохранён в: {path}",
   "login_as": "Вошли как: {user}",
   "login_verify_failed": "Ошибка проверки: {error}",
-
   "logged_out_token_removed": "Выход выполнен, токен удалён",
   "not_logged_in": "Не выполнен вход",
   "logout_ok": "Выход выполнен, токен удалён",
   "logout_not": "Не выполнен вход",
   "run_login_hint": "Выполните 'abk login'",
-
   "whoami_user": "Пользователь: {user}",
   "whoami_fork": "Fork: {fork}",
   "whoami_status_synced": "Статус: синхронизировано",
@@ -56,7 +52,6 @@
   "status_synced": "Статус: синхронизировано",
   "fork_not_detected": "Fork: не найден",
   "hint_run_fork": "Подсказка: выполните 'abk fork' для создания",
-
   "fork_exists": "Fork существует: {fork}",
   "fork_behind": "Отстаёт на {n} коммитов",
   "fork_syncing": "Синхронизация...",
@@ -79,7 +74,6 @@
   "syncing_n_commits": "Синхронизация ({n} коммитов)...",
   "warn_behind_upstream": "Предупреждение: fork отстаёт на {n} коммитов",
   "run_abk_sync": "Выполните 'abk sync' для синхронизации",
-
   "build_triggering": "Запуск сборки {name}...",
   "build_triggered": "Сборка запущена!",
   "build_triggered_dry": "[DRY-RUN] пропущено",
@@ -97,10 +91,8 @@
   "triggered_fail": "✗ Ошибка: {error}",
   "downloading_name": "Загрузка {name}...",
   "fetch_status_failed": "Ошибка получения статуса: {error}",
-
   "enabled": "вкл",
   "disabled": "выкл",
-
   "status_no_builds": "Нет записей сборок",
   "status_recent": "Последние {n} сборок:\n",
   "artifacts_no_artifacts": "Нет артефактов для этой сборки",
@@ -111,12 +103,7 @@
   "list_matrix_item": "--matrix {key:9} - {name} (матрица всех подуровней)",
   "list_oneplus_item": "--oneplus        - Устройства OnePlus (требуется --device)",
   "list_custom_default": "По умолчанию: произвольная сборка (kernel-custom.yml), требуется --sub-level и --os-patch-level",
-
   "available_targets": "Доступные цели сборки:\n",
-  "list_matrix_item": "--matrix {key:9} - {name} (матрица всех подуровней)",
-  "list_oneplus_item": "--oneplus        - Устройства OnePlus (требуется --device)",
-  "list_custom_default": "По умолчанию: произвольная сборка (kernel-custom.yml), требуется --sub-level и --os-patch-level",
-
   "build_target_a12": "Android 12 (5.10)",
   "build_target_a13": "Android 13 (5.15)",
   "build_target_a14": "Android 14 (6.1)",
@@ -126,14 +113,12 @@
   "build_target_oneplus": "OnePlus/Oplus",
   "build_target_full": "Полная матрица функций",
   "build_target_all_managers": "Полная матрица всех менеджеров",
-
   "help_subcommands": "Команды (abk <command> --help для справки)",
   "help_flag": "Показать эту справку и выйти",
   "help_token": "GitHub Token (или GITHUB_TOKEN)",
   "help_repo": "Репозитory GitHub (автоопределение fork)",
   "help_verbose": "Подробный вывод",
   "help_lang": "Язык интерфейса",
-
   "cmd_login_help": "Войти в GitHub (Device Flow)",
   "cmd_login_desc": "Вход через GitHub Device Flow, автоматически открывает браузер",
   "cmd_logout_help": "Выйти из GitHub",
@@ -152,7 +137,6 @@
   "cmd_artifacts_desc": "Просмотр и загрузка артефактов сборки (AnyKernel3, img и т.д.)",
   "cmd_list_help": "Показать доступные опции",
   "cmd_list_desc": "Список всех целей, вариантов KSU и опций функций",
-
   "ksu_variants_label": "Варианты KernelSU:",
   "ksu_branches_label": "Ветки KernelSU:",
   "virt_options_label": "Опции виртуализации:",
@@ -165,7 +149,6 @@
   "cmd_example_build": "abk build a15 --ksu ReSukiSU             # Собрать ядро",
   "cmd_example_status": "abk status                               # Статус сборок",
   "cmd_example_artifacts": "abk artifacts --run-id 12345 --download  # Загрузить артефакты",
-
   "arg_matrix": "Цель матричной сборки (both=все версии, full=полная матрица, all-managers=все менеджеры)",
   "arg_oneplus": "Сборка для OnePlus",
   "arg_ref": "Ветка fork (по умолчанию: dev)",
@@ -211,6 +194,23 @@
   "arg_limit": "Количество результатов (по умолчанию: 10)",
   "arg_download": "Загрузить артефакты",
   "arg_output": "Каталог вывода (по умолчанию: ./abk-artifacts)",
-
-  "build_epilog": "Опции версии ядра:\n  --android-version   Версия Android (по умолчанию: android12)\n  --kernel-version    Основная версия ядра (по умолчанию: 5.10)\n  --sub-level         Подуровень (обязательно)\n  --os-patch-level    Уровень патча безопасности (обязательно)\n  --revision          Ревизия (только 5.10)\n\nМатричная сборка (все подуровни):\n  --matrix android14        Использовать kernel-a14-6-1.yml\n\nOnePlus сборка:\n  --oneplus                 Использовать oneplus-custom.yml (требуется --device)\n\nВарианты KernelSU:\n  None / Official / SukiSU / ReSukiSU (по умолчанию)\n\nВетки KernelSU:\n  Stable(标准) / Dev(开发) / Custom(自定义)\n\nВиртуализация: off (по умолчанию) / 678 / 123 / 345\n\nПримеры:\n  abk build --sub-level 162 --os-patch-level 2026-03\n  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram\n  abk build --matrix a15                                    # Матрица\n  abk build --matrix both                                   # Все версии\n  abk build --matrix full                                   # Полная матрица\n  abk build --matrix all-managers                           # Все менеджеры\n  abk build --oneplus --device oneplus12                    # OnePlus"
+  "build_epilog": "Опции версии ядра:\n  --android-version   Версия Android (по умолчанию: android12)\n  --kernel-version    Основная версия ядра (по умолчанию: 5.10)\n  --sub-level         Подуровень (обязательно)\n  --os-patch-level    Уровень патча безопасности (обязательно)\n  --revision          Ревизия (только 5.10)\n\nМатричная сборка (все подуровни):\n  --matrix android14        Использовать kernel-a14-6-1.yml\n\nOnePlus сборка:\n  --oneplus                 Использовать oneplus-custom.yml (требуется --device)\n\nВарианты KernelSU:\n  None / Official / SukiSU / ReSukiSU (по умолчанию)\n\nВетки KernelSU:\n  Stable(标准) / Dev(开发) / Custom(自定义)\n\nВиртуализация: off (по умолчанию) / 678 / 123 / 345\n\nПримеры:\n  abk build --sub-level 162 --os-patch-level 2026-03\n  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram\n  abk build --matrix a15                                    # Матрица\n  abk build --matrix both                                   # Все версии\n  abk build --matrix full                                   # Полная матрица\n  abk build --matrix all-managers                           # Все менеджеры\n  abk build --oneplus --device oneplus12                    # OnePlus",
+  "err_unknown_device": "Неизвестное устройство '{device}'",
+  "err_available_devices": "Доступные устройства: {devices}",
+  "warning_prefix": "Предупреждение:",
+  "error_prefix": "Ошибка:",
+  "op_no_zram": "OnePlus не поддерживает ZRAM, автоматически отключено",
+  "op_no_ddk": "OnePlus не поддерживает DDK, автоматически отключено",
+  "op_no_ntsync": "OnePlus не поддерживает NTsync, автоматически отключено",
+  "op_no_networking": "OnePlus не поддерживает сетевое усиление, автоматически отключено",
+  "op_no_rekernel": "OnePlus не поддерживает Re-Kernel, автоматически отключено",
+  "op_no_virt": "OnePlus не поддерживает виртуализацию, автоматически отключено",
+  "op_no_custom_ref": "OnePlus не поддерживает пользовательские ссылки, автоматически очищено",
+  "op_no_zram_algo": "OnePlus не поддерживает полные алгоритмы ZRAM, автоматически отключено",
+  "op_no_zram_extra": "OnePlus не поддерживает пользовательские алгоритмы ZRAM, автоматически очищено",
+  "op_no_custom_modules": "OnePlus не поддерживает пользовательские модули, автоматически очищено",
+  "op_no_kpm_password": "OnePlus не поддерживает пароль KPM, автоматически очищено",
+  "op_mtk_no_proxy": "MTK CPU ({cpu}) не поддерживает оптимизацию прокси, автоматически отключено",
+  "op_no_susfs": "OnePlus {android}/{kernel} не поддерживает SUSFS, автоматически отключено",
+  "op_no_kpm_ksu": "KSU {ksu} не поддерживает OnePlus KPM, автоматически отключено"
 }

@@ -193,5 +193,22 @@
   "arg_limit": "Número de resultados (predet: 10)",
   "arg_download": "Descargar artefactos",
   "arg_output": "Directorio de salida (predet: ./abk-artifacts)",
-  "build_epilog": "Opciones de versión del kernel:\n  --android-version   Versión Android (predet: android12)\n  --kernel-version    Versión principal del kernel (predet: 5.10)\n  --sub-level         Subnivel (requerido)\n  --os-patch-level    Nivel de parche de seguridad (requerido)\n  --revision          Revisión (solo 5.10)\n\nBuild matricial (todos los subniveles):\n  --matrix android14        Usar kernel-a14-6-1.yml\n\nBuild OnePlus:\n  --oneplus                 Usar oneplus-custom.yml (--device requerido)\n\nVariantes KernelSU:\n  None / Official / SukiSU / ReSukiSU (predet)\n\nRamas KernelSU:\n  Stable(标准) / Dev(开发) / Custom(自定义)\n\nVirtualización: off (predet) / 678 / 123 / 345\n\nEjemplos:\n  abk build --sub-level 162 --os-patch-level 2026-03\n  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram\n  abk build --matrix a15                                    # Matriz\n  abk build --matrix both                                   # Todas versiones\n  abk build --matrix full                                   # Matriz completa\n  abk build --matrix all-managers                           # Todos managers\n  abk build --oneplus --device oneplus12                    # OnePlus"
+  "build_epilog": "Opciones de versión del kernel:\n  --android-version   Versión Android (predet: android12)\n  --kernel-version    Versión principal del kernel (predet: 5.10)\n  --sub-level         Subnivel (requerido)\n  --os-patch-level    Nivel de parche de seguridad (requerido)\n  --revision          Revisión (solo 5.10)\n\nBuild matricial (todos los subniveles):\n  --matrix android14        Usar kernel-a14-6-1.yml\n\nBuild OnePlus:\n  --oneplus                 Usar oneplus-custom.yml (--device requerido)\n\nVariantes KernelSU:\n  None / Official / SukiSU / ReSukiSU (predet)\n\nRamas KernelSU:\n  Stable(标准) / Dev(开发) / Custom(自定义)\n\nVirtualización: off (predet) / 678 / 123 / 345\n\nEjemplos:\n  abk build --sub-level 162 --os-patch-level 2026-03\n  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram\n  abk build --matrix a15                                    # Matriz\n  abk build --matrix both                                   # Todas versiones\n  abk build --matrix full                                   # Matriz completa\n  abk build --matrix all-managers                           # Todos managers\n  abk build --oneplus --device oneplus12                    # OnePlus",
+  "err_unknown_device": "Dispositivo desconocido '{device}'",
+  "err_available_devices": "Dispositivos disponibles: {devices}",
+  "warning_prefix": "Advertencia:",
+  "error_prefix": "Error:",
+  "op_no_zram": "OnePlus no soporta ZRAM, desactivado automáticamente",
+  "op_no_ddk": "OnePlus no soporta DDK, desactivado automáticamente",
+  "op_no_ntsync": "OnePlus no soporta NTsync, desactivado automáticamente",
+  "op_no_networking": "OnePlus no soporta mejora de red, desactivado automáticamente",
+  "op_no_rekernel": "OnePlus no soporta Re-Kernel, desactivado automáticamente",
+  "op_no_virt": "OnePlus no soporta virtualización, desactivado automáticamente",
+  "op_no_zram_algo": "OnePlus no soporta algoritmos ZRAM completos, desactivado automáticamente",
+  "op_no_zram_extra": "OnePlus no soporta ZRAM personalizados, borrado automáticamente",
+  "op_no_custom_modules": "OnePlus no soporta módulos personalizados, borrado automáticamente",
+  "op_no_kpm_password": "OnePlus no soporta contraseña KPM, borrada automáticamente",
+  "op_mtk_no_proxy": "CPU MTK ({cpu}) no soporta optimización proxy, desactivado automáticamente",
+  "op_no_susfs": "OnePlus {android}/{kernel} no soporta SUSFS, desactivado automáticamente",
+  "op_no_kpm_ksu": "KSU {ksu} no soporta OnePlus KPM, desactivado automáticamente"
 }

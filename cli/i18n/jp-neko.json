@@ -1,7 +1,6 @@
 {
   "abk_cli_desc": "ABK CLI - Nyan~ Android じゃないデバイスからカーネルビルドだニャ",
   "abk_cli_desc_full": "ABK (AnyBase Kernel) は GKI KernelSU/SUSFS カーネルをビルド・配布・管理するニャン🐱\nCLI で Android デバイスなしに GitHub Actions ビルドをトリガーできるニャ！",
-
   "err_no_token": "ログインしてないニャ！先に 'abk login' してニャ～",
   "err_set_token_env": "GITHUB_TOKEN を設定するか --token を使ってニャ",
   "err_no_fork": "Fork が見つからないニャ！先に 'abk fork' してニャ～",
@@ -23,7 +22,6 @@
   "err_build_failed": "ビルド失敗ニャ: {error}...残念ニャ😿",
   "err_api_error": "GitHub API エラー ({code}): {msg} ニャ",
   "err_network_error": "ネットワークエラーだニャ: {reason}",
-
   "login_requesting": "デバイスコードをリクエスト中ニャ...",
   "login_title": "GitHub デバイス認証ニャ🐱",
   "login_step1": "1. ブラウザで開くニャ:",
@@ -38,13 +36,11 @@
   "login_token_saved": "トークンを保存したニャ: {path}",
   "login_as": "ログインしたニャ: {user} 🐱",
   "login_verify_failed": "検証失敗ニャ: {error}",
-
   "logged_out_token_removed": "ログアウトしたニャ...また来てニャ👋",
   "not_logged_in": "ログインしてないニャ...",
   "logout_ok": "ログアウトしたニャ...また来てニャ👋",
   "logout_not": "ログインしてないニャ...",
   "run_login_hint": "'abk login' してニャ～",
-
   "whoami_user": "ユーザー: {user} 🐱",
   "whoami_fork": "Fork: {fork}",
   "whoami_status_synced": "ステータス: 同期済みニャ✨",
@@ -56,7 +52,6 @@
   "status_synced": "ステータス: 同期済みニャ✨",
   "fork_not_detected": "Fork: 見つからないニャ...",
   "hint_run_fork": "ヒント: 'abk fork' で Fork を作ってニャ",
-
   "fork_exists": "Fork が存在するニャ: {fork}",
   "fork_behind": "上流より {n} コミット遅れてるニャ...",
   "fork_syncing": "同期中ニャ...🐱",
@@ -79,7 +74,6 @@
   "syncing_n_commits": "同期中ニャ ({n} コミット遅れ)...",
   "warn_behind_upstream": "警告ニャ！Fork が上流より {n} コミット遅れてるニャ",
   "run_abk_sync": "'abk sync' で同期してニャ",
-
   "build_triggering": "{name} ビルドをトリガー中ニャ...",
   "build_triggered": "ビルドをトリガーしたニャ！🎉",
   "build_triggered_dry": "[DRY-RUN] スキップだニャ",
@@ -97,22 +91,18 @@
   "triggered_fail": "✗ 失敗ニャ: {error} 😿",
   "downloading_name": "{name} をダウンロード中ニャ...",
   "fetch_status_failed": "ステータス取得失敗ニャ: {error}",
-
   "enabled": "有効ニャ✓",
   "disabled": "無効ニャ✗",
-
   "status_no_builds": "ビルド記録がないニャ...",
   "status_recent": "最近の {n} 個のビルドニャ:\n",
   "artifacts_no_artifacts": "このビルドにはアーティファクトがないニャ",
   "artifacts_list": "ビルド #{id} のアーティファクトニャ:\n",
   "artifacts_downloading": "{name} をダウンロード中ニャ...",
   "artifacts_download_to": "ダウンロード先: {dir}",
-
   "available_targets": "利用可能なビルドターゲットニャ:\n",
   "list_matrix_item": "--matrix {key:9} - {name} (全サブレベルのマトリクスだニャ)",
   "list_oneplus_item": "--oneplus        - OnePlus/Oplus デバイス (--device が必要だニャ)",
   "list_custom_default": "デフォルト: カスタムビルド (kernel-custom.yml)。--sub-level と --os-patch-level が必要だニャ",
-
   "build_target_a12": "Android 12 (5.10)",
   "build_target_a13": "Android 13 (5.15)",
   "build_target_a14": "Android 14 (6.1)",
@@ -122,14 +112,12 @@
   "build_target_oneplus": "OnePlus/Oplus",
   "build_target_full": "フルフィーチャーマトリクス",
   "build_target_all_managers": "全マネージャーマトリクス",
-
   "help_subcommands": "コマンド (詳細: abk <command> --help) ニャ",
   "help_flag": "このヘルプを表示して終了するニャ",
   "help_token": "GitHub Token (または GITHUB_TOKEN)",
   "help_repo": "GitHub リポジトリ (デフォルト: fork を自動検出するニャ)",
   "help_verbose": "詳細出力だニャ",
   "help_lang": "インターフェースの言語ニャ",
-
   "cmd_login_help": "GitHub にログイン (Device Flow) ニャ",
   "cmd_login_desc": "GitHub Device Flow でログイン。ブラウザを自動で開くニャ🐱",
   "cmd_logout_help": "GitHub からログアウトするニャ",
@@ -148,7 +136,6 @@
   "cmd_artifacts_desc": "ビルドアーティファクトの表示とダウンロードだニャ (AnyKernel3, img など)",
   "cmd_list_help": "利用可能なオプションを表示するニャ",
   "cmd_list_desc": "全ビルドターゲット、KSU バリアント、機能オプションの一覧だニャ",
-
   "ksu_variants_label": "KernelSU バリアントニャ:",
   "ksu_branches_label": "KernelSU ブランチニャ:",
   "virt_options_label": "仮想化サポートオプションニャ:",
@@ -161,7 +148,6 @@
   "cmd_example_build": "abk build a15 --ksu ReSukiSU             # カーネルビルド",
   "cmd_example_status": "abk status                               # ビルドステータス",
   "cmd_example_artifacts": "abk artifacts --run-id 12345 --download  # アーティファクト DL",
-
   "arg_matrix": "マトリクスビルドターゲット (both=全バージョン, full=フルマトリクス, all-managers=全マネージャー)",
   "arg_oneplus": "OnePlus デバイスビルド",
   "arg_ref": "Fork Git ブランチ (デフォルト: dev)",
@@ -207,6 +193,18 @@
   "arg_limit": "表示件数 (デフォルト: 10)",
   "arg_download": "アーティファクトをダウンロードするニャ",
   "arg_output": "出力ディレクトリ (デフォルト: ./abk-artifacts)",
-
-  "build_epilog": "カーネルバージョンオプションニャ:\n  --android-version   Android バージョン (デフォルト: android12)\n  --kernel-version    メインカーネルバージョン (デフォルト: 5.10)\n  --sub-level         サブレベル (必須だニャ)\n  --os-patch-level    セキュリティパッチレベル (必須だニャ)\n  --revision          リビジョン (5.10 のみ)\n\nマトリクスビルド (全サブレベル):\n  --matrix android14        kernel-a14-6-1.yml を使うニャ\n\nOnePlus ビルド:\n  --oneplus                 oneplus-custom.yml を使うニャ (--device が必要)\n\nKernelSU バリアント:\n  None / Official / SukiSU / ReSukiSU (デフォルト)\n\nKernelSU ブランチ:\n  Stable(标准) / Dev(开发) / Custom(自定义)\n\n仮想化: off (デフォルト) / 678 / 123 / 345\n\n例ニャ:\n  abk build --sub-level 162 --os-patch-level 2026-03\n  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram\n  abk build --matrix a15                                    # マトリクス\n  abk build --matrix both                                   # 全バージョン\n  abk build --matrix full                                   # フルマトリクス\n  abk build --matrix all-managers                           # 全マネージャー\n  abk build --oneplus --device oneplus12                    # OnePlus 🐱"
+  "build_epilog": "カーネルバージョンオプションニャ:\n  --android-version   Android バージョン (デフォルト: android12)\n  --kernel-version    メインカーネルバージョン (デフォルト: 5.10)\n  --sub-level         サブレベル (必須だニャ)\n  --os-patch-level    セキュリティパッチレベル (必須だニャ)\n  --revision          リビジョン (5.10 のみ)\n\nマトリクスビルド (全サブレベル):\n  --matrix android14        kernel-a14-6-1.yml を使うニャ\n\nOnePlus ビルド:\n  --oneplus                 oneplus-custom.yml を使うニャ (--device が必要)\n\nKernelSU バリアント:\n  None / Official / SukiSU / ReSukiSU (デフォルト)\n\nKernelSU ブランチ:\n  Stable(标准) / Dev(开发) / Custom(自定义)\n\n仮想化: off (デフォルト) / 678 / 123 / 345\n\n例ニャ:\n  abk build --sub-level 162 --os-patch-level 2026-03\n  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram\n  abk build --matrix a15                                    # マトリクス\n  abk build --matrix both                                   # 全バージョン\n  abk build --matrix full                                   # フルマトリクス\n  abk build --matrix all-managers                           # 全マネージャー\n  abk build --oneplus --device oneplus12                    # OnePlus 🐱",
+  "err_unknown_device": "知らないデバイス '{device}' ニャ...",
+  "err_available_devices": "使えるデバイス: {devices} ニャ",
+  "warning_prefix": "警告ニャ:",
+  "error_prefix": "エラーニャ:",
+  "op_no_zram": "OnePlusはZRAM使えないニャ、自動で無効にした",
+  "op_no_ddk": "OnePlusはDDK使えないニャ、自動で無効にした",
+  "op_no_ntsync": "OnePlusはNTsync使えないニャ、自動で無効にした",
+  "op_no_networking": "OnePlusはネットワーク強化使えないニャ、自動で無効にした",
+  "op_no_rekernel": "OnePlusはRe-Kernel使えないニャ、自動で無効にした",
+  "op_no_virt": "OnePlusは仮想化使えないニャ、自動で無効にした",
+  "op_mtk_no_proxy": "MTK CPU ({cpu})はプロキシ最適化非対応ニャ、自動で無効にした",
+  "op_no_susfs": "OnePlus {android}/{kernel}はSUSFS非対応ニャ、自動で無効にした",
+  "op_no_kpm_ksu": "KSU {ksu}はOnePlus KPM非対応ニャ、自動で無効にした"
 }
