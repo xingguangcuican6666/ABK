@@ -889,6 +889,7 @@ def cmd_build(args):
                 inputs["use_proxy_optimization"] = str(args.proxy_optimization).lower()
                 inputs["use_unicode_bypass"] = str(args.unicode_bypass).lower()
                 inputs.pop("kernelsu_variant", None)
+                inputs.pop("kernelsu_branch", None)
                 inputs.pop("cancel_susfs", None)
                 inputs.pop("supp_op", None)
                 inputs.pop("use_zram", None)
