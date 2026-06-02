@@ -68,6 +68,12 @@ object DownloadUtils {
             lower.contains("anykernel") || lower.contains("ak3") -> ArtifactType.ANYKERNEL3
             lower.endsWith(".zip") && isLikelyModuleZipName(lower) -> ArtifactType.SUSFS_MODULE
             isLikelyModuleZipName(lower) && !lower.contains("anykernel") -> ArtifactType.SUSFS_MODULE
+            // Build ABK App workflows upload a single artifact bundle named
+            // "abk-apks" that contains the debug/release APK files. Treat the
+            // bundle itself as a manager artifact so completed manager runs
+            // remain visible in the workflow list and manager filter.
+            lower == "abk-apks" || lower.contains("abk-apks") -> ArtifactType.ABK_MANAGER
+            lower.contains("abk") && lower.endsWith(".apk") -> ArtifactType.ABK_MANAGER
             lower.endsWith(".apk") && (
                 lower.contains("manager") ||
                     lower.contains("kernelsu") ||
@@ -95,6 +101,7 @@ object DownloadUtils {
         ArtifactType.KERNEL_PACKAGE,
         ArtifactType.KERNEL_IMG,
         ArtifactType.ANYKERNEL3 -> ArtifactCategory.KERNEL
+        ArtifactType.ABK_MANAGER,
         ArtifactType.KSU_MANAGER -> ArtifactCategory.MANAGER
         ArtifactType.SUSFS_MODULE -> ArtifactCategory.MODULE
         ArtifactType.OTHER -> null
@@ -175,8 +182,15 @@ object DownloadUtils {
             }
             try {
                 call.execute().use { handled ->
-                    if (!handled.isSuccessful) return@withContext DownloadResult()
-                    val body = handled.body ?: return@withContext DownloadResult()
+                    if (!handled.isSuccessful) {
+                        return@withContext DownloadResult(
+                            errorMessage = downloadHttpErrorMessage(context, handled.code)
+                        )
+                    }
+                    val body = handled.body
+                        ?: return@withContext DownloadResult(
+                            errorMessage = context.getString(R.string.download_empty_response)
+                        )
                     val totalBytes = artifact.sizeInBytes.coerceAtLeast(1L)
 
                     val targetRunDir = File(downloadsRoot, runFolderName(run)).apply { mkdirs() }
@@ -280,7 +294,7 @@ object DownloadUtils {
             zipFile?.delete()
             stageDir?.deleteRecursively()
             outDir?.deleteRecursively()
-            DownloadResult()
+            DownloadResult(errorMessage = downloadExceptionMessage(context, e))
         }
     }
 
@@ -323,8 +337,15 @@ object DownloadUtils {
             }
             try {
                 call.execute().use { handled ->
-                    if (!handled.isSuccessful) return@withContext DownloadResult()
-                    val body = handled.body ?: return@withContext DownloadResult()
+                    if (!handled.isSuccessful) {
+                        return@withContext DownloadResult(
+                            errorMessage = downloadHttpErrorMessage(context, handled.code)
+                        )
+                    }
+                    val body = handled.body
+                        ?: return@withContext DownloadResult(
+                            errorMessage = context.getString(R.string.download_empty_response)
+                        )
                     val totalBytes = when {
                         sizeBytes > 0L -> sizeBytes
                         body.contentLength() > 0L -> body.contentLength()
@@ -450,7 +471,7 @@ object DownloadUtils {
             stageDir?.deleteRecursively()
             outDir?.deleteRecursively()
             assetDir?.takeIf { bundleWithNotices }?.deleteRecursively()
-            DownloadResult()
+            DownloadResult(errorMessage = downloadExceptionMessage(context, e))
         }
     }
 
@@ -529,6 +550,13 @@ object DownloadUtils {
         }
         return directory.takeIf { it.isDirectory && it.canWrite() }
     }
+
+    private fun downloadHttpErrorMessage(context: Context, code: Int): String =
+        context.getString(R.string.download_http_failed, code)
+
+    private fun downloadExceptionMessage(context: Context, error: Throwable): String =
+        error.message?.takeIf { it.isNotBlank() }
+            ?: context.getString(R.string.download_unknown_error)
 
     private fun downloadDirectoryErrorMessage(context: Context, downloadDirectoryPath: String?): String {
         val normalizedPath = DownloadDirectoryUtils.normalizeDirectoryPath(downloadDirectoryPath)
@@ -700,6 +728,7 @@ object DownloadUtils {
                 ArtifactType.KERNEL_PACKAGE,
                 ArtifactType.KERNEL_IMG,
                 ArtifactType.ANYKERNEL3,
+                ArtifactType.ABK_MANAGER,
                 ArtifactType.KSU_MANAGER,
                 ArtifactType.SUSFS_MODULE -> true
                 ArtifactType.OTHER -> false
@@ -713,6 +742,7 @@ object DownloadUtils {
                     ArtifactType.KERNEL_PACKAGE -> 0
                     ArtifactType.KERNEL_IMG -> 1
                     ArtifactType.ANYKERNEL3 -> 2
+                    ArtifactType.ABK_MANAGER,
                     ArtifactType.KSU_MANAGER -> 3
                     ArtifactType.SUSFS_MODULE -> 4
                     ArtifactType.OTHER -> 5

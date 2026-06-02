@@ -79,7 +79,16 @@ action_build_comparison.md
 build/
 app/.cxx/
 app/build/
+app/build/generated/
 
 # Android Studio
 gradle-daemon-jvm.properties
+.cxx/
+.externalNativeBuild/
+*.hprof
+captures/
+
+# Machine-local Android SDK path (use local.properties.example as template)
 local.properties
+local.properties.*
+!local.properties.example

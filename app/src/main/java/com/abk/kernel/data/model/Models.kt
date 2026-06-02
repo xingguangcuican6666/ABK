@@ -574,6 +574,8 @@ data class BuildQueueItem(
     val config: KernelBuildConfig = KernelBuildConfig(),
     val createdAt: Long = 0L,
     val status: BuildQueueItemStatus = BuildQueueItemStatus.PENDING,
+    /** GitHub workflow id for the dispatched YAML; used to link runs without stealing another slot. */
+    val workflowId: Long = 0L,
     val runId: Long = 0L,
     val runNumber: Int = 0,
     val error: String? = null
@@ -617,6 +619,7 @@ enum class ArtifactType {
     KERNEL_PACKAGE,
     KERNEL_IMG,
     ANYKERNEL3,
+    ABK_MANAGER,
     KSU_MANAGER,
     SUSFS_MODULE,
     OTHER
@@ -632,6 +635,7 @@ fun ArtifactType.toArtifactCategory(): ArtifactCategory = when (this) {
     ArtifactType.KERNEL_PACKAGE,
     ArtifactType.KERNEL_IMG,
     ArtifactType.ANYKERNEL3 -> ArtifactCategory.KERNEL
+    ArtifactType.ABK_MANAGER,
     ArtifactType.KSU_MANAGER -> ArtifactCategory.MANAGER
     ArtifactType.SUSFS_MODULE -> ArtifactCategory.MODULE
     ArtifactType.OTHER -> ArtifactCategory.MODULE
@@ -640,3 +644,93 @@ fun ArtifactType.toArtifactCategory(): ArtifactCategory = when (this) {
 enum class BuildStatus {
     IDLE, QUEUED, IN_PROGRESS, SUCCESS, FAILURE, CANCELLED
 }
+
+/**
+ * Heuristic check whether this workflow run is a kernel build (as opposed to a
+ * manager build such as KSU Manager or SukiSU Manager).
+ *
+ * Used by the Status screen "Last build" tile so it reflects only kernel-build
+ * activity even when other workflows (e.g. manager builds) are running.
+ */
+fun WorkflowRun.isFailedFlashRun(): Boolean =
+    status == "completed" && conclusion == "failure"
+
+fun WorkflowRun.isKernelBuild(): Boolean {
+    val workflowName = name.orEmpty().lowercase()
+    val lower = "${name.orEmpty()} ${displayTitle.orEmpty()}".lowercase()
+    if (lower.hasUtilityWorkflowSignal()) return false
+    // The workflow name is more reliable than displayTitle, which can contain
+    // user/commit text from a different build type.
+    if (workflowName.hasManagerBuildSignal()) return false
+    if (workflowName.hasKernelBuildSignal()) return true
+    // Negative signals: app / manager / certificate / utility workflows.
+    if (lower.hasManagerBuildSignal()) return false
+    // Positive signals: kernel build.
+    if (lower.hasKernelBuildSignal()) return true
+    // Unknown — be conservative and exclude it from the kernel-only tile.
+    return false
+}
+
+/**
+ * Heuristic check whether this workflow run is a manager-app build (KSU
+ * Manager / SukiSU Manager / Build ABK App). Symmetric to [isKernelBuild];
+ * a single run is either kernel-like or manager-like, never both — kernel
+ * runs that bundle a manager APK are still classified as kernel.
+ */
+fun WorkflowRun.isManagerBuild(): Boolean {
+    val workflowName = name.orEmpty().lowercase()
+    val lower = "${name.orEmpty()} ${displayTitle.orEmpty()}".lowercase()
+    if (lower.hasUtilityWorkflowSignal()) return false
+    // The GitHub run display title can contain kernel parameters from the
+    // triggering commit/title. The workflow name is the primary classifier.
+    if (workflowName.hasManagerBuildSignal()) return true
+    if (workflowName.hasKernelBuildSignal()) return false
+    // Kernel workflows often bundle a manager APK but are not manager-primary.
+    if (lower.hasKernelBuildSignal()) return false
+    return lower.hasManagerBuildSignal()
+}
+
+/** Manager-primary workflow (Build ABK App / Dev), not a kernel build that bundles a manager APK. */
+fun WorkflowRun.isPureManagerBuild(): Boolean =
+    isManagerBuild() && !isKernelBuild()
+
+/**
+ * Dev manager workflow (e.g. Build ABK App Dev). Uses workflow [name] only — not
+ * [WorkflowRun.displayTitle]. Avoids bare `"dev" in text` so "device" does not match.
+ */
+fun WorkflowRun.isManagerDevBuild(): Boolean =
+    workflowNameIndicatesManagerDev(name.orEmpty())
+
+/** Same rules as [WorkflowRun.isManagerDevBuild] for artifact [runTitle] when [WorkflowRun] is missing. */
+fun workflowNameIndicatesManagerDev(workflowName: String): Boolean {
+    val n = workflowName.lowercase().trim()
+    if (n.isBlank()) return false
+    if (MANAGER_DEV_WORKFLOW_NAME_MARKERS.any { it in n }) return true
+    return MANAGER_DEV_NAME_TOKEN.containsMatchIn(n)
+}
+
+private val MANAGER_DEV_WORKFLOW_NAME_MARKERS = listOf(
+    "abk app dev",
+    "abk-app-dev",
+    "build abk app dev",
+    "build-app-dev",
+    "build app dev"
+)
+
+private val MANAGER_DEV_NAME_TOKEN =
+    Regex("""(^|[\s_.-])dev($|[\s_.-]|\.apk)""", RegexOption.IGNORE_CASE)
+
+private fun String.hasManagerBuildSignal(): Boolean =
+    "abk app" in this || "abk-app" in this ||
+        "build app" in this || "build-app" in this ||
+        "debug apk" in this ||
+        "manager" in this || "ksu manager" in this || "sukisu manager" in this ||
+        "getmanager" in this || "get manager" in this ||
+        "管理器" in this
+
+private fun String.hasKernelBuildSignal(): Boolean =
+    "kernel" in this || "内核" in this
+
+private fun String.hasUtilityWorkflowSignal(): Boolean =
+    "certificate" in this || "证书" in this ||
+        "emergency" in this || "auto trigger" in this

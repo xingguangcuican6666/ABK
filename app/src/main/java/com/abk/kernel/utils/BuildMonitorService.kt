@@ -9,6 +9,8 @@ import androidx.core.content.ContextCompat
 import com.abk.kernel.data.model.BuildProgress
 import com.abk.kernel.data.model.WorkflowJob
 import com.abk.kernel.data.model.WorkflowRun
+import com.abk.kernel.data.model.isKernelBuild
+import com.abk.kernel.data.model.isManagerBuild
 import com.abk.kernel.data.repository.GitHubRepository
 import com.abk.kernel.data.repository.PreferencesRepository
 import com.abk.kernel.data.repository.Result
@@ -52,7 +54,8 @@ class BuildMonitorService : Service() {
     private val monitorJobs = mutableMapOf<Long, Job>()
     private val runSnapshots = mutableMapOf<Long, WorkflowRun>()
     private val progressSnapshots = mutableMapOf<Long, BuildProgress>()
-    private val completedRunSuccess = mutableMapOf<Long, Boolean>()
+    private val completedOutcomes = mutableMapOf<Long, BuildSessionOutcome>()
+    private val completedRunKinds = mutableMapOf<Long, NotificationUtils.BuildKind>()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -91,7 +94,7 @@ class BuildMonitorService : Service() {
             github.updateToken(token)
 
             try {
-                while (isActive) {
+                while (coroutineContext.isActive) {
                     val result = github.getWorkflowRun(owner, repo, runId)
                     if (result is Result.Success) {
                         val run = result.data
@@ -107,28 +110,57 @@ class BuildMonitorService : Service() {
                             NotificationUtils.notifyBuildRunning(
                                 applicationContext,
                                 merged?.percent ?: progress.percent,
-                                merged?.currentStep ?: progress.currentStep
+                                merged?.currentStep ?: progress.currentStep,
+                                kind = mergedActiveKind()
                             )
                         }
                         when (run.status) {
                             "completed" -> {
-                                val success = run.conclusion == "success"
-                                val finish = finishMonitoring(runId, success)
-                                if (notifyBuild && finish.shouldStop) {
-                                    NotificationUtils.notifyBuildDone(
-                                        applicationContext,
-                                        finish.allSucceeded
-                                    )
+                                val outcome = when (run.conclusion) {
+                                    "success" -> BuildSessionOutcome.Success
+                                    "cancelled" -> BuildSessionOutcome.Cancelled
+                                    else -> BuildSessionOutcome.Failure
+                                }
+                                val completedKind = kindForRun(run)
+                                val finish = finishMonitoring(
+                                    runId,
+                                    outcome = outcome,
+                                    kind = completedKind
+                                )
+                                if (notifyBuild) {
+                                    if (finish.shouldStop) {
+                                        publishSessionDoneNotification()
+                                    } else {
+                                        publishMergedRunningNotification()
+                                    }
                                 }
                                 break
                             }
-                            "queued", "waiting", "in_progress", "requested", "pending" -> {
+                            // Pre-start states change in seconds: poll fast so
+                            // the UI sees "queued → in_progress" promptly and
+                            // the runner-pickup spinner stops being a lie.
+                            "queued", "waiting", "requested", "pending" -> {
+                                delay(10_000)
+                            }
+                            // Long-running compile steps: slow polling is fine
+                            // and keeps us well under the GitHub rate limit
+                            // (~120 req/h per monitor at 30s × 2 endpoints).
+                            "in_progress" -> {
                                 delay(30_000)
                             }
                             else -> {
-                                val finish = finishMonitoring(runId, success = false)
-                                if (notifyBuild && finish.shouldStop) {
-                                    NotificationUtils.notifyBuildDone(applicationContext, success = false)
+                                val failedKind = kindForRun(run)
+                                val finish = finishMonitoring(
+                                    runId,
+                                    outcome = BuildSessionOutcome.Failure,
+                                    kind = failedKind
+                                )
+                                if (notifyBuild) {
+                                    if (finish.shouldStop) {
+                                        publishSessionDoneNotification()
+                                    } else {
+                                        publishMergedRunningNotification()
+                                    }
                                 }
                                 break
                             }
@@ -163,19 +195,85 @@ class BuildMonitorService : Service() {
         if (activeRuns.isEmpty()) null else BuildProgressUtils.merge(activeRuns, progressSnapshots)
     }
 
-    private fun finishMonitoring(runId: Long, success: Boolean? = null): MonitorFinish {
+    /**
+     * Classify currently-monitored active runs so the notification can pick
+     * the right title and decide whether to attach the HyperOS island.
+     */
+    private fun mergedActiveKind(): NotificationUtils.BuildKind = synchronized(monitorLock) {
+        val activeRuns = runSnapshots.values.filter { it.status in ACTIVE_MONITOR_STATUSES }
+        val kernels = activeRuns.count { it.isKernelBuild() }
+        val managers = activeRuns.count { it.isManagerBuild() }
+        when {
+            kernels >= 1 && managers >= 1 -> NotificationUtils.BuildKind.Mixed
+            kernels > 1 -> NotificationUtils.BuildKind.MultipleKernels
+            kernels == 1 -> NotificationUtils.BuildKind.Kernel
+            managers >= 1 -> NotificationUtils.BuildKind.ManagerOnly
+            else -> NotificationUtils.BuildKind.Unknown
+        }
+    }
+
+    private fun publishMergedRunningNotification() {
+        val merged = mergedActiveProgress() ?: return
+        NotificationUtils.notifyBuildRunning(
+            applicationContext,
+            merged.percent,
+            merged.currentStep,
+            kind = mergedActiveKind()
+        )
+    }
+
+    private fun kindForRun(run: WorkflowRun): NotificationUtils.BuildKind = when {
+        run.isManagerBuild() -> NotificationUtils.BuildKind.ManagerOnly
+        run.isKernelBuild() -> NotificationUtils.BuildKind.Kernel
+        else -> NotificationUtils.BuildKind.Unknown
+    }
+
+    private fun finishMonitoring(
+        runId: Long,
+        outcome: BuildSessionOutcome? = null,
+        kind: NotificationUtils.BuildKind? = null,
+    ): MonitorFinish {
         val finish = synchronized(monitorLock) {
             monitorJobs.remove(runId)
             runSnapshots.remove(runId)
             progressSnapshots.remove(runId)
-            success?.let { completedRunSuccess[runId] = it }
-            MonitorFinish(
-                shouldStop = monitorJobs.isEmpty(),
-                allSucceeded = completedRunSuccess.values.all { it }
-            )
+            if (outcome != null) {
+                completedOutcomes[runId] = outcome
+                kind?.let { completedRunKinds[runId] = it }
+            }
+            MonitorFinish(shouldStop = monitorJobs.isEmpty())
         }
-        if (finish.shouldStop) stopSelf()
+        if (finish.shouldStop) stopServiceAndForeground()
         return finish
+    }
+
+    private fun publishSessionDoneNotification() {
+        val action = synchronized(monitorLock) {
+            resolveBuildSessionNotificationAction(completedOutcomes.values)
+        } ?: return
+        val kind = synchronized(monitorLock) { resolveSessionDoneKind() }
+        when (action) {
+            BuildSessionNotificationAction.NotifySuccess ->
+                NotificationUtils.notifyBuildDone(applicationContext, success = true, kind = kind)
+            BuildSessionNotificationAction.NotifyFailure ->
+                NotificationUtils.notifyBuildDone(applicationContext, success = false, kind = kind)
+            BuildSessionNotificationAction.CancelNotification ->
+                NotificationUtils.cancelBuildNotification(applicationContext)
+        }
+    }
+
+    private fun resolveSessionDoneKind(): NotificationUtils.BuildKind {
+        val kinds: Set<NotificationUtils.BuildKind> =
+            synchronized(monitorLock) { completedRunKinds.values.toSet() }
+        return when {
+            NotificationUtils.BuildKind.Kernel in kinds &&
+                NotificationUtils.BuildKind.ManagerOnly in kinds ->
+                NotificationUtils.BuildKind.Mixed
+            kinds.size == 1 -> kinds.single()
+            NotificationUtils.BuildKind.Kernel in kinds -> NotificationUtils.BuildKind.Kernel
+            NotificationUtils.BuildKind.ManagerOnly in kinds -> NotificationUtils.BuildKind.ManagerOnly
+            else -> NotificationUtils.BuildKind.Unknown
+        }
     }
 
     private fun stopAllMonitoring() {
@@ -184,10 +282,20 @@ class BuildMonitorService : Service() {
             monitorJobs.clear()
             runSnapshots.clear()
             progressSnapshots.clear()
-            completedRunSuccess.clear()
+            completedOutcomes.clear()
+            completedRunKinds.clear()
             current
         }
         jobs.forEach { it.cancel() }
+        stopServiceAndForeground()
+    }
+
+    private fun removeForegroundNotification() {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+    }
+
+    private fun stopServiceAndForeground() {
+        removeForegroundNotification()
         stopSelf()
     }
 
@@ -207,16 +315,15 @@ class BuildMonitorService : Service() {
             monitorJobs.clear()
             runSnapshots.clear()
             progressSnapshots.clear()
-            completedRunSuccess.clear()
+            completedOutcomes.clear()
+            completedRunKinds.clear()
         }
         scope.cancel()
+        removeForegroundNotification()
         super.onDestroy()
     }
 
     private val ACTIVE_MONITOR_STATUSES = setOf("queued", "waiting", "requested", "pending", "in_progress")
 
-    private data class MonitorFinish(
-        val shouldStop: Boolean,
-        val allSucceeded: Boolean
-    )
+    private data class MonitorFinish(val shouldStop: Boolean)
 }

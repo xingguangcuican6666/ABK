@@ -25,7 +25,7 @@ sealed class Result<out T> {
     object Loading : Result<Nothing>()
 }
 
-class GitHubRepository(
+open class GitHubRepository(
     private val authService: GitHubAuthService = NetworkClient.createAuthService(),
     private var apiService: GitHubApiService = NetworkClient.createApiService()
 ) {
@@ -41,7 +41,7 @@ class GitHubRepository(
 
     // ── Auth ──────────────────────────────────────────────────────────────
 
-    suspend fun requestDeviceCode(): Result<DeviceCodeResponse> = runCatching {
+    open suspend fun requestDeviceCode(): Result<DeviceCodeResponse> = runCatching {
         val resp = authService.requestDeviceCode(clientId)
         if (resp.isSuccessful && resp.body() != null) {
             Result.Success(resp.body()!!)
@@ -50,7 +50,7 @@ class GitHubRepository(
         }
     }.getOrElse { Result.Error(it.message ?: "Unknown error") }
 
-    suspend fun pollToken(deviceCode: String): Result<AccessTokenResponse> = runCatching {
+    open suspend fun pollToken(deviceCode: String): Result<AccessTokenResponse> = runCatching {
         val resp = authService.pollAccessToken(clientId, deviceCode)
         if (resp.isSuccessful && resp.body() != null) {
             Result.Success(resp.body()!!)
@@ -203,7 +203,7 @@ class GitHubRepository(
 
     // ── Fork ──────────────────────────────────────────────────────────────
 
-    suspend fun getUserFork(sourceOwner: String, sourceRepo: String, username: String): Result<GitHubRepo?> {
+    open suspend fun getUserFork(sourceOwner: String, sourceRepo: String, username: String): Result<GitHubRepo?> {
         val api = apiService
         return runCatching {
             val resp = api.getRepo(username, sourceRepo)
@@ -219,7 +219,7 @@ class GitHubRepository(
         }.getOrElse { Result.Error(it.message ?: "Unknown error") }
     }
 
-    suspend fun forkRepo(owner: String, repo: String): Result<GitHubRepo> {
+    open suspend fun forkRepo(owner: String, repo: String): Result<GitHubRepo> {
         val api = apiService
         return runCatching {
             val resp = api.forkRepo(owner, repo)
@@ -228,7 +228,7 @@ class GitHubRepository(
         }.getOrElse { Result.Error(it.message ?: "Unknown error") }
     }
 
-    suspend fun checkBehind(
+    open suspend fun checkBehind(
         sourceOwner: String,
         sourceRepo: String,
         baseBranch: String,
