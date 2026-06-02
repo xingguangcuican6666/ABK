@@ -122,7 +122,7 @@
   "artifacts_list": "构建 #{id} 的产物:\n",
   "artifacts_downloading": "下载 {name}...",
   "artifacts_download_to": "下载到: {dir}",
-  "list_title": "可用构建目标:\n",
+  "list_title": "可用的构建目标:\n",
   "list_matrix_item": "--matrix {k:9} - {name} (矩阵构建所有子版本)",
   "list_oneplus_item": "--oneplus        - OnePlus/Oplus 设备 (需 --device)",
   "list_custom_default": "默认: 自定义构建 (kernel-custom.yml)，需 --sub-level 和 --os-patch-level",
@@ -219,5 +219,9 @@
   "arg_lz4kd": "启用 LZ4KD (仅 OnePlus)",
   "arg_bbr": "启用 BBR (仅 OnePlus)",
   "arg_proxy": "启用代理优化 (仅 OnePlus)",
-  "arg_unicode": "启用 Unicode 零宽绕过 (仅 OnePlus)"
+  "arg_unicode": "启用 Unicode 零宽绕过 (仅 OnePlus)",
+  "op_list_title": "OnePlus devices / OnePlus 设备:\n",
+  "op_features_title": "OnePlus only / OnePlus only:",
+  "features_title": "Features / 功能开关:",
+  "default_build_info": "Default: kernel-custom.yml, --sub-level + --os-patch-level needed"
 }

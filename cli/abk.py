@@ -961,7 +961,7 @@ def cmd_artifacts(args):
 
 def cmd_list(args):
     if args.oneplus:
-        print("OnePlus devices / OnePlus 设备:\n")
+        print(t("op_list_title"))
         for did, info in ONEPLUS_DEVICES.items():
             print(f"  {did:<35} {info['name']:<20} {info['cpu']:<10} {info['android']} {info['kernel']}")
         return
@@ -975,18 +975,16 @@ def cmd_list(args):
     print(f"  --matrix {'full':<10} full")
     print(f"  --matrix {'all-managers':<10} all-managers")
     print(f"  --oneplus{'':<10} (--device required)")
-    print(f"\n  Default: kernel-custom.yml, --sub-level + --os-patch-level needed")
+    print(f"\n  " + t("default_build_info"))
 
     print(f"\n{t('ksu_variants_label')}")
-    print(f"  --ksu None / Official / SukiSU / ReSukiSU / all")
 
     print(f"\n{t('ksu_branches_label')}")
-    print(f"  --ksu-branch Stable(标准) / Dev(开发) / Custom(自定义)")
 
-    print(f"\nOnePlus only / OnePlus only:")
+    print(f"\n{t('op_features_title')}")
     print(f"  --lz4kd  --bbr  --proxy-optimization  --unicode-bypass")
 
-    print(f"\nFeatures / 功能开关:")
+    print(f"\n{t('features_title')}")
     print(f"  --[no-]zram  --[no-]bbg  --[no-]ddk  --[no-]kpm")
     print(f"  --[no-]susfs  --[no-]rekernel  --[no-]ntsync  --[no-]networking")
     print(f"  --oneplus-8e  --zram-full-algo  --zram-extra-algos")

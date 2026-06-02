@@ -219,5 +219,9 @@
   "arg_lz4kd": "Enable LZ4KD (OnePlus only)",
   "arg_bbr": "Enable BBR (OnePlus only)",
   "arg_proxy": "Enable proxy optimization (OnePlus only)",
-  "arg_unicode": "Enable Unicode zero-width bypass (OnePlus only)"
+  "arg_unicode": "Enable Unicode zero-width bypass (OnePlus only)",
+  "op_list_title": "OnePlus devices / OnePlus 设备:\n",
+  "op_features_title": "OnePlus only / OnePlus only:",
+  "features_title": "Features / 功能开关:",
+  "default_build_info": "Default: kernel-custom.yml, --sub-level + --os-patch-level needed"
 }

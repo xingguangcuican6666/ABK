@@ -99,7 +99,7 @@
   "artifacts_list": "Артефакты сборки #{id}:\n",
   "artifacts_downloading": "Загрузка {name}...",
   "artifacts_download_to": "Загрузка в: {dir}",
-  "list_title": "Доступные цели сборки:\n",
+  "list_title": "Available build targets:\n",
   "list_matrix_item": "--matrix {k:9} - {name} (матрица всех подуровней)",
   "list_oneplus_item": "--oneplus        - Устройства OnePlus (требуется --device)",
   "list_custom_default": "По умолчанию: произвольная сборка (kernel-custom.yml), требуется --sub-level и --os-patch-level",
@@ -216,5 +216,9 @@
   "arg_lz4kd": "Включить LZ4KD (только OnePlus)",
   "arg_bbr": "Включить BBR (только OnePlus)",
   "arg_proxy": "Включить оптимизацию прокси (только OnePlus)",
-  "arg_unicode": "Включить обход Unicode zero-width (только OnePlus)"
+  "arg_unicode": "Включить обход Unicode zero-width (только OnePlus)",
+  "op_list_title": "OnePlus devices / OnePlus 设备:\n",
+  "op_features_title": "OnePlus only / OnePlus only:",
+  "features_title": "Features / 功能开关:",
+  "default_build_info": "Default: kernel-custom.yml, --sub-level + --os-patch-level needed"
 }

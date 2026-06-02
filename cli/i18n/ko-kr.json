@@ -215,5 +215,10 @@
   "arg_lz4kd": "LZ4KD 활성화 (OnePlus 전용)",
   "arg_bbr": "BBR 활성화 (OnePlus 전용)",
   "arg_proxy": "프록시 최적화 활성화 (OnePlus 전용)",
-  "arg_unicode": "Unicode 제로폭 바이패스 활성화 (OnePlus 전용)"
+  "arg_unicode": "Unicode 제로폭 바이패스 활성화 (OnePlus 전용)",
+  "list_title": "Available build targets:\n",
+  "op_list_title": "OnePlus devices / OnePlus 设备:\n",
+  "op_features_title": "OnePlus only / OnePlus only:",
+  "features_title": "Features / 功能开关:",
+  "default_build_info": "Default: kernel-custom.yml, --sub-level + --os-patch-level needed"
 }

@@ -210,5 +210,10 @@
   "arg_lz4kd": "Ebligi LZ4KD (nur OnePlus)",
   "arg_bbr": "Ebligi BBR (nur OnePlus)",
   "arg_proxy": "Ebligi prokurilan optimumigon (nur OnePlus)",
-  "arg_unicode": "Ebligi Unicode zero-width pretervojon (nur OnePlus)"
+  "arg_unicode": "Ebligi Unicode zero-width pretervojon (nur OnePlus)",
+  "list_title": "Available build targets:\n",
+  "op_list_title": "OnePlus devices / OnePlus 设备:\n",
+  "op_features_title": "OnePlus only / OnePlus only:",
+  "features_title": "Features / 功能开关:",
+  "default_build_info": "Default: kernel-custom.yml, --sub-level + --os-patch-level needed"
 }

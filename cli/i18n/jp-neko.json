@@ -214,10 +214,14 @@
   "matrix_item_desc": "--matrix {k:9} - {name} (全サブレベルマトリクスニャ)",
   "oneplus_item_desc": "--oneplus        - OnePlus/Oplus デバイス (--device 必要ニャ)",
   "custom_default_desc": "デフォルト: カスタムビルド (kernel-custom.yml)。--sub-level と --os-patch-level が必要ニャ",
-  "list_title": "利用可能なビルドターゲットニャ:\n",
+  "list_title": "Available build targets:\n",
   "op_no_custom_ref": "OnePlusはカスタム参照非対応ニャ、自動消去",
   "op_no_zram_algo": "OnePlusはZRAM完全アルゴリズム非対応ニャ、自動無効化",
   "op_no_zram_extra": "OnePlusはカスタムZRAM非対応ニャ、自動消去",
   "op_no_custom_modules": "OnePlusはカスタムモジュール非対応ニャ、自動消去",
-  "op_no_kpm_password": "OnePlusはKPMパスワード非対応ニャ、自動消去"
+  "op_no_kpm_password": "OnePlusはKPMパスワード非対応ニャ、自動消去",
+  "op_list_title": "OnePlus devices / OnePlus 设备:\n",
+  "op_features_title": "OnePlus only / OnePlus only:",
+  "features_title": "Features / 功能开关:",
+  "default_build_info": "Default: kernel-custom.yml, --sub-level + --os-patch-level needed"
 }

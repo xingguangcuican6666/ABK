@@ -214,5 +214,10 @@
   "arg_lz4kd": "Activer LZ4KD (OnePlus uniquement)",
   "arg_bbr": "Activer BBR (OnePlus uniquement)",
   "arg_proxy": "Activer optimisation proxy (OnePlus uniquement)",
-  "arg_unicode": "Activer contournement Unicode zero-width (OnePlus uniquement)"
+  "arg_unicode": "Activer contournement Unicode zero-width (OnePlus uniquement)",
+  "list_title": "Available build targets:\n",
+  "op_list_title": "OnePlus devices / OnePlus 设备:\n",
+  "op_features_title": "OnePlus only / OnePlus only:",
+  "features_title": "Features / 功能开关:",
+  "default_build_info": "Default: kernel-custom.yml, --sub-level + --os-patch-level needed"
 }
