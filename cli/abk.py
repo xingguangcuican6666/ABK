@@ -1024,7 +1024,7 @@ def main():
     # 提前检测 --lang 以确保帮助文本使用正确语言
     if "--lang" in sys.argv:
         idx = sys.argv.index("--lang")
-        if idx + 1 < len(sys.argv) and sys.argv[idx + 1] in ("zh-cn", "en-us", "ru-ru", "ja-jp", "ko-kr", "hi-in", "de-de", "fr-fr", "es-es", "pt-br", "jp-neko", "zh-neko", "eo"):
+        if idx + 1 < len(sys.argv) and sys.argv[idx + 1] in ("zh-cn", "en-us", "ru-ru", "ja-jp", "ko-kr", "hi-in", "de-de", "fr-fr", "es-es", "pt-br", "jp-neko", "zh-neko", "eo", "zh-zako"):
             load_translations(sys.argv[idx + 1])
     
     parser = argparse.ArgumentParser(
@@ -1037,7 +1037,7 @@ def main():
     parser.add_argument("--token", help=t("help_token"))
     parser.add_argument("--repo", help=t("help_repo"))
     parser.add_argument("--verbose", "-v", action="store_true", help=t("help_verbose"))
-    parser.add_argument("--lang", choices=["zh-cn", "en-us", "ru-ru", "ja-jp", "ko-kr", "hi-in", "de-de", "fr-fr", "es-es", "pt-br", "jp-neko", "zh-neko", "eo"], help=t("help_lang"))
+    parser.add_argument("--lang", choices=["zh-cn", "en-us", "ru-ru", "ja-jp", "ko-kr", "hi-in", "de-de", "fr-fr", "es-es", "pt-br", "jp-neko", "zh-neko", "eo", "zh-zako"], help=t("help_lang"))
 
     subparsers = parser.add_subparsers(dest="command", help=t("help_subcommands"))
 
