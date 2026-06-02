@@ -143,7 +143,7 @@
     <string name="build_ksu_branch">Ветка KSU</string>
     <string name="build_custom_ksu_ref">Свой KSU commit/ref</string>
     <string name="build_custom_ksu_ref_placeholder">например, abc123, branch:5 или tag</string>
-    <string name="build_ksu_branch_latest_hint">Ядро и менеджер с одного коммита — последнего успешного build-manager на upstream main. APK менеджера через nightly.link с того же run. Если менеджер не скачается, сборка ядра продолжится.</string>
+    <string name="build_ksu_branch_latest_hint">Сначала HEAD upstream main, если на этом коммите есть успешный Release или build-manager CI; иначе — последний успешный standalone build-manager на main. APK менеджера через nightly.link с того же run. Если менеджер не скачается, сборка ядра продолжится.</string>
     <string name="build_no_root_scheme_desc">Не внедрять схему авторизации root. Ветка KSU, SUSFS и KPM будут автоматически отключены.</string>
     <string name="build_ksu_none">None (без root)</string>
     <string name="build_standard">стабильная</string>
