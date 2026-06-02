@@ -698,8 +698,23 @@ jobs:
             [ -d "$file" ] && continue
             # 跳过 -Rejects 目录中的文件（已在 collect-rejects 中汇总处理）
             [[ "$file" == *-Rejects/* ]] && continue
+            case "$(basename "$file")" in
+              LICENSE|THIRD_PARTY_NOTICES.md) continue ;;
+            esac
             echo "上传 $file..."
             gh release upload "$NEW_TAG" "$file"
+          done
+
+      - name: 上传许可证文档
+        run: |
+          for doc in LICENSE THIRD_PARTY_NOTICES.md; do
+            file="$(find ./downloaded-artifacts -type f -name "$doc" | sort | head -n 1 || true)"
+            if [ -z "$file" ]; then
+              echo "::warning::未找到 $doc，跳过上传。"
+              continue
+            fi
+            echo "上传 $file..."
+            gh release upload "$NEW_TAG" "$file" --clobber
           done
 
       # ==================== 构建摘要 ====================

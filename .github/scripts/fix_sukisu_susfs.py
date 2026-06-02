@@ -367,28 +367,19 @@ def patch_lsm_hook(path, changed_files):
     original = path.read_text()
     text = original
 
-    marker = "ABK: prefer selinux slot for setprocattr hook patching."
+    old_marker = "ABK: prefer selinux slot for setprocattr hook patching."
+    marker = "ABK: prefer resolved setprocattr target for hook patching."
+    if old_marker in text and marker not in text:
+        text = text.replace(old_marker, marker)
+
     if marker not in text:
         text = text.replace(
             '    pr_info("target: 0x%lx %pSb\\n", (unsigned long)target, target);\n',
             '    pr_info("target: 0x%lx %pSb\\n", (unsigned long)target, target);\n'
             '\n'
-            '    bool prefer_selinux_slot =\n'
+            '    bool prefer_setprocattr_target =\n'
             '        !strcmp(hook->head_name ?: "", "setprocattr") && !strcmp(target_name, "selinux_setprocattr");\n'
-            '    /* ABK: prefer selinux slot for setprocattr hook patching. */\n',
-            1,
-        )
-
-        text = text.replace(
-            "        if (current_origin != target) {\n"
-            "            continue;\n"
-            "        }\n",
-            "        if (prefer_selinux_slot) {\n"
-            "            if (!entry->lsm || strcmp(entry->lsm, \"selinux\"))\n"
-            "                continue;\n"
-            "        } else if (current_origin != target) {\n"
-            "            continue;\n"
-            "        }\n",
+            '    /* ABK: prefer resolved setprocattr target for hook patching. */\n',
             1,
         )
 
@@ -401,25 +392,51 @@ def patch_lsm_hook(path, changed_files):
             "                selected_origin = current_origin;\n"
             "                break;\n"
             "            }\n",
-            "            if (prefer_selinux_slot) {\n"
-            "                if (!entry->lsm || strcmp(entry->lsm, \"selinux\"))\n"
-            "                    continue;\n"
-            "                pr_info(\"found %s selinux slot at head offset %ld (provided %ld)\\n\", hook->head_name,\n"
-            "                        (unsigned long)head - heads_addr, hook->head_offset);\n"
-            "                selected_entry = entry;\n"
-            "                selected_slot = slot;\n"
-            "                selected_origin = current_origin;\n"
-            "                break;\n"
-            "            }\n"
             "            if (current_origin == target) {\n"
-            "                pr_info(\"found %s (target %s) at head offset %ld (provided %ld)\\n\", hook->head_name, hook->target_name,\n"
-            "                        (unsigned long)head - heads_addr, hook->head_offset);\n"
+            "                if (prefer_setprocattr_target)\n"
+            "                    pr_info(\"found %s resolved setprocattr target at head offset %ld (provided %ld)\\n\", hook->head_name,\n"
+            "                            (unsigned long)head - heads_addr, hook->head_offset);\n"
+            "                else\n"
+            "                    pr_info(\"found %s (target %s) at head offset %ld (provided %ld)\\n\", hook->head_name, hook->target_name,\n"
+            "                            (unsigned long)head - heads_addr, hook->head_offset);\n"
             "                selected_entry = entry;\n"
             "                selected_slot = slot;\n"
             "                selected_origin = current_origin;\n"
             "                break;\n"
             "            }\n",
             1,
+        )
+
+    text = text.replace(
+        "        if (prefer_selinux_slot) {\n"
+        "            if (!entry->lsm || strcmp(entry->lsm, \"selinux\"))\n"
+        "                continue;\n"
+        "        } else if (current_origin != target) {\n"
+        "            continue;\n"
+        "        }\n",
+        "        if (current_origin != target) {\n"
+        "            continue;\n"
+        "        }\n",
+    )
+    text = text.replace(
+        "            if (prefer_selinux_slot) {\n"
+        "                if (!entry->lsm || strcmp(entry->lsm, \"selinux\"))\n"
+        "                    continue;\n"
+        "                pr_info(\"found %s selinux slot at head offset %ld (provided %ld)\\n\", hook->head_name,\n"
+        "                        (unsigned long)head - heads_addr, hook->head_offset);\n"
+        "                selected_entry = entry;\n"
+        "                selected_slot = slot;\n"
+        "                selected_origin = current_origin;\n"
+        "                break;\n"
+        "            }\n",
+        "",
+    )
+    text = text.replace("prefer_selinux_slot", "prefer_setprocattr_target")
+    if text.count("prefer_setprocattr_target") == 1:
+        text = text.replace(
+            "    bool prefer_setprocattr_target =\n"
+            "        !strcmp(hook->head_name ?: \"\", \"setprocattr\") && !strcmp(target_name, \"selinux_setprocattr\");\n",
+            "",
         )
 
     write_if_changed(path, text, original, changed_files)
@@ -896,9 +913,7 @@ def verify(ksu_dir):
             '"security_setprocattr",',
         ),
         ksu_dir / "hook/lsm_hook.c": (
-            "ABK: prefer selinux slot for setprocattr hook patching.",
-            'prefer_selinux_slot =',
-            'entry->lsm, "selinux"',
+            "ABK: prefer resolved setprocattr target for hook patching.",
         ),
         ksu_dir / "feature/sucompat.c": (
             "DEFINE_STATIC_KEY_TRUE(ksu_su_compat_enabled)",

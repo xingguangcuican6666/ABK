@@ -861,6 +861,7 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           def preprocessor_delta(text):
               opens = 0
@@ -872,6 +873,201 @@ jobs:
                   elif stripped.startswith("#endif"):
                       closes += 1
               return opens - closes
+
+          def ensure_include(text, include_line, anchors, path):
+              if include_line in text:
+                  return text
+              for anchor in anchors:
+                  if anchor in text:
+                      return text.replace(anchor, anchor + include_line, 1)
+              raise SystemExit(f"{path} missing include anchor for {include_line.strip()}")
+
+          def patch_resukisu_selinux_hide(path):
+              original = path.read_text()
+              text = original
+
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)?struct\s+selinux_state\s+fake_state\s*;",
+                  "struct selinux_state fake_state;",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*static\s+bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;",
+                  "bool ksu_selinux_hide_running __read_mostly = false;",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*static\s+bool\s+ksu_selinux_hide_enabled\s+__read_mostly\s*=\s*false\s*;",
+                  "bool ksu_selinux_hide_enabled __read_mostly = false;",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)?int\s+security_context_to_sid_with_policy\s*\(",
+                  "int security_context_to_sid_with_policy(",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)?int\s+security_sid_to_context_with_policy\s*\(",
+                  "int security_sid_to_context_with_policy(",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)?void\s+__nocfi\s+security_compute_av_user_with_policy\s*\(",
+                  "void __nocfi security_compute_av_user_with_policy(",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)?void\s+security_compute_av_user_with_policy\s*\(",
+                  "void security_compute_av_user_with_policy(",
+                  text,
+              )
+
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)?DEFINE_STATIC_KEY_FALSE\s*\(\s*fake_status_initialize_key\s*\)\s*;",
+                  "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)?struct\s+page\s*\*\s*fake_status\s*(?:=\s*NULL)?\s*;",
+                  "struct page *fake_status = NULL;",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)?void\s+initialize_fake_status\s*\(\s*(?:void)?\s*\)",
+                  "void initialize_fake_status(void)",
+                  text,
+              )
+
+              fake_status_additions = []
+              if not re.search(r"(?m)^\s*DEFINE_STATIC_KEY_FALSE\s*\(\s*fake_status_initialize_key\s*\)\s*;", text):
+                  fake_status_additions.append("DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);")
+              if not re.search(r"(?m)^\s*struct\s+page\s*\*\s*fake_status\s*(?:=\s*NULL)?\s*;", text):
+                  fake_status_additions.append("struct page *fake_status = NULL;")
+              if not re.search(r"(?m)^\s*void\s+initialize_fake_status\s*\(\s*(?:void)?\s*\)\s*\{", text):
+                  fake_status_additions.extend([
+                      "void initialize_fake_status(void)",
+                      "{",
+                      "}",
+                  ])
+              if fake_status_additions:
+                  text = ensure_include(
+                      text,
+                      "#include <linux/jump_label.h>\n",
+                      ("#include <linux/mutex.h>\n", "#include <linux/version.h>\n"),
+                      path,
+                  )
+                  anchor = "bool ksu_selinux_hide_running __read_mostly = false;\n"
+                  if anchor not in text:
+                      raise SystemExit(f"{path} missing fake status insertion anchor")
+                  block = "\n".join([
+                      "",
+                      "#ifdef CONFIG_KSU_SUSFS",
+                      *fake_status_additions,
+                      "#endif",
+                      "",
+                  ])
+                  text = text.replace(anchor, anchor + block, 1)
+
+              if text != original:
+                  path.write_text(text)
+                  print(f"Patched ReSukiSU selinux_hide compatibility exports: {path}")
+
+              final_text = path.read_text()
+              required = (
+                  "struct selinux_state fake_state;",
+                  "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
+                  "struct page *fake_status = NULL;",
+                  "bool ksu_selinux_hide_enabled __read_mostly",
+                  "bool ksu_selinux_hide_running __read_mostly",
+                  "void initialize_fake_status(",
+                  "int security_context_to_sid_with_policy(",
+                  "int security_sid_to_context_with_policy(",
+              )
+              missing = [marker for marker in required if marker not in final_text]
+              if missing:
+                  raise SystemExit(f"{path} missing ReSukiSU SELinux compatibility markers: {missing}")
+
+              forbidden = (
+                  "static struct selinux_state fake_state;",
+                  "__maybe_static struct selinux_state fake_state;",
+                  "static bool ksu_selinux_hide_running __read_mostly = false;",
+                  "static bool ksu_selinux_hide_enabled __read_mostly = false;",
+                  "__maybe_static int security_context_to_sid_with_policy(",
+                  "static int security_context_to_sid_with_policy(",
+                  "__maybe_static int security_sid_to_context_with_policy(",
+                  "static int security_sid_to_context_with_policy(",
+                  "__maybe_static void __nocfi security_compute_av_user_with_policy(",
+                  "static void __nocfi security_compute_av_user_with_policy(",
+                  "__maybe_static void security_compute_av_user_with_policy(",
+                  "static void security_compute_av_user_with_policy(",
+              )
+              present = [marker for marker in forbidden if marker in final_text]
+              if present:
+                  raise SystemExit(f"{path} still has non-exported ReSukiSU SELinux symbols: {present}")
+
+              if (
+                  "void __nocfi security_compute_av_user_with_policy(" not in final_text
+                  and "void security_compute_av_user_with_policy(" not in final_text
+              ):
+                  raise SystemExit(f"{path} missing exported security_compute_av_user_with_policy()")
+
+          def patch_resukisu_rules(path):
+              original = path.read_text()
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)?struct\s+selinux_policy\s*\*\s*backup_sepolicy\s*;",
+                  "struct selinux_policy *backup_sepolicy;",
+                  original,
+              )
+
+              if text != original:
+                  path.write_text(text)
+                  print(f"Patched ReSukiSU backup_sepolicy owner: {path}")
+
+              final_text = path.read_text()
+              if "struct selinux_policy *backup_sepolicy;" not in final_text:
+                  raise SystemExit(f"{path} missing backup_sepolicy definition")
+              forbidden = (
+                  "static struct selinux_policy *backup_sepolicy;",
+                  "__maybe_static struct selinux_policy *backup_sepolicy;",
+              )
+              present = [marker for marker in forbidden if marker in final_text]
+              if present:
+                  raise SystemExit(f"{path} still has non-exported backup_sepolicy definition: {present}")
+
+          def patch_resukisu_selinux(path):
+              original = path.read_text()
+              text = original
+              marker = "/* ABK: simonpunk SUSFS SELinux hooks reference KernelSU selinux_hide globals. */"
+              if marker in text:
+                  start = text.index(marker)
+                  start = text.rfind("\n", 0, start) + 1 if "\n" in text[:start] else 0
+                  end_marker = "#endif\n#endif"
+                  end = text.find(end_marker, start)
+                  if end == -1:
+                      raise SystemExit(f"{path} contains stale ABK SELinux compat marker without closing guards")
+                  end += len(end_marker)
+                  while end < len(text) and text[end] == "\n":
+                      end += 1
+                  text = text[:start] + text[end:]
+
+              if text != original:
+                  path.write_text(text)
+                  print(f"Removed duplicate-prone ReSukiSU SELinux globals from {path}")
+
+              final_text = path.read_text()
+              forbidden = (
+                  marker,
+                  "struct selinux_state fake_state;",
+                  "bool ksu_selinux_hide_running __read_mostly = false;",
+                  "bool ksu_selinux_hide_enabled __read_mostly = false;",
+                  "struct selinux_policy *backup_sepolicy;",
+                  "int security_context_to_sid_with_policy(struct selinux_policy *policy, const char *scontext, u32 scontext_len,",
+                  "int security_sid_to_context_with_policy(struct selinux_policy *policy, u32 sid, char **scontext,",
+                  "void security_compute_av_user_with_policy(struct selinux_policy *policy, u32 ssid, u32 tsid, u16 tclass,",
+              )
+              present = [marker_text for marker_text in forbidden if marker_text in final_text]
+              if present:
+                  raise SystemExit(f"{path} still contains duplicate-prone ReSukiSU SELinux definitions: {present}")
 
           variant = "${{ inputs.ksu_variant }}"
           candidates = []
@@ -956,52 +1152,18 @@ jobs:
                       print("Injected missing SukiSU/ReSukiSU SUSFS static key definitions:", ", ".join(missing_true + missing_false))
 
               if variant == "ReSukiSU":
+                  selinux_hide_c = kernel_dir / "feature/selinux_hide.c"
+                  rules_c = kernel_dir / "selinux/rules.c"
                   selinux_c = kernel_dir / "selinux/selinux.c"
-                  if selinux_c.exists():
-                      text = selinux_c.read_text()
-                      compat_symbols = [
-                          "ksu_selinux_hide_running",
-                          "struct selinux_state fake_state",
-                          "struct selinux_policy *backup_sepolicy",
-                          "security_context_to_sid_with_policy",
-                          "security_sid_to_context_with_policy",
-                          "security_compute_av_user_with_policy",
-                      ]
-                      if not all(symbol in tree_text for symbol in compat_symbols):
-                          anchor = "u32 ksu_file_sid __read_mostly = 0;\n"
-                          block = "\n".join([
-                              "",
-                              "/* ABK: simonpunk SUSFS SELinux hooks reference KernelSU selinux_hide globals. */",
-                              "#ifdef CONFIG_KSU_SUSFS",
-                              "struct selinux_state fake_state;",
-                              "bool ksu_selinux_hide_running __read_mostly = false;",
-                              "struct selinux_policy *backup_sepolicy;",
-                              "#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)",
-                              "int security_context_to_sid_with_policy(struct selinux_policy *policy, const char *scontext, u32 scontext_len,",
-                              "                                        u32 *sid, u32 def_sid, unsigned int gfp_flags)",
-                              "{",
-                              "    return -22;",
-                              "}",
-                              "int security_sid_to_context_with_policy(struct selinux_policy *policy, u32 sid, char **scontext,",
-                              "                                        u32 *scontext_len)",
-                              "{",
-                              "    return -22;",
-                              "}",
-                              "void security_compute_av_user_with_policy(struct selinux_policy *policy, u32 ssid, u32 tsid, u16 tclass,",
-                              "                                          struct av_decision *avd)",
-                              "{",
-                              "}",
-                              "#endif",
-                              "#endif",
-                              "",
-                          ])
-                          if anchor in text:
-                              selinux_c.write_text(text.replace(anchor, anchor + block, 1))
-                          elif '#include "selinux_defs.h"\n' in text:
-                              selinux_c.write_text(text.replace('#include "selinux_defs.h"\n', '#include "selinux_defs.h"\n' + block, 1))
-                          else:
-                              raise SystemExit(f"{selinux_c} missing SELinux compatibility insertion anchor")
-                          print("Injected ReSukiSU SUSFS SELinux hide compatibility globals")
+                  if not selinux_hide_c.exists():
+                      raise SystemExit(f"{kernel_dir} missing feature/selinux_hide.c")
+                  if not rules_c.exists():
+                      raise SystemExit(f"{kernel_dir} missing selinux/rules.c")
+                  if not selinux_c.exists():
+                      raise SystemExit(f"{kernel_dir} missing selinux/selinux.c")
+                  patch_resukisu_selinux_hide(selinux_hide_c)
+                  patch_resukisu_rules(rules_c)
+                  patch_resukisu_selinux(selinux_c)
 
               sucompat_c = kernel_dir / "feature/sucompat.c"
               if sucompat_c.exists():
@@ -2657,6 +2819,7 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
           import re
 
           INIT_BODY = """int __init kernelsu_init(void)
@@ -3294,6 +3457,8 @@ jobs:
           changed = ensure_official_susfs_objects(ksu_dir) or changed
           changed = patch_official_selinux_hide(ksu_dir) or changed
           changed = ensure_official_symbol_resolver_exports(ksu_dir) or changed
+          changed = ensure_official_runtime_compat(ksu_dir) or changed
+          changed = ensure_official_boot_event_compat(ksu_dir) or changed
 
           runtime_c = ksu_dir / "runtime/ksud_integration.c"
           if runtime_c.exists():
@@ -4149,6 +4314,8 @@ jobs:
           path: |
             *AnyKernel3.zip
             *.img
+            LICENSE
+            THIRD_PARTY_NOTICES.md
           compression-level: 9
 
       - name: 上传补丁冲突文件
