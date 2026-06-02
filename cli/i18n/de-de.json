@@ -100,7 +100,7 @@
   "artifacts_downloading": "Lade {name} herunter...",
   "artifacts_download_to": "Download nach: {dir}",
   "available_targets": "Verfügbare Build-Ziele:\n",
-  "list_matrix_item": "--matrix {key:9} - {name} (Matrix aller Sublevel)",
+  "list_matrix_item": "--matrix {k:9} - {name} (Matrix aller Sublevel)",
   "list_oneplus_item": "--oneplus        - OnePlus/Oplus-Geräte (--device erforderlich)",
   "list_custom_default": "Standard: Custom-Build (kernel-custom.yml), --sub-level und --os-patch-level erforderlich",
   "build_target_a12": "Android 12 (5.10)",

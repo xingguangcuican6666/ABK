@@ -960,34 +960,45 @@ def cmd_artifacts(args):
 
 
 def cmd_list(args):
-    print(t("available_targets"))
+    if args.oneplus:
+        print("OnePlus devices / OnePlus 设备:\n")
+        for did, info in ONEPLUS_DEVICES.items():
+            print(f"  {did:<35} {info['name']:<20} {info['cpu']:<10} {info['android']} {info['kernel']}")
+        return
+
+    print("=" * 50)
+    print(t("list_title"))
     for key in MATRIX_TARGETS:
         wf = WORKFLOWS[key]
-        print(f"  " + t("matrix_item_desc", key=key, name=wf["name"]))
-    print(f"  " + t("oneplus_item_desc"))
-    print(f"\n" + t("custom_default_desc"))
+        print(f"  --matrix {key:<10} {wf['name']}")
+    print(f"  --matrix {'both':<10} both")
+    print(f"  --matrix {'full':<10} full")
+    print(f"  --matrix {'all-managers':<10} all-managers")
+    print(f"  --oneplus{'':<10} (--device required)")
+    print(f"\n  Default: kernel-custom.yml, --sub-level + --os-patch-level needed")
 
-    print(f"\n" + t("ksu_variants_label"))
-    for v in KSU_VARIANTS:
-        print(f"  {v}")
+    print(f"\n{t('ksu_variants_label')}")
+    print(f"  --ksu None / Official / SukiSU / ReSukiSU / all")
 
-    print(f"\n" + t("ksu_branches_label"))
-    for b in KSU_BRANCHES:
-        print(f"  {b}")
+    print(f"\n{t('ksu_branches_label')}")
+    print(f"  --ksu-branch Stable(标准) / Dev(开发) / Custom(自定义)")
 
-    print(f"\n" + t("virt_options_label"))
-    for o in VIRT_OPTIONS:
-        print(f"  {o}")
+    print(f"\nOnePlus only / OnePlus only:")
+    print(f"  --lz4kd  --bbr  --proxy-optimization  --unicode-bypass")
 
-    print(f"\n" + t("commands_label"))
-    print(t("cmd_example_login"))
-    print(t("cmd_example_logout"))
-    print(t("cmd_example_whoami"))
-    print(t("cmd_example_fork"))
-    print(t("cmd_example_sync"))
-    print(t("cmd_example_build"))
-    print(t("cmd_example_status"))
-    print(t("cmd_example_artifacts"))
+    print(f"\nFeatures / 功能开关:")
+    print(f"  --[no-]zram  --[no-]bbg  --[no-]ddk  --[no-]kpm")
+    print(f"  --[no-]susfs  --[no-]rekernel  --[no-]ntsync  --[no-]networking")
+    print(f"  --oneplus-8e  --zram-full-algo  --zram-extra-algos")
+
+    print(f"\n{t('commands_label')}")
+    cmds = [("login", "cmd_login_help"),("logout", "cmd_logout_help"),("whoami", "cmd_whoami_help"),
+            ("fork", "cmd_fork_help"),("sync", "cmd_sync_help"),("build", "cmd_build_help"),
+            ("status", "cmd_status_help"),("artifacts", "cmd_artifacts_help"),("list", "cmd_list_help")]
+    for cmd, key in cmds:
+        print(f"  abk {cmd:<12} {t(key)}")
+
+    print(f"\n更多: abk build --help | abk status --help")
 
 
 def main():
@@ -1117,6 +1128,7 @@ def main():
     list_parser = subparsers.add_parser("list", 
         help=t("cmd_list_help"),
         description=t("cmd_list_desc"))
+    list_parser.add_argument("--oneplus", action="store_true", help="列出 OnePlus 设备")
     list_parser.set_defaults(func=cmd_list)
 
     args = parser.parse_args()

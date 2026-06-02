@@ -100,7 +100,7 @@
   "artifacts_downloading": "{name} をダウンロード中ニャ...",
   "artifacts_download_to": "ダウンロード先: {dir}",
   "available_targets": "利用可能なビルドターゲットニャ:\n",
-  "list_matrix_item": "--matrix {key:9} - {name} (全サブレベルのマトリクスだニャ)",
+  "list_matrix_item": "--matrix {k:9} - {name} (全サブレベルのマトリクスだニャ)",
   "list_oneplus_item": "--oneplus        - OnePlus/Oplus デバイス (--device が必要だニャ)",
   "list_custom_default": "デフォルト: カスタムビルド (kernel-custom.yml)。--sub-level と --os-patch-level が必要だニャ",
   "build_target_a12": "Android 12 (5.10)",
@@ -210,5 +210,14 @@
   "arg_lz4kd": "LZ4KDを有効にするニャ (OnePlusのみ)",
   "arg_bbr": "BBRを有効にするニャ (OnePlusのみ)",
   "arg_proxy": "プロキシ最適化を有効にするニャ (OnePlusのみ)",
-  "arg_unicode": "Unicodeゼロ幅バイパスを有効にするニャ (OnePlusのみ)"
+  "arg_unicode": "Unicodeゼロ幅バイパスを有効にするニャ (OnePlusのみ)",
+  "matrix_item_desc": "--matrix {k:9} - {name} (全サブレベルマトリクスニャ)",
+  "oneplus_item_desc": "--oneplus        - OnePlus/Oplus デバイス (--device 必要ニャ)",
+  "custom_default_desc": "デフォルト: カスタムビルド (kernel-custom.yml)。--sub-level と --os-patch-level が必要ニャ",
+  "list_title": "利用可能なビルドターゲットニャ:\n",
+  "op_no_custom_ref": "OnePlusはカスタム参照非対応ニャ、自動消去",
+  "op_no_zram_algo": "OnePlusはZRAM完全アルゴリズム非対応ニャ、自動無効化",
+  "op_no_zram_extra": "OnePlusはカスタムZRAM非対応ニャ、自動消去",
+  "op_no_custom_modules": "OnePlusはカスタムモジュール非対応ニャ、自動消去",
+  "op_no_kpm_password": "OnePlusはKPMパスワード非対応ニャ、自動消去"
 }
