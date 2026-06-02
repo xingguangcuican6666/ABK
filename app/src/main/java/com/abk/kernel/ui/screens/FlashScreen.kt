@@ -441,6 +441,7 @@ fun FlashScreen(
                             onOutput = ::appendTerminalOutput
                         )
                         ArtifactType.SUSFS_MODULE -> RootUtils.installModule(preparedFile.absolutePath, ::appendTerminalOutput)
+                        ArtifactType.ABK_MANAGER,
                         ArtifactType.KSU_MANAGER -> RootUtils.installApk(context, preparedFile.absolutePath, ::appendTerminalOutput)
                         else -> RootUtils.ShellResult(false, listOf(context.getString(R.string.flash_unsupported_auto_flash)))
                     }
@@ -2515,6 +2516,7 @@ private fun DownloadedOutputRow(
                         Spacer(Modifier.width(4.dp))
                         Text(stringResource(flashButtonLabelRes(artifact.type)))
                     }
+                    ArtifactType.ABK_MANAGER,
                     ArtifactType.KSU_MANAGER -> Button(
                         onClick = onInstall,
                         modifier = Modifier.weight(1f).height(40.dp)
@@ -2668,6 +2670,7 @@ private fun artifactIcon(type: ArtifactType) = when (type) {
     ArtifactType.KERNEL_PACKAGE -> Icons.Default.Inventory2
     ArtifactType.KERNEL_IMG -> Icons.Default.Memory
     ArtifactType.ANYKERNEL3 -> Icons.Default.Archive
+    ArtifactType.ABK_MANAGER -> Icons.Default.InstallMobile
     ArtifactType.KSU_MANAGER -> Icons.Default.Shield
     ArtifactType.SUSFS_MODULE -> Icons.Default.Extension
     ArtifactType.OTHER -> Icons.Default.InsertDriveFile
@@ -2678,6 +2681,7 @@ private fun artifactTypeLabelRes(type: ArtifactType) = when (type) {
     ArtifactType.KERNEL_PACKAGE -> R.string.flash_artifact_kernel_package
     ArtifactType.KERNEL_IMG -> R.string.flash_artifact_kernel_img
     ArtifactType.ANYKERNEL3 -> R.string.flash_artifact_anykernel3
+    ArtifactType.ABK_MANAGER -> R.string.flash_artifact_abk_manager
     ArtifactType.KSU_MANAGER -> R.string.flash_artifact_ksu_manager
     ArtifactType.SUSFS_MODULE -> R.string.flash_artifact_susfs_module
     ArtifactType.OTHER -> R.string.flash_artifact_other
