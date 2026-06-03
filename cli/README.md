@@ -212,9 +212,9 @@ abk list
 
 | 分支 / Branch | 描述 / Description |
 |------|------|
-| `Stable(标准)` | 稳定版 (默认) |
-| `Dev(开发)` | 开发版 |
-| `Custom(自定义)` | 自定义引用 |
+| `Stable` | 稳定版 (默认)，映射到 Stable(标准) |
+| `Dev` | 开发版，映射到 Dev(开发) |
+| `Custom` | 自定义引用，映射到 Custom(自定义) |
 
 ## 虚拟化支持 / Virtualization
 
@@ -284,6 +284,7 @@ abk --lang neko --help     # 🐱
 | `pt-br` | Português |
 | `jp-neko` | 日本語猫娘 🐱 |
 | `zh-neko` | 中文猫娘 🐱 |
+| `zh-zako` | 杂鱼语 🗑️ |
 | `eo` | Esperanto |
 | `zh-zako` | zako~ zako~ |
 
@@ -297,7 +298,7 @@ abk --lang neko --help     # 🐱
    - `main()` 函数中早期语言检测的 `sys.argv` 检查列表
 5. 更新本 README 的语言支持表格
 
-**注意：** KernelSU 分支名（如 `Stable(标准)`、`Dev(开发)`）是 API 参数，**不能翻译**，必须保持中文原值。
+**注意：** KernelSU 分支名作为 API 参数时**不能翻译**，CLI 会自动将 `Stable`/`Dev`/`Custom` 映射为 `Stable(标准)`/`Dev(开发)`/`Custom(自定义)`。语言文件只需展示短名。其他 API 值同理（如设备名、KSU 变体名）。
 
 ## 语言维护 / Language Maintenance
 
