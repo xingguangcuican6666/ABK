@@ -47,7 +47,15 @@ FULL_MATRIX_WORKFLOWS = {
 }
 
 KSU_VARIANTS = ["None", "Official", "SukiSU", "ReSukiSU"]
-KSU_BRANCHES = ["Stable(标准)", "Dev(开发)", "Custom(自定义)"]
+KSU_BRANCH_MAP = {
+    "stable": "Stable(标准)", "Stable": "Stable(标准)",
+    "dev": "Dev(开发)", "Dev": "Dev(开发)",
+    "custom": "Custom(自定义)", "Custom": "Custom(自定义)",
+}
+KSU_BRANCH_VALUES = ["Stable(标准)", "Dev(开发)", "Custom(自定义)"]
+
+def resolve_ksu_branch(b):
+    return KSU_BRANCH_MAP.get(b, b) if b else "Stable(标准)"
 VIRT_OPTIONS = ["off", "678", "123", "345"]
 
 ONEPLUS_DEVICES = {
@@ -720,7 +728,7 @@ def cmd_build(args):
             name = t("build_target_full")
             inputs = {
                 "kernelsu_variant": args.ksu_variant or "ReSukiSU",
-                "kernelsu_branch": args.ksu_branch or "Dev(开发)",
+                "kernelsu_branch": resolve_ksu_branch(args.ksu_branch),
                 "version": args.version or "",
                 "revision": args.revision or "r11",
                 "kpm_password": args.kpm_password or "",
@@ -740,7 +748,7 @@ def cmd_build(args):
             inputs = {
                 "build_scope": args.build_scope or "Both",
                 "manager_variants": args.manager_variants or "all",
-                "kernelsu_branch": args.ksu_branch or "Dev(开发)",
+                "kernelsu_branch": resolve_ksu_branch(args.ksu_branch),
                 "version": args.version or "",
                 "revision": args.revision or "r11",
                 "kpm_password": args.kpm_password or "",
@@ -855,7 +863,7 @@ def cmd_build(args):
             
             inputs = {
                 "kernelsu_variant": kv,
-                "kernelsu_branch": args.ksu_branch or "Stable(标准)",
+                "kernelsu_branch": resolve_ksu_branch(args.ksu_branch),
                 "use_zram": str(args.zram).lower(),
                 "use_bbg": str(args.bbg).lower(),
                 "use_ddk": str(args.ddk).lower(),
@@ -1082,7 +1090,7 @@ def main():
     build_parser.add_argument("--oneplus", action="store_true", help=t("arg_oneplus"))
     build_parser.add_argument("--ref", default="dev", help=t("arg_ref"))
     build_parser.add_argument("--ksu", dest="ksu_variant", choices=KSU_VARIANTS + ["all"], help=t("arg_ksu"))
-    build_parser.add_argument("--ksu-branch", choices=KSU_BRANCHES, help=t("arg_ksu_branch"))
+    build_parser.add_argument("--ksu-branch", choices=["Stable","Dev","Custom"]+KSU_BRANCH_VALUES, help=t("arg_ksu_branch"))
     build_parser.add_argument("--custom-ref", help=t("arg_custom_ref"))
     build_parser.add_argument("--version", help=t("arg_version"))
     build_parser.add_argument("--device", help=t("arg_device"))
