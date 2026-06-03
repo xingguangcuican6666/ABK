@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.abk.kernel.R
 import com.abk.kernel.ui.components.ExpressiveHeroCard
+import com.abk.kernel.ui.components.ShimmerLinearProgress
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
@@ -529,7 +530,10 @@ private fun ForkCheckScreen(
                     )
                 }
             ) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                ShimmerLinearProgress(
+                    progress = { null },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         } else if (!hasFork) {
             ExpressiveHeroCard(

@@ -4,14 +4,8 @@ package com.abk.kernel.ui.screens
 
 import android.content.Context
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -63,7 +57,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import com.abk.kernel.ui.components.ShimmerLinearProgress
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -79,7 +73,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -89,12 +82,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -110,6 +101,12 @@ import com.abk.kernel.data.model.ModuleCatalogRepository
 import com.abk.kernel.data.model.RuntimeModuleCatalogItem
 import com.abk.kernel.data.model.RuntimeModuleRepository
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.components.ObserveChildPageVisibility
+import com.abk.kernel.ui.components.childPageOverlayEnterTransition
+import com.abk.kernel.ui.components.childPageOverlayExitTransition
+import com.abk.kernel.ui.components.childPageScrimExitTransition
+import com.abk.kernel.ui.components.rememberChildPageBackController
+import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveTopBar
@@ -119,21 +116,11 @@ import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.RootUtils
 import com.abk.kernel.viewmodel.MainViewModel
 import java.io.File
-import kotlin.math.pow
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val MODULE_REPOSITORY_BACK_VISUAL_EXPONENT = 1.8f
-private const val MODULE_REPOSITORY_BACK_SCALE_DELTA = 0.09f
-private const val MODULE_REPOSITORY_BACK_SCRIM_ALPHA = 0.32f
-private const val MODULE_REPOSITORY_PAGE_EXIT_DELAY_MS = 280L
 private const val RUNTIME_MODULE_DOWNLOAD_RUN_ID = -2_000_000_001L
-private val MODULE_REPOSITORY_BACK_MAX_OFFSET = 56.dp
-private val MODULE_REPOSITORY_BACK_MAX_CORNER = 32.dp
 
 enum class ModuleRepositoryMode {
     BUILD_ABK,
@@ -170,25 +157,15 @@ fun ModuleRepositoryScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showRepositorySettings by rememberSaveable { mutableStateOf(false) }
+    val repositoryPageTransition = rememberChildPageOverlayTransition(
+        visible = showRepositorySettings,
+        label = "runtime-module-repository-settings"
+    )
     var pendingInstallModule by remember { mutableStateOf<MergedRuntimeCatalogModule?>(null) }
     var installDialogVisible by remember { mutableStateOf(false) }
     var installRunning by remember { mutableStateOf(false) }
     var installSuccess by remember { mutableStateOf<Boolean?>(null) }
     var installLog by remember { mutableStateOf<List<String>>(emptyList()) }
-    var repositoryBackProgress by remember { mutableFloatStateOf(0f) }
-    val animatedRepositoryBackProgress by animateFloatAsState(
-        targetValue = repositoryBackProgress.coerceIn(0f, 1f),
-        animationSpec = motionScheme.fastSpatialSpec(),
-        label = "module-repository-back-progress"
-    )
-    val visualRepositoryBackProgress = animatedRepositoryBackProgress
-        .coerceIn(0f, 1f)
-        .pow(MODULE_REPOSITORY_BACK_VISUAL_EXPONENT)
-    val density = LocalDensity.current
-    val repositoryBackOffsetPx = with(density) { MODULE_REPOSITORY_BACK_MAX_OFFSET.toPx() }
-    val repositoryBackCorner = with(density) {
-        (MODULE_REPOSITORY_BACK_MAX_CORNER.toPx() * visualRepositoryBackProgress).toDp()
-    }
     val mergedModulesState by produceState(
         initialValue = ModuleListComputation<MergedRuntimeCatalogModule>(
             loading = state.runtimeModuleRepositories.isNotEmpty()
@@ -230,15 +207,26 @@ fun ModuleRepositoryScreen(
     val filteredModules = filteredModulesState.items
     val listComputing = mergedModulesState.loading
 
-    fun openRepositorySettings() {
-        repositoryBackProgress = 0f
-        onRepositoryPageVisibleChange(true)
-        showRepositorySettings = true
-    }
-
     fun closeRepositorySettings() {
         showRepositorySettings = false
     }
+
+    val childPageBack = rememberChildPageBackController(
+        enabled = showRepositorySettings,
+        predictiveBackEnabled = state.predictiveBackEnabled,
+        onBack = ::closeRepositorySettings,
+    )
+
+    fun openRepositorySettings() {
+        childPageBack.resetProgress()
+        showRepositorySettings = true
+    }
+
+    ObserveChildPageVisibility(
+        transition = repositoryPageTransition,
+        onVisibleChange = onRepositoryPageVisibleChange,
+        onAfterExitAnimation = { childPageBack.resetProgress() }
+    )
 
     fun appendInstallLog(line: String) {
         installLog = installLog + line
@@ -316,33 +304,8 @@ fun ModuleRepositoryScreen(
         }
     }
 
-    LaunchedEffect(showRepositorySettings) {
-        if (showRepositorySettings) {
-            onRepositoryPageVisibleChange(true)
-        } else {
-            delay(MODULE_REPOSITORY_PAGE_EXIT_DELAY_MS)
-            repositoryBackProgress = 0f
-            onRepositoryPageVisibleChange(false)
-        }
-    }
-
     DisposableEffect(Unit) {
         onDispose { onRepositoryPageVisibleChange(false) }
-    }
-
-    PredictiveBackHandler(enabled = showRepositorySettings && state.predictiveBackEnabled) { progress ->
-        try {
-            progress.collect { backEvent ->
-                repositoryBackProgress = backEvent.progress.coerceIn(0f, 1f)
-            }
-            closeRepositorySettings()
-        } catch (_: CancellationException) {
-            repositoryBackProgress = 0f
-        }
-    }
-
-    BackHandler(enabled = showRepositorySettings && !state.predictiveBackEnabled) {
-        closeRepositorySettings()
     }
 
     pendingInstallModule?.let { merged ->
@@ -425,38 +388,29 @@ fun ModuleRepositoryScreen(
             )
         }
 
-        AnimatedVisibility(
-            visible = showRepositorySettings,
+        repositoryPageTransition.AnimatedVisibility(
+            visible = { it },
             enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
+            exit = childPageScrimExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = MODULE_REPOSITORY_BACK_SCRIM_ALPHA * visualRepositoryBackProgress))
+                    .background(Color.Black.copy(alpha = childPageBack.scrimAlpha))
             )
         }
 
-        AnimatedVisibility(
-            visible = showRepositorySettings,
-            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
-                slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { width -> width / 4 },
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
-                slideOutHorizontally(animationSpec = motionScheme.fastSpatialSpec()) { width -> width },
+        repositoryPageTransition.AnimatedVisibility(
+            visible = { it },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        translationX = repositoryBackOffsetPx * visualRepositoryBackProgress
-                        scaleX = 1f - MODULE_REPOSITORY_BACK_SCALE_DELTA * visualRepositoryBackProgress
-                        scaleY = 1f - MODULE_REPOSITORY_BACK_SCALE_DELTA * visualRepositoryBackProgress
-                        alpha = 1f - 0.06f * visualRepositoryBackProgress
-                        shape = RoundedCornerShape(repositoryBackCorner)
-                        clip = visualRepositoryBackProgress > 0.01f
-                    }
+                    .then(childPageBack.backTransformModifier())
             ) {
                 ModuleRepositoryPageBackground(
                     backgroundUri = state.customBackgroundUri,
@@ -468,7 +422,7 @@ fun ModuleRepositoryScreen(
                         ExpressiveTopBar(
                             title = runtimeRepoCentralLabel(context),
                             navigationIcon = {
-                                IconButton(onClick = ::closeRepositorySettings) {
+                                IconButton(onClick = childPageBack::requestDismiss) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.module_repo_back))
                                 }
                             }
@@ -503,22 +457,12 @@ private fun BuildModuleRepositoryScreenContent(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showRepositorySettings by rememberSaveable { mutableStateOf(false) }
+    val repositoryPageTransition = rememberChildPageOverlayTransition(
+        visible = showRepositorySettings,
+        label = "build-module-repository-settings"
+    )
     var pendingCatalogModule by remember { mutableStateOf<ModuleCatalogItem?>(null) }
     var selectedCatalogModuleStages by rememberSaveable { mutableStateOf(emptyList<String>()) }
-    var repositoryBackProgress by remember { mutableFloatStateOf(0f) }
-    val animatedRepositoryBackProgress by animateFloatAsState(
-        targetValue = repositoryBackProgress.coerceIn(0f, 1f),
-        animationSpec = motionScheme.fastSpatialSpec(),
-        label = "build-module-repository-back-progress"
-    )
-    val visualRepositoryBackProgress = animatedRepositoryBackProgress
-        .coerceIn(0f, 1f)
-        .pow(MODULE_REPOSITORY_BACK_VISUAL_EXPONENT)
-    val density = LocalDensity.current
-    val repositoryBackOffsetPx = with(density) { MODULE_REPOSITORY_BACK_MAX_OFFSET.toPx() }
-    val repositoryBackCorner = with(density) {
-        (MODULE_REPOSITORY_BACK_MAX_CORNER.toPx() * visualRepositoryBackProgress).toDp()
-    }
     val mergedModulesState by produceState(
         initialValue = ModuleListComputation<BuildPageMergedCatalogModule>(
             loading = state.buildModuleRepositories.isNotEmpty()
@@ -565,43 +509,29 @@ private fun BuildModuleRepositoryScreenContent(
             .toSet()
     }
 
-    fun openRepositorySettings() {
-        repositoryBackProgress = 0f
-        onRepositoryPageVisibleChange(true)
-        showRepositorySettings = true
-    }
-
     fun closeRepositorySettings() {
         showRepositorySettings = false
     }
 
-    LaunchedEffect(showRepositorySettings) {
-        if (showRepositorySettings) {
-            onRepositoryPageVisibleChange(true)
-        } else {
-            delay(MODULE_REPOSITORY_PAGE_EXIT_DELAY_MS)
-            repositoryBackProgress = 0f
-            onRepositoryPageVisibleChange(false)
-        }
+    val childPageBack = rememberChildPageBackController(
+        enabled = showRepositorySettings,
+        predictiveBackEnabled = state.predictiveBackEnabled,
+        onBack = ::closeRepositorySettings,
+    )
+
+    fun openRepositorySettings() {
+        childPageBack.resetProgress()
+        showRepositorySettings = true
     }
+
+    ObserveChildPageVisibility(
+        transition = repositoryPageTransition,
+        onVisibleChange = onRepositoryPageVisibleChange,
+        onAfterExitAnimation = { childPageBack.resetProgress() }
+    )
 
     DisposableEffect(Unit) {
         onDispose { onRepositoryPageVisibleChange(false) }
-    }
-
-    PredictiveBackHandler(enabled = showRepositorySettings && state.predictiveBackEnabled) { progress ->
-        try {
-            progress.collect { backEvent ->
-                repositoryBackProgress = backEvent.progress.coerceIn(0f, 1f)
-            }
-            closeRepositorySettings()
-        } catch (_: CancellationException) {
-            repositoryBackProgress = 0f
-        }
-    }
-
-    BackHandler(enabled = showRepositorySettings && !state.predictiveBackEnabled) {
-        closeRepositorySettings()
     }
 
     pendingCatalogModule?.let { module ->
@@ -755,38 +685,29 @@ private fun BuildModuleRepositoryScreenContent(
             )
         }
 
-        AnimatedVisibility(
-            visible = showRepositorySettings,
+        repositoryPageTransition.AnimatedVisibility(
+            visible = { it },
             enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
+            exit = childPageScrimExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = MODULE_REPOSITORY_BACK_SCRIM_ALPHA * visualRepositoryBackProgress))
+                    .background(Color.Black.copy(alpha = childPageBack.scrimAlpha))
             )
         }
 
-        AnimatedVisibility(
-            visible = showRepositorySettings,
-            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
-                slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { width -> width / 4 },
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
-                slideOutHorizontally(animationSpec = motionScheme.fastSpatialSpec()) { width -> width },
+        repositoryPageTransition.AnimatedVisibility(
+            visible = { it },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        translationX = repositoryBackOffsetPx * visualRepositoryBackProgress
-                        scaleX = 1f - MODULE_REPOSITORY_BACK_SCALE_DELTA * visualRepositoryBackProgress
-                        scaleY = 1f - MODULE_REPOSITORY_BACK_SCALE_DELTA * visualRepositoryBackProgress
-                        alpha = 1f - 0.06f * visualRepositoryBackProgress
-                        shape = RoundedCornerShape(repositoryBackCorner)
-                        clip = visualRepositoryBackProgress > 0.01f
-                    }
+                    .then(childPageBack.backTransformModifier())
             ) {
                 ModuleRepositoryPageBackground(
                     backgroundUri = state.customBackgroundUri,
@@ -798,7 +719,7 @@ private fun BuildModuleRepositoryScreenContent(
                         ExpressiveTopBar(
                             title = buildRepoCentralLabel(context),
                             navigationIcon = {
-                                IconButton(onClick = ::closeRepositorySettings) {
+                                IconButton(onClick = childPageBack::requestDismiss) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.module_repo_back))
                                 }
                             }
@@ -855,7 +776,10 @@ private fun RuntimeModuleRepositoryListContent(
 
         if (refreshing && !showInitialLoading) {
             item(key = "refreshing") {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                ShimmerLinearProgress(
+                    progress = { null },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
 
@@ -1274,7 +1198,10 @@ private fun RuntimeModuleRepositoryCard(
         icon = Icons.Default.Dns
     ) {
         if (refreshing) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            ShimmerLinearProgress(
+                progress = { null },
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1672,7 +1599,10 @@ private fun BuildModuleRepositoryListContent(
 
         if (refreshing && !showInitialLoading) {
             item(key = "refreshing") {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                ShimmerLinearProgress(
+                    progress = { null },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
 
@@ -1939,7 +1869,10 @@ private fun BuildModuleCatalogRepositoryCard(
         icon = Icons.Default.Dns
     ) {
         if (refreshing) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            ShimmerLinearProgress(
+                progress = { null },
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,

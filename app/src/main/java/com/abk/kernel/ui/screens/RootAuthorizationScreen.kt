@@ -6,14 +6,9 @@
 package com.abk.kernel.ui.screens
 
 import android.graphics.drawable.Drawable
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -92,25 +87,20 @@ import com.abk.kernel.R
 import com.abk.kernel.data.model.RootGrantApp
 import com.abk.kernel.data.model.RootGrantProfile
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.components.ObserveChildPageVisibility
+import com.abk.kernel.ui.components.childPageOverlayEnterTransition
+import com.abk.kernel.ui.components.childPageOverlayExitTransition
+import com.abk.kernel.ui.components.childPageScrimExitTransition
+import com.abk.kernel.ui.components.rememberChildPageBackController
+import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveSwitch
 import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.viewmodel.MainViewModel
-import kotlin.math.pow
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
-
-private const val ROOT_AUTH_BACK_VISUAL_EXPONENT = 1.8f
-private const val ROOT_AUTH_BACK_SCALE_DELTA = 0.09f
-private const val ROOT_AUTH_BACK_SCRIM_ALPHA = 0.32f
-private const val ROOT_AUTH_DETAIL_EXIT_DELAY_MS = 280L
-private val ROOT_AUTH_BACK_MAX_OFFSET = 56.dp
-private val ROOT_AUTH_BACK_MAX_CORNER = 32.dp
 
 @Composable
 fun RootAuthorizationScreen(
@@ -122,19 +112,7 @@ fun RootAuthorizationScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var showSystemApps by rememberSaveable { mutableStateOf(false) }
     var selectedPackage by rememberSaveable { mutableStateOf<String?>(null) }
-    var detailBackProgress by remember { mutableFloatStateOf(0f) }
     val motionScheme = MaterialTheme.motionScheme
-    val animatedDetailBackProgress by animateFloatAsState(
-        targetValue = detailBackProgress.coerceIn(0f, 1f),
-        animationSpec = motionScheme.fastSpatialSpec(),
-        label = "root-auth-detail-back-progress"
-    )
-    val visualDetailBackProgress = animatedDetailBackProgress
-        .coerceIn(0f, 1f)
-        .pow(ROOT_AUTH_BACK_VISUAL_EXPONENT)
-    val density = LocalDensity.current
-    val detailBackOffsetPx = with(density) { ROOT_AUTH_BACK_MAX_OFFSET.toPx() }
-    val detailBackCorner = with(density) { (ROOT_AUTH_BACK_MAX_CORNER.toPx() * visualDetailBackProgress).toDp() }
     val apps = remember(state.rootGrantApps, query, showSystemApps) {
         state.rootGrantApps
             .filter { showSystemApps || !it.isSystemApp }
@@ -151,6 +129,11 @@ fun RootAuthorizationScreen(
             state.rootGrantApps.firstOrNull { it.packageName == packageName }
         }
     }
+    val detailPageVisible = selectedApp != null
+    val detailPageTransition = rememberChildPageOverlayTransition(
+        visible = detailPageVisible,
+        label = "root-auth-detail"
+    )
     val canLeaveDetail = state.rootGrantSavingPackage == null
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -158,39 +141,24 @@ fun RootAuthorizationScreen(
         if (state.runtimeNavigationEnabled) vm.refreshRootGrantApps()
     }
 
-    LaunchedEffect(selectedApp != null) {
-        if (selectedApp != null) {
-            onDetailPageVisibleChange(true)
-        } else {
-            delay(ROOT_AUTH_DETAIL_EXIT_DELAY_MS)
-            detailBackProgress = 0f
-            onDetailPageVisibleChange(false)
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { onDetailPageVisibleChange(false) }
-    }
-
     fun closeDetailPage() {
         if (canLeaveDetail) selectedPackage = null
     }
 
-    PredictiveBackHandler(
-        enabled = selectedApp != null && canLeaveDetail && state.predictiveBackEnabled
-    ) { progress ->
-        try {
-            progress.collect { backEvent ->
-                detailBackProgress = backEvent.progress.coerceIn(0f, 1f)
-            }
-            closeDetailPage()
-        } catch (_: CancellationException) {
-            detailBackProgress = 0f
-        }
-    }
+    val childPageBack = rememberChildPageBackController(
+        enabled = selectedApp != null && canLeaveDetail,
+        predictiveBackEnabled = state.predictiveBackEnabled,
+        onBack = ::closeDetailPage,
+    )
 
-    BackHandler(enabled = selectedApp != null && canLeaveDetail && !state.predictiveBackEnabled) {
-        closeDetailPage()
+    ObserveChildPageVisibility(
+        transition = detailPageTransition,
+        onVisibleChange = onDetailPageVisibleChange,
+        onAfterExitAnimation = { childPageBack.resetProgress() }
+    )
+
+    DisposableEffect(Unit) {
+        onDispose { onDetailPageVisibleChange(false) }
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -309,45 +277,39 @@ fun RootAuthorizationScreen(
                         saving = state.rootGrantSavingPackage == app.packageName,
                         anySaving = state.rootGrantSavingPackage != null,
                         onToggle = { allowed -> vm.setRootGrantAllowed(app.packageName, allowed) },
-                        onOpen = { selectedPackage = app.packageName }
+                        onOpen = {
+                            childPageBack.resetProgress()
+                            selectedPackage = app.packageName
+                        }
                     )
                 }
             }
         }
 
-        AnimatedVisibility(
-            visible = selectedApp != null,
+        detailPageTransition.AnimatedVisibility(
+            visible = { it },
             enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
+            exit = childPageScrimExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = ROOT_AUTH_BACK_SCRIM_ALPHA * visualDetailBackProgress))
+                    .background(Color.Black.copy(alpha = childPageBack.scrimAlpha))
             )
         }
 
-        AnimatedVisibility(
-            visible = selectedApp != null,
-            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
-                slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { width -> width / 4 },
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
-                slideOutHorizontally(animationSpec = motionScheme.fastSpatialSpec()) { width -> width },
+        detailPageTransition.AnimatedVisibility(
+            visible = { it },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             selectedApp?.let { app ->
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .graphicsLayer {
-                            translationX = detailBackOffsetPx * visualDetailBackProgress
-                            scaleX = 1f - ROOT_AUTH_BACK_SCALE_DELTA * visualDetailBackProgress
-                            scaleY = 1f - ROOT_AUTH_BACK_SCALE_DELTA * visualDetailBackProgress
-                            alpha = 1f - 0.06f * visualDetailBackProgress
-                            shape = RoundedCornerShape(detailBackCorner)
-                            clip = visualDetailBackProgress > 0.01f
-                        }
+                        .then(childPageBack.backTransformModifier())
                 ) {
                     RootGrantDetailPageBackground(
                         backgroundUri = state.customBackgroundUri,
@@ -361,7 +323,7 @@ fun RootAuthorizationScreen(
                                 navigationIcon = {
                                     IconButton(
                                         enabled = canLeaveDetail,
-                                        onClick = ::closeDetailPage
+                                        onClick = childPageBack::requestDismiss
                                     ) {
                                         Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.root_auth_back_to_list))
                                     }
