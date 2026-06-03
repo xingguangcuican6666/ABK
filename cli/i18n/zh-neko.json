@@ -224,5 +224,11 @@
   "op_features_title": "OnePlus 专属功能喵:",
   "features_title": "功能开关喵:",
   "default_build_info": "默认: 自定义构建喵, 需要 --sub-level 和 --os-patch-level 喵",
-  "workflow_404_hint": "提示喵: 404 - 去 GitHub Actions 页面找到这个工作流手动运行一次激活喵"
+  "workflow_404_hint": "提示喵: 404 - 去 GitHub Actions 页面找到这个工作流手动运行一次激活喵",
+  "arg_cancel": "取消正在运行的构建喵",
+  "arg_rerun": "重新运行已完成的构建喵",
+  "cancel_ok": "构建 #{id} 已取消喵",
+  "cancel_fail": "取消失败喵: {error}",
+  "rerun_ok": "构建 #{id} 已重新运行喵",
+  "rerun_fail": "重新运行失败喵: {error}"
 }

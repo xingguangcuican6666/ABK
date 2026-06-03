@@ -224,5 +224,11 @@
   "op_features_title": "OnePlus features:",
   "features_title": "Feature flags:",
   "default_build_info": "Default: custom build (kernel-custom.yml), --sub-level + --os-patch-level required",
-  "workflow_404_hint": "Hint: 404 - Find this workflow in GitHub Actions tab and run it once to activate"
+  "workflow_404_hint": "Hint: 404 - Find this workflow in GitHub Actions tab and run it once to activate",
+  "arg_cancel": "Cancel a running build",
+  "arg_rerun": "Re-run a completed build",
+  "cancel_ok": "Build #{id} cancelled",
+  "cancel_fail": "Cancel failed: {error}",
+  "rerun_ok": "Build #{id} re-running",
+  "rerun_fail": "Rerun failed: {error}"
 }

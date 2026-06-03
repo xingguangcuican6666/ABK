@@ -690,17 +690,17 @@ def cmd_status(args):
     if args.cancel:
         try:
             client.cancel_run(args.cancel)
-            print(f"Build #{args.cancel} cancelled")
+            print(t("cancel_ok", id=args.cancel))
         except Exception as e:
-            print(f"Cancel failed: {e}", file=sys.stderr)
+            print(t("cancel_fail", error=e), file=sys.stderr)
         return
 
     if args.rerun:
         try:
             client.rerun(args.rerun)
-            print(f"Build #{args.rerun} re-running")
+            print(t("rerun_ok", id=args.rerun))
         except Exception as e:
-            print(f"Rerun failed: {e}", file=sys.stderr)
+            print(t("rerun_fail", error=e), file=sys.stderr)
         return
     
     client = GitHubClient(token=token)
@@ -1168,8 +1168,8 @@ def main():
     status_parser.add_argument("--target", choices=WORKFLOWS.keys(), help=t("arg_target"))
     status_parser.add_argument("--status", choices=["all", "queued", "in_progress", "completed"], default="all", help=t("arg_status_filter"))
     status_parser.add_argument("--limit", type=int, default=10, help=t("arg_limit"))
-    status_parser.add_argument("--cancel", type=int, metavar="RUN_ID", help="Cancel a running build")
-    status_parser.add_argument("--rerun", type=int, metavar="RUN_ID", help="Re-run a completed build")
+    status_parser.add_argument("--cancel", type=int, metavar="RUN_ID", help=t("arg_cancel"))
+    status_parser.add_argument("--rerun", type=int, metavar="RUN_ID", help=t("arg_rerun"))
     status_parser.set_defaults(func=cmd_status)
 
     # artifacts

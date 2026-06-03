@@ -224,5 +224,11 @@
   "op_features_title": "OnePlus専用機能ニャ:",
   "features_title": "機能フラグニャ:",
   "default_build_info": "デフォルト: カスタムビルドニャ, --sub-level と --os-patch-level が必要ニャ",
-  "workflow_404_hint": "ヒントニャ: 404 - Actionsページでこのワークフローを一度手動実行して有効化してニャ"
+  "workflow_404_hint": "ヒントニャ: 404 - Actionsページでこのワークフローを一度手動実行して有効化してニャ",
+  "arg_cancel": "実行中のビルドをキャンセルするニャ",
+  "arg_rerun": "完了したビルドを再実行するニャ",
+  "cancel_ok": "ビルド #{id} をキャンセルしたニャ",
+  "cancel_fail": "キャンセル失敗ニャ: {error}",
+  "rerun_ok": "ビルド #{id} を再実行中ニャ",
+  "rerun_fail": "再実行失敗ニャ: {error}"
 }

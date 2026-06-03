@@ -220,5 +220,11 @@
   "op_features_title": "Fonctions OnePlus:",
   "features_title": "Options:",
   "default_build_info": "Défaut: build personnalisé (kernel-custom.yml), --sub-level et --os-patch-level requis",
-  "workflow_404_hint": "Astuce: 404 signifie workflow non activé. Activez-le dans l'onglet Actions"
+  "workflow_404_hint": "Astuce: 404 signifie workflow non activé. Activez-le dans l'onglet Actions",
+  "arg_cancel": "Annuler le build en cours",
+  "arg_rerun": "Relancer le build terminé",
+  "cancel_ok": "Build #{id} annulé",
+  "cancel_fail": "Échec annulation: {error}",
+  "rerun_ok": "Build #{id} relancé",
+  "rerun_fail": "Échec relance: {error}"
 }

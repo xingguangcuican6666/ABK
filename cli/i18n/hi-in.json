@@ -220,5 +220,11 @@
   "op_features_title": "OnePlus सुविधाएँ:",
   "features_title": "फीचर फ्लैग्स:",
   "default_build_info": "डिफ़ॉल्ट: कस्टम बिल्ड (kernel-custom.yml), --sub-level और --os-patch-level आवश्यक",
-  "workflow_404_hint": "संकेत: 404 का मतलब वर्कफ़्लो सक्षम नहीं। Actions टैब में सक्षम करें"
+  "workflow_404_hint": "संकेत: 404 का मतलब वर्कफ़्लो सक्षम नहीं। Actions टैब में सक्षम करें",
+  "arg_cancel": "चल रही बिल्ड रद्द करें",
+  "arg_rerun": "पूर्ण बिल्ड फिर से चलाएं",
+  "cancel_ok": "बिल्ड #{id} रद्द",
+  "cancel_fail": "रद्द विफल: {error}",
+  "rerun_ok": "बिल्ड #{id} फिर से चल रही",
+  "rerun_fail": "फिर से चलाना विफल: {error}"
 }

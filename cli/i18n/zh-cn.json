@@ -224,5 +224,11 @@
   "op_features_title": "OnePlus 专属功能:",
   "features_title": "功能开关:",
   "default_build_info": "默认: 自定义构建 (kernel-custom.yml)，需要 --sub-level 和 --os-patch-level",
-  "workflow_404_hint": "提示: 404 - 请在 GitHub Actions 页面找到此工作流并手动运行一次来激活它"
+  "workflow_404_hint": "提示: 404 - 请在 GitHub Actions 页面找到此工作流并手动运行一次来激活它",
+  "arg_cancel": "取消正在运行的构建",
+  "arg_rerun": "重新运行已完成的构建",
+  "cancel_ok": "构建 #{id} 已取消",
+  "cancel_fail": "取消失败: {error}",
+  "rerun_ok": "构建 #{id} 已重新运行",
+  "rerun_fail": "重新运行失败: {error}"
 }

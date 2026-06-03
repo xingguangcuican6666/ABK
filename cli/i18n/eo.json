@@ -216,5 +216,11 @@
   "op_features_title": "OnePlus-funkcioj:",
   "features_title": "Funkcio-flagoj:",
   "default_build_info": "Defaŭlte: propra konstruo (kernel-custom.yml), --sub-level kaj --os-patch-level bezonataj",
-  "workflow_404_hint": "Konsileto: 404 signifas ke laborfluo ne estas aktivigita. Aktivigu ĝin en Actions"
+  "workflow_404_hint": "Konsileto: 404 signifas ke laborfluo ne estas aktivigita. Aktivigu ĝin en Actions",
+  "arg_cancel": "Nuligi kurantan konstruadon",
+  "arg_rerun": "Ree ruli finitan konstruadon",
+  "cancel_ok": "Konstruo #{id} nuligita",
+  "cancel_fail": "Nuligo malsukcesis: {error}",
+  "rerun_ok": "Konstruo #{id} ree rulanta",
+  "rerun_fail": "Ree rulado malsukcesis: {error}"
 }
