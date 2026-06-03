@@ -206,7 +206,10 @@ data class MainUiState(
     val rootGrantLoading: Boolean = false,
     val rootGrantError: String? = null,
     val rootGrantSavingPackage: String? = null
-)
+) {
+    val isDownloading: Boolean
+        get() = activeDownloadTasks.isNotEmpty() || downloadProgress.isNotEmpty()
+}
 
 class MainViewModel @JvmOverloads constructor(
     application: Application,
