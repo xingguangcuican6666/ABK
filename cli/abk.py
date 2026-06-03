@@ -1090,7 +1090,7 @@ def main():
     build_parser.add_argument("--oneplus", action="store_true", help=t("arg_oneplus"))
     build_parser.add_argument("--ref", default="dev", help=t("arg_ref"))
     build_parser.add_argument("--ksu", dest="ksu_variant", choices=KSU_VARIANTS + ["all"], help=t("arg_ksu"))
-    build_parser.add_argument("--ksu-branch", choices=["Stable","Dev","Custom"]+KSU_BRANCH_VALUES, help=t("arg_ksu_branch"))
+    build_parser.add_argument("--ksu-branch", choices=["Stable","Dev","Custom"], help=t("arg_ksu_branch"))
     build_parser.add_argument("--custom-ref", help=t("arg_custom_ref"))
     build_parser.add_argument("--version", help=t("arg_version"))
     build_parser.add_argument("--device", help=t("arg_device"))
