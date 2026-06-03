@@ -284,7 +284,6 @@ abk --lang neko --help     # 🐱
 | `pt-br` | Português |
 | `jp-neko` | 日本語猫娘 🐱 |
 | `zh-neko` | 中文猫娘 🐱 |
-| `zh-zako` | 杂鱼语 🗑️ |
 | `eo` | Esperanto |
 | `zh-zako` | zako~ zako~ |
 
