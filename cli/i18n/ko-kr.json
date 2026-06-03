@@ -227,5 +227,6 @@
   "cancel_ok": "빌드 #{id} 취소됨",
   "cancel_fail": "취소 실패: {error}",
   "rerun_ok": "빌드 #{id} 다시 실행 중",
-  "rerun_fail": "다시 실행 실패: {error}"
+  "rerun_fail": "다시 실행 실패: {error}",
+  "arg_build_time": "커스텀 빌드 시간 (선택)"
 }

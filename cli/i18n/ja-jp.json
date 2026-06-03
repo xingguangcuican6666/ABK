@@ -227,5 +227,6 @@
   "cancel_ok": "ビルド #{id} をキャンセルしました",
   "cancel_fail": "キャンセル失敗: {error}",
   "rerun_ok": "ビルド #{id} を再実行中",
-  "rerun_fail": "再実行失敗: {error}"
+  "rerun_fail": "再実行失敗: {error}",
+  "arg_build_time": "カスタムビルド時刻 (オプション)"
 }

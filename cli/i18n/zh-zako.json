@@ -230,5 +230,6 @@
   "cancel_ok": "构建 #{id} 取消了（终于认输了？）",
   "cancel_fail": "取消失败: {error}（连取消都失败？）",
   "rerun_ok": "构建 #{id} 重新跑了（真有毅力呢）",
-  "rerun_fail": "重新运行失败: {error}（果然不行）"
+  "rerun_fail": "重新运行失败: {error}（果然不行）",
+  "arg_build_time": "自定义构建时间（不填也行）"
 }

@@ -226,5 +226,6 @@
   "cancel_ok": "Build #{id} abgebrochen",
   "cancel_fail": "Abbruch fehlgeschlagen: {error}",
   "rerun_ok": "Build #{id} wird wiederholt",
-  "rerun_fail": "Wiederholung fehlgeschlagen: {error}"
+  "rerun_fail": "Wiederholung fehlgeschlagen: {error}",
+  "arg_build_time": "Benutzerdefinierte Build-Zeit (optional)"
 }

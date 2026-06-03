@@ -948,6 +948,8 @@ def cmd_build(args):
                     inputs["kpm_password"] = args.kpm_password
                 if args.zram_extra_algos:
                     inputs["zram_extra_algos"] = args.zram_extra_algos
+                if args.build_time:
+                    inputs["build_time"] = args.build_time
                 if args.custom_modules:
                     inputs["use_custom_external_modules"] = "true"
                     inputs["custom_external_modules"] = args.custom_modules
@@ -1124,6 +1126,7 @@ def main():
     build_parser.add_argument("--device", help=t("arg_device"))
     build_parser.add_argument("--virt", choices=VIRT_OPTIONS, default="off", help=t("arg_virt"))
     build_parser.add_argument("--kpm-password", help=t("arg_kpm_password"))
+    build_parser.add_argument("--build-time", help=t("arg_build_time"))
     build_parser.add_argument("--force", action="store_true", help=t("arg_force"))
     build_parser.add_argument("--dry-run", action="store_true", help=t("arg_dry_run"))
     

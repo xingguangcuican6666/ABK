@@ -230,5 +230,6 @@
   "cancel_ok": "构建 #{id} 已取消喵",
   "cancel_fail": "取消失败喵: {error}",
   "rerun_ok": "构建 #{id} 已重新运行喵",
-  "rerun_fail": "重新运行失败喵: {error}"
+  "rerun_fail": "重新运行失败喵: {error}",
+  "arg_build_time": "自定义构建时间喵（可选）"
 }

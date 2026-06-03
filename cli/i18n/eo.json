@@ -222,5 +222,6 @@
   "cancel_ok": "Konstruo #{id} nuligita",
   "cancel_fail": "Nuligo malsukcesis: {error}",
   "rerun_ok": "Konstruo #{id} ree rulanta",
-  "rerun_fail": "Ree rulado malsukcesis: {error}"
+  "rerun_fail": "Ree rulado malsukcesis: {error}",
+  "arg_build_time": "Propra konstru-horo (laŭvola)"
 }

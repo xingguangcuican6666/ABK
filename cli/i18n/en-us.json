@@ -230,5 +230,6 @@
   "cancel_ok": "Build #{id} cancelled",
   "cancel_fail": "Cancel failed: {error}",
   "rerun_ok": "Build #{id} re-running",
-  "rerun_fail": "Rerun failed: {error}"
+  "rerun_fail": "Rerun failed: {error}",
+  "arg_build_time": "Custom build time (optional)"
 }

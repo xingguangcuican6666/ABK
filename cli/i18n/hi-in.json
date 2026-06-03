@@ -226,5 +226,6 @@
   "cancel_ok": "बिल्ड #{id} रद्द",
   "cancel_fail": "रद्द विफल: {error}",
   "rerun_ok": "बिल्ड #{id} फिर से चल रही",
-  "rerun_fail": "फिर से चलाना विफल: {error}"
+  "rerun_fail": "फिर से चलाना विफल: {error}",
+  "arg_build_time": "कस्टम बिल्ड समय (वैकल्पिक)"
 }

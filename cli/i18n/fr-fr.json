@@ -226,5 +226,6 @@
   "cancel_ok": "Build #{id} annulé",
   "cancel_fail": "Échec annulation: {error}",
   "rerun_ok": "Build #{id} relancé",
-  "rerun_fail": "Échec relance: {error}"
+  "rerun_fail": "Échec relance: {error}",
+  "arg_build_time": "Heure de build personnalisée (optionnel)"
 }
