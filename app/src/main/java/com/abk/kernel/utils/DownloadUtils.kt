@@ -59,7 +59,7 @@ object DownloadUtils {
     )
 
     fun classifyArtifact(name: String): ArtifactType {
-        val lower = name.lowercase()
+        val lower = normalizedArtifactName(name).lowercase()
         return when {
             lower.contains("reject") || lower.contains("-rej") -> ArtifactType.OTHER
             lower.contains("_kernel-android") || lower.contains("kernel-android") -> ArtifactType.KERNEL_PACKAGE
@@ -355,6 +355,15 @@ object DownloadUtils {
 
             val downloadedFile = requireNotNull(file)
             val records = if (bundleWithNotices) {
+                if (looksLikeNoticeBundle(downloadedFile)) {
+                    listOf(
+                        LocalDownloadEntry(
+                            displayName = normalizedArtifactName(downloadedFile.name),
+                            file = downloadedFile,
+                            type = classifyDownloadedFile(downloadedFile)
+                        )
+                    )
+                } else {
                 val byName = classifyDownloadedFile(downloadedFile)
                 val candidateFiles = if (downloadedFile.extension.equals("zip", ignoreCase = true) &&
                     byName in setOf(ArtifactType.KERNEL_PACKAGE, ArtifactType.OTHER)
@@ -387,6 +396,7 @@ object DownloadUtils {
                     candidates = candidateFiles,
                     notices = notices
                 )
+                }
             } else {
                 val byName = classifyDownloadedFile(downloadedFile)
                 val files = if (downloadedFile.extension.equals("zip", ignoreCase = true) && byName in setOf(ArtifactType.KERNEL_PACKAGE, ArtifactType.OTHER)) {
@@ -499,6 +509,14 @@ object DownloadUtils {
         value.replace(Regex("""[^A-Za-z0-9._ -]"""), "_")
             .trim()
             .ifBlank { "artifact" }
+
+    private fun normalizedArtifactName(name: String): String {
+        val lower = name.lowercase(Locale.ROOT)
+        return when {
+            lower.endsWith(".bundle.zip") -> name.dropLast(".bundle.zip".length)
+            else -> name
+        }
+    }
 
     private fun resolveDownloadsRoot(downloadDirectoryPath: String?): File? {
         val normalizedPath = DownloadDirectoryUtils.normalizeDirectoryPath(downloadDirectoryPath)

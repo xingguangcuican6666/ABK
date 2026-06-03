@@ -673,49 +673,107 @@ jobs:
             --notes-file release_body.md \
             $PRERELEASE_FLAG
 
+      - name: 准备 Release 合规包
+        run: |
+          set -euo pipefail
+          mkdir -p release-bundles
+
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+
+          root = Path("downloaded-artifacts")
+          bundle_dir = Path("release-bundles")
+          bundle_dir.mkdir(parents=True, exist_ok=True)
+          manifest_name = "ABK_BUNDLE_MANIFEST.txt"
+          doc_names = ("LICENSE", "THIRD_PARTY_NOTICES.md")
+
+          docs = {}
+          for doc in doc_names:
+              matches = sorted(root.rglob(doc))
+              if matches:
+                  docs[doc] = matches[0]
+                  continue
+              repo_copy = Path(doc)
+              if repo_copy.is_file():
+                  docs[doc] = repo_copy
+                  continue
+              raise SystemExit(f"missing compliance document: {doc}")
+
+          manager_assets = []
+          kernel_assets = []
+          used_names = set()
+
+          def next_bundle_name(source_name: str) -> str:
+              base = f"{source_name}.bundle.zip"
+              if base not in used_names:
+                  used_names.add(base)
+                  return base
+              index = 2
+              while True:
+                  candidate = f"{source_name}.{index}.bundle.zip"
+                  if candidate not in used_names:
+                      used_names.add(candidate)
+                      return candidate
+                  index += 1
+
+          def build_bundle(source: Path) -> str:
+              target = bundle_dir / next_bundle_name(source.name)
+              with ZipFile(target, "w", compression=ZIP_DEFLATED, compresslevel=9) as zf:
+                  zf.writestr(manifest_name, f"payload={source.name}\n")
+                  zf.write(source, arcname=source.name)
+                  for doc_name in doc_names:
+                      zf.write(docs[doc_name], arcname=doc_name)
+              return str(target)
+
+          for file in sorted(root.rglob("*")):
+              if not file.is_file():
+                  continue
+              rel = file.relative_to(root)
+              rel_posix = rel.as_posix()
+              top = rel.parts[0] if rel.parts else ""
+              if "-Rejects/" in rel_posix:
+                  continue
+              if file.name in doc_names:
+                  continue
+
+              if file.suffix.lower() == ".apk" or top.startswith("susfs-"):
+                  manager_assets.append(build_bundle(file))
+                  continue
+
+              if "_kernel-" in top and (file.suffix.lower() == ".img" or file.name.endswith("AnyKernel3.zip")):
+                  kernel_assets.append(build_bundle(file))
+
+          Path("release-manager-module-bundles.txt").write_text(
+              "".join(f"{path}\n" for path in manager_assets),
+              encoding="utf-8"
+          )
+          Path("release-kernel-bundles.txt").write_text(
+              "".join(f"{path}\n" for path in kernel_assets),
+              encoding="utf-8"
+          )
+          PY
+
       # ==================== 上传管理器和模块 ====================
       - name: 上传管理器和 SUSFS 模块
         continue-on-error: true
         run: |
-          echo "准备上传 APK 与 SUSFS 模块..."
-          apk_count=$(find ./downloaded-artifacts -type f -name "*.apk" | wc -l || true)
-          sus_count=$(find ./downloaded-artifacts -type f -path "./downloaded-artifacts/susfs-*/*" | wc -l || true)
-          echo "APK files: ${apk_count}"
-          echo "SUSFS files: ${sus_count}"
-          find ./downloaded-artifacts -type f -name "*.apk" -print0 | \
-          while IFS= read -r -d '' f; do
+          echo "准备上传 APK 与 SUSFS 模块合规包..."
+          bundle_count=$(wc -l < release-manager-module-bundles.txt | tr -d '[:space:]')
+          echo "Bundle files: ${bundle_count}"
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
             gh release upload "$NEW_TAG" "$f" || true
-          done
-          find ./downloaded-artifacts -type f -path "./downloaded-artifacts/susfs-*/*" -print0 | \
-          while IFS= read -r -d '' f; do
-            gh release upload "$NEW_TAG" "$f" || true
-          done
+          done < release-manager-module-bundles.txt
 
       # ==================== 上传内核产物 ====================
       - name: 上传内核产物
         run: |
-          for file in ./downloaded-artifacts/*_kernel-*/*; do
-            [ -d "$file" ] && continue
-            # 跳过 -Rejects 目录中的文件（已在 collect-rejects 中汇总处理）
-            [[ "$file" == *-Rejects/* ]] && continue
-            case "$(basename "$file")" in
-              LICENSE|THIRD_PARTY_NOTICES.md) continue ;;
-            esac
+          while IFS= read -r file; do
+            [ -f "$file" ] || continue
             echo "上传 $file..."
             gh release upload "$NEW_TAG" "$file"
-          done
-
-      - name: 上传许可证文档
-        run: |
-          for doc in LICENSE THIRD_PARTY_NOTICES.md; do
-            file="$(find ./downloaded-artifacts -type f -name "$doc" | sort | head -n 1 || true)"
-            if [ -z "$file" ]; then
-              echo "::warning::未找到 $doc，跳过上传。"
-              continue
-            fi
-            echo "上传 $file..."
-            gh release upload "$NEW_TAG" "$file" --clobber
-          done
+          done < release-kernel-bundles.txt
 
       # ==================== 构建摘要 ====================
       - name: 构建摘要

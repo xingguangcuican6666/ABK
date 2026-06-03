@@ -97,10 +97,11 @@ jobs:
           while IFS= read -r artifact; do
             [ -n "$artifact" ] || continue
             echo "下载 artifact: $artifact"
+            artifact_dir="$(printf '%s' "$artifact" | tr '/:\\' '___')"
             gh run download "$SOURCE_RUN_ID" \
               --repo "$REPO" \
               --name "$artifact" \
-              --dir downloaded-artifacts
+              --dir "downloaded-artifacts/$artifact_dir"
           done < artifact_names.txt
 
       - name: 准备 Release 元数据
@@ -164,19 +165,74 @@ jobs:
             release_title="AnyBase Kernel 全属性矩阵 ${ksu_variant} #${SOURCE_RUN_ID}.${SOURCE_ATTEMPT}"
           fi
 
-          find ./downloaded-artifacts -type f \
-            \( -name '*AnyKernel3.zip' -o -name '*.img' \) \
-            ! -path '*-Rejects/*' \
-            | sort > release_assets.txt
+          mkdir -p release-bundles
 
-          for doc in LICENSE THIRD_PARTY_NOTICES.md; do
-            file="$(find ./downloaded-artifacts -type f -name "$doc" | sort | head -n 1 || true)"
-            if [ -n "$file" ]; then
-              printf '%s\n' "$file" >> release_assets.txt
-            else
-              echo "::warning::未找到 $doc，跳过追加到 Release assets。"
-            fi
-          done
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+
+          root = Path("downloaded-artifacts")
+          bundle_dir = Path("release-bundles")
+          bundle_dir.mkdir(parents=True, exist_ok=True)
+          manifest_name = "ABK_BUNDLE_MANIFEST.txt"
+          doc_names = ("LICENSE", "THIRD_PARTY_NOTICES.md")
+
+          docs = {}
+          for doc in doc_names:
+              matches = sorted(root.rglob(doc))
+              if matches:
+                  docs[doc] = matches[0]
+                  continue
+              repo_copy = Path(doc)
+              if repo_copy.is_file():
+                  docs[doc] = repo_copy
+                  continue
+              raise SystemExit(f"missing compliance document: {doc}")
+
+          used_names = set()
+          bundles = []
+
+          def next_bundle_name(source_name: str) -> str:
+              base = f"{source_name}.bundle.zip"
+              if base not in used_names:
+                  used_names.add(base)
+                  return base
+              index = 2
+              while True:
+                  candidate = f"{source_name}.{index}.bundle.zip"
+                  if candidate not in used_names:
+                      used_names.add(candidate)
+                      return candidate
+                  index += 1
+
+          for file in sorted(root.rglob("*")):
+              if not file.is_file():
+                  continue
+              rel = file.relative_to(root)
+              rel_posix = rel.as_posix()
+              top = rel.parts[0] if rel.parts else ""
+              if "-Rejects/" in rel_posix:
+                  continue
+              if file.name in doc_names:
+                  continue
+              if file.suffix.lower() != ".img" and not file.name.endswith("AnyKernel3.zip"):
+                  continue
+              if "_kernel-" not in top:
+                  continue
+
+              target = bundle_dir / next_bundle_name(file.name)
+              with ZipFile(target, "w", compression=ZIP_DEFLATED, compresslevel=9) as zf:
+                  zf.writestr(manifest_name, f"payload={file.name}\n")
+                  zf.write(file, arcname=file.name)
+                  for doc_name in doc_names:
+                      zf.write(docs[doc_name], arcname=doc_name)
+              bundles.append(str(target))
+
+          Path("release_assets.txt").write_text(
+              "".join(f"{path}\n" for path in bundles),
+              encoding="utf-8"
+          )
+          PY
 
           asset_count="$(wc -l < release_assets.txt | tr -d '[:space:]')"
           if [ "$asset_count" -eq 0 ]; then

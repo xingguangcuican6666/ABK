@@ -892,12 +892,12 @@ jobs:
                   text,
               )
               text = re.sub(
-                  r"(?m)^\s*static\s+bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;",
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)?bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;",
                   "bool ksu_selinux_hide_running __read_mostly = false;",
                   text,
               )
               text = re.sub(
-                  r"(?m)^\s*static\s+bool\s+ksu_selinux_hide_enabled\s+__read_mostly\s*=\s*false\s*;",
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)?bool\s+ksu_selinux_hide_enabled\s+__read_mostly\s*=\s*false\s*;",
                   "bool ksu_selinux_hide_enabled __read_mostly = false;",
                   text,
               )
@@ -987,21 +987,19 @@ jobs:
               if missing:
                   raise SystemExit(f"{path} missing ReSukiSU SELinux compatibility markers: {missing}")
 
-              forbidden = (
-                  "static struct selinux_state fake_state;",
-                  "__maybe_static struct selinux_state fake_state;",
-                  "static bool ksu_selinux_hide_running __read_mostly = false;",
-                  "static bool ksu_selinux_hide_enabled __read_mostly = false;",
-                  "__maybe_static int security_context_to_sid_with_policy(",
-                  "static int security_context_to_sid_with_policy(",
-                  "__maybe_static int security_sid_to_context_with_policy(",
-                  "static int security_sid_to_context_with_policy(",
-                  "__maybe_static void __nocfi security_compute_av_user_with_policy(",
-                  "static void __nocfi security_compute_av_user_with_policy(",
-                  "__maybe_static void security_compute_av_user_with_policy(",
-                  "static void security_compute_av_user_with_policy(",
-              )
-              present = [marker for marker in forbidden if marker in final_text]
+              forbidden_patterns = {
+                  "fake_state": r"(?m)^\s*(?:static|__maybe_static)\s+struct\s+selinux_state\s+fake_state\s*;",
+                  "ksu_selinux_hide_running": r"(?m)^\s*(?:static|__maybe_static)\s+bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;",
+                  "ksu_selinux_hide_enabled": r"(?m)^\s*(?:static|__maybe_static)\s+bool\s+ksu_selinux_hide_enabled\s+__read_mostly\s*=\s*false\s*;",
+                  "security_context_to_sid_with_policy": r"(?m)^\s*(?:static|__maybe_static)\s+int\s+security_context_to_sid_with_policy\s*\(",
+                  "security_sid_to_context_with_policy": r"(?m)^\s*(?:static|__maybe_static)\s+int\s+security_sid_to_context_with_policy\s*\(",
+                  "security_compute_av_user_with_policy __nocfi": r"(?m)^\s*(?:static|__maybe_static)\s+void\s+__nocfi\s+security_compute_av_user_with_policy\s*\(",
+                  "security_compute_av_user_with_policy": r"(?m)^\s*(?:static|__maybe_static)\s+void\s+security_compute_av_user_with_policy\s*\(",
+              }
+              present = [
+                  name for name, pattern in forbidden_patterns.items()
+                  if re.search(pattern, final_text)
+              ]
               if present:
                   raise SystemExit(f"{path} still has non-exported ReSukiSU SELinux symbols: {present}")
 
@@ -3343,6 +3341,8 @@ jobs:
 
               text = kbuild.read_text()
               missing = []
+              if "feature/selinux_hide.o" not in text:
+                  missing.append("kernelsu-objs += feature/selinux_hide.o")
               if "hook/lsm_hook.o" not in text:
                   missing.append("kernelsu-objs += hook/lsm_hook.o")
               if "hook/arm64/patch_memory.o" not in text:

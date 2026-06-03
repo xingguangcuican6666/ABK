@@ -377,7 +377,7 @@ def patch_lsm_hook(path, changed_files):
             '    pr_info("target: 0x%lx %pSb\\n", (unsigned long)target, target);\n',
             '    pr_info("target: 0x%lx %pSb\\n", (unsigned long)target, target);\n'
             '\n'
-            '    bool prefer_setprocattr_target =\n'
+            '    bool prefer_setprocattr_target __maybe_unused =\n'
             '        !strcmp(hook->head_name ?: "", "setprocattr") && !strcmp(target_name, "selinux_setprocattr");\n'
             '    /* ABK: prefer resolved setprocattr target for hook patching. */\n',
             1,
@@ -432,7 +432,18 @@ def patch_lsm_hook(path, changed_files):
         "",
     )
     text = text.replace("prefer_selinux_slot", "prefer_setprocattr_target")
+    text = text.replace(
+        "    bool prefer_setprocattr_target =\n"
+        "        !strcmp(hook->head_name ?: \"\", \"setprocattr\") && !strcmp(target_name, \"selinux_setprocattr\");\n",
+        "    bool prefer_setprocattr_target __maybe_unused =\n"
+        "        !strcmp(hook->head_name ?: \"\", \"setprocattr\") && !strcmp(target_name, \"selinux_setprocattr\");\n",
+    )
     if text.count("prefer_setprocattr_target") == 1:
+        text = text.replace(
+            "    bool prefer_setprocattr_target __maybe_unused =\n"
+            "        !strcmp(hook->head_name ?: \"\", \"setprocattr\") && !strcmp(target_name, \"selinux_setprocattr\");\n",
+            "",
+        )
         text = text.replace(
             "    bool prefer_setprocattr_target =\n"
             "        !strcmp(hook->head_name ?: \"\", \"setprocattr\") && !strcmp(target_name, \"selinux_setprocattr\");\n",
