@@ -152,7 +152,7 @@
   "arg_oneplus": "OnePlus 기기 빌드",
   "arg_ref": "Fork Git 브랜치 (기본: dev)",
   "arg_ksu": "KernelSU 변형 (all=전체 변형)",
-  "arg_ksu_branch": "KernelSU 브랜치",
+  "arg_ksu_branch": "브랜치 (Stable/Dev/Custom)",
   "arg_custom_ref": "커스텀 KSU 참조 (커밋/브랜치/태그)",
   "arg_version": "커스텀 커널 이름 (선택)",
   "arg_device": "OnePlus 기기 이름 (--oneplus 필요)",

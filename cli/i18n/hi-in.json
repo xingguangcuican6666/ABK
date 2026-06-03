@@ -152,7 +152,7 @@
   "arg_oneplus": "OnePlus डिवाइस बिल्ड",
   "arg_ref": "Fork Git ब्रांच (डिफ़ॉल्ट: dev)",
   "arg_ksu": "KernelSU वेरिएंट (all=सभी वेरिएंट)",
-  "arg_ksu_branch": "KernelSU ब्रांच",
+  "arg_ksu_branch": "ब्रांच (Stable/Dev/Custom)",
   "arg_custom_ref": "कस्टम KSU संदर्भ (कमिट/ब्रांच/टैग)",
   "arg_version": "कस्टम कर्नेल नाम (वैकल्पिक)",
   "arg_device": "OnePlus डिवाइस नाम (--oneplus आवश्यक)",

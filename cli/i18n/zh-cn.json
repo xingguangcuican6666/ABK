@@ -163,7 +163,7 @@
   "arg_oneplus": "OnePlus 设备构建",
   "arg_ref": "Fork 仓库的 Git 分支 (默认: dev)",
   "arg_ksu": "KernelSU 变体 (all=全变体)",
-  "arg_ksu_branch": "KernelSU 分支",
+  "arg_ksu_branch": "分支 (Stable/Dev/Custom)",
   "arg_custom_ref": "自定义 KSU 引用 (commit/branch/tag)",
   "arg_version": "自定义内核名 (可选)",
   "arg_device": "OnePlus 设备名 (需 --oneplus)",

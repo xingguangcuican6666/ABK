@@ -152,7 +152,7 @@
   "arg_oneplus": "Build para dispositivo OnePlus",
   "arg_ref": "Rama Git del fork (predet: dev)",
   "arg_ksu": "Variante KernelSU (all=todas las variantes)",
-  "arg_ksu_branch": "Rama KernelSU",
+  "arg_ksu_branch": "Rama (Stable/Dev/Custom)",
   "arg_custom_ref": "Referencia KSU personalizada (commit/rama/etiqueta)",
   "arg_version": "Nombre de kernel personalizado (opcional)",
   "arg_device": "Nombre del dispositivo OnePlus (--oneplus requerido)",

@@ -152,7 +152,7 @@
   "arg_oneplus": "OnePlus デバイスビルド",
   "arg_ref": "Fork Git ブランチ (デフォルト: dev)",
   "arg_ksu": "KernelSU バリアント (all=全バリアント)",
-  "arg_ksu_branch": "KernelSU ブランチ",
+  "arg_ksu_branch": "ブランチニャ (Stable/Dev/Custom)",
   "arg_custom_ref": "カスタム KSU 参照 (コミット/ブランチ/タグ)",
   "arg_version": "カスタムカーネル名 (オプション)",
   "arg_device": "OnePlus デバイス名 (--oneplus が必要だニャ)",

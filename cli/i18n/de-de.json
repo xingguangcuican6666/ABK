@@ -152,7 +152,7 @@
   "arg_oneplus": "OnePlus-Geräte-Build",
   "arg_ref": "Fork Git-Branch (Standard: dev)",
   "arg_ksu": "KernelSU-Variante (all=alle Varianten)",
-  "arg_ksu_branch": "KernelSU-Branch",
+  "arg_ksu_branch": "Branch (Stable/Dev/Custom)",
   "arg_custom_ref": "Benutzerdefinierte KSU-Referenz (Commit/Branch/Tag)",
   "arg_version": "Benutzerdefinierter Kernelname (optional)",
   "arg_device": "OnePlus-Gerätename (--oneplus erforderlich)",
