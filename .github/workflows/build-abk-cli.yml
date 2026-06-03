@@ -145,14 +145,24 @@ jobs:
             --add-data "cli/i18n;i18n" `
             cli/abk.py
 
-      - name: Install Linux cross-packaging prerequisites
+      - name: Prepare Linux cross-packaging runtime
         if: ${{ matrix.target_id == 'linux-armhf' || matrix.target_id == 'linux-x86' }}
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y docker.io qemu-user-static
-          sudo systemctl start docker || sudo service docker start
+
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "::error::Docker is required for cross-packaging but is not available on this runner."
+            exit 1
+          fi
+
+          sudo systemctl start docker || sudo service docker start || true
+
+          if ! sudo docker info >/dev/null 2>&1; then
+            echo "::error::Docker daemon is unavailable on this runner."
+            exit 1
+          fi
+
           sudo docker run --privileged --rm tonistiigi/binfmt --install arm,386
 
       - name: Build linux-armhf bundle in container
@@ -286,7 +296,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          .\dist\abk\abk.exe --help | Out-Null
+          .\dist\abk\abk.exe --lang en-us --help | Out-Null
 
       - name: Package artifact
         if: runner.os != 'Windows'

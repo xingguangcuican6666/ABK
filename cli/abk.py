@@ -14,6 +14,20 @@ from urllib.parse import urlencode
 sys.path.insert(0, str(Path(__file__).parent))
 from i18n import t, load_translations, detect_language
 
+
+def configure_stdio():
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None or not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            # Avoid crashing on terminals or pipelines whose locale encoding
+            # cannot represent translated help or status output.
+            stream.reconfigure(errors="replace")
+        except Exception:
+            pass
+
+
 GITHUB_API = "https://api.github.com"
 GITHUB_OAUTH_DEVICE_URL = "https://github.com/login/device/code"
 GITHUB_OAUTH_TOKEN_URL = "https://github.com/login/oauth/access_token"
@@ -1206,4 +1220,5 @@ def main():
 
 
 if __name__ == "__main__":
+    configure_stdio()
     main()
