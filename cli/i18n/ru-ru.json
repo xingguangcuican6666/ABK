@@ -151,7 +151,7 @@
   "cmd_example_artifacts": "abk artifacts --run-id 12345 --download  # Загрузить артефакты",
   "arg_matrix": "Цель матричной сборки (both=все версии, full=полная матрица, all-managers=все менеджеры)",
   "arg_oneplus": "Сборка для OnePlus",
-  "arg_ref": "Ветка fork (по умолчанию: dev)",
+  "arg_ref": "Git-ветка форка (по умолчанию: авто)",
   "arg_ksu": "Вариант KernelSU (all=все варианты)",
   "arg_ksu_branch": "Ветка (Stable/Dev/Custom)",
   "arg_custom_ref": "Пользовательская ссылка KSU (commit/ветка/тег)",

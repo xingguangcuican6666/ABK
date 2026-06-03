@@ -150,7 +150,7 @@
   "cmd_example_artifacts": "abk artifacts --run-id 12345 --download  # Baixar artefatos",
   "arg_matrix": "Alvo de build matricial (both=todos, full=matriz completa, all-managers=todos os managers)",
   "arg_oneplus": "Build para dispositivo OnePlus",
-  "arg_ref": "Branch Git do fork (padrão: dev)",
+  "arg_ref": "Branch Git do fork (padrão: auto)",
   "arg_ksu": "Variante KernelSU (all=todas as variantes)",
   "arg_ksu_branch": "Branch (Stable/Dev/Custom)",
   "arg_custom_ref": "Referência KSU personalizada (commit/branch/tag)",

@@ -150,7 +150,7 @@
   "cmd_example_artifacts": "abk artifacts --run-id 12345 --download  # Elŝuti artefaktojn",
   "arg_matrix": "Matrica konstru-celo (both=ĉiuj, full=plena matrico, all-managers=ĉiuj administrantoj)",
   "arg_oneplus": "OnePlus aparata konstruado",
-  "arg_ref": "Fork Git-branĉo (defaŭlte: dev)",
+  "arg_ref": "Fork Git-branĉo (defaŭlte: aŭtomata)",
   "arg_ksu": "KernelSU-varianto (all=ĉiuj variantoj)",
   "arg_ksu_branch": "Branĉo (Stable/Dev/Custom)",
   "arg_custom_ref": "Propra KSU-referenco (komento/branĉo/etikedo)",

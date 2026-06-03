@@ -161,7 +161,7 @@
   "cmd_list_desc": "列出所有可用的构建目标、KernelSU 变体和功能选项",
   "arg_matrix": "矩阵构建目标 (both=全版本, full=全属性矩阵, all-managers=全管理器全矩阵)",
   "arg_oneplus": "OnePlus 设备构建",
-  "arg_ref": "Fork 仓库的 Git 分支 (默认: dev)",
+  "arg_ref": "Fork Git 分支 (默认: 自动检测)",
   "arg_ksu": "KernelSU 变体 (all=全变体)",
   "arg_ksu_branch": "分支 (Stable/Dev/Custom)",
   "arg_custom_ref": "自定义 KSU 引用 (commit/branch/tag)",

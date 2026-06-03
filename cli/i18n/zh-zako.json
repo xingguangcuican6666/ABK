@@ -92,7 +92,7 @@
   "cmd_list_help": "列出选项",
   "arg_matrix": "矩阵构建目标",
   "arg_oneplus": "OnePlus 设备构建",
-  "arg_ref": "Fork 分支",
+  "arg_ref": "Fork 分支 (别乱改啦，自动检测)",
   "arg_ksu": "KernelSU 变体",
   "arg_ksu_branch": "分支 (Stable/Dev/Custom)",
   "arg_version": "自定义内核名",

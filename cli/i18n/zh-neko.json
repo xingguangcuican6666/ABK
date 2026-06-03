@@ -150,7 +150,7 @@
   "cmd_example_artifacts": "abk artifacts --run-id 12345 --download  # 下载产物",
   "arg_matrix": "矩阵构建目标喵 (both=全部, full=全属性矩阵, all-managers=全管理器)",
   "arg_oneplus": "OnePlus 设备构建",
-  "arg_ref": "Fork Git 分支喵 (默认: dev)",
+  "arg_ref": "Fork Git 分支喵 (默认: 自动检测)",
   "arg_ksu": "KernelSU 变体喵 (all=全部变体)",
   "arg_ksu_branch": "分支喵 (Stable/Dev/Custom)",
   "arg_custom_ref": "自定义 KSU 引用喵 (commit/分支/tag)",

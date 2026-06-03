@@ -109,7 +109,7 @@
   "cmd_list_desc": "List all build targets, KSU variants, and feature options",
   "arg_matrix": "Matrix build target (both=all versions, full=full feature, all-managers=all managers)",
   "arg_oneplus": "OnePlus device build",
-  "arg_ref": "Fork Git branch (default: dev)",
+  "arg_ref": "Fork Git branch (default: auto-detect)",
   "arg_ksu": "KernelSU variant (all=all variants)",
   "arg_ksu_branch": "Branch (Stable/Dev/Custom)",
   "arg_custom_ref": "Custom KSU ref (commit/branch/tag)",

@@ -340,12 +340,18 @@ class GitHubClient:
         try:
             user = self.get("/user")
             self.username = user.get("login")
-            
             fork = self.get_fork()
             if fork:
                 self.fork_repo = fork
         except Exception:
             pass
+
+    def get_default_branch(self):
+        try:
+            repo_info = self.get(f"/repos/{self.repo}")
+            return repo_info.get("default_branch", "dev")
+        except Exception:
+            return "dev"
 
     def _request(self, method, path, data=None):
         url = f"{GITHUB_API}{path}" if not path.startswith("http") else path
@@ -764,7 +770,7 @@ def cmd_build(args):
                 "zram_extra_algos": args.zram_extra_algos or "",
             }
         
-        ref = args.ref or "dev"
+        ref = args.ref or client.get_default_branch()
         print(t("triggering_name", name=name))
         if args.dry_run:
             print(f"  " + t("dry_run_skip"))
@@ -924,7 +930,7 @@ def cmd_build(args):
                     inputs["use_custom_external_modules"] = "true"
                     inputs["custom_external_modules"] = args.custom_modules
             
-            ref = args.ref or "dev"
+            ref = args.ref or client.get_default_branch()
             print(t("triggering_name", name=f"{workflow['name']} ({kv})"))
             print(f"  " + t("build_feat_line", susfs=t("enabled") if args.susfs else t("disabled"), zram=t("enabled") if args.zram else t("disabled"), bbg=t("enabled") if args.bbg else t("disabled"), ddk=t("enabled") if args.ddk else t("disabled"), kpm=t("enabled") if args.kpm else t("disabled"), rekernel=t("enabled") if args.rekernel else t("disabled"), ntsync=t("enabled") if args.ntsync else t("disabled"), networking=t("enabled") if args.networking else t("disabled")))
             
@@ -1088,7 +1094,7 @@ def main():
         epilog=t("build_epilog"))
     build_parser.add_argument("--matrix", choices=MATRIX_TARGETS_ALL, help=t("arg_matrix"))
     build_parser.add_argument("--oneplus", action="store_true", help=t("arg_oneplus"))
-    build_parser.add_argument("--ref", default="dev", help=t("arg_ref"))
+    build_parser.add_argument("--ref", help=t("arg_ref"))
     build_parser.add_argument("--ksu", dest="ksu_variant", choices=KSU_VARIANTS + ["all"], help=t("arg_ksu"))
     build_parser.add_argument("--ksu-branch", choices=["Stable","Dev","Custom"], help=t("arg_ksu_branch"))
     build_parser.add_argument("--custom-ref", help=t("arg_custom_ref"))

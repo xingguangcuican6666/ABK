@@ -150,7 +150,7 @@
   "cmd_example_artifacts": "abk artifacts --run-id 12345 --download  # आर्टिफैक्ट डाउनलोड",
   "arg_matrix": "मैट्रिक्स बिल्ड लक्ष्य (both=सभी, full=पूर्ण मैट्रिक्स, all-managers=सभी मैनेजर)",
   "arg_oneplus": "OnePlus डिवाइस बिल्ड",
-  "arg_ref": "Fork Git ब्रांच (डिफ़ॉल्ट: dev)",
+  "arg_ref": "Fork Git ब्रांच (डिफ़ॉल्ट: ऑटो)",
   "arg_ksu": "KernelSU वेरिएंट (all=सभी वेरिएंट)",
   "arg_ksu_branch": "ब्रांच (Stable/Dev/Custom)",
   "arg_custom_ref": "कस्टम KSU संदर्भ (कमिट/ब्रांच/टैग)",

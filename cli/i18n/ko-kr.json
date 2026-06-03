@@ -150,7 +150,7 @@
   "cmd_example_artifacts": "abk artifacts --run-id 12345 --download  # 아티팩트 다운로드",
   "arg_matrix": "매트릭스 빌드 타겟 (both=전체, full=풀 매트릭스, all-managers=전체 매니저)",
   "arg_oneplus": "OnePlus 기기 빌드",
-  "arg_ref": "Fork Git 브랜치 (기본: dev)",
+  "arg_ref": "Fork Git 브랜치 (기본: 자동 감지)",
   "arg_ksu": "KernelSU 변형 (all=전체 변형)",
   "arg_ksu_branch": "브랜치 (Stable/Dev/Custom)",
   "arg_custom_ref": "커스텀 KSU 참조 (커밋/브랜치/태그)",

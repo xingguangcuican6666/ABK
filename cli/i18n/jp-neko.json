@@ -150,7 +150,7 @@
   "cmd_example_artifacts": "abk artifacts --run-id 12345 --download  # アーティファクト DL",
   "arg_matrix": "マトリクスビルドターゲット (both=全バージョン, full=フルマトリクス, all-managers=全マネージャー)",
   "arg_oneplus": "OnePlus デバイスビルド",
-  "arg_ref": "Fork Git ブランチ (デフォルト: dev)",
+  "arg_ref": "Forkブランチニャ (デフォルト: 自動検出)",
   "arg_ksu": "KernelSU バリアント (all=全バリアント)",
   "arg_ksu_branch": "ブランチニャ (Stable/Dev/Custom)",
   "arg_custom_ref": "カスタム KSU 参照 (コミット/ブランチ/タグ)",
