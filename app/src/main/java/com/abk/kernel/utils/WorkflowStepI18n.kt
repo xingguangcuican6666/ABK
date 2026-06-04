@@ -166,7 +166,7 @@ object WorkflowStepI18n {
         }
     }
 
-    private fun applyBundle(lang: String, bundle: WorkflowStepI18nBundle, persist: Boolean) {
+    private suspend fun applyBundle(lang: String, bundle: WorkflowStepI18nBundle, persist: Boolean) {
         mapsByLang[lang] = bundle.steps
         if (persist) {
             saveBundleToCache(lang, bundle)
