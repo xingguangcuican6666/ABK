@@ -351,7 +351,7 @@
     <string name="flash_build_error_unavailable">无法加载构建错误日志。</string>
     <string name="flash_copy_error_done">已复制错误信息</string>
     <string name="flash_artifact_abk_manager">ABK 应用</string>
-    <string name="flash_failed_subtitle">GitHub 上的工作流以错误结束。</string>
+    <string name="flash_failed_subtitle">GitHub 报告该工作流运行失败。</string>
     <string name="flash_loading_steps">正在加载构建步骤…</string>
     <string name="flash_steps_load_error">无法加载构建步骤</string>
     <string name="flash_conclusion_failure">failure</string>
