@@ -1,0 +1,322 @@
+name: Build ABK CLI
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "cli/**"
+      - ".github/workflows/build-abk-cli.yml"
+  pull_request:
+    paths:
+      - "cli/**"
+      - ".github/workflows/build-abk-cli.yml"
+
+concurrency:
+  group: build-abk-cli-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.target_name }}
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target_name: linux-arm64
+            target_id: linux-arm64
+            runs_on: ubuntu-24.04-arm
+            archive_ext: tar.gz
+            python_arch: arm64
+            binary_name: abk
+
+          - target_name: linux-armhf
+            target_id: linux-armhf
+            runs_on: ubuntu-24.04-arm
+            archive_ext: tar.gz
+            python_arch: arm64
+            binary_name: abk
+
+          - target_name: linux-x86
+            target_id: linux-x86
+            runs_on: ubuntu-24.04
+            archive_ext: tar.gz
+            python_arch: x64
+            binary_name: abk
+
+          - target_name: linux-x64
+            target_id: linux-x64
+            runs_on: ubuntu-24.04
+            archive_ext: tar.gz
+            python_arch: x64
+            binary_name: abk
+
+          - target_name: windows-arm64
+            target_id: windows-arm64
+            runs_on: windows-11-arm
+            archive_ext: zip
+            python_arch: arm64
+            binary_name: abk.exe
+
+          - target_name: windows-x86
+            target_id: windows-x86
+            runs_on: windows-2025
+            archive_ext: zip
+            python_arch: x86
+            binary_name: abk.exe
+
+          - target_name: windows-x64
+            target_id: windows-x64
+            runs_on: windows-2025
+            archive_ext: zip
+            python_arch: x64
+            binary_name: abk.exe
+
+          - target_name: macos-arm64
+            target_id: macos-arm64
+            runs_on: macos-14
+            archive_ext: tar.gz
+            python_arch: arm64
+            binary_name: abk
+
+          - target_name: macos-x64
+            target_id: macos-x64
+            runs_on: macos-15-intel
+            archive_ext: tar.gz
+            python_arch: x64
+            binary_name: abk
+
+    env:
+      PYTHON_VERSION: "3.12"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: ${{ matrix.python_arch }}
+
+      - name: Install build dependencies
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+
+      - name: Install build dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+
+      - name: Build native one-dir bundle
+        if: ${{ matrix.target_id == 'linux-arm64' || matrix.target_id == 'linux-x64' || matrix.target_id == 'macos-arm64' || matrix.target_id == 'macos-x64' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build dist
+          pyinstaller \
+            --noconfirm \
+            --clean \
+            --onedir \
+            --name abk \
+            --add-data "cli/i18n:i18n" \
+            cli/abk.py
+
+      - name: Build Windows one-dir bundle
+        if: ${{ matrix.target_id == 'windows-arm64' || matrix.target_id == 'windows-x86' || matrix.target_id == 'windows-x64' }}
+        shell: pwsh
+        run: |
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          pyinstaller `
+            --noconfirm `
+            --clean `
+            --onedir `
+            --name abk `
+            --add-data "cli/i18n;i18n" `
+            cli/abk.py
+
+      - name: Prepare Linux cross-packaging runtime
+        if: ${{ matrix.target_id == 'linux-armhf' || matrix.target_id == 'linux-x86' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "::error::Docker is required for cross-packaging but is not available on this runner."
+            exit 1
+          fi
+
+          sudo systemctl start docker || sudo service docker start || true
+
+          if ! sudo docker info >/dev/null 2>&1; then
+            echo "::error::Docker daemon is unavailable on this runner."
+            exit 1
+          fi
+
+          sudo docker run --privileged --rm tonistiigi/binfmt --install arm,386
+
+      - name: Build linux-armhf bundle in container
+        if: ${{ matrix.target_id == 'linux-armhf' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build dist
+          docker run --rm \
+            --platform linux/arm/v7 \
+            -v "$PWD:/work" \
+            -w /work \
+            python:3.12-bookworm \
+            bash -lc '
+              set -euo pipefail
+              apt-get update
+              apt-get install -y build-essential zlib1g-dev
+              python -m pip install --upgrade pip
+              python -m pip install pyinstaller
+              pyinstaller \
+                --noconfirm \
+                --clean \
+                --onedir \
+                --name abk \
+                --add-data "cli/i18n:i18n" \
+                cli/abk.py
+            '
+          sudo chown -R "$(id -u):$(id -g)" build dist
+
+      - name: Build linux-x86 bundle in container
+        if: ${{ matrix.target_id == 'linux-x86' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build dist
+          docker run --rm \
+            --platform linux/386 \
+            -v "$PWD:/work" \
+            -w /work \
+            python:3.12-bookworm \
+            bash -lc '
+              set -euo pipefail
+              apt-get update
+              apt-get install -y build-essential zlib1g-dev
+              python -m pip install --upgrade pip
+              python -m pip install pyinstaller
+              pyinstaller \
+                --noconfirm \
+                --clean \
+                --onedir \
+                --name abk \
+                --add-data "cli/i18n:i18n" \
+                cli/abk.py
+            '
+          sudo chown -R "$(id -u):$(id -g)" build dist
+
+      - name: Add bundled README
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/abk
+          cat > dist/abk/README.txt <<'EOF'
+          ABK CLI
+
+          Run:
+            Linux/macOS: ./abk --help
+            Windows: abk.exe --help
+
+          Environment:
+            Set GITHUB_TOKEN before triggering builds that require authentication.
+          EOF
+          curl https://raw.githubusercontent.com/xingguangcuican6666/ABK/refs/heads/dev/LICENSE --output dist/abk/LICENSE
+
+      - name: Add bundled README
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist/abk -Force | Out-Null
+          @"
+          ABK CLI
+
+          Run:
+            Linux/macOS: ./abk --help
+            Windows: abk.exe --help
+
+          Environment:
+            Set GITHUB_TOKEN before triggering builds that require authentication.
+          "@ | Set-Content -Path dist/abk/README.txt
+          
+          curl https://raw.githubusercontent.com/xingguangcuican6666/ABK/refs/heads/dev/LICENSE --output dist/abk/LICENSE
+
+      - name: Verify bundle contents
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "dist/abk/${{ matrix.binary_name }}"
+          test -f "dist/abk/README.txt"
+          test -f "dist/abk/_internal/i18n/zh-cn.json"
+          test -f "dist/abk/_internal/i18n/en-us.json"
+
+      - name: Verify bundle contents
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist/abk/${{ matrix.binary_name }}")) { throw "Missing binary" }
+          if (!(Test-Path "dist/abk/README.txt")) { throw "Missing README" }
+          if (!(Test-Path "dist/abk/_internal/i18n/zh-cn.json")) { throw "Missing zh-cn.json" }
+          if (!(Test-Path "dist/abk/_internal/i18n/en-us.json")) { throw "Missing en-us.json" }
+
+      - name: Smoke test
+        if: runner.os != 'Windows' && matrix.target_id != 'linux-armhf' && matrix.target_id != 'linux-x86'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./dist/abk/abk --help > /dev/null
+
+      - name: Smoke test linux-armhf
+        if: ${{ matrix.target_id == 'linux-armhf' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --help > /dev/null
+
+      - name: Smoke test linux-x86
+        if: ${{ matrix.target_id == 'linux-x86' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --help > /dev/null
+
+      - name: Smoke test Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\dist\abk\abk.exe --lang en-us --help | Out-Null
+
+      - name: Package artifact
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -C dist/abk -czf "dist/abk-cli-${{ matrix.target_id }}.tar.gz" .
+
+      - name: Package artifact
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/abk/* -DestinationPath dist/abk-cli-${{ matrix.target_id }}.zip -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: abk-cli-${{ matrix.target_id }}
+          path: dist/abk-cli-${{ matrix.target_id }}.${{ matrix.archive_ext }}
+          if-no-files-found: error
