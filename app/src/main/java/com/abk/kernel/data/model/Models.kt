@@ -645,16 +645,15 @@ enum class BuildStatus {
     IDLE, QUEUED, IN_PROGRESS, SUCCESS, FAILURE, CANCELLED
 }
 
-/**
- * Heuristic check whether this workflow run is a kernel build (as opposed to a
- * manager build such as KSU Manager or SukiSU Manager).
- *
- * Used by the Status screen "Last build" tile so it reflects only kernel-build
- * activity even when other workflows (e.g. manager builds) are running.
- */
+/** Completed run with `conclusion == failure` (Flash failed-card list). */
 fun WorkflowRun.isFailedFlashRun(): Boolean =
     status == "completed" && conclusion == "failure"
 
+/**
+ * Kernel build vs manager build (KSU Manager, Build ABK App, etc.).
+ * Uses workflow [name] first — [displayTitle] can mention the wrong build type.
+ * Status "Last build" tile uses this to ignore manager runs.
+ */
 fun WorkflowRun.isKernelBuild(): Boolean {
     val workflowName = name.orEmpty().lowercase()
     val lower = "${name.orEmpty()} ${displayTitle.orEmpty()}".lowercase()

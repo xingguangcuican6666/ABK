@@ -351,7 +351,7 @@
     <string name="flash_build_error_unavailable">Could not load the build error log.</string>
     <string name="flash_copy_error_done">Error copied</string>
     <string name="flash_artifact_abk_manager">ABK app</string>
-    <string name="flash_failed_subtitle">The workflow finished with an error on GitHub.</string>
+    <string name="flash_failed_subtitle">GitHub reported a failed run.</string>
     <string name="flash_loading_steps">Loading build steps…</string>
     <string name="flash_steps_load_error">Could not load build steps</string>
     <string name="flash_conclusion_failure">failure</string>

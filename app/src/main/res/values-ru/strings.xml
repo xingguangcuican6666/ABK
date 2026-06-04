@@ -351,7 +351,7 @@
     <string name="flash_build_error_unavailable">Не удалось загрузить лог ошибки сборки.</string>
     <string name="flash_copy_error_done">Ошибка скопирована</string>
     <string name="flash_artifact_abk_manager">Приложение ABK</string>
-    <string name="flash_failed_subtitle">Workflow завершился с ошибкой на GitHub.</string>
+    <string name="flash_failed_subtitle">GitHub: сборка завершилась с ошибкой.</string>
     <string name="flash_loading_steps">Загрузка шагов сборки…</string>
     <string name="flash_steps_load_error">Не удалось загрузить шаги сборки</string>
     <string name="flash_conclusion_failure">failure</string>
