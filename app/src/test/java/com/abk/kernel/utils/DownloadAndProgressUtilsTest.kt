@@ -10,6 +10,11 @@ import org.junit.Test
 
 class DownloadAndProgressUtilsTest {
 
+    @org.junit.Before
+    fun setUp() {
+        WorkflowStepI18n.resetForTest()
+    }
+
     @Test
     fun classifiesKnownArtifactNames() {
         assertEquals(ArtifactType.KERNEL_PACKAGE, DownloadUtils.classifyArtifact("GKI_kernel-android14-6.1.zip"))

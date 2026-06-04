@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import com.abk.kernel.utils.LocaleHelper
@@ -29,6 +30,7 @@ import com.abk.kernel.utils.computeKindBuildProgress
 import com.abk.kernel.utils.DownloadDirectoryUtils
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.FailureLogExtractor
+import com.abk.kernel.utils.WorkflowStepI18n
 import com.abk.kernel.utils.NotificationUtils
 import com.abk.kernel.utils.RootUtils
 import com.google.gson.Gson
@@ -57,6 +59,11 @@ import java.util.UUID
 // ── UI State ─────────────────────────────────────────────────────────────────
 
 enum class AuthStep { INTRO, LOGIN, FORK_CHECK }
+
+enum class WorkflowStepI18nRefreshReason {
+    SYNC_GATE,
+    LANGUAGE,
+}
 
 enum class ManagerAccessState {
     UNKNOWN,
@@ -228,6 +235,13 @@ class MainViewModel @JvmOverloads constructor(
     private val cancelledArtifactDownloadKeys = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private var hasCheckedWorkflowEnablementThisLaunch = false
     private var hasRefreshedGitHubSessionThisLaunch = false
+    private var appMainUiEnteredAtMs: Long = 0L
+    private var forkI18nGateOpenedAtMs: Long = 0L
+    private var forkSyncGeneration: Int = 0
+    private var workflowStepI18nJob: Job? = null
+    private var workflowStepI18nLanguageJob: Job? = null
+    private var lastScheduledWorkflowStepLang: String? = null
+    private var lastScheduledWorkflowStepSyncGeneration: Int = -1
     private var buildQueueJob: Job? = null
     private var recentRunsRefreshJob: Job? = null
     private var recentRunsRefreshGeneration = 0
@@ -792,6 +806,86 @@ class MainViewModel @JvmOverloads constructor(
         _uiState.update { it.copy(user = user, isLoggedIn = true) }
     }
 
+    fun markMainUiEntered() {
+        if (appMainUiEnteredAtMs == 0L) {
+            appMainUiEnteredAtMs = SystemClock.elapsedRealtime()
+        }
+    }
+
+    fun onUiLanguageChanged() {
+        scheduleWorkflowStepI18nRefresh(WorkflowStepI18nRefreshReason.LANGUAGE)
+    }
+
+    private fun isForkI18nGateOpen(): Boolean {
+        val state = _uiState.value
+        return state.termsAccepted &&
+            !state.showOobe &&
+            !state.showSyncPrompt &&
+            state.behindBy <= 0 &&
+            (!state.isLoggedIn || state.forkRepo != null)
+    }
+
+    private fun maybeOpenForkI18nGate() {
+        if (!isForkI18nGateOpen()) return
+        if (forkI18nGateOpenedAtMs == 0L) {
+            forkI18nGateOpenedAtMs = SystemClock.elapsedRealtime()
+        }
+        scheduleWorkflowStepI18nRefresh(WorkflowStepI18nRefreshReason.SYNC_GATE)
+    }
+
+    private fun buildWorkflowStepI18nFetchContext(): WorkflowStepI18n.FetchContext {
+        val state = _uiState.value
+        val fork = state.forkRepo
+        return WorkflowStepI18n.FetchContext(
+            forkOwner = state.user?.login,
+            forkName = fork?.name,
+            forkDefaultBranch = fork?.defaultBranch,
+            upstreamDefaultBranch = fork?.parent?.defaultBranch ?: BuildConfig.SOURCE_REPO_DEFAULT_BRANCH,
+        )
+    }
+
+    private fun scheduleWorkflowStepI18nRefresh(reason: WorkflowStepI18nRefreshReason) {
+        val lang = LocaleHelper.currentUiLanguage()
+        if (lang == LocaleHelper.LANG_ZH || !isForkI18nGateOpen()) return
+
+        workflowStepI18nJob?.cancel()
+        workflowStepI18nLanguageJob?.cancel()
+
+        when (reason) {
+            WorkflowStepI18nRefreshReason.LANGUAGE -> {
+                workflowStepI18nLanguageJob = viewModelScope.launch {
+                    delay(500)
+                    runWorkflowStepI18nRefreshIfNeeded(lang)
+                }
+            }
+            WorkflowStepI18nRefreshReason.SYNC_GATE -> {
+                workflowStepI18nJob = viewModelScope.launch {
+                    val fetchAt = maxOf(appMainUiEnteredAtMs, forkI18nGateOpenedAtMs) + 10_000L
+                    val waitMs = fetchAt - SystemClock.elapsedRealtime()
+                    if (waitMs > 0) delay(waitMs)
+                    runWorkflowStepI18nRefreshIfNeeded(lang)
+                }
+            }
+        }
+    }
+
+    private suspend fun runWorkflowStepI18nRefreshIfNeeded(lang: String) {
+        if (!isForkI18nGateOpen()) return
+        val generation = forkSyncGeneration
+        if (lang == lastScheduledWorkflowStepLang &&
+            generation == lastScheduledWorkflowStepSyncGeneration
+        ) {
+            return
+        }
+        lastScheduledWorkflowStepLang = lang
+        lastScheduledWorkflowStepSyncGeneration = generation
+        runWorkflowStepI18nRefresh(lang)
+    }
+
+    private suspend fun runWorkflowStepI18nRefresh(lang: String) {
+        WorkflowStepI18n.refresh(buildWorkflowStepI18nFetchContext(), lang)
+    }
+
     fun checkFork(showSyncPrompt: Boolean = true, closeOobeWhenReady: Boolean = false) {
         val username = _uiState.value.user?.login ?: return
         viewModelScope.launch {
@@ -838,6 +932,9 @@ class MainViewModel @JvmOverloads constructor(
                         }
                         onForkContextReady()
                         authOobe.completeIfRequested(closeOobeWhenReady)
+                        if (behind <= 0) {
+                            maybeOpenForkI18nGate()
+                        }
                     }
                 }
                 is Result.Error -> _uiState.update { it.copy(isLoading = false, error = forkResult.message) }
@@ -862,6 +959,7 @@ class MainViewModel @JvmOverloads constructor(
                     }
                     onForkContextReady()
                     authOobe.completeIfRequested(closeOobeWhenReady = true)
+                    maybeOpenForkI18nGate()
                 }
                 is Result.Error -> _uiState.update { it.copy(isLoading = false, error = r.message) }
                 else -> {}
@@ -878,7 +976,10 @@ class MainViewModel @JvmOverloads constructor(
             when (val r = github.syncFork(username, fork.name, fork.defaultBranch)) {
                 is Result.Success -> {
                     _uiState.update { it.copy(isLoading = false, behindBy = 0) }
+                    forkSyncGeneration++
+                    forkI18nGateOpenedAtMs = SystemClock.elapsedRealtime()
                     onForkContextReady()
+                    scheduleWorkflowStepI18nRefresh(WorkflowStepI18nRefreshReason.SYNC_GATE)
                 }
                 is Result.Error -> _uiState.update { it.copy(isLoading = false, error = r.message) }
                 else -> {}

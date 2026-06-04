@@ -213,6 +213,17 @@ class PreferencesRepository(private val context: Context) {
     }
     suspend fun clearPendingAutoDownloadRunId() = context.dataStore.edit { it.remove(KEY_PENDING_AUTO_DOWNLOAD_RUN_ID) }
 
+    private fun workflowStepsVersionKey(lang: String) = intPreferencesKey("workflow_steps_version_$lang")
+
+    suspend fun getWorkflowStepsVersion(lang: String): Int {
+        val key = workflowStepsVersionKey(lang)
+        return context.dataStore.data.map { it[key] ?: 0 }.first()
+    }
+
+    suspend fun setWorkflowStepsVersion(lang: String, version: Int) = context.dataStore.edit {
+        it[workflowStepsVersionKey(lang)] = version
+    }
+
     suspend fun clearAuth() = context.dataStore.edit {
         it.remove(KEY_ACCESS_TOKEN)
         it.remove(KEY_USERNAME)

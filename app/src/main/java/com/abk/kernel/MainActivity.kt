@@ -375,6 +375,11 @@ private fun AbkMainScaffold(
 ) {
     val state by vm.uiState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(Unit) {
+        vm.markMainUiEntered()
+    }
+
     var selectedTab by rememberSaveable { mutableStateOf(AbkTab.Status) }
     var flashDetailPageVisible by rememberSaveable { mutableStateOf(false) }
     var settingsThemePageVisible by rememberSaveable { mutableStateOf(false) }

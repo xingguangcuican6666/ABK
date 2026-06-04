@@ -693,6 +693,7 @@ private fun SettingsMainContent(
                 current = currentLang,
                 onSelect = { lang ->
                     LocaleHelper.setLanguage(ctx, lang)
+                    vm.onUiLanguageChanged()
                     activity?.recreate()
                 }
             )
