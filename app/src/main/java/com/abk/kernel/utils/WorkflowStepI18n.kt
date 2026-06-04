@@ -40,12 +40,9 @@ object WorkflowStepI18n {
     private val inFlightLangs = ConcurrentHashMap.newKeySet<String>()
     private val refreshMutex = Mutex()
 
-    private var onRefreshFailed: ((String) -> Unit)? = null
-
-    fun init(context: Context, onRefreshFailed: ((String) -> Unit)? = null) {
+    fun init(context: Context) {
         appContext = context.applicationContext
         prefs = PreferencesRepository(appContext)
-        this.onRefreshFailed = onRefreshFailed
         preloadBundled(LocaleHelper.LANG_EN)
         preloadBundled(LocaleHelper.LANG_RU)
     }
@@ -91,7 +88,11 @@ object WorkflowStepI18n {
             val cached = loadBundleFromCache(lang)
             if (cached != null && cached.steps.isNotEmpty()) {
                 applyBundle(lang, cached, persist = false)
-                return if (bestBundle == null) RefreshResult.UsedFallback else RefreshResult.UpToDate
+                return if (bestBundle == null) {
+                    RefreshResult.UsedFallbackStaleRemote
+                } else {
+                    RefreshResult.UpToDate
+                }
             }
 
             val assets = loadBundleFromAssets(lang)
@@ -104,14 +105,13 @@ object WorkflowStepI18n {
                         }
                     }
                 }
-                return RefreshResult.UsedFallback
+                return RefreshResult.UsedFallbackStaleRemote
             }
 
             if (mapsByLang[lang].isNullOrEmpty()) {
-                onRefreshFailed?.invoke("workflow step translations unavailable")
-                return RefreshResult.Failed("empty")
+                return RefreshResult.Failed
             }
-            return RefreshResult.UsedFallback
+            return RefreshResult.UsedFallbackSilent
         } finally {
             inFlightLangs.remove(lang)
         }
@@ -256,8 +256,12 @@ object WorkflowStepI18n {
     sealed class RefreshResult {
         data object Updated : RefreshResult()
         data object UpToDate : RefreshResult()
-        data object UsedFallback : RefreshResult()
-        data class Failed(val cause: String) : RefreshResult()
+        data object UsedFallbackSilent : RefreshResult()
+        data object UsedFallbackStaleRemote : RefreshResult()
+        data object Failed : RefreshResult()
+
+        fun notifyStaleSnackbar(): Boolean =
+            this is Failed || this is UsedFallbackStaleRemote
     }
 
     private data class WorkflowStepI18nDto(

@@ -1018,6 +1018,8 @@
     <string name="vm_plan_legacy_too_long">Старые коды пресетов ABKP1 слишком длинные и больше не поддерживаются — поделитесь пресетом заново</string>
     <string name="vm_plan_bad_format">Неверный формат кода пресета</string>
     <string name="vm_plan_empty">Код пресета пуст</string>
+    <string name="workflow_step_i18n_stale">Не удалось обновить названия шагов сборки с GitHub; показана встроенная копия.</string>
+    <string name="build_status_run_id">Запуск %1$d</string>
     <string name="vm_plan_bad_version">Версия кода пресета не поддерживается</string>
     <string name="vm_plan_too_many_modules">Количество внешних модулей превышает лимит</string>
     <string name="vm_plan_negative_number">Отрицательные числа нельзя записать в код пресета</string>

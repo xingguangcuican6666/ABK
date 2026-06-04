@@ -1958,7 +1958,10 @@ private fun BuildQueueItemCard(
                 ExpressiveStatusChip(label = "#${item.runNumber}", color = MaterialTheme.colorScheme.secondary)
             }
             if (item.runId > 0L) {
-                ExpressiveStatusChip(label = "run ${item.runId}", color = MaterialTheme.colorScheme.outline)
+                ExpressiveStatusChip(
+                    label = stringResource(R.string.build_status_run_id, item.runId),
+                    color = MaterialTheme.colorScheme.outline,
+                )
             }
         }
         item.error?.let {

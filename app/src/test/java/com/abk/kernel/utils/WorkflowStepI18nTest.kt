@@ -1,9 +1,12 @@
 package com.abk.kernel.utils
 
 import com.abk.kernel.data.model.WorkflowStepI18nBundle
+import com.abk.kernel.utils.WorkflowStepI18n.RefreshResult
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -38,5 +41,14 @@ class WorkflowStepI18nTest {
     fun translateKey_resolvesFromBundle() {
         val bundle = WorkflowStepI18nBundle(1, mapOf("编译内核" to "Compile kernel"))
         assertEquals("Compile kernel", WorkflowStepI18n.translateKey(bundle, "编译内核"))
+    }
+
+    @Test
+    fun refreshResult_notifyStaleSnackbar() {
+        assertTrue(RefreshResult.Failed.notifyStaleSnackbar())
+        assertTrue(RefreshResult.UsedFallbackStaleRemote.notifyStaleSnackbar())
+        assertFalse(RefreshResult.UsedFallbackSilent.notifyStaleSnackbar())
+        assertFalse(RefreshResult.Updated.notifyStaleSnackbar())
+        assertFalse(RefreshResult.UpToDate.notifyStaleSnackbar())
     }
 }
