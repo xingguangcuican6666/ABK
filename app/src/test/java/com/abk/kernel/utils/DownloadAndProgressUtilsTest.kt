@@ -5,8 +5,10 @@ import com.abk.kernel.data.model.WorkflowJob
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.WorkflowStep
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class DownloadAndProgressUtilsTest {
 
@@ -23,6 +25,28 @@ class DownloadAndProgressUtilsTest {
         assertEquals(ArtifactType.SUSFS_MODULE, DownloadUtils.classifyArtifact("susfs-module.zip"))
         assertEquals(ArtifactType.KSU_MANAGER, DownloadUtils.classifyArtifact("KernelSU-Manager.apk"))
         assertEquals(ArtifactType.OTHER, DownloadUtils.classifyArtifact("patch-rejects.zip"))
+    }
+
+    @Test
+    fun recognizesBundledNoticeFileNamesCaseInsensitively() {
+        assertTrue(DownloadUtils.isBundledNoticeFileName("LICENSE"))
+        assertTrue(DownloadUtils.isBundledNoticeFileName("license"))
+        assertTrue(DownloadUtils.isBundledNoticeFileName("THIRD_PARTY_NOTICES.md"))
+        assertFalse(DownloadUtils.isBundledNoticeFileName("KernelSU-Manager.apk"))
+    }
+
+    @Test
+    fun collectArtifactPayloadFilesSkipsNoticeFilesEvenAsFallback() {
+        val root = createTempDir("download-utils-test").apply {
+            deleteOnExit()
+        }
+        File(root, "LICENSE").writeText("license text")
+        File(root, "THIRD_PARTY_NOTICES.md").writeText("notices")
+        File(root, "KernelSU-Manager.apk").writeBytes(byteArrayOf(0x50, 0x4B))
+
+        val candidates = DownloadUtils.collectArtifactPayloadFiles(root)
+
+        assertEquals(listOf("KernelSU-Manager.apk"), candidates.map { it.name })
     }
 
     @Test

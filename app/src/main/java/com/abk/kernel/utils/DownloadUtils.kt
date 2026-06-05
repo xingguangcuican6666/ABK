@@ -36,6 +36,11 @@ object DownloadUtils {
     private const val LICENSE_FILE_NAME = "LICENSE"
     private const val THIRD_PARTY_NOTICES_FILE_NAME = "THIRD_PARTY_NOTICES.md"
     private const val BUNDLE_MANIFEST_FILE_NAME = "ABK_BUNDLE_MANIFEST.txt"
+    private const val NOTICE_STAGING_DIR_NAME = "__abk_notices"
+
+    internal fun isBundledNoticeFileName(fileName: String): Boolean =
+        fileName.equals(LICENSE_FILE_NAME, ignoreCase = true) ||
+            fileName.equals(THIRD_PARTY_NOTICES_FILE_NAME, ignoreCase = true)
 
     data class DownloadResult(
         val artifacts: List<DownloadedArtifact> = emptyList(),
@@ -493,7 +498,7 @@ object DownloadUtils {
                 .firstOrNull {
                     it.isFile &&
                         it.name != BUNDLE_MANIFEST_FILE_NAME &&
-                        it.name !in setOf(LICENSE_FILE_NAME, THIRD_PARTY_NOTICES_FILE_NAME)
+                        !isBundledNoticeFileName(it.name)
                 }
             ?: throw IllegalStateException("Bundled artifact missing payload: ${artifact.name}")
         return PreparedDownloadedArtifact(payload, extractDir)
@@ -603,7 +608,7 @@ object DownloadUtils {
     private suspend fun resolveNoticeFiles(stagingRoot: File): NoticeFiles? {
         findNoticeFiles(stagingRoot)?.let { return it }
 
-        val noticeDir = File(stagingRoot, "__abk_notices").apply { mkdirs() }
+        val noticeDir = File(stagingRoot, NOTICE_STAGING_DIR_NAME).apply { mkdirs() }
         val license = File(noticeDir, LICENSE_FILE_NAME)
         val thirdParty = File(noticeDir, THIRD_PARTY_NOTICES_FILE_NAME)
         if (!license.exists() && !downloadNoticeFile(LICENSE_FILE_NAME, license)) return null
@@ -684,12 +689,21 @@ object DownloadUtils {
         notices: NoticeFiles
     ) {
         ZipOutputStream(FileOutputStream(bundleFile)).use { zip ->
+            val addedEntryNames = mutableSetOf<String>()
+            fun addUniqueEntry(file: File, entryName: String) {
+                val key = entryName.lowercase(Locale.ROOT)
+                if (!addedEntryNames.add(key)) return
+                addFileToZip(zip, file, entryName)
+            }
+
             zip.putNextEntry(ZipEntry(BUNDLE_MANIFEST_FILE_NAME))
             zip.write("payload=${payload.name}\n".toByteArray(Charsets.UTF_8))
             zip.closeEntry()
-            addFileToZip(zip, payload, payload.name)
-            addFileToZip(zip, notices.license, LICENSE_FILE_NAME)
-            addFileToZip(zip, notices.thirdPartyNotices, THIRD_PARTY_NOTICES_FILE_NAME)
+            addedEntryNames.add(BUNDLE_MANIFEST_FILE_NAME.lowercase(Locale.ROOT))
+
+            addUniqueEntry(payload, payload.name)
+            addUniqueEntry(notices.license, LICENSE_FILE_NAME)
+            addUniqueEntry(notices.thirdPartyNotices, THIRD_PARTY_NOTICES_FILE_NAME)
         }
     }
 
@@ -718,9 +732,14 @@ object DownloadUtils {
             ?.trim()
             ?.ifBlank { null }
 
+    internal fun collectArtifactPayloadFiles(outDir: File): List<File> = collectCandidateFiles(outDir)
+
     private fun collectCandidateFiles(outDir: File): List<File> {
+        val noticeStagingRoot = File(outDir, NOTICE_STAGING_DIR_NAME).absolutePath + File.separator
         val files = outDir.walkTopDown()
             .filter { it.isFile && !it.name.startsWith(".") }
+            .filter { !isBundledNoticeFileName(it.name) }
+            .filter { !it.absolutePath.startsWith(noticeStagingRoot) }
             .toList()
 
         val candidates = files.filter { file ->

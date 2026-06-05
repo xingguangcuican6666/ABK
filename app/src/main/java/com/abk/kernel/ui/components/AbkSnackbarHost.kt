@@ -11,7 +11,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 const val ABK_SNACKBAR_SHORT_MS = 3_500L
 const val ABK_SNACKBAR_LONG_MS = 6_000L
@@ -38,9 +40,13 @@ suspend fun SnackbarHostState.showAbkSnackbar(
             showSnackbar(message = message, duration = SnackbarDuration.Long)
         }
         else -> {
-            showSnackbar(message = message, duration = SnackbarDuration.Indefinite)
-            delay(durationMs)
-            currentSnackbarData?.dismiss()
+            coroutineScope {
+                launch {
+                    delay(durationMs)
+                    currentSnackbarData?.dismiss()
+                }
+                showSnackbar(message = message, duration = SnackbarDuration.Indefinite)
+            }
         }
     }
 }
