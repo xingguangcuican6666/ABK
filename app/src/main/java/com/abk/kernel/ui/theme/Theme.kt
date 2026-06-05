@@ -2,8 +2,8 @@
 
 package com.abk.kernel.ui.theme
 
-import android.app.Activity
 import android.os.Build
+import com.abk.kernel.utils.findActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialExpressiveTheme
@@ -59,9 +59,10 @@ fun AbkTheme(
     }
 
     val view = LocalView.current
-    if (!view.isInEditMode) {
+    val activity = context.findActivity()
+    if (activity != null && !view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
+            val window = activity.window
             window.statusBarColor = colorScheme.surface.toArgb()
             window.navigationBarColor = colorScheme.surface.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme

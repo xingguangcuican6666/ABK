@@ -6,11 +6,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -64,8 +62,19 @@ import com.abk.kernel.data.model.KSU_VARIANT_RESUKISU
 import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
 import com.abk.kernel.data.model.ModuleCatalogItem
 import com.abk.kernel.data.model.ModuleCatalogRepository
+import com.abk.kernel.data.model.WorkflowRun
+import com.abk.kernel.data.model.isKernelBuild
+import com.abk.kernel.data.model.isManagerBuild
+import com.abk.kernel.data.model.isManagerDevBuild
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.components.ObserveChildPageVisibility
+import com.abk.kernel.ui.components.childPageOverlayEnterTransition
+import com.abk.kernel.ui.components.childPageOverlayExitTransition
+import com.abk.kernel.ui.components.childPageScrimExitTransition
+import com.abk.kernel.ui.components.rememberChildPageBackController
+import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
 import com.abk.kernel.ui.components.ExpressiveHeroCard
+import com.abk.kernel.ui.components.ShimmerLinearProgress
 import com.abk.kernel.ui.components.ExpressiveListItem
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
@@ -80,19 +89,10 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlin.math.pow
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
-private const val BUILD_PLAN_BACK_VISUAL_EXPONENT = 1.8f
-private const val BUILD_PLAN_BACK_SCALE_DELTA = 0.09f
-private const val BUILD_PLAN_BACK_SCRIM_ALPHA = 0.32f
-private const val BUILD_PLAN_PAGE_EXIT_DELAY_MS = 280L
 private const val CATALOG_MODULE_REMOVE_DELAY_MS = 260L
-private val BUILD_PLAN_BACK_MAX_OFFSET = 56.dp
-private val BUILD_PLAN_BACK_MAX_CORNER = 32.dp
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -140,18 +140,6 @@ fun BuildScreen(
     var showPlanLibraryPage by rememberSaveable { mutableStateOf(false) }
     var showBuildQueuePage by rememberSaveable { mutableStateOf(false) }
     var planToolsExpanded by rememberSaveable { mutableStateOf(false) }
-    var planBackProgress by remember { mutableFloatStateOf(0f) }
-    val animatedPlanBackProgress by animateFloatAsState(
-        targetValue = planBackProgress.coerceIn(0f, 1f),
-        animationSpec = motionScheme.fastSpatialSpec(),
-        label = "build-plan-back-progress"
-    )
-    val visualPlanBackProgress = animatedPlanBackProgress
-        .coerceIn(0f, 1f)
-        .pow(BUILD_PLAN_BACK_VISUAL_EXPONENT)
-    val density = LocalDensity.current
-    val planBackOffsetPx = with(density) { BUILD_PLAN_BACK_MAX_OFFSET.toPx() }
-    val planBackCorner = with(density) { (BUILD_PLAN_BACK_MAX_CORNER.toPx() * visualPlanBackProgress).toDp() }
     var savePlanName by remember { mutableStateOf("") }
     var importPlanCode by remember { mutableStateOf("") }
     var importPlanPreview by remember { mutableStateOf<BuildPlanImportPreview?>(null) }
@@ -178,6 +166,10 @@ fun BuildScreen(
         groupBuildCustomExternalModules(config.customExternalModules, catalogModuleByUrl)
     }
     val childPageVisible = showPlanLibraryPage || showBuildQueuePage
+    val childPageTransition = rememberChildPageOverlayTransition(
+        visible = childPageVisible,
+        label = "build-child-page"
+    )
     val activeBuild = state.buildStatus in listOf(BuildStatus.QUEUED, BuildStatus.IN_PROGRESS)
     val pendingQueueCount = state.buildQueue.count { it.status == BuildQueueItemStatus.PENDING }
     val activeQueueCount = state.buildQueue.count {
@@ -192,52 +184,37 @@ fun BuildScreen(
         if (config != rawConfig) vm.updateBuildConfig(config)
     }
 
-    fun openPlanLibraryPage() {
-        planBackProgress = 0f
-        onPlanPageVisibleChange(true)
-        showBuildQueuePage = false
-        showPlanLibraryPage = true
-    }
-
-    fun openBuildQueuePage() {
-        planBackProgress = 0f
-        onPlanPageVisibleChange(true)
-        showPlanLibraryPage = false
-        showBuildQueuePage = true
-    }
-
     fun closeChildPage() {
         showPlanLibraryPage = false
         showBuildQueuePage = false
     }
 
-    LaunchedEffect(childPageVisible) {
-        if (childPageVisible) {
-            onPlanPageVisibleChange(true)
-        } else {
-            delay(BUILD_PLAN_PAGE_EXIT_DELAY_MS)
-            planBackProgress = 0f
-            onPlanPageVisibleChange(false)
-        }
+    val childPageBack = rememberChildPageBackController(
+        enabled = childPageVisible,
+        predictiveBackEnabled = state.predictiveBackEnabled,
+        onBack = ::closeChildPage,
+    )
+
+    fun openPlanLibraryPage() {
+        childPageBack.resetProgress()
+        showBuildQueuePage = false
+        showPlanLibraryPage = true
     }
+
+    fun openBuildQueuePage() {
+        childPageBack.resetProgress()
+        showPlanLibraryPage = false
+        showBuildQueuePage = true
+    }
+
+    ObserveChildPageVisibility(
+        transition = childPageTransition,
+        onVisibleChange = onPlanPageVisibleChange,
+        onAfterExitAnimation = { childPageBack.resetProgress() }
+    )
 
     DisposableEffect(Unit) {
         onDispose { onPlanPageVisibleChange(false) }
-    }
-
-    PredictiveBackHandler(enabled = childPageVisible && state.predictiveBackEnabled) { progress ->
-        try {
-            progress.collect { backEvent ->
-                planBackProgress = backEvent.progress.coerceIn(0f, 1f)
-            }
-            closeChildPage()
-        } catch (_: CancellationException) {
-            planBackProgress = 0f
-        }
-    }
-
-    BackHandler(enabled = childPageVisible && !state.predictiveBackEnabled) {
-        closeChildPage()
     }
 
     if (showConfirmDialog) {
@@ -807,16 +784,49 @@ fun BuildScreen(
                 enter = fadeIn() + slideInVertically { -it / 3 } + expandVertically(),
                 exit = fadeOut() + shrinkVertically()
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    BuildStatusBanner(
-                        status = state.buildStatus,
-                        progress = state.buildProgress,
-                        runId = state.currentRun?.id ?: 0L,
-                        activeRunCount = state.activeBuildRuns.size,
-                        cancelling = state.currentRun?.id in state.cancellingWorkflowRunIds,
-                        onCancel = { runId -> vm.cancelWorkflowRun(runId) }
+                val kernelActiveRuns = remember(state.activeBuildRuns) {
+                    state.activeBuildRuns.filter { it.isKernelBuild() }
+                }
+                val managerActiveRuns = remember(state.activeBuildRuns) {
+                    state.activeBuildRuns.filter { it.isManagerBuild() }
+                }
+                val kernelRunningChips = remember(kernelActiveRuns, state.buildQueue) {
+                    buildRunChipsForStatus(kernelActiveRuns, state.buildQueue, running = true)
+                }
+                val kernelQueuedChips = remember(kernelActiveRuns, state.buildQueue) {
+                    buildRunChipsForStatus(kernelActiveRuns, state.buildQueue, running = false)
+                }
+                val managerRunningChips = remember(managerActiveRuns, state.buildQueue) {
+                    buildRunChipsForStatus(managerActiveRuns, state.buildQueue, running = true)
+                }
+                val managerQueuedChips = remember(managerActiveRuns, state.buildQueue) {
+                    buildRunChipsForStatus(managerActiveRuns, state.buildQueue, running = false)
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    BuildKindProgressBlock(
+                        title = stringResource(R.string.status_build),
+                        status = state.kernelBuildStatus,
+                        progress = state.kernelBuildProgress,
+                        currentRun = state.kernelCurrentRun,
+                        activeRunCount = state.kernelActiveBuildRuns.size,
+                        cancellingRunIds = state.cancellingWorkflowRunIds,
+                        runningChips = kernelRunningChips,
+                        queuedChips = kernelQueuedChips,
+                        onCancel = vm::cancelWorkflowRun,
                     )
-                    BuildProgressCard(state.buildProgress)
+                    if (state.managerBuildStatus != BuildStatus.IDLE || state.managerCurrentRun != null) {
+                        BuildKindProgressBlock(
+                            title = stringResource(R.string.status_manager_build),
+                            status = state.managerBuildStatus,
+                            progress = state.managerBuildProgress,
+                            currentRun = state.managerCurrentRun,
+                            activeRunCount = state.managerActiveBuildRuns.size,
+                            cancellingRunIds = state.cancellingWorkflowRunIds,
+                            runningChips = managerRunningChips,
+                            queuedChips = managerQueuedChips,
+                            onCancel = vm::cancelWorkflowRun,
+                        )
+                    }
                 }
             }
 
@@ -1354,58 +1364,33 @@ fun BuildScreen(
                 )
             }
 
-            // Error
-            state.error?.let { err ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-                ) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error)
-                        Spacer(Modifier.width(8.dp))
-                        Text(err, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { vm.clearError() }) {
-                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close_error), tint = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                }
-            }
-
             Spacer(Modifier.height(80.dp + outerPadding.calculateBottomPadding()))
             }
         }
 
-        AnimatedVisibility(
-            visible = childPageVisible,
+        childPageTransition.AnimatedVisibility(
+            visible = { it },
             enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
+            exit = childPageScrimExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = BUILD_PLAN_BACK_SCRIM_ALPHA * visualPlanBackProgress))
+                    .background(Color.Black.copy(alpha = childPageBack.scrimAlpha))
             )
         }
 
-        AnimatedVisibility(
-            visible = childPageVisible,
-            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
-                slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { width -> width / 4 },
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
-                slideOutHorizontally(animationSpec = motionScheme.fastSpatialSpec()) { width -> width },
+        childPageTransition.AnimatedVisibility(
+            visible = { it },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        translationX = planBackOffsetPx * visualPlanBackProgress
-                        scaleX = 1f - BUILD_PLAN_BACK_SCALE_DELTA * visualPlanBackProgress
-                        scaleY = 1f - BUILD_PLAN_BACK_SCALE_DELTA * visualPlanBackProgress
-                        alpha = 1f - 0.06f * visualPlanBackProgress
-                        shape = RoundedCornerShape(planBackCorner)
-                        clip = visualPlanBackProgress > 0.01f
-                    }
+                    .then(childPageBack.backTransformModifier())
             ) {
                 BuildPlanPageBackground(
                     backgroundUri = state.customBackgroundUri,
@@ -1421,7 +1406,7 @@ fun BuildScreen(
                                 stringResource(R.string.build_plan_library)
                             },
                             navigationIcon = {
-                                IconButton(onClick = ::closeChildPage) {
+                                IconButton(onClick = childPageBack::requestDismiss) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.build_back_to_config))
                                 }
                             }
@@ -1434,7 +1419,7 @@ fun BuildScreen(
                             cancellingRunIds = state.cancellingWorkflowRunIds,
                             onApply = {
                                 vm.updateBuildConfig(it.config)
-                                closeChildPage()
+                                childPageBack.requestDismiss()
                                 Toast.makeText(context, context.getString(R.string.build_queue_applied), Toast.LENGTH_SHORT).show()
                             },
                             onRemove = { vm.removeBuildQueueItem(it.id) },
@@ -1450,7 +1435,7 @@ fun BuildScreen(
                             plans = state.buildPlans,
                             onApply = {
                                 vm.applyBuildPlan(it)
-                                closeChildPage()
+                                childPageBack.requestDismiss()
                                 Toast.makeText(context, context.getString(R.string.build_plan_applied_edit), Toast.LENGTH_SHORT).show()
                             },
                             onShare = { sharePlanTarget = it },
@@ -1973,7 +1958,10 @@ private fun BuildQueueItemCard(
                 ExpressiveStatusChip(label = "#${item.runNumber}", color = MaterialTheme.colorScheme.secondary)
             }
             if (item.runId > 0L) {
-                ExpressiveStatusChip(label = "run ${item.runId}", color = MaterialTheme.colorScheme.outline)
+                ExpressiveStatusChip(
+                    label = stringResource(R.string.build_status_run_id, item.runId),
+                    color = MaterialTheme.colorScheme.outline,
+                )
             }
         }
         item.error?.let {
@@ -2362,6 +2350,48 @@ private val BUILD_TIME_FORMATTER: DateTimeFormatter =
     DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss z yyyy", Locale.US)
 
 @Composable
+private fun BuildKindProgressBlock(
+    title: String,
+    status: BuildStatus,
+    progress: BuildProgress,
+    currentRun: WorkflowRun?,
+    activeRunCount: Int,
+    cancellingRunIds: Set<Long>,
+    runningChips: List<BuildRunChip>,
+    queuedChips: List<BuildRunChip>,
+    onCancel: (Long) -> Unit,
+) {
+    if (
+        status == BuildStatus.IDLE &&
+        currentRun == null &&
+        runningChips.isEmpty() &&
+        queuedChips.isEmpty()
+    ) {
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        BuildStatusBanner(
+            status = status,
+            progress = progress,
+            runId = currentRun?.id ?: 0L,
+            activeRunCount = activeRunCount,
+            cancelling = currentRun?.id in cancellingRunIds,
+            onCancel = onCancel,
+        )
+        BuildProgressCard(
+            progress = progress,
+            runningChips = runningChips,
+            queuedChips = queuedChips,
+        )
+    }
+}
+
+@Composable
 private fun BuildStatusBanner(
     status: BuildStatus,
     progress: BuildProgress,
@@ -2413,8 +2443,13 @@ private fun BuildStatusBanner(
             Column(Modifier.weight(1f)) {
                 Text(text, color = color, style = MaterialTheme.typography.bodyMedium)
                 if (progress.totalSteps > 0) {
+                    // Drop the "·" separator the user explicitly asked to remove —
+                    // percent on the left, then the compact chip format text
+                    // (already comma-joined for multi-run). maxLines=1 so the
+                    // banner stays at a fixed height; full chip layout lives
+                    // in BuildProgressCard below.
                     Text(
-                        "${progress.percent}% · ${progress.currentStep}",
+                        "${progress.percent}% ${progress.currentStep}",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1
@@ -2447,7 +2482,11 @@ private fun BuildStatusBanner(
 }
 
 @Composable
-private fun BuildProgressCard(progress: BuildProgress) {
+private fun BuildProgressCard(
+    progress: BuildProgress,
+    runningChips: List<BuildRunChip> = emptyList(),
+    queuedChips: List<BuildRunChip> = emptyList()
+) {
     val animatedProgress by animateFloatAsState(
         targetValue = (progress.percent / 100f).coerceIn(0f, 1f),
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
@@ -2464,53 +2503,141 @@ private fun BuildProgressCard(progress: BuildProgress) {
                 Text(stringResource(R.string.build_progress_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text("${progress.percent}%", style = MaterialTheme.typography.labelLarge)
             }
-            LinearProgressIndicator(
+            ShimmerLinearProgress(
                 progress = { animatedProgress },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             )
-            Text(
-                progress.currentStep,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                maxLines = 2
-            )
-            AnimatedVisibility(
-                visible = progress.steps.isNotEmpty(),
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    progress.steps.take(8).forEach { step ->
-                        BuildStepRow(step)
-                    }
-                    if (progress.steps.size > 8) {
-                        Text(
-                            stringResource(R.string.build_more_steps, progress.steps.size - 8),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
+            // Top row = currently running runs, bottom row = queued runs.
+            // Each chip is one workflow rendered in the compact
+            // "#65 SukiSU SUSFS 6.6.89-android15-2025-06" format. Rows scroll
+            // horizontally so an arbitrary number of parallel builds fit
+            // without wrapping the page.
+            if (runningChips.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    runningChips.forEach { chip -> BuildRunChipView(chip) }
                 }
+            }
+            if (queuedChips.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    queuedChips.forEach { chip -> BuildRunChipView(chip) }
+                }
+            }
+            if (runningChips.isEmpty() && queuedChips.isEmpty() && progress.currentStep.isNotBlank()) {
+                Text(
+                    progress.currentStep,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    maxLines = 2
+                )
             }
         }
     }
 }
 
-@Composable
-private fun BuildStepRow(step: BuildStepProgress) {
-    val (icon, color, label) = when {
-        step.status == "completed" && step.conclusion in listOf("failure", "cancelled", "timed_out") ->
-            Triple(Icons.Default.Error, MaterialTheme.colorScheme.error, stringResource(R.string.status_failure))
-        step.status == "completed" ->
-            Triple(Icons.Default.CheckCircle, MaterialTheme.colorScheme.primary, stringResource(R.string.build_step_done))
-        step.status == "in_progress" ->
-            Triple(Icons.Default.Sync, MaterialTheme.colorScheme.tertiary, stringResource(R.string.status_in_progress))
-        else -> Triple(Icons.Default.RadioButtonUnchecked, MaterialTheme.colorScheme.outline, stringResource(R.string.build_step_waiting))
+private data class BuildRunChip(
+    val runId: Long,
+    val text: String,
+    val running: Boolean
+)
+
+/**
+ * Compact "#65 SukiSU SUSFS 6.6.89-android15-2025-06" chips for the Build
+ * tab progress card. Mirrors the descriptor logic that the merged-progress
+ * text uses, but renders separate UI tiles rather than concatenated text.
+ * Manager-only runs become "#42 Manager" / "#42 Manager Dev" chips.
+ */
+private fun buildRunChipsForStatus(
+    activeRuns: List<WorkflowRun>,
+    queue: List<BuildQueueItem>,
+    running: Boolean
+): List<BuildRunChip> {
+    val queueByRunId = queue.filter { it.runId > 0L }.associateBy { it.runId }
+    return activeRuns
+        .asSequence()
+        .filter { run ->
+            val isRunning = run.status == "in_progress"
+            isRunning == running
+        }
+        .map { run ->
+            val label = buildRunChipLabel(run, queueByRunId[run.id])
+            BuildRunChip(runId = run.id, text = label, running = running)
+        }
+        .toList()
+}
+
+private fun buildRunChipLabel(run: WorkflowRun, item: BuildQueueItem?): String {
+    val runLabel = if (run.runNumber > 0) "#${run.runNumber}" else "#${run.id}"
+    if (run.isManagerBuild()) {
+        return buildString {
+            append(runLabel)
+            append(' ')
+            append(if (run.isManagerDevBuild()) "Manager Dev" else "Manager")
+        }
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
-        Text(step.name, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), maxLines = 1)
-        Text(label, color = color, style = MaterialTheme.typography.labelSmall)
+    val cfg = item?.config
+    val variant = cfg?.kernelsuVariant?.takeIf { it != KSU_VARIANT_NONE }.orEmpty()
+    val susfs = cfg != null && !cfg.cancelSusfs && cfg.kernelsuVariant != KSU_VARIANT_NONE
+    val kernelLabel = if (cfg != null) {
+        "${cfg.kernelVersion}.${cfg.subLevel}-${cfg.androidVersion}-${cfg.osPatchLevel}"
+    } else ""
+    return buildString {
+        append(runLabel)
+        if (variant.isNotBlank()) append(' ').append(variant)
+        if (susfs) append(" SUSFS")
+        if (kernelLabel.isNotBlank()) append(' ').append(kernelLabel)
+        if (variant.isBlank() && !susfs && kernelLabel.isBlank()) {
+            runChipTitleFallback(run, runLabel)?.let { append(' ').append(it) }
+        }
+    }
+}
+
+private fun runChipTitleFallback(run: WorkflowRun, runLabel: String): String? {
+    val disallowed = setOf(runLabel, "#${run.id}")
+    return listOf(run.displayTitle, run.name)
+        .asSequence()
+        .mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }
+        .map { title ->
+            title.removePrefix(runLabel)
+                .removePrefix("#${run.id}")
+                .trimStart(' ', '-', ':', '·', ',', '#')
+                .trim()
+        }
+        .firstOrNull { title -> title.isNotBlank() && title !in disallowed }
+}
+
+@Composable
+private fun BuildRunChipView(chip: BuildRunChip) {
+    val containerColor = if (chip.running) {
+        MaterialTheme.colorScheme.secondaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val contentColor = if (chip.running) {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor,
+        contentColor = contentColor
+    ) {
+        Text(
+            text = chip.text,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            maxLines = 1
+        )
     }
 }
 

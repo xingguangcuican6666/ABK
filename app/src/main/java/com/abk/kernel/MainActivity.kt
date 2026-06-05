@@ -3,8 +3,8 @@ package com.abk.kernel
 import android.Manifest
 import android.app.Activity
 import android.content.Context
-import android.content.ContextWrapper
 import com.abk.kernel.utils.LocaleHelper
+import com.abk.kernel.utils.findActivity
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -16,6 +16,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -45,10 +46,12 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -65,8 +68,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -78,6 +80,9 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.abk.kernel.ui.components.AbkSnackbarHost
+import com.abk.kernel.ui.components.animateBottomNavForChildPage
+import com.abk.kernel.ui.components.showAbkSnackbar
 import com.abk.kernel.ui.screens.BuildScreen
 import com.abk.kernel.ui.screens.FlashScreen
 import com.abk.kernel.ui.screens.InstalledModulesScreen
@@ -252,7 +257,7 @@ private fun TermsAgreementDialog(
 ) {
     val scrollState = rememberScrollState()
     val canAccept by remember {
-        derivedStateOf { scrollState.maxValue > 0 && scrollState.value >= scrollState.maxValue }
+        derivedStateOf { scrollState.maxValue == 0 || scrollState.value >= scrollState.maxValue }
     }
 
     AlertDialog(
@@ -367,6 +372,7 @@ private enum class AbkTab(@StringRes val labelRes: Int) {
     Settings(R.string.nav_settings)
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AbkMainScaffold(
     vm: MainViewModel,
@@ -418,6 +424,25 @@ private fun AbkMainScaffold(
         AbkTab.RuntimeHome -> managerPatchPageVisible
         else -> false
     }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(state.snackbarMessage, state.snackbarLongDuration, state.error) {
+        when (val snackbar = state.snackbarMessage) {
+            null -> {
+                val error = state.error ?: return@LaunchedEffect
+                snackbarHostState.showAbkSnackbar(message = error, longDuration = true)
+                vm.clearError()
+            }
+            else -> {
+                snackbarHostState.showAbkSnackbar(
+                    message = snackbar,
+                    longDuration = state.snackbarLongDuration,
+                )
+                vm.clearSnackbar()
+                if (state.error != null) vm.clearError()
+            }
+        }
+    }
 
     LaunchedEffect(pendingModuleInstallUri) {
         if (!pendingModuleInstallUri.isNullOrBlank()) {
@@ -441,6 +466,9 @@ private fun AbkMainScaffold(
                 settingsThemePageVisible = false
                 rootAuthDetailPageVisible = false
                 managerPatchPageVisible = false
+                // Flash NavHost is recreated on tab entry — clear stale saveable
+                // state so the bottom bar does not hide until a detail opens.
+                flashDetailPageVisible = false
             }
             AbkTab.Modules -> {
                 buildPlanPageVisible = false
@@ -501,6 +529,15 @@ private fun AbkMainScaffold(
         BackHandler(onBack = ::handleTopLevelBack)
     }
 
+    val navProgressAnim = remember { Animatable(1f) }
+    LaunchedEffect(childPageVisible) {
+        navProgressAnim.animateBottomNavForChildPage(
+            childPageVisible = childPageVisible,
+            motionScheme = motionScheme,
+        )
+    }
+    val navProgress = navProgressAnim.value
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -512,6 +549,11 @@ private fun AbkMainScaffold(
                 .align(Alignment.BottomCenter)
                 .onSizeChanged { bottomBarHeightPx = it.height }
                 .zIndex(if (childPageVisible) 0f else 2f)
+                .graphicsLayer {
+                    val hidden = 1f - navProgress
+                    translationY = hidden * bottomBarHeightPx
+                    alpha = 1f - (hidden * 0.15f)
+                }
         ) {
             NavigationBar(
                 containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer),
@@ -644,6 +686,15 @@ private fun AbkMainScaffold(
                 }
             }
         }
+        AbkSnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(
+                    bottom = with(density) { (bottomBarHeightPx * navProgress).toDp() } + 10.dp
+                )
+                .zIndex(4f)
+        )
     }
 }
 
@@ -687,12 +738,6 @@ private fun isLikelyModuleZipIntent(mimeType: String?, uri: Uri): Boolean {
     val cleanMime = mimeType?.lowercase().orEmpty()
     val path = uri.toString().lowercase()
     return cleanMime in MODULE_ZIP_MIME_TYPES || path.endsWith(".zip")
-}
-
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
 }
 
 private const val EXIT_BACK_INTERVAL_MS = 2_000L

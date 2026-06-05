@@ -1018,6 +1018,8 @@
     <string name="vm_plan_legacy_too_long">旧版 ABKP1 方案码太长，已不再支持，请重新分享</string>
     <string name="vm_plan_bad_format">方案码格式不正确</string>
     <string name="vm_plan_empty">方案码为空</string>
+    <string name="workflow_step_i18n_stale">无法从 GitHub 更新构建步骤名称，正在使用内置副本。</string>
+    <string name="build_status_run_id">运行 %1$d</string>
     <string name="vm_plan_bad_version">不支持的方案码版本</string>
     <string name="vm_plan_too_many_modules">外部模块数量超出限制</string>
     <string name="vm_plan_negative_number">负数无法写入方案码</string>

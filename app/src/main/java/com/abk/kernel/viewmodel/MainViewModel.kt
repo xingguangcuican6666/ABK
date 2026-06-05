@@ -30,8 +30,8 @@ import com.abk.kernel.utils.computeKindBuildProgress
 import com.abk.kernel.utils.DownloadDirectoryUtils
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.FailureLogExtractor
-import com.abk.kernel.utils.WorkflowStepI18n
 import com.abk.kernel.utils.NotificationUtils
+import com.abk.kernel.utils.WorkflowStepI18n
 import com.abk.kernel.utils.RootUtils
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -242,6 +242,7 @@ class MainViewModel @JvmOverloads constructor(
     private var workflowStepI18nLanguageJob: Job? = null
     private var lastScheduledWorkflowStepLang: String? = null
     private var lastScheduledWorkflowStepSyncGeneration: Int = -1
+    private val workflowStepI18nSnackbarShown = mutableSetOf<String>()
     private var buildQueueJob: Job? = null
     private var recentRunsRefreshJob: Job? = null
     private var recentRunsRefreshGeneration = 0
@@ -883,7 +884,18 @@ class MainViewModel @JvmOverloads constructor(
     }
 
     private suspend fun runWorkflowStepI18nRefresh(lang: String) {
-        WorkflowStepI18n.refresh(buildWorkflowStepI18nFetchContext(), lang)
+        when (val result = WorkflowStepI18n.refresh(buildWorkflowStepI18nFetchContext(), lang)) {
+            WorkflowStepI18n.RefreshResult.Updated ->
+                workflowStepI18nSnackbarShown.remove(lang)
+            else -> if (result.notifyStaleSnackbar()) {
+                showWorkflowStepLabelsSnackbarOnce(lang)
+            }
+        }
+    }
+
+    private fun showWorkflowStepLabelsSnackbarOnce(lang: String) {
+        if (!workflowStepI18nSnackbarShown.add(lang)) return
+        showSnackbar(text(R.string.workflow_step_i18n_stale), longDuration = false)
     }
 
     fun checkFork(showSyncPrompt: Boolean = true, closeOobeWhenReady: Boolean = false) {

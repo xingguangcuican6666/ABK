@@ -1018,6 +1018,8 @@
     <string name="vm_plan_legacy_too_long">Legacy ABKP1 plan codes are too long and are no longer supported. Share the plan again.</string>
     <string name="vm_plan_bad_format">Plan code format is invalid</string>
     <string name="vm_plan_empty">Plan code is empty</string>
+    <string name="workflow_step_i18n_stale">Couldn\'t refresh build step labels; using offline copy.</string>
+    <string name="build_status_run_id">Run %1$d</string>
     <string name="vm_plan_bad_version">Unsupported plan code version</string>
     <string name="vm_plan_too_many_modules">External module count exceeds the limit</string>
     <string name="vm_plan_negative_number">Negative numbers can not be written to a plan code</string>
