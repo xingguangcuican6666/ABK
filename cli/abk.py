@@ -188,6 +188,16 @@ def save_config(config):
     CONFIG_FILE.write_text(json.dumps(config, indent=2, ensure_ascii=False))
 
 
+def get_token(args):
+    config = load_config()
+    return (
+        getattr(args, "token", None)
+        or os.environ.get("GITHUB_TOKEN")
+        or os.environ.get("GH_TOKEN")
+        or config.get("token")
+    )
+
+
 def get_client_id():
     config = load_config()
     return config.get("client_id") or os.environ.get("ABK_CLIENT_ID") or CLIENT_ID_FALLBACK
@@ -210,7 +220,7 @@ def request_device_code():
     )
     
     try:
-        with urlopen(req) as resp:
+        with urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
     except Exception as e:
         print(t("err_req_failed_with_error", error=e), file=sys.stderr)
@@ -236,7 +246,7 @@ def poll_device_token_once(device_code):
     )
     
     try:
-        with urlopen(req) as resp:
+        with urlopen(req, timeout=30) as resp:
             result = json.loads(resp.read())
     except HTTPError as e:
         return {"success": False, "error": f"http_{e.code}"}
@@ -381,7 +391,7 @@ class GitHubClient:
 
         req = Request(url, data=data, headers=headers, method=method)
         try:
-            with urlopen(req) as resp:
+            with urlopen(req, timeout=30) as resp:
                 body = resp.read()
                 if not body:
                     return {}
@@ -507,22 +517,13 @@ class GitHubClient:
         }
         req = Request(url, headers=headers)
         try:
-            with urlopen(req) as resp:
+            with urlopen(req, timeout=60) as resp:
                 content = resp.read()
                 filename = f"artifact-{artifact_id}.zip"
                 output_path = Path(output_dir) / filename
                 output_path.write_bytes(content)
                 return str(output_path)
-        except HTTPError as e:
-            if e.code == 302:
-                redirect_url = e.headers.get("Location")
-                if redirect_url:
-                    with urlopen(redirect_url) as resp:
-                        content = resp.read()
-                        filename = f"artifact-{artifact_id}.zip"
-                        output_path = Path(output_dir) / filename
-                        output_path.write_bytes(content)
-                        return str(output_path)
+        except HTTPError:
             return None
 
     def ensure_fork(self):
@@ -576,19 +577,19 @@ def cmd_login(args):
             
             if fork_status and fork_status.get("needs_fork"):
                 create = input(t("ask_create_fork")).strip().lower()
-                if create == 'y':
+                if create in ('y', 'yes'):
                     client.create_fork()
                     print(t("fork_created_generic"))
             elif fork_status and fork_status.get("needs_sync"):
                 print(t("fork_behind_upstream", n=fork_status['behind_by']))
                 sync = input(t("ask_sync")).strip().lower()
-                if sync == 'y':
+                if sync in ('y', 'yes'):
                     client.sync_fork()
                     print(t("fork_sync_done"))
             elif fork_status and not fork_status.get("needs_fork"):
                 print(t("fork_up_to_date"))
         except Exception as e:
-            print(t("login_verify_failed", error=e), file=sys.stderr)
+            print(t("login_check_failed", error=e), file=sys.stderr)
 
 
 def cmd_logout(args):
@@ -605,13 +606,7 @@ def cmd_logout(args):
 
 
 def cmd_whoami(args):
-    config = load_config()
-    token = (
-        args.token 
-        or os.environ.get("GITHUB_TOKEN") 
-        or os.environ.get("GH_TOKEN")
-        or config.get("token")
-    )
+    token = get_token(args)
     
     if not token:
         print(t("logout_not"))
@@ -640,13 +635,7 @@ def cmd_whoami(args):
 
 
 def cmd_fork(args):
-    config = load_config()
-    token = (
-        args.token 
-        or os.environ.get("GITHUB_TOKEN") 
-        or os.environ.get("GH_TOKEN")
-        or config.get("token")
-    )
+    token = get_token(args)
     
     if not token:
         print(t("err_no_token"), file=sys.stderr)
@@ -678,13 +667,7 @@ def cmd_fork(args):
 
 
 def cmd_sync(args):
-    config = load_config()
-    token = (
-        args.token 
-        or os.environ.get("GITHUB_TOKEN") 
-        or os.environ.get("GH_TOKEN")
-        or config.get("token")
-    )
+    token = get_token(args)
     
     if not token:
         print(t("err_no_token"), file=sys.stderr)
@@ -712,13 +695,7 @@ def cmd_sync(args):
 
 
 def cmd_status(args):
-    config = load_config()
-    token = (
-        args.token 
-        or os.environ.get("GITHUB_TOKEN") 
-        or os.environ.get("GH_TOKEN")
-        or config.get("token")
-    )
+    token = get_token(args)
     
     if not token:
         print(t("err_no_token"), file=sys.stderr)
@@ -771,13 +748,7 @@ def cmd_status(args):
 
 
 def cmd_build(args):
-    config = load_config()
-    token = (
-        args.token 
-        or os.environ.get("GITHUB_TOKEN") 
-        or os.environ.get("GH_TOKEN")
-        or config.get("token")
-    )
+    token = get_token(args)
     
     if not token:
         print(t("err_no_token"), file=sys.stderr)
@@ -893,7 +864,7 @@ def cmd_build(args):
                 print(t("warn_behind_upstream", n=behind['behind_by']))
                 if not args.force:
                     sync = input(t("ask_sync")).strip().lower()
-                    if sync == 'y':
+                    if sync in ('y', 'yes'):
                         client.sync_fork()
                         print(t("fork_sync_done"))
     except Exception as e:
@@ -1013,13 +984,7 @@ def cmd_build(args):
 
 
 def cmd_artifacts(args):
-    config = load_config()
-    token = (
-        args.token 
-        or os.environ.get("GITHUB_TOKEN") 
-        or os.environ.get("GH_TOKEN")
-        or config.get("token")
-    )
+    token = get_token(args)
     
     if not token:
         print(t("err_no_token"), file=sys.stderr)
