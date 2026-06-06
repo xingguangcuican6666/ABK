@@ -1575,10 +1575,12 @@ private fun contributors(): List<AboutContributor> = listOf(
     AboutContributor("Fede2782"),
     AboutContributor("FixeQyt"),
     AboutContributor("FunLay123"),
+    AboutContributor("gsf114"),
     AboutContributor("guruji-byte"),
     AboutContributor("huime180"),
     AboutContributor("liqideqq"),
     AboutContributor("LX200944"),
+    AboutContributor("Mazha0309"),
     AboutContributor("MiRinChan"),
     AboutContributor("prpjzz"),
     AboutContributor("ReeViiS69"),
@@ -1599,7 +1601,7 @@ private fun openSourceNoticeGroups(): List<OpenSourceNoticeGroup> = listOf(
     OpenSourceNoticeGroup(
         R.string.settings_license_group_repository,
         listOf(
-            OpenSourceNotice("AnyBase Kernel", "GPL-2.0", "LICENSE", sourceRepoUrl()),
+            OpenSourceNotice("AnyBase Kernel", "GPL-3.0", "LICENSE", sourceRepoUrl()),
             OpenSourceNotice("ABK Control native bridge", "GPL-2.0", "app/src/main/cpp/uapi/abk_control.h"),
             OpenSourceNotice("xingguang DDK module", "GPL", "ddk/xingguang-ddk/xingguang_ddk.c"),
             OpenSourceNotice("DDK kernel API patch", "GPL-2.0", "ddk/patches/xingguang-ddk/0001-xingguang-ddk-api.patch"),
@@ -1616,6 +1618,7 @@ private fun openSourceNoticeGroups(): List<OpenSourceNoticeGroup> = listOf(
             OpenSourceNotice("Xiaomichael/kernel_manifest", "Upstream repository license / no SPDX detected", "OnePlus manifest branch source", "https://github.com/Xiaomichael/kernel_manifest"),
             OpenSourceNotice("Xiaomichael/kernel_patches", "Upstream repository license / no SPDX detected", "OnePlus patch source", "https://github.com/Xiaomichael/kernel_patches"),
             OpenSourceNotice("KernelSU", "GPL-3.0", "workflow setup.sh source", "https://github.com/tiann/KernelSU"),
+            OpenSourceNotice("KernelSU Next", "GPL-3.0", "workflow setup.sh source", "https://github.com/KernelSU-Next/KernelSU-Next"),
             OpenSourceNotice("SukiSU Ultra", "GPL-3.0", "kernel setup, ksud, android_bootimg", "https://github.com/SukiSU-Ultra/SukiSU-Ultra"),
             OpenSourceNotice("ReSukiSU", "GPL-3.0", "workflow setup.sh source", "https://github.com/ReSukiSU/ReSukiSU"),
             OpenSourceNotice("SUSFS", "GPL-2.0", "kernel patches and module integration", "https://gitlab.com/simonpunk/susfs4ksu"),
@@ -1626,13 +1629,13 @@ private fun openSourceNoticeGroups(): List<OpenSourceNoticeGroup> = listOf(
             OpenSourceNotice("WildKernels/kernel_patches", "GPL-2.0", "NTsync, IPSet, BBR and related patches", "https://github.com/WildKernels/kernel_patches"),
             OpenSourceNotice("cctv18/susfs4oki", "GPL-3.0", "OnePlus/OPPO/Realme SUSFS patch source", "https://github.com/cctv18/susfs4oki"),
             OpenSourceNotice("SukiSU_KernelPatch_patch", "Upstream repository license", "KPM patch source", "https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch"),
-            OpenSourceNotice("Action-Build", "Repository license", "workflow integration", "https://github.com/Numbersf/Action-Build"),
-            OpenSourceNotice("sidex15/susfs4ksu-module", "Repository license", "SUSFS module build source", "https://github.com/sidex15/susfs4ksu-module"),
+            OpenSourceNotice("Action-Build", "Upstream repository license", "workflow integration", "https://github.com/Numbersf/Action-Build"),
+            OpenSourceNotice("sidex15/susfs4ksu-module", "Upstream repository license", "SUSFS module build source", "https://github.com/sidex15/susfs4ksu-module"),
             OpenSourceNotice("LineageOS GCC prebuilts", "GPL-family toolchain notices", "workflow toolchain source", "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1"),
-            OpenSourceNotice("Baseband Guard", "Repository license", "workflow setup source", "https://github.com/vc-teahouse/Baseband-guard"),
-            OpenSourceNotice("Re-Kernel", "Repository license", "workflow patch source", "https://github.com/Sakion-Team/Re-Kernel"),
-            OpenSourceNotice("Droidspaces-OSS", "Repository license", "virtualization support patches", "https://github.com/ravindu644/Droidspaces-OSS"),
-            OpenSourceNotice("ABK_repo", "Repository license", "official module catalog", "https://github.com/xingguangcuican6666/ABK_repo")
+            OpenSourceNotice("Baseband Guard", "Upstream repository license", "workflow setup source", "https://github.com/vc-teahouse/Baseband-guard"),
+            OpenSourceNotice("Re-Kernel", "Upstream repository license", "workflow patch source", "https://github.com/Sakion-Team/Re-Kernel"),
+            OpenSourceNotice("Droidspaces-OSS", "Upstream repository license", "virtualization support patches", "https://github.com/ravindu644/Droidspaces-OSS"),
+            OpenSourceNotice("ABK_repo module catalog", "Upstream repository license", "official module catalog", "https://github.com/xingguangcuican6666/ABK_repo")
         )
     ),
     OpenSourceNoticeGroup(
