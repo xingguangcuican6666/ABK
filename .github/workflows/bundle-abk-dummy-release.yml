@@ -1,0 +1,265 @@
+name: Bundle ABK Dummy Release
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: "Branch or tag to build (default: current ref)"
+        required: false
+        type: string
+        default: ""
+      release_tag:
+        description: "Dummy release tag (default: dummy-abk-bundle-<run_id>)"
+        required: false
+        type: string
+        default: ""
+      release_title:
+        description: "Dummy release title (default: generated from ref/run number)"
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: bundle-abk-dummy-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      TARGET_REF_INPUT: ${{ inputs.target_ref }}
+      RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+      RELEASE_TITLE_INPUT: ${{ inputs.release_title }}
+    steps:
+      - name: Resolve target ref and release metadata
+        id: meta
+        run: |
+          set -euo pipefail
+
+          target_ref="${TARGET_REF_INPUT:-}"
+          if [ -z "$target_ref" ]; then
+            target_ref="${GITHUB_REF_NAME}"
+          fi
+
+          encoded_ref="$(jq -rn --arg value "$target_ref" '$value | @uri')"
+          target_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${encoded_ref}" --jq '.sha')"
+
+          release_tag="${RELEASE_TAG_INPUT:-dummy-abk-bundle-${GITHUB_RUN_ID}}"
+          release_title="${RELEASE_TITLE_INPUT:-ABK dummy build bundle ${target_ref} #${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}}"
+
+          {
+            echo "target_ref=$target_ref"
+            echo "target_sha=$target_sha"
+            echo "release_tag=$release_tag"
+            echo "release_title=$release_title"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch child build workflows
+        env:
+          TARGET_REF: ${{ steps.meta.outputs.target_ref }}
+          TARGET_SHA: ${{ steps.meta.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+
+          cat > workflows.tsv <<'EOF'
+          build-abk-app.yml	abk-app
+          build-abk-app-dev.yml	abk-app-dev
+          build-abk-cli.yml	abk-cli
+          EOF
+
+          : > child-runs.tsv
+
+          while IFS=$'\t' read -r workflow_file workflow_slug; do
+            [ -n "$workflow_file" ] || continue
+            dispatch_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+            echo "Dispatching $workflow_file on ref $TARGET_REF"
+            gh workflow run "$workflow_file" \
+              --repo "$GITHUB_REPOSITORY" \
+              --ref "$TARGET_REF"
+
+            run_id=""
+            run_url=""
+            for attempt in $(seq 1 60); do
+              runs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_file}/runs?event=workflow_dispatch&per_page=50")"
+              run_id="$(printf '%s' "$runs_json" | jq -r --arg sha "$TARGET_SHA" --arg since "$dispatch_started_at" '
+                .workflow_runs
+                | map(select(.head_sha == $sha and .created_at >= $since))
+                | sort_by(.created_at)
+                | last
+                | .id // empty
+              ')"
+              if [ -n "$run_id" ]; then
+                run_url="$(printf '%s' "$runs_json" | jq -r --argjson id "$run_id" '
+                  .workflow_runs
+                  | map(select(.id == $id))
+                  | first
+                  | .html_url // empty
+                ')"
+                break
+              fi
+              sleep 5
+            done
+
+            if [ -z "$run_id" ]; then
+              echo "::error::Timed out while waiting for $workflow_file to appear."
+              exit 1
+            fi
+
+            printf '%s\t%s\t%s\t%s\n' "$workflow_file" "$workflow_slug" "$run_id" "$run_url" >> child-runs.tsv
+            echo "Queued $workflow_slug run: $run_id"
+          done < workflows.tsv
+
+      - name: Wait for child builds
+        run: |
+          set -euo pipefail
+
+          while IFS=$'\t' read -r workflow_file workflow_slug run_id run_url; do
+            [ -n "$run_id" ] || continue
+            echo "Waiting for $workflow_slug ($run_id)"
+            gh run watch "$run_id" \
+              --repo "$GITHUB_REPOSITORY" \
+              --exit-status
+          done < child-runs.tsv
+
+      - name: Download child artifacts
+        run: |
+          set -euo pipefail
+
+          mkdir -p release-assets
+          : > release-assets.txt
+
+          while IFS=$'\t' read -r workflow_file workflow_slug run_id run_url; do
+            [ -n "$run_id" ] || continue
+
+            artifacts_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100")"
+            artifact_count="$(printf '%s' "$artifacts_json" | jq '[.artifacts[] | select(.expired == false)] | length')"
+            if [ "$artifact_count" -eq 0 ]; then
+              echo "::error::$workflow_slug run $run_id has no downloadable artifacts."
+              exit 1
+            fi
+
+            printf '%s' "$artifacts_json" | jq -r '
+              .artifacts[]
+              | select(.expired == false)
+              | [.name, .archive_download_url]
+              | @tsv
+            ' | while IFS=$'\t' read -r artifact_name archive_url; do
+              safe_name="$(printf '%s' "${workflow_slug}-${artifact_name}" | tr '/:\\ ' '-' | tr -s '-')"
+              asset_path="release-assets/${safe_name}.zip"
+              echo "Downloading $workflow_slug artifact $artifact_name -> $asset_path"
+              curl -fsSL \
+                -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                "$archive_url" \
+                -o "$asset_path"
+              printf '%s\n' "$asset_path" >> release-assets.txt
+            done
+          done < child-runs.tsv
+
+          sort -u release-assets.txt -o release-assets.txt
+          if [ ! -s release-assets.txt ]; then
+            echo "::error::No release assets were downloaded."
+            exit 1
+          fi
+
+      - name: Build dummy release notes
+        env:
+          TARGET_REF: ${{ steps.meta.outputs.target_ref }}
+          TARGET_SHA: ${{ steps.meta.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+
+          asset_count="$(wc -l < release-assets.txt | tr -d '[:space:]')"
+
+          {
+            echo "## ABK dummy build bundle"
+            echo
+            echo "This prerelease is generated from the existing ABK child build workflows."
+            echo "Assets are the raw GitHub Actions artifact ZIP files from those runs."
+            echo
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Target ref | \`$TARGET_REF\` |"
+            echo "| Target SHA | \`$TARGET_SHA\` |"
+            echo "| Bundle workflow run | https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} |"
+            echo "| Asset count | $asset_count |"
+            echo
+            echo "## Child workflows"
+            while IFS=$'\t' read -r workflow_file workflow_slug run_id run_url; do
+              [ -n "$run_id" ] || continue
+              echo "- \`$workflow_slug\`: ${run_url:-https://github.com/${GITHUB_REPOSITORY}/actions/runs/${run_id}}"
+            done < child-runs.tsv
+            echo
+            echo "## Assets"
+            while IFS= read -r asset_path; do
+              [ -n "$asset_path" ] || continue
+              echo "- $(basename "$asset_path")"
+            done < release-assets.txt
+          } > release_body.md
+
+      - name: Create or update dummy release
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+          RELEASE_TITLE: ${{ steps.meta.outputs.release_title }}
+          TARGET_SHA: ${{ steps.meta.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$RELEASE_TITLE" \
+              --notes-file release_body.md
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$TARGET_SHA" \
+              --title "$RELEASE_TITLE" \
+              --notes-file release_body.md \
+              --prerelease
+          fi
+
+      - name: Upload dummy release assets
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r asset_path; do
+            [ -n "$asset_path" ] || continue
+            gh release upload "$RELEASE_TAG" "$asset_path" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          done < release-assets.txt
+
+      - name: Write summary
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo "## ABK dummy release"
+            echo "- Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+            echo "- Target ref: \`${{ steps.meta.outputs.target_ref }}\`"
+            echo "- Target SHA: \`${{ steps.meta.outputs.target_sha }}\`"
+            echo
+            echo "## Child runs"
+            while IFS=$'\t' read -r workflow_file workflow_slug run_id run_url; do
+              [ -n "$run_id" ] || continue
+              echo "- \`$workflow_slug\`: ${run_url:-https://github.com/${GITHUB_REPOSITORY}/actions/runs/${run_id}}"
+            done < child-runs.tsv
+            echo
+            echo "## Uploaded assets"
+            while IFS= read -r asset_path; do
+              [ -n "$asset_path" ] || continue
+              echo "- https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/$(basename "$asset_path")"
+            done < release-assets.txt
+          } >> "$GITHUB_STEP_SUMMARY"
