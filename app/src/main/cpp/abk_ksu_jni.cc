@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 
 #include <android/log.h>
+#include <cstdio>
 #include <cstring>
 #include <string>
 
@@ -131,6 +132,18 @@ static void fillArrayWithList(JNIEnv *env, jobject list, int *data, int count) {
     }
 }
 
+/** Copy JNI UTF-8 into a fixed buffer; rejects overflow (strlen >= bufSize). */
+static bool copyUtf8ToBuffer(char *buf, size_t bufSize, const char *utf) {
+    if (!buf || bufSize == 0 || !utf) {
+        return false;
+    }
+    if (strlen(utf) >= bufSize) {
+        return false;
+    }
+    snprintf(buf, bufSize, "%s", utf);
+    return true;
+}
+
 extern "C"
 JNIEXPORT jobject JNICALL
 Java_com_abk_kernel_utils_AbkKsuNative_getAppProfile(JNIEnv *env, jobject, jstring pkg, jint uid) {
@@ -140,13 +153,20 @@ Java_com_abk_kernel_utils_AbkKsuNative_getAppProfile(JNIEnv *env, jobject, jstri
 
     p_key_t key = {};
     auto cpkg = env->GetStringUTFChars(pkg, nullptr);
-    strcpy(key, cpkg);
+    if (!cpkg || !copyUtf8ToBuffer(key, sizeof(key), cpkg)) {
+        if (cpkg) {
+            env->ReleaseStringUTFChars(pkg, cpkg);
+        }
+        return nullptr;
+    }
     env->ReleaseStringUTFChars(pkg, cpkg);
 
     app_profile profile = {};
     profile.version = KSU_APP_PROFILE_VER;
 
-    strcpy(profile.key, key);
+    if (!copyUtf8ToBuffer(profile.key, sizeof(profile.key), key)) {
+        return nullptr;
+    }
     profile.curr_uid = uid;
 
     bool useDefaultProfile = get_app_profile(&profile) != 0;
@@ -259,7 +279,12 @@ Java_com_abk_kernel_utils_AbkKsuNative_setAppProfile(JNIEnv *env, jobject clazz,
 
     auto cpkg = env->GetStringUTFChars((jstring) key, nullptr);
     p_key_t p_key = {};
-    strcpy(p_key, cpkg);
+    if (!cpkg || !copyUtf8ToBuffer(p_key, sizeof(p_key), cpkg)) {
+        if (cpkg) {
+            env->ReleaseStringUTFChars((jstring) key, cpkg);
+        }
+        return false;
+    }
     env->ReleaseStringUTFChars((jstring) key, cpkg);
 
     auto currentUid = env->GetIntField(profile, currentUidField);
@@ -275,7 +300,9 @@ Java_com_abk_kernel_utils_AbkKsuNative_setAppProfile(JNIEnv *env, jobject clazz,
     app_profile p = {};
     p.version = KSU_APP_PROFILE_VER;
 
-    strcpy(p.key, p_key);
+    if (!copyUtf8ToBuffer(p.key, sizeof(p.key), p_key)) {
+        return false;
+    }
     p.allow_su = allowSu;
     p.curr_uid = currentUid;
 
@@ -283,8 +310,18 @@ Java_com_abk_kernel_utils_AbkKsuNative_setAppProfile(JNIEnv *env, jobject clazz,
         p.rp_config.use_default = env->GetBooleanField(profile, rootUseDefaultField);
         auto templateName = env->GetObjectField(profile, rootTemplateField);
         if (templateName) {
+            if (env->GetStringLength((jstring) templateName) > KSU_MAX_PACKAGE_NAME) {
+                return false;
+            }
             auto ctemplateName = env->GetStringUTFChars((jstring) templateName, nullptr);
-            strcpy(p.rp_config.template_name, ctemplateName);
+            if (!ctemplateName ||
+                !copyUtf8ToBuffer(p.rp_config.template_name,
+                        sizeof(p.rp_config.template_name), ctemplateName)) {
+                if (ctemplateName) {
+                    env->ReleaseStringUTFChars((jstring) templateName, ctemplateName);
+                }
+                return false;
+            }
             env->ReleaseStringUTFChars((jstring) templateName, ctemplateName);
         }
 
@@ -301,9 +338,21 @@ Java_com_abk_kernel_utils_AbkKsuNative_setAppProfile(JNIEnv *env, jobject clazz,
 
         p.rp_config.profile.capabilities.effective = capListToBits(env, capabilities);
 
-        auto cdomain = env->GetStringUTFChars((jstring) domain, nullptr);
-        strcpy(p.rp_config.profile.selinux_domain, cdomain);
-        env->ReleaseStringUTFChars((jstring) domain, cdomain);
+        if (domain) {
+            if (env->GetStringLength((jstring) domain) > KSU_SELINUX_DOMAIN) {
+                return false;
+            }
+            auto cdomain = env->GetStringUTFChars((jstring) domain, nullptr);
+            if (!cdomain ||
+                !copyUtf8ToBuffer(p.rp_config.profile.selinux_domain,
+                        sizeof(p.rp_config.profile.selinux_domain), cdomain)) {
+                if (cdomain) {
+                    env->ReleaseStringUTFChars((jstring) domain, cdomain);
+                }
+                return false;
+            }
+            env->ReleaseStringUTFChars((jstring) domain, cdomain);
+        }
 
         p.rp_config.profile.namespaces = env->GetIntField(profile, namespacesField);
     } else {
