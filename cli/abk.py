@@ -461,8 +461,14 @@ class GitHubClient:
         return self.post(f"/repos/{self.repo}/actions/runs/{run_id}/rerun")
 
     def sync_fork(self, branch=None):
-        owner = self.username
-        repo = SOURCE_REPO_NAME
+        if not self.username:
+            raise RuntimeError("cannot detect user")
+        if self.fork_repo:
+            owner = self.fork_repo["owner"]["login"]
+            repo = self.fork_repo["name"]
+        else:
+            owner = self.username
+            repo = SOURCE_REPO_NAME
         if branch is None:
             try:
                 upstream_info = self.get(f"/repos/{SOURCE_REPO_OWNER}/{SOURCE_REPO_NAME}")
