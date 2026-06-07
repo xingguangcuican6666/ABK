@@ -636,7 +636,18 @@ jobs:
           CONFIG_HEADERS_INSTALL=n
           EOF
 
-          if [ "$EFFECTIVE_KPM" = "true" ]; then echo "CONFIG_KPM=y" >> "$DEFCONFIG_PATH"; fi
+          kpm_config_supported="false"
+          if [ "$KSU_VARIANT" = "SukiSU" ] || [ "$KSU_VARIANT" = "ReSukiSU" ]; then
+            if rg -n '^[[:space:]]*config[[:space:]]+KPM\b' "$COMMON_ROOT/KernelSU" "$COMMON_ROOT/common/drivers/kernelsu" "$COMMON_ROOT/drivers/kernelsu" -g 'Kconfig*' >/dev/null 2>&1; then
+              kpm_config_supported="true"
+            fi
+          fi
+
+          if [ "$EFFECTIVE_KPM" = "true" ] && [ "$kpm_config_supported" = "true" ]; then
+            echo "CONFIG_KPM=y" >> "$DEFCONFIG_PATH"
+          elif [ "$EFFECTIVE_KPM" = "true" ]; then
+            echo "::notice::$KSU_VARIANT 当前源码未暴露 CONFIG_KPM；跳过 defconfig 注入，保留后续 Image KPM patch。"
+          fi
           if [ "$USE_BBG" = "true" ] && [ "$EFFECTIVE_KPM" = "false" ]; then
               cat >> "$DEFCONFIG_PATH" <<'EOF'
           CONFIG_BBG=y

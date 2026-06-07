@@ -2598,6 +2598,8 @@ jobs:
       - name: 配置内核选项
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
+          set -euo pipefail
+
           if [ "${{ inputs.ksu_variant }}" != "None" ]; then
             cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_KSU=y
@@ -2606,10 +2608,23 @@ jobs:
           EOF
           fi
 
+          kpm_config_supported="false"
+          if [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; then
+            if rg -n '^[[:space:]]*config[[:space:]]+KPM\b' KernelSU common/drivers/kernelsu drivers/kernelsu -g 'Kconfig*' >/dev/null 2>&1; then
+              kpm_config_supported="true"
+            fi
+          fi
+
           if [ "${{ inputs.use_kpm }}" == "true" ] && { [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; }; then
-            echo "CONFIG_KPM=y" >> "$DEFCONFIG"
+            if [ "$kpm_config_supported" = "true" ]; then
+              echo "CONFIG_KPM=y" >> "$DEFCONFIG"
+            else
+              echo "::notice::${{ inputs.ksu_variant }} 当前源码未暴露 CONFIG_KPM；跳过 defconfig 注入，保留后续 Image KPM patch。"
+            fi
           elif [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; then
-            echo "# CONFIG_KPM is not set" >> "$DEFCONFIG"
+            if [ "$kpm_config_supported" = "true" ]; then
+              echo "# CONFIG_KPM is not set" >> "$DEFCONFIG"
+            fi
           fi
 
           if [ "${{ inputs.enable_susfs }}" != "true" ] && { [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; }; then
