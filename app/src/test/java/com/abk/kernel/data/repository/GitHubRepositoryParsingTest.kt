@@ -1,9 +1,12 @@
 package com.abk.kernel.data.repository
 
 import com.abk.kernel.data.model.CustomExternalModuleStage
+import com.abk.kernel.data.model.shouldOfferAppUpdate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GitHubRepositoryParsingTest {
@@ -110,5 +113,83 @@ class GitHubRepositoryParsingTest {
         assertThrows(IllegalStateException::class.java) {
             repository.parseExternalModuleConf("ABK_MODULE_VERSION=1")
         }
+    }
+
+    @Test
+    fun parsesAppUpdateMetadataAndKeepsStableUntouched() {
+        val document = """
+            {
+              "stable": {
+                "normal": {
+                  "versionName": "1.2.0",
+                  "versionCode": 10020,
+                  "downloadUrl": "https://example.com/abk-stable.apk"
+                }
+              },
+              "unstable": {
+                "normal": {
+                  "versionName": "1.2.1-dev",
+                  "versionCode": 10020,
+                  "downloadUrl": "https://nightly.link/example/normal.zip",
+                  "buildTimestampEpochMillis": 1710000000000,
+                  "sourceWorkflow": "Build ABK App",
+                  "commitSha": "abc123",
+                  "runId": 42
+                },
+                "dev": {
+                  "versionName": "1.2.1-dev2",
+                  "versionCode": 10021,
+                  "downloadUrl": "https://nightly.link/example/dev.zip"
+                }
+              }
+            }
+        """.trimIndent()
+
+        val parsed = repository.parseAppUpdateMetadata(document)
+
+        assertEquals("1.2.0", parsed.stable.normal?.versionName)
+        assertEquals("https://example.com/abk-stable.apk", parsed.stable.normal?.downloadUrl)
+        assertEquals("1.2.1-dev", parsed.unstable.normal?.versionName)
+        assertEquals(1710000000000, parsed.unstable.normal?.buildTimestampEpochMillis)
+        assertEquals("Build ABK App", parsed.unstable.normal?.sourceWorkflow)
+        assertEquals("1.2.1-dev2", parsed.unstable.dev?.versionName)
+        assertNull(parsed.stable.dev)
+    }
+
+    @Test
+    fun appUpdateComparisonUsesBuildTimestampForSameVersionCode() {
+        assertTrue(
+            shouldOfferAppUpdate(
+                remote = com.abk.kernel.data.model.AppUpdateEntry(
+                    versionName = "1.2.0",
+                    versionCode = 10020,
+                    buildTimestampEpochMillis = 2000L
+                ),
+                currentVersionCode = 10020,
+                currentBuildTimestampEpochMillis = 1000L
+            )
+        )
+        assertFalse(
+            shouldOfferAppUpdate(
+                remote = com.abk.kernel.data.model.AppUpdateEntry(
+                    versionName = "1.2.0",
+                    versionCode = 10020,
+                    buildTimestampEpochMillis = 1000L
+                ),
+                currentVersionCode = 10020,
+                currentBuildTimestampEpochMillis = 1000L
+            )
+        )
+        assertTrue(
+            shouldOfferAppUpdate(
+                remote = com.abk.kernel.data.model.AppUpdateEntry(
+                    versionName = "1.3.0",
+                    versionCode = 10021,
+                    buildTimestampEpochMillis = 500L
+                ),
+                currentVersionCode = 10020,
+                currentBuildTimestampEpochMillis = 999999L
+            )
+        )
     }
 }

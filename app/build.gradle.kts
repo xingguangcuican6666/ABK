@@ -6,6 +6,22 @@ plugins {
 val githubClientId = providers.gradleProperty("ABK_GITHUB_CLIENT_ID")
     .orElse(providers.environmentVariable("ABK_GITHUB_CLIENT_ID"))
     .orElse("Ov23li8skGo6AFPBeSTh")
+val appVersionCode = 10020
+val appVersionName = "1.2.0"
+val appUpdateMetadataUrl = providers.environmentVariable("ABK_APP_UPDATE_METADATA_URL")
+    .orElse("https://raw.githubusercontent.com/xingguangcuican6666/ABK/dev/version.json")
+val appBuildTimestamp = providers.environmentVariable("ABK_APP_BUILD_TIMESTAMP")
+    .orElse("")
+val appBuildTimestampEpochMillis = providers.environmentVariable("ABK_APP_BUILD_TIMESTAMP_EPOCH_MILLIS")
+    .map { raw -> raw.toLongOrNull()?.let { "${it}L" } ?: "0L" }
+    .orElse("0L")
+val appBuildRunId = providers.environmentVariable("ABK_APP_BUILD_RUN_ID")
+    .map { raw -> raw.toLongOrNull()?.let { "${it}L" } ?: "0L" }
+    .orElse("0L")
+val appBuildCommitSha = providers.environmentVariable("ABK_APP_BUILD_COMMIT_SHA")
+    .orElse("")
+val appBuildWorkflowName = providers.environmentVariable("ABK_APP_BUILD_WORKFLOW_NAME")
+    .orElse("")
 
 val releaseStoreFile = providers.gradleProperty("ABK_RELEASE_STORE_FILE")
     .orElse(providers.environmentVariable("ABK_RELEASE_STORE_FILE"))
@@ -31,11 +47,19 @@ android {
         applicationId = "com.abk.kernel"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10020
-        versionName = "1.2.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        buildConfigField("long", "APP_VERSION_CODE", "${appVersionCode}L")
+        buildConfigField("String", "APP_VERSION_NAME", "\"$appVersionName\"")
+        buildConfigField("String", "APP_UPDATE_METADATA_URL", "\"${appUpdateMetadataUrl.get()}\"")
+        buildConfigField("String", "APP_BUILD_TIMESTAMP", "\"${appBuildTimestamp.get()}\"")
+        buildConfigField("long", "APP_BUILD_TIMESTAMP_EPOCH_MILLIS", appBuildTimestampEpochMillis.get())
+        buildConfigField("long", "APP_BUILD_RUN_ID", appBuildRunId.get())
+        buildConfigField("String", "APP_BUILD_COMMIT_SHA", "\"${appBuildCommitSha.get()}\"")
+        buildConfigField("String", "APP_BUILD_WORKFLOW_NAME", "\"${appBuildWorkflowName.get()}\"")
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"${githubClientId.get()}\"")
         buildConfigField("String", "SOURCE_REPO_OWNER", "\"xingguangcuican6666\"")
         buildConfigField("String", "SOURCE_REPO_NAME", "\"ABK\"")

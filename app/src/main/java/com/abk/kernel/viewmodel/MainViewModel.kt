@@ -178,6 +178,11 @@ data class MainUiState(
     val downloadDirectory: String = DownloadDirectoryUtils.defaultDirectoryPath(),
     val downloadMirrorBaseUrl: String = "",
     val prebuiltGkiEnabled: Boolean = true,
+    val appUpdateStability: String = APP_UPDATE_STABILITY_STABLE,
+    val appUpdateLine: String = APP_UPDATE_LINE_NORMAL,
+    val appUpdateChecking: Boolean = false,
+    val appUpdateInfo: AppUpdateCheckResult? = null,
+    val appUpdateError: String? = null,
     val predictiveBackEnabled: Boolean = true,
     val runtimeNavigationEnabled: Boolean = false,
     val webViewDebugEnabled: Boolean = false,
@@ -532,6 +537,24 @@ class MainViewModel @JvmOverloads constructor(
                             loadingPrebuiltGkiAssetReleaseIds = emptySet()
                         )
                     }
+                }
+            }
+        }
+        viewModelScope.launch {
+            combine(
+                prefs.appUpdateStability,
+                prefs.appUpdateLine
+            ) { stability, line ->
+                stability to line
+            }.collect { (stability, line) ->
+                _uiState.update { state ->
+                    val resetResult = state.appUpdateStability != stability || state.appUpdateLine != line
+                    state.copy(
+                        appUpdateStability = stability,
+                        appUpdateLine = line,
+                        appUpdateInfo = if (resetResult) null else state.appUpdateInfo,
+                        appUpdateError = if (resetResult) null else state.appUpdateError
+                    )
                 }
             }
         }
@@ -2509,6 +2532,83 @@ class MainViewModel @JvmOverloads constructor(
             ).withDownloadState()
         }
         prefs.setPrebuiltGkiEnabled(v)
+    }
+    fun setAppUpdateStability(value: String) = viewModelScope.launch {
+        prefs.setAppUpdateStability(value)
+    }
+    fun setAppUpdateLine(value: String) = viewModelScope.launch {
+        prefs.setAppUpdateLine(value)
+    }
+    fun checkAppUpdate() {
+        if (_uiState.value.appUpdateChecking) return
+        viewModelScope.launch {
+            val stability = normalizeAppUpdateStability(_uiState.value.appUpdateStability)
+            val line = normalizeAppUpdateLine(_uiState.value.appUpdateLine)
+            _uiState.update {
+                it.copy(
+                    appUpdateChecking = true,
+                    appUpdateError = null
+                )
+            }
+
+            when (val result = github.fetchAppUpdateMetadata()) {
+                is Result.Success -> {
+                    val remote = result.data.entryFor(stability, line)
+                    if (remote == null) {
+                        val message = text(R.string.vm_app_update_channel_missing)
+                        _uiState.update {
+                            it.copy(
+                                appUpdateChecking = false,
+                                appUpdateInfo = null,
+                                appUpdateError = message
+                            )
+                        }
+                        showSnackbar(message, longDuration = true)
+                        return@launch
+                    }
+
+                    val info = AppUpdateCheckResult(
+                        stability = stability,
+                        line = line,
+                        currentVersionName = BuildConfig.APP_VERSION_NAME,
+                        currentVersionCode = BuildConfig.APP_VERSION_CODE,
+                        currentBuildTimestampEpochMillis = BuildConfig.APP_BUILD_TIMESTAMP_EPOCH_MILLIS,
+                        remote = remote,
+                        hasUpdate = shouldOfferAppUpdate(
+                            remote = remote,
+                            currentVersionCode = BuildConfig.APP_VERSION_CODE,
+                            currentBuildTimestampEpochMillis = BuildConfig.APP_BUILD_TIMESTAMP_EPOCH_MILLIS
+                        )
+                    )
+                    _uiState.update {
+                        it.copy(
+                            appUpdateChecking = false,
+                            appUpdateInfo = info,
+                            appUpdateError = null
+                        )
+                    }
+                    showSnackbar(
+                        if (info.hasUpdate) {
+                            text(R.string.vm_app_update_available, remote.versionName)
+                        } else {
+                            text(R.string.vm_app_update_latest)
+                        }
+                    )
+                }
+                is Result.Error -> {
+                    val message = text(R.string.vm_app_update_check_failed, result.message)
+                    _uiState.update {
+                        it.copy(
+                            appUpdateChecking = false,
+                            appUpdateInfo = null,
+                            appUpdateError = message
+                        )
+                    }
+                    showSnackbar(message, longDuration = true)
+                }
+                Result.Loading -> Unit
+            }
+        }
     }
 
     fun refreshManagerSettings(force: Boolean = false) {

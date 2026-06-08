@@ -253,6 +253,86 @@ data class PrebuiltGkiRelease(
     val assetCount: Int = 0
 )
 
+const val APP_UPDATE_STABILITY_STABLE = "stable"
+const val APP_UPDATE_STABILITY_UNSTABLE = "unstable"
+const val APP_UPDATE_LINE_NORMAL = "normal"
+const val APP_UPDATE_LINE_DEV = "dev"
+
+val APP_UPDATE_STABILITY_OPTIONS = listOf(
+    APP_UPDATE_STABILITY_STABLE,
+    APP_UPDATE_STABILITY_UNSTABLE,
+)
+
+val APP_UPDATE_LINE_OPTIONS = listOf(
+    APP_UPDATE_LINE_NORMAL,
+    APP_UPDATE_LINE_DEV,
+)
+
+data class AppUpdateMetadata(
+    val stable: AppUpdateChannelEntries = AppUpdateChannelEntries(),
+    val unstable: AppUpdateChannelEntries = AppUpdateChannelEntries()
+) {
+    fun entryFor(stability: String, line: String): AppUpdateEntry? {
+        val normalizedStability = normalizeAppUpdateStability(stability)
+        val normalizedLine = normalizeAppUpdateLine(line)
+        val channel = when (normalizedStability) {
+            APP_UPDATE_STABILITY_UNSTABLE -> unstable
+            else -> stable
+        }
+        return when (normalizedLine) {
+            APP_UPDATE_LINE_DEV -> channel.dev
+            else -> channel.normal
+        }
+    }
+}
+
+data class AppUpdateChannelEntries(
+    val normal: AppUpdateEntry? = null,
+    val dev: AppUpdateEntry? = null
+)
+
+data class AppUpdateEntry(
+    val versionName: String = "",
+    val versionCode: Long = 0L,
+    val downloadUrl: String = "",
+    val publishedAt: String = "",
+    val buildTimestampEpochMillis: Long = 0L,
+    val sourceWorkflow: String = "",
+    val commitSha: String = "",
+    val runId: Long = 0L
+)
+
+data class AppUpdateCheckResult(
+    val stability: String,
+    val line: String,
+    val currentVersionName: String,
+    val currentVersionCode: Long,
+    val currentBuildTimestampEpochMillis: Long,
+    val remote: AppUpdateEntry,
+    val hasUpdate: Boolean
+)
+
+fun normalizeAppUpdateStability(value: String): String = when (value.trim().lowercase()) {
+    APP_UPDATE_STABILITY_UNSTABLE -> APP_UPDATE_STABILITY_UNSTABLE
+    else -> APP_UPDATE_STABILITY_STABLE
+}
+
+fun normalizeAppUpdateLine(value: String): String = when (value.trim().lowercase()) {
+    APP_UPDATE_LINE_DEV -> APP_UPDATE_LINE_DEV
+    else -> APP_UPDATE_LINE_NORMAL
+}
+
+fun shouldOfferAppUpdate(
+    remote: AppUpdateEntry,
+    currentVersionCode: Long,
+    currentBuildTimestampEpochMillis: Long
+): Boolean = when {
+    remote.versionCode > currentVersionCode -> true
+    remote.versionCode < currentVersionCode -> false
+    remote.buildTimestampEpochMillis > currentBuildTimestampEpochMillis -> true
+    else -> false
+}
+
 // GitHub Device Flow OAuth
 data class DeviceCodeResponse(
     @SerializedName("device_code") val deviceCode: String,

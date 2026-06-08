@@ -4,6 +4,10 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import com.abk.kernel.data.model.APP_UPDATE_LINE_NORMAL
+import com.abk.kernel.data.model.APP_UPDATE_STABILITY_STABLE
+import com.abk.kernel.data.model.normalizeAppUpdateLine
+import com.abk.kernel.data.model.normalizeAppUpdateStability
 import com.abk.kernel.utils.DownloadDirectoryUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -51,6 +55,8 @@ class PreferencesRepository(private val context: Context) {
         val KEY_DOWNLOAD_MIRROR_BASE_URL = stringPreferencesKey("download_mirror_base_url")
         val KEY_DOWNLOAD_DIRECTORY = stringPreferencesKey("download_directory")
         val KEY_PREBUILT_GKI_ENABLED = booleanPreferencesKey("prebuilt_gki_enabled")
+        val KEY_APP_UPDATE_STABILITY = stringPreferencesKey("app_update_stability")
+        val KEY_APP_UPDATE_LINE = stringPreferencesKey("app_update_line")
         val KEY_PREDICTIVE_BACK_ENABLED = booleanPreferencesKey("predictive_back_enabled")
         val KEY_RUNTIME_NAVIGATION_ENABLED = booleanPreferencesKey("runtime_navigation_enabled")
         val KEY_WEBVIEW_DEBUG_ENABLED = booleanPreferencesKey("webview_debug_enabled")
@@ -99,6 +105,12 @@ class PreferencesRepository(private val context: Context) {
         DownloadDirectoryUtils.normalizeDirectoryPath(it[KEY_DOWNLOAD_DIRECTORY])
     }
     val prebuiltGkiEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_PREBUILT_GKI_ENABLED] ?: true }
+    val appUpdateStability: Flow<String> = context.dataStore.data.map {
+        normalizeAppUpdateStability(it[KEY_APP_UPDATE_STABILITY] ?: APP_UPDATE_STABILITY_STABLE)
+    }
+    val appUpdateLine: Flow<String> = context.dataStore.data.map {
+        normalizeAppUpdateLine(it[KEY_APP_UPDATE_LINE] ?: APP_UPDATE_LINE_NORMAL)
+    }
     val predictiveBackEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_PREDICTIVE_BACK_ENABLED] ?: true }
     val runtimeNavigationEnabled: Flow<Boolean> = context.dataStore.data.map {
         it[KEY_RUNTIME_NAVIGATION_ENABLED] ?: false
@@ -197,6 +209,12 @@ class PreferencesRepository(private val context: Context) {
         }
     }
     suspend fun setPrebuiltGkiEnabled(v: Boolean) = context.dataStore.edit { it[KEY_PREBUILT_GKI_ENABLED] = v }
+    suspend fun setAppUpdateStability(value: String) = context.dataStore.edit {
+        it[KEY_APP_UPDATE_STABILITY] = normalizeAppUpdateStability(value)
+    }
+    suspend fun setAppUpdateLine(value: String) = context.dataStore.edit {
+        it[KEY_APP_UPDATE_LINE] = normalizeAppUpdateLine(value)
+    }
     suspend fun setPredictiveBackEnabled(v: Boolean) = context.dataStore.edit { it[KEY_PREDICTIVE_BACK_ENABLED] = v }
     suspend fun setRuntimeNavigationEnabled(v: Boolean) = context.dataStore.edit {
         it[KEY_RUNTIME_NAVIGATION_ENABLED] = v

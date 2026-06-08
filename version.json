@@ -1,0 +1,28 @@
+{
+  "stable": {
+    "normal": {},
+    "dev": {}
+  },
+  "unstable": {
+    "normal": {
+      "versionName": "1.2.0",
+      "versionCode": 10020,
+      "downloadUrl": "https://nightly.link/xingguangcuican6666/ABK/workflows/build-abk-app/dev/abk-apks.zip",
+      "publishedAt": "",
+      "buildTimestampEpochMillis": 0,
+      "sourceWorkflow": "",
+      "commitSha": "",
+      "runId": 0
+    },
+    "dev": {
+      "versionName": "1.2.0",
+      "versionCode": 10020,
+      "downloadUrl": "https://nightly.link/xingguangcuican6666/ABK/workflows/build-abk-app-dev/dev/abk-apks.zip",
+      "publishedAt": "",
+      "buildTimestampEpochMillis": 0,
+      "sourceWorkflow": "",
+      "commitSha": "",
+      "runId": 0
+    }
+  }
+}

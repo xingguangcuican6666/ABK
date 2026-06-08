@@ -23,9 +23,10 @@ on:
 
 jobs:
   build:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.repository == 'xingguangcuican6666/ABK' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ${{ vars.APP_RUNNER || 'ubuntu-latest' }}
     permissions:
-      contents: read
+      contents: write
       actions: read
     env:
       HAS_RELEASE_SIGNING: ${{ secrets.ABK_RELEASE_KEYSTORE_BASE64 != '' && secrets.ABK_RELEASE_STORE_PASSWORD != '' && secrets.ABK_RELEASE_KEY_ALIAS != '' && secrets.ABK_RELEASE_KEY_PASSWORD != '' }}
@@ -35,6 +36,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Stamp app build metadata
+        run: |
+          echo "ABK_APP_UPDATE_METADATA_URL=https://raw.githubusercontent.com/xingguangcuican6666/ABK/dev/version.json" >> "$GITHUB_ENV"
+          echo "ABK_APP_BUILD_TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+          echo "ABK_APP_BUILD_TIMESTAMP_EPOCH_MILLIS=$(( $(date -u +%s) * 1000 ))" >> "$GITHUB_ENV"
+          echo "ABK_APP_BUILD_RUN_ID=${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+          echo "ABK_APP_BUILD_COMMIT_SHA=${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "ABK_APP_BUILD_WORKFLOW_NAME=${GITHUB_WORKFLOW}" >> "$GITHUB_ENV"
 
       - name: Set up JDK
         uses: actions/setup-java@v5
@@ -529,6 +541,40 @@ jobs:
             exit 1
           fi
           "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose "$signed_apk"
+
+      - name: Update unstable version.json
+        if: ${{ github.repository == 'xingguangcuican6666/ABK' && github.event_name != 'pull_request' && startsWith(github.ref, 'refs/heads/') }}
+        run: |
+          python .github/scripts/update-version-json.py \
+            --channel dev \
+            --workflow-name "${GITHUB_WORKFLOW}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --commit-sha "${GITHUB_SHA}" \
+            --published-at "${ABK_APP_BUILD_TIMESTAMP}" \
+            --build-timestamp-epoch-millis "${ABK_APP_BUILD_TIMESTAMP_EPOCH_MILLIS}"
+
+      - name: Commit version.json
+        if: ${{ github.repository == 'xingguangcuican6666/ABK' && github.event_name != 'pull_request' && startsWith(github.ref, 'refs/heads/') }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "${GITHUB_REF_NAME}"
+          git checkout "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+          python .github/scripts/update-version-json.py \
+            --channel dev \
+            --workflow-name "${GITHUB_WORKFLOW}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --commit-sha "${GITHUB_SHA}" \
+            --published-at "${ABK_APP_BUILD_TIMESTAMP}" \
+            --build-timestamp-epoch-millis "${ABK_APP_BUILD_TIMESTAMP_EPOCH_MILLIS}"
+          if git diff --quiet -- version.json; then
+            echo "version.json unchanged"
+            exit 0
+          fi
+          git add version.json
+          git commit -m "chore(app): update unstable version metadata"
+          git push origin HEAD:${GITHUB_REF_NAME}
 
       - name: Upload APKs
         uses: actions/upload-artifact@v6
