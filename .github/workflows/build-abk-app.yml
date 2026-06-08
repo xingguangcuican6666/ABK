@@ -540,26 +540,36 @@ jobs:
       - name: Commit version.json
         if: ${{ github.repository == 'xingguangcuican6666/ABK' && github.event_name != 'pull_request' && startsWith(github.ref, 'refs/heads/') }}
         run: |
+          set -euo pipefail
+          branch="${GITHUB_REF_NAME}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git restore --staged --worktree version.json 2>/dev/null || true
-          git fetch origin "${GITHUB_REF_NAME}"
-          git checkout "${GITHUB_REF_NAME}"
-          git rebase "origin/${GITHUB_REF_NAME}"
-          python .github/scripts/update-version-json.py \
-            --channel normal \
-            --workflow-name "${GITHUB_WORKFLOW}" \
-            --run-id "${GITHUB_RUN_ID}" \
-            --commit-sha "${GITHUB_SHA}" \
-            --published-at "${ABK_APP_BUILD_TIMESTAMP}" \
-            --build-timestamp-epoch-millis "${ABK_APP_BUILD_TIMESTAMP_EPOCH_MILLIS}"
-          if git diff --quiet -- version.json; then
-            echo "version.json unchanged"
-            exit 0
-          fi
-          git add version.json
-          git commit -m "chore(app): update unstable version metadata"
-          git push origin HEAD:${GITHUB_REF_NAME}
+          for attempt in 1 2 3 4 5; do
+            git restore --staged --worktree version.json app/build.gradle.kts app/src/main/res/values/strings.xml 2>/dev/null || true
+            git fetch origin "${branch}"
+            git checkout "${branch}"
+            git pull --rebase origin "${branch}"
+            python .github/scripts/update-version-json.py \
+              --channel normal \
+              --workflow-name "${GITHUB_WORKFLOW}" \
+              --run-id "${GITHUB_RUN_ID}" \
+              --commit-sha "${GITHUB_SHA}" \
+              --published-at "${ABK_APP_BUILD_TIMESTAMP}" \
+              --build-timestamp-epoch-millis "${ABK_APP_BUILD_TIMESTAMP_EPOCH_MILLIS}"
+            if git diff --quiet -- version.json; then
+              echo "version.json unchanged"
+              exit 0
+            fi
+            git add version.json
+            git commit -m "chore(app): update unstable version metadata"
+            if git push origin HEAD:${branch}; then
+              exit 0
+            fi
+            git reset --hard "origin/${branch}"
+            sleep $((attempt * 3))
+          done
+          echo "::error::Failed to push version.json after retries."
+          exit 1
 
       - name: Upload APKs
         uses: actions/upload-artifact@v6
