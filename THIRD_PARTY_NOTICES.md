@@ -6,7 +6,7 @@ This document records the open source projects, embedded code, generated binarie
 
 | Component | Source | License |
 | --- | --- | --- |
-| AnyBase Kernel repository | `LICENSE` | GPL-2.0 |
+| AnyBase Kernel repository | `LICENSE` | GPL-3.0 |
 | ABK Control native bridge | `app/src/main/cpp/uapi/abk_control.h` | GPL-2.0 |
 | xingguang DDK module | `ddk/xingguang-ddk/xingguang_ddk.c` | GPL |
 | DDK kernel API patch | `ddk/patches/xingguang-ddk/0001-xingguang-ddk-api.patch` | GPL-2.0 |
@@ -98,6 +98,6 @@ The web dependency list is derived from `web/package-lock.json`.
 
 ## Contributors
 
-Contributor data is generated from local git history, showing only identifiable GitHub usernames/links and filtering automation accounts.
+Contributor data is normalized from local git history to identifiable GitHub usernames/links and sorted by username. Automation accounts and identities without a reliable mapping are filtered out.
 
-[@TheWildJames](https://github.com/TheWildJames), [@zzh20188](https://github.com/zzh20188), [@xingguangcuican6666](https://github.com/xingguangcuican6666), [@ShirkNeko](https://github.com/ShirkNeko), [@huime180](https://github.com/huime180), [@MiRinChan](https://github.com/MiRinChan), [@FunLay123](https://github.com/FunLay123), [@guruji-byte](https://github.com/guruji-byte), [@Xiaomichael](https://github.com/Xiaomichael), [@DreamFerry](https://github.com/DreamFerry), [@liqideqq](https://github.com/liqideqq), [@elysias123](https://github.com/elysias123), [@Fede2782](https://github.com/Fede2782), [@ReeViiS69](https://github.com/ReeViiS69), [@TheSillyOk](https://github.com/TheSillyOk), [@prpjzz](https://github.com/prpjzz), [@ukriu](https://github.com/ukriu), [@wrnxr233](https://github.com/wrnxr233), [@Tools-cx-app](https://github.com/Tools-cx-app), [@Akuma-Noko](https://github.com/Akuma-Noko), [@DebugBoard](https://github.com/DebugBoard), [@FixeQyt](https://github.com/FixeQyt), [@LX200944](https://github.com/LX200944), [@Starsun](https://github.com/Starsun), [@yx1234587](https://github.com/yx1234587).
+[@Akuma-Noko](https://github.com/Akuma-Noko), [@DebugBoard](https://github.com/DebugBoard), [@DreamFerry](https://github.com/DreamFerry), [@elysias123](https://github.com/elysias123), [@Fede2782](https://github.com/Fede2782), [@FixeQyt](https://github.com/FixeQyt), [@FunLay123](https://github.com/FunLay123), [@gsf114](https://github.com/gsf114), [@guruji-byte](https://github.com/guruji-byte), [@huime180](https://github.com/huime180), [@liqideqq](https://github.com/liqideqq), [@LX200944](https://github.com/LX200944), [@Mazha0309](https://github.com/Mazha0309), [@MiRinChan](https://github.com/MiRinChan), [@prpjzz](https://github.com/prpjzz), [@ReeViiS69](https://github.com/ReeViiS69), [@ShirkNeko](https://github.com/ShirkNeko), [@Starsun](https://github.com/Starsun), [@TheSillyOk](https://github.com/TheSillyOk), [@TheWildJames](https://github.com/TheWildJames), [@Tools-cx-app](https://github.com/Tools-cx-app), [@ukriu](https://github.com/ukriu), [@wrnxr233](https://github.com/wrnxr233), [@Xiaomichael](https://github.com/Xiaomichael), [@xingguangcuican6666](https://github.com/xingguangcuican6666), [@yx1234587](https://github.com/yx1234587), [@zzh20188](https://github.com/zzh20188).

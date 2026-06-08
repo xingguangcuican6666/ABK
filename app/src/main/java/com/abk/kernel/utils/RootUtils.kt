@@ -42,6 +42,8 @@ object RootUtils {
     private const val BUNDLED_KSUD_METADATA_NAME = "source.properties"
     private const val BUNDLED_KSUD_INSTALL_DIR = "bundled-ksud"
     private const val ABK_META_MOUNT_ID = "meta-abk-mount"
+    /** Matches KernelSU/Magisk folder names under /data/adb/modules (see meta-abk-mount). */
+    private val SAFE_MODULE_ID_FOR_PATH = Regex("^[A-Za-z0-9._-]+$")
     private const val ABK_META_MOUNT_DIR = "/data/adb/modules/meta-abk-mount"
     private const val ABK_META_MOUNT_WEB_ROOT = "/data/adb/modules/meta-abk-mount/webroot"
     private const val ABK_META_MOUNT_SYSFS_ENABLED = "/sys/kernel/abk_meta_mount/enabled"
@@ -75,7 +77,7 @@ object RootUtils {
     }
 
     fun init(context: Context) {
-        appContext = context.applicationContext
+        appContext = context.applicationContext ?: context
         Shell.enableVerboseLogging = false
         Shell.setDefaultBuilder(
             Shell.Builder.create()
@@ -914,10 +916,21 @@ object RootUtils {
         return execRootScript(prefix + command, timeoutSeconds = timeoutSeconds)
     }
 
+    /**
+     * True when [moduleId] is safe to embed in /data/adb/modules/{id}/ paths (WebUI, module info).
+     */
+    fun isSafeModuleIdForPath(moduleId: String): Boolean =
+        sanitizeModuleIdForPath(moduleId) != null
+
+    private fun sanitizeModuleIdForPath(moduleId: String): String? {
+        val clean = moduleId.trim()
+        if (clean.isEmpty() || !SAFE_MODULE_ID_FOR_PATH.matches(clean)) return null
+        return clean
+    }
+
     fun readModuleWebResource(moduleId: String, relativePath: String): ByteArray? {
-        val cleanId = moduleId.trim()
+        val cleanId = sanitizeModuleIdForPath(moduleId) ?: return null
         val cleanRelativePath = sanitizeWebRelativePath(relativePath) ?: return null
-        if (cleanId.isBlank()) return null
 
         if (isAbkMetaMountModuleId(cleanId)) {
             ensureAbkMetaMountPlaceholder()
@@ -954,8 +967,7 @@ object RootUtils {
     }
 
     fun moduleInfoJson(moduleId: String): String {
-        val cleanId = moduleId.trim()
-        if (cleanId.isBlank()) return "{}"
+        val cleanId = sanitizeModuleIdForPath(moduleId) ?: return "{}"
         val moduleDir = "/data/adb/modules/$cleanId"
         val webRoot = "$moduleDir/webroot"
         val modules = listKsuModules().takeIf { it.success }?.output?.joinToString("\n").orEmpty()
@@ -1546,7 +1558,7 @@ object RootUtils {
         val shell = builder.build()
         if (isShellRoot(shell)) return shell
         shell.close()
-        error("Root shell unavailable")
+        throw IllegalStateException("Root shell unavailable")
     }
 
     private fun isShellRoot(shell: Shell): Boolean {

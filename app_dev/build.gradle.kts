@@ -47,8 +47,8 @@ android {
         applicationId = "com.abk.kernel"
         minSdk = 26
         targetSdk = 35
-        versionCode = appVersionCode
-        versionName = appVersionName
+        versionCode = 10021
+        versionName = "1.2.1-dev"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
