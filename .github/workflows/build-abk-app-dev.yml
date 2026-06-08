@@ -542,22 +542,12 @@ jobs:
           fi
           "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose "$signed_apk"
 
-      - name: Update unstable version.json
-        if: ${{ github.repository == 'xingguangcuican6666/ABK' && github.event_name != 'pull_request' && startsWith(github.ref, 'refs/heads/') }}
-        run: |
-          python .github/scripts/update-version-json.py \
-            --channel dev \
-            --workflow-name "${GITHUB_WORKFLOW}" \
-            --run-id "${GITHUB_RUN_ID}" \
-            --commit-sha "${GITHUB_SHA}" \
-            --published-at "${ABK_APP_BUILD_TIMESTAMP}" \
-            --build-timestamp-epoch-millis "${ABK_APP_BUILD_TIMESTAMP_EPOCH_MILLIS}"
-
       - name: Commit version.json
         if: ${{ github.repository == 'xingguangcuican6666/ABK' && github.event_name != 'pull_request' && startsWith(github.ref, 'refs/heads/') }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git restore --staged --worktree version.json 2>/dev/null || true
           git fetch origin "${GITHUB_REF_NAME}"
           git checkout "${GITHUB_REF_NAME}"
           git rebase "origin/${GITHUB_REF_NAME}"
