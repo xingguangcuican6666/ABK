@@ -23,7 +23,7 @@ on:
 
 jobs:
   build:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.repository == 'xingguangcuican6666/ABK' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || (github.event_name == 'push' && github.repository == 'xingguangcuican6666/ABK') }}
     runs-on: ${{ vars.APP_RUNNER || 'ubuntu-latest' }}
     permissions:
       contents: write

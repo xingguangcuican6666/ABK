@@ -16,21 +16,21 @@
       "versionName": "1.2.2",
       "versionCode": 10022,
       "downloadUrl": "https://nightly.link/xingguangcuican6666/ABK/workflows/build-abk-app/dev/abk-apks.zip",
-      "publishedAt": "2026-06-08T07:02:23Z",
-      "buildTimestampEpochMillis": 1780902143000,
+      "publishedAt": "2026-06-08T16:30:36Z",
+      "buildTimestampEpochMillis": 1780936236000,
       "sourceWorkflow": "Build ABK App",
-      "commitSha": "571b7c40019d0236e1f0cad0a797fd1aa39635e9",
-      "runId": 27121364734
+      "commitSha": "ca1cdeef64a6c83265a50cad5ad06583cdd0ebbe",
+      "runId": 27151996141
     },
     "dev": {
       "versionName": "1.2.2",
       "versionCode": 10022,
       "downloadUrl": "https://nightly.link/xingguangcuican6666/ABK/workflows/build-abk-app-dev/dev/abk-apks.zip",
-      "publishedAt": "2026-06-08T07:02:23Z",
-      "buildTimestampEpochMillis": 1780902143000,
+      "publishedAt": "2026-06-08T16:30:38Z",
+      "buildTimestampEpochMillis": 1780936238000,
       "sourceWorkflow": "Build ABK App Dev",
-      "commitSha": "571b7c40019d0236e1f0cad0a797fd1aa39635e9",
-      "runId": 27121364750
+      "commitSha": "ca1cdeef64a6c83265a50cad5ad06583cdd0ebbe",
+      "runId": 27151996170
     }
   }
 }
