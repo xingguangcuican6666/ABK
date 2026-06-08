@@ -4,6 +4,7 @@ import com.abk.kernel.data.model.Artifact
 import com.abk.kernel.data.model.BuildArtifact
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.isActive
+import com.abk.kernel.data.model.isFailedFlashRun
 import com.abk.kernel.data.model.isManagerBuild
 import com.abk.kernel.data.model.withRun
 import com.abk.kernel.data.repository.GitHubRepository
@@ -146,11 +147,14 @@ class WorkflowArtifactCoordinator(
         updateState { it.copy(artifacts = merged) }
 
         if (pendingRunId > 0L && runsToRefresh.any { it.id == pendingRunId }) {
-            maybeAutoDownload(
-                pendingRunId,
-                merged.filter { it.runId == pendingRunId },
-                true,
-            )
+            val pendingRun = runsToRefresh.firstOrNull { it.id == pendingRunId }
+            if (pendingRun?.isFailedFlashRun() != true) {
+                maybeAutoDownload(
+                    pendingRunId,
+                    merged.filter { it.runId == pendingRunId },
+                    true,
+                )
+            }
         }
         runsToRefresh.forEach { run -> burstMaybeStart(run.id, run) }
     }

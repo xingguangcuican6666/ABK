@@ -310,12 +310,6 @@ fun FlashScreen(
         visible = ghostFailedVisible,
         label = "flash-failed-workflow",
     )
-    val closeGhostFailedWorkflow: () -> Unit = { ghostFailedSheetRunId = null }
-    val ghostFailedPageBack = rememberChildPageBackController(
-        enabled = ghostFailedVisible,
-        predictiveBackEnabled = state.predictiveBackEnabled,
-        onBack = closeGhostFailedWorkflow,
-    )
     val flashListScrollState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     val unlinkedWorkflowTitle = stringResource(R.string.workflow_unlinked)
     val recentRunById = remember(state.recentRuns, state.sessionGhostFailedRuns) {
@@ -343,7 +337,7 @@ fun FlashScreen(
             }
         (workflowGroups + extraGroups + extraGhostGroups)
             .filter { group ->
-                if (group.runId in state.sessionGhostFailedRuns && group.runId in state.dismissedFailedRunIds) {
+                if (group.runId in state.dismissedFailedRunIds) {
                     return@filter false
                 }
                 val run = recentRunById[group.runId]
@@ -357,6 +351,7 @@ fun FlashScreen(
             .sortedForWorkflowDisplay(recentRunById)
     }
     var filter by rememberSaveable(stateSaver = FlashFilterSaver) { mutableStateOf(FlashFilter()) }
+    var dismissingFailedRunId by remember { mutableStateOf<Long?>(null) }
     // rememberSaveable survives rotation/savedInstanceState but not process
     // death. Persist to DataStore so the filter choice carries across cold
     // starts. Gate the auto-save on `filterLoaded` so the dispatched default
@@ -494,6 +489,19 @@ fun FlashScreen(
         }
     }
 
+    val closeGhostFailedWorkflow: () -> Unit = {
+        val dismissedRunId = ghostFailedSheetRunId
+        ghostFailedSheetRunId = null
+        if (dismissedRunId != null && flashDetailRouteActive && selectedRunId == dismissedRunId) {
+            returnToWorkflowList()
+        }
+    }
+    val ghostFailedPageBack = rememberChildPageBackController(
+        enabled = ghostFailedVisible,
+        predictiveBackEnabled = state.predictiveBackEnabled,
+        onBack = closeGhostFailedWorkflow,
+    )
+
     ObserveChildPageVisibility(
         visible = flashDetailRouteActive,
         onVisibleChange = { detailVisible ->
@@ -558,8 +566,25 @@ fun FlashScreen(
         }
     }
 
-    LaunchedEffect(allWorkflowGroups, selectedRunId) {
-        if (selectedRunId != null && selectedGroup == null) returnToTopList()
+    LaunchedEffect(
+        allWorkflowGroups,
+        selectedRunId,
+        state.sessionGhostFailedRuns,
+        state.dismissedFailedRunIds,
+        recentRunById,
+        flashDetailRouteActive,
+    ) {
+        val runId = selectedRunId ?: return@LaunchedEffect
+        if (selectedGroup != null) return@LaunchedEffect
+        if (runId in state.dismissedFailedRunIds) {
+            returnToTopList()
+            return@LaunchedEffect
+        }
+        if (runId in state.sessionGhostFailedRuns) return@LaunchedEffect
+        val run = recentRunById[runId]
+        if (run?.isFailedFlashRun() == true) return@LaunchedEffect
+        if (flashDetailRouteActive && run != null) return@LaunchedEffect
+        returnToTopList()
     }
 
     LaunchedEffect(state.prebuiltGkiReleases, selectedPrebuiltReleaseId) {
@@ -855,6 +880,29 @@ fun FlashScreen(
         )
     }
 
+    dismissingFailedRunId?.let { runId ->
+        val hasFiles = hasDownloadedFilesForRun(
+            runId = runId,
+            downloadedArtifacts = state.downloadedArtifacts,
+            workflowGroups = allWorkflowGroups,
+            activeDownloadTasks = state.activeDownloadTasks,
+        )
+        DismissFailedRunDialog(
+            hasDownloadedFiles = hasFiles,
+            onConfirm = { deleteFiles ->
+                vm.dismissFailedWorkflow(runId, deleteFiles)
+                dismissingFailedRunId = null
+                if (ghostFailedSheetRunId == runId) {
+                    ghostFailedSheetRunId = null
+                }
+                if (selectedRunId == runId) {
+                    returnToWorkflowList()
+                }
+            },
+            onDismiss = { dismissingFailedRunId = null },
+        )
+    }
+
     deleteFileTarget?.let { item ->
         AlertDialog(
             onDismissRequest = { deleteFileTarget = null },
@@ -1124,7 +1172,7 @@ fun FlashScreen(
                                         },
                                         onDelete = {
                                             if (failedGhost) {
-                                                vm.dismissFailedWorkflow(group.runId)
+                                                dismissingFailedRunId = group.runId
                                             } else {
                                                 deleteWorkflowTarget = group
                                                 deleteRemoteWorkflowRun = false
@@ -1271,6 +1319,7 @@ fun FlashScreen(
         val runId = ghostFailedRunId ?: return@LaunchedEffect
         vm.loadWorkflowJobs(runId)
         vm.loadFailedRunLogExcerpt(runId)
+        vm.watchLateArtifactsForFailedRun(runId)
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -1346,17 +1395,22 @@ fun FlashScreen(
                     }
                     if (wasShowingBuilding && !showBuilding) {
                         val finishedRun = recentRunById[routeRunId]
-                        val retryWhenEmpty = when (finishedRun?.conclusion) {
-                            "failure", "cancelled" -> false
-                            "success" -> true
-                            else -> finishedRun?.status == "completed"
+                        if (finishedRun?.isFailedFlashRun() == true) {
+                            ghostFailedPageBack.resetProgress()
+                            ghostFailedSheetRunId = routeRunId
+                        } else {
+                            val retryWhenEmpty = when (finishedRun?.conclusion) {
+                                "cancelled" -> false
+                                "success" -> true
+                                else -> finishedRun?.status == "completed"
+                            }
+                            vm.refreshWorkflowArtifacts(
+                                routeRunId,
+                                autoDownload = state.autoDownload && retryWhenEmpty,
+                                retryWhenEmpty = retryWhenEmpty,
+                                force = true,
+                            )
                         }
-                        vm.refreshWorkflowArtifacts(
-                            routeRunId,
-                            autoDownload = state.autoDownload && retryWhenEmpty,
-                            retryWhenEmpty = retryWhenEmpty,
-                            force = true,
-                        )
                     }
                     wasShowingBuilding = showBuilding
                     if (!showBuilding) return@LaunchedEffect
