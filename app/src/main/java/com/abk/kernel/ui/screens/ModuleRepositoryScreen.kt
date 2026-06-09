@@ -48,6 +48,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Source
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -96,6 +98,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.abk.kernel.R
 import com.abk.kernel.data.model.CustomExternalModuleStage
+import com.abk.kernel.data.model.ExternalModuleMetadata
 import com.abk.kernel.data.model.ModuleCatalogItemKind
 import com.abk.kernel.data.model.ModuleCatalogItem
 import com.abk.kernel.data.model.ModuleCatalogRepository
@@ -455,6 +458,7 @@ private fun BuildModuleRepositoryScreenContent(
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
+    val coroutineScope = rememberCoroutineScope()
     val motionScheme = MaterialTheme.motionScheme
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -544,6 +548,7 @@ private fun BuildModuleRepositoryScreenContent(
             val metadata = pendingModuleSetMetadata
             if (metadata != null) {
                 val children = metadata.children
+                val addToBuildLabel = stringResource(R.string.module_repo_add_to_build)
                 AlertDialog(
                     onDismissRequest = {
                         pendingCatalogModule = null
@@ -556,9 +561,7 @@ private fun BuildModuleRepositoryScreenContent(
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(
-                                text = module.description.ifBlank {
-                                    stringResource(R.string.module_repo_add_to_build)
-                                },
+                                text = if (module.description.isNotBlank()) module.description else addToBuildLabel,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
