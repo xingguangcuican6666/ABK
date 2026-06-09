@@ -161,6 +161,18 @@ dependencies {
     // Preferences
     implementation(libs.datastore.preferences)
 
+    // Miuix
+    implementation(libs.miuix.ui)
+    implementation(libs.miuix.squircle)
+    implementation(libs.miuix.icons)
+    implementation(libs.miuix.preference)
+    implementation(libs.miuix.navigation3)
+    implementation(libs.miuix.blur)
+    implementation(libs.capsule)
+    implementation(libs.navigation3.runtime)
+    implementation(libs.navigation.compose.multiplatform)
+    implementation(libs.navigationevent.compose)
+
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)

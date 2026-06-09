@@ -35,12 +35,15 @@ class PreferencesRepository(private val context: Context) {
         val WORKFLOW_FOREGROUND_REFRESH_INTERVALS_SEC = setOf(10, 20, 30)
         val KEY_LAST_RUN_ID = longPreferencesKey("last_run_id")
         val KEY_THEME = stringPreferencesKey("theme_mode") // "system" | "light" | "dark"
+        val KEY_THEME_STYLE = stringPreferencesKey("theme_style")
         val KEY_DYNAMIC_COLOR_ENABLED = booleanPreferencesKey("dynamic_color_enabled")
         val KEY_CUSTOM_THEME_COLOR = intPreferencesKey("custom_theme_color_argb")
         val KEY_CUSTOM_ACCENT_COLOR = intPreferencesKey("custom_accent_color_argb")
         val KEY_CUSTOM_COLORS_USER_SET = booleanPreferencesKey("custom_colors_user_set")
         val KEY_CUSTOM_BACKGROUND_URI = stringPreferencesKey("custom_background_uri")
         val KEY_BACKGROUND_IMAGE_ENABLED = booleanPreferencesKey("background_image_enabled")
+        val KEY_GLASS_NAVIGATION_BAR_ENABLED = booleanPreferencesKey("floating_navigation_bar_enabled")
+        val KEY_GLASS_NAVIGATION_EFFECT_ENABLED = booleanPreferencesKey("glass_navigation_effect_enabled")
         val KEY_UI_SURFACE_ALPHA = floatPreferencesKey("ui_surface_alpha")
         val KEY_BUILD_CONFIG = stringPreferencesKey("build_config_json")
         val KEY_BUILD_PLANS = stringPreferencesKey("build_plans_json")
@@ -81,11 +84,14 @@ class PreferencesRepository(private val context: Context) {
     }
     val lastRunId: Flow<Long> = context.dataStore.data.map { it[KEY_LAST_RUN_ID] ?: -1L }
     val themeMode: Flow<String> = context.dataStore.data.map { it[KEY_THEME] ?: "dark" }
+    val themeStyle: Flow<String> = context.dataStore.data.map { it[KEY_THEME_STYLE] ?: "expressive" }
     val dynamicColorEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_DYNAMIC_COLOR_ENABLED] ?: true }
     val customThemeColorArgb: Flow<Int?> = context.dataStore.data.map { it[KEY_CUSTOM_THEME_COLOR] }
     val customAccentColorArgb: Flow<Int?> = context.dataStore.data.map { it[KEY_CUSTOM_ACCENT_COLOR] }
     val customBackgroundUri: Flow<String?> = context.dataStore.data.map { it[KEY_CUSTOM_BACKGROUND_URI] }
     val backgroundImageEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_BACKGROUND_IMAGE_ENABLED] ?: false }
+    val floatingNavigationBarEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_GLASS_NAVIGATION_BAR_ENABLED] ?: false }
+    val glassNavigationEffectEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_GLASS_NAVIGATION_EFFECT_ENABLED] ?: false }
     val uiSurfaceAlpha: Flow<Float> = context.dataStore.data.map { it[KEY_UI_SURFACE_ALPHA] ?: 1f }
     val buildConfigJson: Flow<String?> = context.dataStore.data.map { it[KEY_BUILD_CONFIG] }
     val buildPlansJson: Flow<String?> = context.dataStore.data.map { it[KEY_BUILD_PLANS] }
@@ -153,6 +159,7 @@ class PreferencesRepository(private val context: Context) {
     }
     suspend fun saveLastRunId(id: Long) = context.dataStore.edit { it[KEY_LAST_RUN_ID] = id }
     suspend fun setThemeMode(mode: String) = context.dataStore.edit { it[KEY_THEME] = mode }
+    suspend fun setThemeStyle(style: String) = context.dataStore.edit { it[KEY_THEME_STYLE] = style }
     suspend fun setDynamicColorEnabled(
         v: Boolean,
         snapshotThemeColorArgb: Int? = null,
@@ -180,6 +187,12 @@ class PreferencesRepository(private val context: Context) {
     }
     suspend fun setBackgroundImageEnabled(v: Boolean) = context.dataStore.edit {
         it[KEY_BACKGROUND_IMAGE_ENABLED] = v
+    }
+    suspend fun setFloatingNavigationBarEnabled(v: Boolean) = context.dataStore.edit {
+        it[KEY_GLASS_NAVIGATION_BAR_ENABLED] = v
+    }
+    suspend fun setGlassNavigationEffectEnabled(v: Boolean) = context.dataStore.edit {
+        it[KEY_GLASS_NAVIGATION_EFFECT_ENABLED] = v
     }
     suspend fun setUiSurfaceAlpha(alpha: Float) = context.dataStore.edit {
         it[KEY_UI_SURFACE_ALPHA] = alpha.coerceIn(0f, 1f)

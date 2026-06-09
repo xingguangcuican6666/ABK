@@ -284,12 +284,14 @@ fun SettingsScreen(
                     ThemeSettingsScreen(
                         padding = it,
                         themeMode = state.themeMode,
+                        themeStyle = state.themeStyle,
                         dynamicColorEnabled = state.dynamicColorEnabled,
                         customThemeColorArgb = state.customThemeColorArgb,
                         customAccentColorArgb = state.customAccentColorArgb,
                         backgroundUri = state.customBackgroundUri,
                         backgroundImageEnabled = state.backgroundImageEnabled,
                         uiSurfaceAlpha = state.uiSurfaceAlpha,
+                        onThemeStyleChange = { value -> vm.setThemeStyle(value) },
                         onThemeModeChange = { value -> vm.setThemeMode(value) },
                         onDynamicColorEnabledChange = { enabled, themeColor, accentColor ->
                             vm.setDynamicColorEnabled(enabled, themeColor, accentColor)
@@ -1172,12 +1174,14 @@ private fun defaultAppProfileTemplateJson(): String =
 private fun ThemeSettingsScreen(
     padding: PaddingValues,
     themeMode: String,
+    themeStyle: String,
     dynamicColorEnabled: Boolean,
     customThemeColorArgb: Int?,
     customAccentColorArgb: Int?,
     backgroundUri: String?,
     backgroundImageEnabled: Boolean,
     uiSurfaceAlpha: Float,
+    onThemeStyleChange: (String) -> Unit,
     onThemeModeChange: (String) -> Unit,
     onDynamicColorEnabledChange: (Boolean, Int?, Int?) -> Unit,
     onCustomThemeColorsChange: (Int, Int) -> Unit,
@@ -1218,6 +1222,32 @@ private fun ThemeSettingsScreen(
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        SettingsGroup(title = stringResource(R.string.settings_theme_style)) {
+            val styles = listOf(
+                Pair("expressive", stringResource(R.string.settings_theme_style_expressive)),
+                Pair("miuix", stringResource(R.string.settings_theme_style_miuix))
+            )
+            styles.forEach { (key, label) ->
+                val selected = themeStyle == key
+                val subtitle = when (key) {
+                    "expressive" -> stringResource(R.string.settings_theme_style_expressive_desc)
+                    else -> stringResource(R.string.settings_theme_style_miuix_desc)
+                }
+                ExpressiveListItem(
+                    title = label,
+                    subtitle = subtitle,
+                    leadingIcon = if (key == "miuix") Icons.Default.AutoAwesome else Icons.Default.Palette,
+                    selected = selected,
+                    trailingContent = {
+                        if (selected) {
+                            Icon(Icons.Default.Check, null)
+                        }
+                    },
+                    onClick = { onThemeStyleChange(key) }
+                )
+            }
+        }
+
         SettingsGroup(title = stringResource(R.string.settings_appearance_mode)) {
             themes.forEach { (key, label, icon) ->
                 val selected = themeMode == key
@@ -1658,6 +1688,7 @@ private fun contributors(): List<AboutContributor> = listOf(
     AboutContributor("FixeQyt"),
     AboutContributor("FunLay123"),
     AboutContributor("gsf114"),
+    AboutContributor("guoyujie666"),
     AboutContributor("guruji-byte"),
     AboutContributor("huime180"),
     AboutContributor("liqideqq"),

@@ -462,6 +462,13 @@
     <string name="flash_manual_download_badge">手动下载</string>
     <string name="flash_device_recommended">设备推荐</string>
     <string name="flash_auto_next">下次自动</string>
+    <string name="flash_hero_available">Available</string>
+    <string name="flash_hero_downloaded">Downloaded</string>
+    <string name="flash_no_artifacts">暂无产物</string>
+    <string name="flash_unknown_artifact">未知产物</string>
+    <string name="flash_local_files">已下载文件</string>
+    <string name="flash_prebuilt_only_matches">只看匹配当前筛选条件的资产</string>
+    <string name="reset">重置</string>
     <string name="flash_workflow_label">工作流 %1$s</string>
     <string name="flash_cancel_workflow">取消工作流</string>
     <string name="flash_delete_workflow">删除工作流</string>
@@ -510,6 +517,8 @@
     <string name="status_version_build_download">版本：%1$s · 构建和下载可用</string>
     <string name="status_root_authorized">Root 已授权</string>
     <string name="status_root_unauthorized">Root 未授权</string>
+    <string name="status_authorized">已授权</string>
+    <string name="status_unauthorized">未授权</string>
     <string name="status_no_fork_detected">未检测到 Fork</string>
     <string name="status_progress_sync">通知栏与应用内进度同步</string>
     <string name="status_no_running_build">暂无进行中的构建</string>
@@ -526,7 +535,6 @@
     <string name="status_fork_behind">Fork 落后上游 %1$d 个提交</string>
     <string name="status_recent_runs_title">最近构建记录</string>
     <string name="status_recent_runs_subtitle">快速确认最近 5 次工作流结果。</string>
-    <string name="status_authorized">已授权</string>
     <string name="status_pending_check">待检查</string>
     <string name="status_synced">已同步</string>
     <string name="status_detected">已检测</string>
@@ -572,8 +580,14 @@
     <string name="settings_prebuilt_gki_desc">从本仓库 Release 获取预编译 GKI，下载需手动触发</string>
     <string name="settings_notify_build_desc">在通知栏显示构建状态</string>
     <string name="settings_navigation">导航</string>
+    <string name="settings_navigation_bar">导航栏样式</string>
+    <string name="settings_floating_navigation">悬浮底栏</string>
+    <string name="settings_floating_navigation_desc">使用 Apple 风格的悬浮底栏</string>
+    <string name="settings_glass_navigation_effect">液态玻璃</string>
+    <string name="settings_glass_navigation_effect_desc">启用悬浮底栏的液态玻璃效果（需要 Android 13+）</string>
     <string name="settings_predictive_back">应用内 M3E 返回动效</string>
     <string name="settings_predictive_back_desc">使用 Material 3 Expressive 的页面返回动画，不依赖系统预测性返回</string>
+    <string name="settings_predictive_back_miuix_desc">在 Miuix 主题中，该设置不生效</string>
     <string name="settings_color_appearance">颜色与外观</string>
     <string name="settings_enter_color_appearance">进入颜色与外观</string>
     <string name="settings_about_desc">本仓库入口、版本信息与贡献者</string>
@@ -581,6 +595,11 @@
     <string name="settings_open_source_licenses">开放源代码许可</string>
     <string name="settings_open_source_licenses_desc">本仓库引用、内嵌源码和依赖包的许可证清单</string>
     <string name="settings_enter_open_source_licenses">进入开放源代码许可</string>
+    <string name="settings_theme_style">主题风格</string>
+    <string name="settings_theme_style_expressive">Material 3 Expressive</string>
+    <string name="settings_theme_style_miuix">Miuix</string>
+    <string name="settings_theme_style_expressive_desc">圆角适中、色彩鲜明的 Material 3 Expressive 风格</string>
+    <string name="settings_theme_style_miuix_desc">大圆角、柔和配色、HyperOS 风格</string>
     <string name="settings_appearance_mode">外观模式</string>
     <string name="settings_color_source">颜色来源</string>
     <string name="settings_monet">莫奈取色</string>
@@ -846,6 +865,18 @@
     <string name="module_repo_add_to_build">加入构建配置</string>
     <string name="module_repo_search">搜索模块</string>
     <string name="module_repo_central_desc">添加包含 abk-modules.json 的索引仓库。</string>
+    <string name="module_repo_abk_title">ABK 模块仓库</string>
+    <string name="module_repo_abk_central_title">ABK 模块中央仓库</string>
+    <string name="module_repo_abk_central_desc">添加包含 abk-modules.json 的 ABK 模块仓库。</string>
+    <string name="module_repo_abk_central_url">ABK 模块仓库链接</string>
+    <string name="module_repo_abk_empty_title">暂无 ABK 模块仓库</string>
+    <string name="module_repo_abk_empty_desc">添加 ABK 模块仓库后，模块会在这里合并展示并支持加入构建配置。</string>
+    <string name="runtime_repo_standard_title">普通模块仓库</string>
+    <string name="runtime_repo_standard_central_title">普通模块中央仓库</string>
+    <string name="runtime_repo_standard_central_desc">添加符合 Magisk 标准 JSON 格式的普通模块仓库。</string>
+    <string name="runtime_repo_standard_url">模块仓库链接</string>
+    <string name="runtime_repo_standard_empty_title">暂无普通模块仓库</string>
+    <string name="runtime_repo_standard_empty_desc">添加符合 Magisk 标准 JSON 格式的模块仓库后，支持在线安装的普通模块会在这里展示。</string>
     <string name="module_repo_url">中央仓库链接</string>
     <string name="add">添加</string>
     <string name="refresh_all">刷新全部</string>
@@ -1108,6 +1139,7 @@
     <string name="close_error">关闭错误提示</string>
     <!-- Language switcher -->
     <string name="settings_language">语言</string>
+    <string name="settings_language_switch">切换语言</string>
     <string name="settings_language_desc">选择应用的显示语言</string>
     <string name="settings_language_zh">中文</string>
     <string name="settings_language_en">English</string>

@@ -1,5 +1,3 @@
-@file:android.annotation.SuppressLint("RestrictedApi")
-
 package com.abk.kernel.ui.theme
 
 import android.os.Build
@@ -13,7 +11,9 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -22,8 +22,12 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.google.android.material.color.utilities.CorePalette
 import com.google.android.material.color.utilities.TonalPalette
+import top.yukonga.miuix.kmp.theme.ColorSchemeMode
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.theme.ThemeController
 
 val LocalUiSurfaceAlpha = staticCompositionLocalOf { 1f }
+val LocalThemeStyle = staticCompositionLocalOf { "expressive" }
 
 @Composable
 fun uiSurfaceColor(color: Color): Color {
@@ -34,6 +38,7 @@ fun uiSurfaceColor(color: Color): Color {
 @Composable
 fun AbkTheme(
     themeMode: String = "system",
+    themeStyle: String = "expressive",
     dynamicColorEnabled: Boolean = true,
     customThemeColorArgb: Int? = null,
     customAccentColorArgb: Int? = null,
@@ -45,6 +50,84 @@ fun AbkTheme(
         else -> isSystemInDarkTheme()
     }
 
+    if (themeStyle == "miuix") {
+        MiuixThemeContent(
+            themeMode = themeMode,
+            darkTheme = darkTheme,
+            dynamicColorEnabled = dynamicColorEnabled,
+            customThemeColorArgb = customThemeColorArgb,
+            content = content
+        )
+    } else {
+        MaterialExpressiveThemeContent(
+            themeMode = themeMode,
+            darkTheme = darkTheme,
+            dynamicColorEnabled = dynamicColorEnabled,
+            customThemeColorArgb = customThemeColorArgb,
+            customAccentColorArgb = customAccentColorArgb,
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun MiuixThemeContent(
+    themeMode: String,
+    darkTheme: Boolean,
+    dynamicColorEnabled: Boolean,
+    customThemeColorArgb: Int?,
+    content: @Composable () -> Unit
+) {
+    val context = LocalContext.current
+    val useDynamicColor = dynamicColorEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+    val mode = when {
+        useDynamicColor -> when (themeMode) {
+            "dark" -> ColorSchemeMode.MonetDark
+            "light" -> ColorSchemeMode.MonetLight
+            else -> ColorSchemeMode.MonetSystem
+        }
+        else -> when (themeMode) {
+            "dark" -> ColorSchemeMode.Dark
+            "light" -> ColorSchemeMode.Light
+            else -> ColorSchemeMode.System
+        }
+    }
+
+    val keyColor = if (!useDynamicColor) customThemeColorArgb?.let { Color(it) } else null
+    val controller = remember(keyColor, mode) {
+        ThemeController(mode, keyColor = keyColor)
+    }
+
+    val view = LocalView.current
+    val activity = context.findActivity()
+
+    MiuixTheme(controller = controller) {
+        CompositionLocalProvider(LocalThemeStyle provides "miuix") {
+            if (activity != null && !view.isInEditMode) {
+                val bgColor = MiuixTheme.colorScheme.background
+                SideEffect {
+                    val window = activity.window
+                    window.statusBarColor = bgColor.toArgb()
+                    window.navigationBarColor = bgColor.toArgb()
+                    WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+                    WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
+                }
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun MaterialExpressiveThemeContent(
+    themeMode: String,
+    darkTheme: Boolean,
+    dynamicColorEnabled: Boolean,
+    customThemeColorArgb: Int?,
+    customAccentColorArgb: Int?,
+    content: @Composable () -> Unit
+) {
     val context = LocalContext.current
     val useDynamicColor = dynamicColorEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val colorScheme = when {
@@ -73,8 +156,11 @@ fun AbkTheme(
     MaterialExpressiveTheme(
         colorScheme = colorScheme,
         motionScheme = MotionScheme.expressive(),
-        content = content
-    )
+    ) {
+        CompositionLocalProvider(LocalThemeStyle provides "expressive") {
+            content()
+        }
+    }
 }
 
 private fun customExpressiveColorScheme(

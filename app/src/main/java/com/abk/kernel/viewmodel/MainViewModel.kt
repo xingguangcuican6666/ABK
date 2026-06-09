@@ -169,11 +169,14 @@ data class MainUiState(
     val workflowForegroundRefreshEnabled: Boolean = PreferencesRepository.DEFAULT_WORKFLOW_FOREGROUND_REFRESH_ENABLED,
     val workflowForegroundRefreshIntervalSec: Int = PreferencesRepository.DEFAULT_WORKFLOW_FOREGROUND_REFRESH_INTERVAL_SEC,
     val themeMode: String = "dark",
+    val themeStyle: String = "expressive",
     val dynamicColorEnabled: Boolean = true,
     val customThemeColorArgb: Int? = null,
     val customAccentColorArgb: Int? = null,
     val customBackgroundUri: String? = null,
     val backgroundImageEnabled: Boolean = false,
+    val floatingNavigationBarEnabled: Boolean = false,
+    val glassNavigationEffectEnabled: Boolean = false,
     val uiSurfaceAlpha: Float = 1f,
     val downloadDirectory: String = DownloadDirectoryUtils.defaultDirectoryPath(),
     val downloadMirrorBaseUrl: String = "",
@@ -501,6 +504,11 @@ class MainViewModel @JvmOverloads constructor(
             }
         }
         viewModelScope.launch {
+            prefs.themeStyle.collect { style ->
+                _uiState.update { it.copy(themeStyle = style) }
+            }
+        }
+        viewModelScope.launch {
             prefs.downloadDirectory.collect { path ->
                 _uiState.update { it.copy(downloadDirectory = path) }
             }
@@ -525,6 +533,16 @@ class MainViewModel @JvmOverloads constructor(
                         uiSurfaceAlpha = backgroundPrefs.alpha
                     )
                 }
+            }
+        }
+        viewModelScope.launch {
+            prefs.floatingNavigationBarEnabled.collect { enabled ->
+                _uiState.update { it.copy(floatingNavigationBarEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            prefs.glassNavigationEffectEnabled.collect { enabled ->
+                _uiState.update { it.copy(glassNavigationEffectEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -808,6 +826,7 @@ class MainViewModel @JvmOverloads constructor(
                     autoDownload = it.autoDownload,
                     notifyBuild = it.notifyBuild,
                     themeMode = it.themeMode,
+                    themeStyle = it.themeStyle,
                     dynamicColorEnabled = it.dynamicColorEnabled,
                     customThemeColorArgb = it.customThemeColorArgb,
                     customAccentColorArgb = it.customAccentColorArgb,
@@ -2496,6 +2515,7 @@ class MainViewModel @JvmOverloads constructor(
         prefs.setWorkflowForegroundRefreshIntervalSec(seconds)
     }
     fun setThemeMode(mode: String) = viewModelScope.launch { prefs.setThemeMode(mode) }
+    fun setThemeStyle(style: String) = viewModelScope.launch { prefs.setThemeStyle(style) }
     fun setDynamicColorEnabled(
         v: Boolean,
         snapshotThemeColorArgb: Int? = null,
@@ -2508,6 +2528,8 @@ class MainViewModel @JvmOverloads constructor(
     }
     fun setBackgroundImageUri(uri: String?) = viewModelScope.launch { prefs.setBackgroundImageUri(uri) }
     fun setBackgroundImageEnabled(v: Boolean) = viewModelScope.launch { prefs.setBackgroundImageEnabled(v) }
+    fun setFloatingNavigationBarEnabled(v: Boolean) = viewModelScope.launch { prefs.setFloatingNavigationBarEnabled(v) }
+    fun setGlassNavigationEffectEnabled(v: Boolean) = viewModelScope.launch { prefs.setGlassNavigationEffectEnabled(v) }
     fun setUiSurfaceAlpha(alpha: Float) = viewModelScope.launch { prefs.setUiSurfaceAlpha(alpha) }
     fun acceptTerms() = viewModelScope.launch { prefs.acceptCurrentTerms() }
     suspend fun loadFlashFilterJson(): String? = prefs.flashFilterJson.first()

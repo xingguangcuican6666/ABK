@@ -572,6 +572,11 @@
     <string name="settings_prebuilt_gki_desc">Раздел готовых сборок GKI из Release репозитория. Скачивание вручную.</string>
     <string name="settings_notify_build_desc">Показывать статус сборки в уведомлениях</string>
     <string name="settings_navigation">Навигация</string>
+    <string name="settings_navigation_bar">Панель навигации</string>
+    <string name="settings_floating_navigation">Плавающая панель</string>
+    <string name="settings_floating_navigation_desc">Использовать плавающую панель в стиле Apple</string>
+    <string name="settings_glass_navigation_effect">Жидкое стекло</string>
+    <string name="settings_glass_navigation_effect_desc">Включить эффект жидкого стекла для плавающей панели (требуется Android 13+)</string>
     <string name="settings_predictive_back">M3E-анимация возврата в приложении</string>
     <string name="settings_predictive_back_desc">Использовать анимацию возврата страниц Material 3 Expressive, независимо от системной predictive back.</string>
     <string name="settings_color_appearance">Цвет и внешний вид</string>
@@ -846,6 +851,18 @@
     <string name="module_repo_add_to_build">Добавить в конфигурацию сборки</string>
     <string name="module_repo_search">Поиск модулей</string>
     <string name="module_repo_central_desc">Добавьте индексный репозиторий, содержащий abk-modules.json.</string>
+    <string name="module_repo_abk_title">Репозиторий модулей ABK</string>
+    <string name="module_repo_abk_central_title">Центральный репозиторий модулей ABK</string>
+    <string name="module_repo_abk_central_desc">Добавьте репозитории модулей ABK, содержащие abk-modules.json.</string>
+    <string name="module_repo_abk_central_url">Ссылка на репозиторий модулей ABK</string>
+    <string name="module_repo_abk_empty_title">Нет репозиториев модулей ABK</string>
+    <string name="module_repo_abk_empty_desc">После добавления репозитория модулей ABK они будут показаны здесь и смогут добавляться в конфигурацию сборки.</string>
+    <string name="runtime_repo_standard_title">Репозиторий обычных модулей</string>
+    <string name="runtime_repo_standard_central_title">Центральный репозиторий обычных модулей</string>
+    <string name="runtime_repo_standard_central_desc">Добавьте репозиторий обычных модулей в стандартном формате JSON Magisk.</string>
+    <string name="runtime_repo_standard_url">Ссылка на репозиторий модулей</string>
+    <string name="runtime_repo_standard_empty_title">Нет репозиториев обычных модулей</string>
+    <string name="runtime_repo_standard_empty_desc">После добавления репозитория модулей в стандартном формате JSON Magisk здесь появятся модули с поддержкой онлайн-установки.</string>
     <string name="module_repo_url">Ссылка на центральный репозиторий</string>
     <string name="add">Добавить</string>
     <string name="refresh_all">Обн. всё</string>
@@ -1108,6 +1125,7 @@
     <string name="close_error">Закрыть сообщение об ошибке</string>
     <!-- Language switcher -->
     <string name="settings_language">Язык</string>
+    <string name="settings_language_switch">Сменить язык</string>
     <string name="settings_language_desc">Выберите язык интерфейса приложения</string>
     <string name="settings_language_zh">中文</string>
     <string name="settings_language_en">English</string>

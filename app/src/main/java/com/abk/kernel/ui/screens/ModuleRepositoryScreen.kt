@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
@@ -40,7 +41,6 @@ import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.LibraryBooks
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
@@ -1833,7 +1833,7 @@ private fun BuildModuleRepositorySettingsPage(
             ExpressiveSectionCard(
                 title = buildRepoEmptyTitleLabel(context),
                 subtitle = buildRepoEmptyDescLabel(context),
-                icon = Icons.Default.LibraryBooks
+                icon = Icons.AutoMirrored.Filled.LibraryBooks
             ) {
                 Text(
                     text = context.getString(R.string.module_repo_delete_keep_modules),

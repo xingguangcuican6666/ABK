@@ -1,7 +1,6 @@
 package com.abk.kernel
 
 import android.Manifest
-import android.app.Activity
 import android.content.Context
 import com.abk.kernel.utils.LocaleHelper
 import com.abk.kernel.utils.findActivity
@@ -12,6 +11,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
@@ -23,10 +23,14 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
@@ -34,12 +38,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LibraryBooks
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.Settings
@@ -62,6 +66,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -92,7 +97,14 @@ import com.abk.kernel.ui.screens.RootAuthorizationScreen
 import com.abk.kernel.ui.screens.RuntimeHomeScreen
 import com.abk.kernel.ui.screens.SettingsScreen
 import com.abk.kernel.ui.screens.StatusScreen
+import com.abk.kernel.ui.screens.miuix.MiuixMainScaffold
+import com.abk.kernel.ui.screens.miuix.MiuixOobeScreen
+import com.abk.kernel.ui.screens.miuix.MiuixTermsAgreementDialog
 import com.abk.kernel.ui.theme.AbkTheme
+import top.yukonga.miuix.kmp.window.WindowDialog
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.TextButton
+import com.abk.kernel.ui.theme.LocalThemeStyle
 import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.viewmodel.MainViewModel
@@ -111,6 +123,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         pendingModuleInstallUri = extractModuleInstallUri(intent)?.toString()
 
         setContent {
@@ -135,46 +148,88 @@ class MainActivity : ComponentActivity() {
 
             AbkTheme(
                 themeMode = state.themeMode,
+                themeStyle = state.themeStyle,
                 dynamicColorEnabled = state.dynamicColorEnabled,
                 customThemeColorArgb = state.customThemeColorArgb,
                 customAccentColorArgb = state.customAccentColorArgb
             ) {
-                AppBackgroundHost(
-                    backgroundUri = state.customBackgroundUri,
-                    backgroundEnabled = state.backgroundImageEnabled,
-                    uiSurfaceAlpha = state.uiSurfaceAlpha
-                ) {
+                val themeStyle = LocalThemeStyle.current
+                if (themeStyle == "miuix") {
+                    // Miuix content tree
                     when {
-                        !state.termsLoaded -> Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = MaterialTheme.colorScheme.surface
+                        !state.termsLoaded -> Box(
+                            modifier = Modifier.fillMaxSize()
                         ) {}
-                        !state.termsAccepted -> TermsAgreementDialog(
+                        !state.termsAccepted -> MiuixTermsAgreementDialog(
                             onAccept = vm::acceptTerms,
                             onDecline = { finishAffinity() }
                         )
                         else -> Box(modifier = Modifier.fillMaxSize()) {
-                            AbkMainScaffold(
+                            MiuixMainScaffold(
                                 vm = vm,
-                                pendingModuleInstallUri = pendingModuleInstallUri,
-                                onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
+                                pendingModuleInstallUri = pendingModuleInstallUri
                             )
-                            if (state.showSyncPrompt && !state.showOobe) {
-                                SyncPromptDialog(
-                                    behindBy = state.behindBy,
-                                    onSync = vm::syncFork,
-                                    onDismiss = vm::dismissSyncPrompt
-                                )
-                            }
+                            MiuixSyncPromptDialog(
+                                show = state.showSyncPrompt && !state.showOobe,
+                                behindBy = state.behindBy,
+                                onSync = vm::syncFork,
+                                onDismiss = vm::dismissSyncPrompt
+                            )
                             if (state.showOobe) {
-                                CompositionLocalProvider(LocalUiSurfaceAlpha provides 1f) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(MaterialTheme.colorScheme.surface)
-                                            .zIndex(4f)
-                                    ) {
-                                        OobeScreen(vm)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clickable(
+                                            interactionSource = null,
+                                            indication = null,
+                                            onClick = { /* consume clicks */ }
+                                        )
+                                        .zIndex(4f)
+                                ) {
+                                    MiuixOobeScreen(vm)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Material Expressive content tree (existing)
+                    AppBackgroundHost(
+                        backgroundUri = state.customBackgroundUri,
+                        backgroundEnabled = state.backgroundImageEnabled,
+                        uiSurfaceAlpha = state.uiSurfaceAlpha
+                    ) {
+                        when {
+                            !state.termsLoaded -> Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                color = MaterialTheme.colorScheme.surface
+                            ) {}
+                            !state.termsAccepted -> TermsAgreementDialog(
+                                onAccept = vm::acceptTerms,
+                                onDecline = { finishAffinity() }
+                            )
+                            else -> Box(modifier = Modifier.fillMaxSize()) {
+                                AbkMainScaffold(
+                                    vm = vm,
+                                    pendingModuleInstallUri = pendingModuleInstallUri,
+                                    onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
+                                )
+                                if (state.showSyncPrompt && !state.showOobe) {
+                                    SyncPromptDialog(
+                                        behindBy = state.behindBy,
+                                        onSync = vm::syncFork,
+                                        onDismiss = vm::dismissSyncPrompt
+                                    )
+                                }
+                                if (state.showOobe) {
+                                    CompositionLocalProvider(LocalUiSurfaceAlpha provides 1f) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(MaterialTheme.colorScheme.surface)
+                                                .zIndex(4f)
+                                        ) {
+                                            OobeScreen(vm)
+                                        }
                                     }
                                 }
                             }
@@ -218,6 +273,29 @@ private fun SyncPromptDialog(
             }
         }
     )
+}
+
+@Composable
+private fun MiuixSyncPromptDialog(
+    show: Boolean,
+    behindBy: Int,
+    onSync: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (show) {
+        WindowDialog(
+            title = stringResource(R.string.sync_title),
+            summary = "${stringResource(R.string.sync_desc)}\n\n${stringResource(R.string.sync_behind_commits, behindBy)}",
+            show = true,
+            onDismissRequest = onDismiss
+        ) {
+            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(text = stringResource(R.string.skip), onClick = onDismiss, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(20.dp))
+                TextButton(text = stringResource(R.string.sync_action), onClick = onSync, modifier = Modifier.weight(1f), colors = ButtonDefaults.textButtonColorsPrimary())
+            }
+        }
+    }
 }
 
 @Composable
@@ -361,7 +439,7 @@ private fun TermsText(text: String) {
     )
 }
 
-private enum class AbkTab(@StringRes val labelRes: Int) {
+private enum class AbkTab(@param:StringRes val labelRes: Int) {
     Status(R.string.nav_status),
     Build(R.string.nav_build),
     Modules(R.string.nav_modules),
@@ -393,7 +471,7 @@ private fun AbkMainScaffold(
     var moduleRepositoryPageVisible by rememberSaveable { mutableStateOf(false) }
     var rootAuthDetailPageVisible by rememberSaveable { mutableStateOf(false) }
     var managerPatchPageVisible by rememberSaveable { mutableStateOf(false) }
-    var lastBackAt by remember { mutableStateOf(0L) }
+    var lastBackAt by remember { mutableLongStateOf(0L) }
     val runtimeNativeManagerActive = state.hasNativeManagerPermission
     val visibleTabs = remember(state.runtimeNavigationEnabled, state.rootGranted, runtimeNativeManagerActive) {
         if (state.runtimeNavigationEnabled) {
@@ -577,7 +655,7 @@ private fun AbkMainScaffold(
                                 imageVector = when (tab) {
                                     AbkTab.Status -> Icons.Default.Home
                                     AbkTab.Build -> Icons.Default.RocketLaunch
-                                    AbkTab.Modules -> Icons.Default.LibraryBooks
+                                    AbkTab.Modules -> Icons.AutoMirrored.Filled.LibraryBooks
                                     AbkTab.Flash -> if (state.rootGranted) Icons.Default.FlashOn else Icons.Default.FolderOpen
                                     AbkTab.RuntimeHome -> Icons.Default.Memory
                                     AbkTab.InstalledModules -> Icons.Default.Extension

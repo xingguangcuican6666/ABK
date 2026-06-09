@@ -462,6 +462,13 @@
     <string name="flash_manual_download_badge">Manual</string>
     <string name="flash_device_recommended">Device recommended</string>
     <string name="flash_auto_next">Auto next time</string>
+    <string name="flash_hero_available">Available</string>
+    <string name="flash_hero_downloaded">Downloaded</string>
+    <string name="flash_no_artifacts">No artifacts</string>
+    <string name="flash_unknown_artifact">Artifact</string>
+    <string name="flash_local_files">Downloaded files</string>
+    <string name="flash_prebuilt_only_matches">Show only matching assets</string>
+    <string name="reset">Reset</string>
     <string name="flash_workflow_label">Workflow %1$s</string>
     <string name="flash_cancel_workflow">Cancel workflow</string>
     <string name="flash_delete_workflow">Delete workflow</string>
@@ -510,6 +517,8 @@
     <string name="status_version_build_download">Version: %1$s · build and download available</string>
     <string name="status_root_authorized">Root authorized</string>
     <string name="status_root_unauthorized">Root unauthorized</string>
+    <string name="status_authorized">Authorized</string>
+    <string name="status_unauthorized">Unauthorized</string>
     <string name="status_no_fork_detected">No fork detected</string>
     <string name="status_progress_sync">Notification and in-app progress stay in sync</string>
     <string name="status_no_running_build">No build in progress</string>
@@ -526,7 +535,6 @@
     <string name="status_fork_behind">Fork is %1$d commits behind upstream</string>
     <string name="status_recent_runs_title">Recent builds</string>
     <string name="status_recent_runs_subtitle">Quickly check the latest 5 workflow results.</string>
-    <string name="status_authorized">Authorized</string>
     <string name="status_pending_check">Pending check</string>
     <string name="status_synced">Synced</string>
     <string name="status_detected">Detected</string>
@@ -572,8 +580,14 @@
     <string name="settings_prebuilt_gki_desc">Fetch prebuilt GKI from this repository release. Downloads are manual.</string>
     <string name="settings_notify_build_desc">Show build status in notifications</string>
     <string name="settings_navigation">Navigation</string>
+    <string name="settings_navigation_bar">Navigation Bar</string>
+    <string name="settings_floating_navigation">Floating Navigation Bar</string>
+    <string name="settings_floating_navigation_desc">Use an Apple-style floating navigation bar</string>
+    <string name="settings_glass_navigation_effect">Liquid Glass</string>
+    <string name="settings_glass_navigation_effect_desc">Enable liquid glass blur effect for the floating navigation bar (requires Android 13+)</string>
     <string name="settings_predictive_back">In-app M3E back animation</string>
     <string name="settings_predictive_back_desc">Use Material 3 Expressive page back animation, independent from system predictive back.</string>
+    <string name="settings_predictive_back_miuix_desc">This setting has no effect in the Miuix theme</string>
     <string name="settings_color_appearance">Color and appearance</string>
     <string name="settings_enter_color_appearance">Open color and appearance</string>
     <string name="settings_about_desc">Repository entry points, version information, and contributors</string>
@@ -581,6 +595,11 @@
     <string name="settings_open_source_licenses">Open source licenses</string>
     <string name="settings_open_source_licenses_desc">Licenses for repository references, embedded source, and dependencies</string>
     <string name="settings_enter_open_source_licenses">Open open source licenses</string>
+    <string name="settings_theme_style">Theme style</string>
+    <string name="settings_theme_style_expressive">Material 3 Expressive</string>
+    <string name="settings_theme_style_miuix">Miuix</string>
+    <string name="settings_theme_style_expressive_desc">Moderate corners, vibrant Material 3 Expressive style</string>
+    <string name="settings_theme_style_miuix_desc">Large corners, soft colors, HyperOS style</string>
     <string name="settings_appearance_mode">Appearance mode</string>
     <string name="settings_color_source">Color source</string>
     <string name="settings_monet">Monet colors</string>
@@ -846,6 +865,18 @@
     <string name="module_repo_add_to_build">Add to build configuration</string>
     <string name="module_repo_search">Search modules</string>
     <string name="module_repo_central_desc">Add index repositories that contain abk-modules.json.</string>
+    <string name="module_repo_abk_title">ABK Module Repo</string>
+    <string name="module_repo_abk_central_title">ABK module central repository</string>
+    <string name="module_repo_abk_central_desc">Add ABK module repositories that contain abk-modules.json.</string>
+    <string name="module_repo_abk_central_url">ABK module repository URL</string>
+    <string name="module_repo_abk_empty_title">No ABK module repositories</string>
+    <string name="module_repo_abk_empty_desc">After adding an ABK module repository, modules are merged here and can be added to the build configuration.</string>
+    <string name="runtime_repo_standard_title">Standard Module Repository</string>
+    <string name="runtime_repo_standard_central_title">Standard module central repository</string>
+    <string name="runtime_repo_standard_central_desc">Add standard module repositories that expose the Magisk JSON format.</string>
+    <string name="runtime_repo_standard_url">Module repository URL</string>
+    <string name="runtime_repo_standard_empty_title">No standard module repositories</string>
+    <string name="runtime_repo_standard_empty_desc">After adding a repository in the Magisk JSON format, modules with online install support will appear here.</string>
     <string name="module_repo_url">Central repository URL</string>
     <string name="add">Add</string>
     <string name="refresh_all">Refresh all</string>
@@ -1108,6 +1139,7 @@
     <string name="close_error">Close error message</string>
     <!-- Language switcher -->
     <string name="settings_language">Language</string>
+    <string name="settings_language_switch">Switch Language</string>
     <string name="settings_language_desc">Select the app display language</string>
     <string name="settings_language_zh">中文</string>
     <string name="settings_language_en">English</string>
