@@ -2665,7 +2665,7 @@ jobs:
         if: inputs.enable_susfs && inputs.ksu_variant != 'None'
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
-          if [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; then
+          if [ "${{ inputs.ksu_variant }}" == "SukiSU" ]; then
             KSU_SOURCE_DIR=""
             for dir in common/drivers/kernelsu drivers/kernelsu KernelSU/kernel kernel; do
               if [ -f "$dir/infra/symbol_resolver.c" ]; then
