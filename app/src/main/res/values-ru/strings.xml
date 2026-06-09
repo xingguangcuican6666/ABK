@@ -344,6 +344,10 @@
     <string name="flash_chip_building">Сборка идёт</string>
     <string name="flash_build_failed_chip">Ошибка сборки</string>
     <string name="flash_dismiss_failed">Убрать из списка</string>
+    <string name="flash_dismiss_failed_title">Убрать запись о сбое</string>
+    <string name="flash_dismiss_failed_message">Больше не будет показываться в этом списке.</string>
+    <string name="flash_dismiss_delete_files">Также удалить скачанные файлы</string>
+    <string name="flash_dismiss_confirm">Убрать</string>
     <string name="flash_open_github_actions">Открыть GitHub Actions</string>
     <string name="flash_failed_step_list_title">Шаги сборки</string>
     <string name="flash_log_excerpt">Фрагмент лога</string>
@@ -570,6 +574,12 @@
     <string name="settings_auto_download_desc">Применяется только к следующей новой сборке. Если выключить, автозагрузки не будет.</string>
     <string name="settings_prebuilt_gki">Готовые сборки GKI</string>
     <string name="settings_prebuilt_gki_desc">Раздел готовых сборок GKI из Release репозитория. Скачивание вручную.</string>
+    <string name="settings_clear_artifacts">Очистить скачанные файлы</string>
+    <string name="settings_clear_artifacts_files">файл(ов)</string>
+    <string name="settings_clear_artifacts_empty">Нет скачанных файлов</string>
+    <string name="settings_clear_artifacts_title">Очистить скачанные файлы?</string>
+    <string name="settings_clear_artifacts_message">Удаляет все локально скачанные файлы сборок.</string>
+    <string name="settings_clear_artifacts_confirm">Очистить</string>
     <string name="settings_notify_build_desc">Показывать статус сборки в уведомлениях</string>
     <string name="settings_navigation">Навигация</string>
     <string name="settings_predictive_back">M3E-анимация возврата в приложении</string>

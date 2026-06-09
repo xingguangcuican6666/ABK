@@ -344,6 +344,10 @@
     <string name="flash_chip_building">Building</string>
     <string name="flash_build_failed_chip">Build failed</string>
     <string name="flash_dismiss_failed">Remove from list</string>
+    <string name="flash_dismiss_failed_title">Remove failed build</string>
+    <string name="flash_dismiss_failed_message">It will no longer show on this screen.</string>
+    <string name="flash_dismiss_delete_files">Also delete downloaded files</string>
+    <string name="flash_dismiss_confirm">Remove</string>
     <string name="flash_open_github_actions">Open GitHub Actions</string>
     <string name="flash_failed_step_list_title">Build steps</string>
     <string name="flash_log_excerpt">Log excerpt</string>
@@ -570,6 +574,12 @@
     <string name="settings_auto_download_desc">Applies only to the next newly submitted build. Turning it off will not auto-download.</string>
     <string name="settings_prebuilt_gki">Prebuilt GKI fetch and download</string>
     <string name="settings_prebuilt_gki_desc">Fetch prebuilt GKI from this repository release. Downloads are manual.</string>
+    <string name="settings_clear_artifacts">Clear downloaded files</string>
+    <string name="settings_clear_artifacts_files">files</string>
+    <string name="settings_clear_artifacts_empty">No downloaded files</string>
+    <string name="settings_clear_artifacts_title">Clear downloaded files?</string>
+    <string name="settings_clear_artifacts_message">Deletes all locally downloaded build files.</string>
+    <string name="settings_clear_artifacts_confirm">Clear</string>
     <string name="settings_notify_build_desc">Show build status in notifications</string>
     <string name="settings_navigation">Navigation</string>
     <string name="settings_predictive_back">In-app M3E back animation</string>

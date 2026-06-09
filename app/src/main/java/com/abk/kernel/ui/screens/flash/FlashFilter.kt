@@ -179,7 +179,6 @@ import com.abk.kernel.data.model.PrebuiltGkiRelease
 import com.abk.kernel.data.model.WorkflowJob
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.WorkflowStep
-import com.abk.kernel.data.model.isFailedFlashRun
 import com.abk.kernel.utils.FlashFilter
 import com.abk.kernel.utils.FlashFilterKernelKind
 import com.abk.kernel.utils.FlashFilterWorkflowState
@@ -296,6 +295,18 @@ internal fun WorkflowRun?.workflowState(): FlashFilterWorkflowState? = when {
     this == null -> null
     this.isActiveFlashRun() -> FlashFilterWorkflowState.Running
     else -> FlashFilterWorkflowState.Finished
+}
+
+internal fun hasDownloadedFilesForRun(
+    runId: Long,
+    downloadedArtifacts: List<DownloadedArtifact>,
+    workflowGroups: List<WorkflowArtifactGroup>,
+    activeDownloadTasks: List<ActiveDownloadTask>,
+): Boolean {
+    if (downloadedArtifacts.any { it.runId == runId }) return true
+    if (workflowGroups.any { it.runId == runId && it.local.isNotEmpty() }) return true
+    if (activeDownloadTasks.any { it.runId == runId }) return true
+    return false
 }
 
 internal fun WorkflowArtifactGroup.shouldAppearInWorkflowList(run: WorkflowRun?): Boolean =
