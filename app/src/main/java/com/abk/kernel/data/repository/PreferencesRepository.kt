@@ -62,6 +62,8 @@ class PreferencesRepository(private val context: Context) {
         val KEY_WEBVIEW_DEBUG_ENABLED = booleanPreferencesKey("webview_debug_enabled")
         val KEY_TERMS_ACCEPTED_VERSION = intPreferencesKey("terms_accepted_version")
         val KEY_FLASH_FILTER = stringPreferencesKey("flash_filter_json")
+        val KEY_GHOST_FAILED_RUNS = stringPreferencesKey("ghost_failed_runs_json")
+        val KEY_DISMISSED_GHOST_RUN_IDS = stringPreferencesKey("dismissed_ghost_run_ids_json")
         val KEY_OOBE_COMPLETED = booleanPreferencesKey("oobe_completed")
     }
 
@@ -128,6 +130,8 @@ class PreferencesRepository(private val context: Context) {
 
     val termsAcceptedVersion: Flow<Int> = context.dataStore.data.map { it[KEY_TERMS_ACCEPTED_VERSION] ?: 0 }
     val flashFilterJson: Flow<String?> = context.dataStore.data.map { it[KEY_FLASH_FILTER] }
+    val ghostFailedRunsJson: Flow<String?> = context.dataStore.data.map { it[KEY_GHOST_FAILED_RUNS] }
+    val dismissedGhostRunIdsJson: Flow<String?> = context.dataStore.data.map { it[KEY_DISMISSED_GHOST_RUN_IDS] }
     val oobeCompleted: Flow<Boolean> = context.dataStore.data.map { it[KEY_OOBE_COMPLETED] ?: false }
 
     suspend fun saveToken(token: String) = context.dataStore.edit { it[KEY_ACCESS_TOKEN] = token }
@@ -226,6 +230,10 @@ class PreferencesRepository(private val context: Context) {
         it[KEY_TERMS_ACCEPTED_VERSION] = CURRENT_TERMS_VERSION
     }
     suspend fun saveFlashFilterJson(json: String) = context.dataStore.edit { it[KEY_FLASH_FILTER] = json }
+    suspend fun saveGhostStateJson(ghostsJson: String, dismissedIdsJson: String) = context.dataStore.edit {
+        it[KEY_GHOST_FAILED_RUNS] = ghostsJson
+        it[KEY_DISMISSED_GHOST_RUN_IDS] = dismissedIdsJson
+    }
     suspend fun setOobeCompleted(v: Boolean) = context.dataStore.edit {
         it[KEY_OOBE_COMPLETED] = v
     }

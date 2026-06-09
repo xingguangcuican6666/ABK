@@ -48,6 +48,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayOutputStream
@@ -143,7 +146,6 @@ data class MainUiState(
     val loadingBuildParameterRunIds: Set<Long> = emptySet(),
     val buildParameterErrors: Map<Long, String> = emptyMap(),
     val dismissedFailedRunIds: Set<Long> = emptySet(),
-    /** In-session only: failed runs surfaced as ghost cards (not from GitHub list fetch). */
     val sessionGhostFailedRuns: Map<Long, WorkflowRun> = emptyMap(),
     val workflowJobsByRunId: Map<Long, List<com.abk.kernel.data.model.WorkflowJob>> = emptyMap(),
     val workflowJobsLoading: Set<Long> = emptySet(),
@@ -240,6 +242,7 @@ class MainViewModel @JvmOverloads constructor(
     private val monitoredRunIds = mutableSetOf<Long>()
     private val preparedMirrorArtifacts = mutableMapOf<Long, Set<String>>()
     private val artifactDownloadJobs = mutableMapOf<Long, Job>()
+    private val ghostPersistMutex = Mutex()
     private var appUpdateDownloadJob: Job? = null
     private val cancelledArtifactDownloadKeys = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private var hasCheckedWorkflowEnablementThisLaunch = false
@@ -255,6 +258,7 @@ class MainViewModel @JvmOverloads constructor(
     private var buildQueueJob: Job? = null
     private var recentRunsRefreshJob: Job? = null
     private var recentRunsRefreshGeneration = 0
+    private val lateFailedArtifactWatchJobs = mutableMapOf<Long, Job>()
     private var foregroundWorkflowRefreshJob: Job? = null
     private var foregroundWorkflowRefreshIntervalSec =
         PreferencesRepository.DEFAULT_WORKFLOW_FOREGROUND_REFRESH_INTERVAL_SEC
@@ -304,7 +308,7 @@ class MainViewModel @JvmOverloads constructor(
                     }
                     else -> BuildStatus.IDLE
                 }
-                _uiState.update {
+                updateWithGhostPersist {
                     val cancelling = run.id in it.cancellingWorkflowRunIds
                     if (cancelling && status != "completed") {
                         it.copy(recentRuns = it.recentRuns.replaceRun(run))
@@ -328,6 +332,14 @@ class MainViewModel @JvmOverloads constructor(
                 if (bs == BuildStatus.SUCCESS) {
                     loadArtifacts(run.id, autoDownload = true, retryWhenEmpty = true, force = true)
                 }
+                if (bs == BuildStatus.FAILURE) {
+                    viewModelScope.launch {
+                        if (prefs.pendingAutoDownloadRunId.first() == run.id) {
+                            prefs.clearPendingAutoDownloadRunId()
+                        }
+                    }
+                    watchLateArtifactsForFailedRun(run.id)
+                }
                 if (bs !in ACTIVE_BUILD_STATUSES) {
                     monitoredRunIds.remove(run.id)
                     processBuildQueue()
@@ -341,9 +353,11 @@ class MainViewModel @JvmOverloads constructor(
             scope = viewModelScope,
             github = github,
             onRunPolled = { run ->
-                _uiState.update { state ->
+                updateWithGhostPersist { state ->
                     var next = state.copy(recentRuns = state.recentRuns.replaceRun(run))
-                    if (state.activeBuildRuns.any { it.id == run.id }) {
+                    val trackDisplay = state.activeBuildRuns.any { it.id == run.id } ||
+                        (run.isFailedFlashRun() && run.id !in state.dismissedFailedRunIds)
+                    if (trackDisplay) {
                         next = next.withBuildRunDisplay(
                             run = run,
                             status = run.toBuildStatus(),
@@ -625,6 +639,23 @@ class MainViewModel @JvmOverloads constructor(
                     .distinctBy { it.filePath }
                     .filter { File(it.filePath).exists() }
                 _uiState.update { it.copy(downloadedArtifacts = restored) }
+            }
+        }
+        viewModelScope.launch {
+            combine(
+                prefs.ghostFailedRunsJson,
+                prefs.dismissedGhostRunIdsJson,
+            ) { ghostsJson, dismissedJson ->
+                parseGhostFailedRuns(ghostsJson) to parseDismissedGhostRunIds(dismissedJson)
+            }.collect { (restoredGhosts, restoredDismissed) ->
+                _uiState.update { state ->
+                    val allDismissed = restoredDismissed + state.dismissedFailedRunIds
+                    val merged = restoredGhosts + state.sessionGhostFailedRuns
+                    state.copy(
+                        dismissedFailedRunIds = allDismissed,
+                        sessionGhostFailedRuns = merged.filterKeys { it !in allDismissed },
+                    )
+                }
             }
         }
         viewModelScope.launch {
@@ -1272,7 +1303,7 @@ class MainViewModel @JvmOverloads constructor(
                                 )
                             }
                         }
-                        _uiState.update {
+                        updateWithGhostPersist {
                             it.withBuildRunDisplay(
                                 run = run,
                                 status = BuildStatus.QUEUED,
@@ -1325,8 +1356,13 @@ class MainViewModel @JvmOverloads constructor(
                         _uiState.update { it.copy(recentRuns = r.data) }
                         r.data.forEach { run ->
                             syncBuildQueueWithRun(run, run.toBuildStatus())
-                            if (_uiState.value.activeBuildRuns.any { it.id == run.id }) {
-                                _uiState.update {
+                            val state = _uiState.value
+                            val trackDisplay = state.activeBuildRuns.any { it.id == run.id } ||
+                                (run.isFailedFlashRun() && run.id !in state.dismissedFailedRunIds &&
+                                    (run.id in state.sessionGhostFailedRuns ||
+                                        state.buildQueue.any { it.runId == run.id }))
+                            if (trackDisplay) {
+                                updateWithGhostPersist {
                                     it.withBuildRunDisplay(
                                         run = run,
                                         status = run.toBuildStatus(),
@@ -1453,7 +1489,7 @@ class MainViewModel @JvmOverloads constructor(
                 if (needsAdopt) {
                     monitorExistingBuildRun(owner, repoName, run)
                 } else {
-                    _uiState.update {
+                    updateWithGhostPersist {
                         it.withBuildRunDisplay(
                             run = run,
                             status = run.toBuildStatus(),
@@ -1472,7 +1508,7 @@ class MainViewModel @JvmOverloads constructor(
             prefs.savePendingAutoDownloadRunId(run.id)
         }
         attachRunToActiveQueueItem(run)
-        _uiState.update {
+        updateWithGhostPersist {
             it.withBuildRunDisplay(
                 run = run,
                 status = run.toBuildStatus(),
@@ -1708,6 +1744,31 @@ class MainViewModel @JvmOverloads constructor(
         )
     }
 
+    fun watchLateArtifactsForFailedRun(runId: Long) {
+        if (runId <= 0L) return
+        lateFailedArtifactWatchJobs[runId]?.cancel()
+        val job = viewModelScope.launch {
+            repeat(LATE_FAILED_ARTIFACT_POLL_ATTEMPTS) { attempt ->
+                if (runId in _uiState.value.dismissedFailedRunIds) return@launch
+                loadArtifacts(
+                    runId = runId,
+                    autoDownload = false,
+                    retryWhenEmpty = true,
+                    force = attempt > 0,
+                )
+                if (attempt < LATE_FAILED_ARTIFACT_POLL_ATTEMPTS - 1) {
+                    delay(LATE_FAILED_ARTIFACT_POLL_INTERVAL_MS)
+                }
+            }
+        }
+        lateFailedArtifactWatchJobs[runId] = job
+        job.invokeOnCompletion {
+            if (lateFailedArtifactWatchJobs[runId] === job) {
+                lateFailedArtifactWatchJobs.remove(runId)
+            }
+        }
+    }
+
     fun isWorkflowStatusBurstActive(runId: Long): Boolean =
         workflowBurstController.isBurstActive(runId)
 
@@ -1870,6 +1931,18 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
+    fun clearAllDownloadedArtifacts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.value.activeDownloadTasks
+                .toList()
+                .forEach { cancelDownload(it.key) }
+            val toDelete = _uiState.value.downloadedArtifacts.toList()
+            toDelete.forEach(::deleteDownloadedFile)
+            _uiState.update { it.copy(downloadedArtifacts = emptyList()) }
+            prefs.saveDownloadedArtifactsJson("[]")
+        }
+    }
+
     fun cancelDownload(taskKey: Long) {
         cancelledArtifactDownloadKeys.add(taskKey)
         artifactDownloadJobs.remove(taskKey)?.cancel()
@@ -1893,6 +1966,15 @@ class MainViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(deletingWorkflowRunId = runId, error = null) }
             try {
+                ghostPersistMutex.withLock {
+                    _uiState.update { state ->
+                        state.copy(
+                            dismissedFailedRunIds = state.dismissedFailedRunIds + runId,
+                            sessionGhostFailedRuns = state.sessionGhostFailedRuns - runId,
+                        )
+                    }
+                    persistGhostState()
+                }
                 if (shouldDeleteRemoteRun) {
                     val owner = _uiState.value.user?.login
                     val repoName = _uiState.value.forkRepo?.name
@@ -1909,14 +1991,7 @@ class MainViewModel @JvmOverloads constructor(
                     }
                 }
 
-                val currentDownloads = _uiState.value.downloadedArtifacts
-                currentDownloads
-                    .filter { it.runId == runId }
-                    .forEach(::deleteDownloadedFile)
-
-                val updatedDownloads = currentDownloads
-                    .filterNot { it.runId == runId }
-                    .sortedDownloadedForDisplay()
+                val updatedDownloads = removeDownloadedArtifactsForRun(runId)
                 val removedRemoteIds = _uiState.value.artifacts
                     .filter { it.runId == runId }
                     .map { it.id }
@@ -1950,7 +2025,6 @@ class MainViewModel @JvmOverloads constructor(
                 if (_uiState.value.pendingAutoDownloadRunId == runId) {
                     prefs.clearPendingAutoDownloadRunId()
                 }
-                prefs.saveDownloadedArtifactsJson(gson.toJson(updatedDownloads))
                 prefs.saveRemoteArtifactsJson(gson.toJson(updatedRemote))
                 prefs.saveBuildParameterSummariesJson(gson.toJson(updatedParameterSummaries.values.sortedByDescending { it.runNumber }))
             } finally {
@@ -1961,10 +2035,65 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
-    fun dismissFailedWorkflow(runId: Long) {
+    private fun updateWithGhostPersist(transform: (MainUiState) -> MainUiState) {
+        val before = _uiState.value.sessionGhostFailedRuns
+        _uiState.update(transform)
+        val after = _uiState.value.sessionGhostFailedRuns
+        if (after != before) {
+            scheduleGhostPersist()
+            (after.keys - before.keys).forEach(::watchLateArtifactsForFailedRun)
+        }
+    }
+
+    private fun scheduleGhostPersist() {
+        viewModelScope.launch(Dispatchers.IO) {
+            ghostPersistMutex.withLock {
+                persistGhostState()
+            }
+        }
+    }
+
+    private suspend fun persistGhostState() {
+        val state = _uiState.value
+        prefs.saveGhostStateJson(
+            ghostsJson = gson.toJson(state.sessionGhostFailedRuns.values.toList()),
+            dismissedIdsJson = gson.toJson(state.dismissedFailedRunIds.toList()),
+        )
+    }
+
+    private suspend fun removeDownloadedArtifactsForRun(runId: Long): List<DownloadedArtifact> {
+        val current = _uiState.value.downloadedArtifacts
+        current.filter { it.runId == runId }.forEach(::deleteDownloadedFile)
+        val updated = current.filterNot { it.runId == runId }.sortedDownloadedForDisplay()
+        _uiState.update { it.copy(downloadedArtifacts = updated) }
+        prefs.saveDownloadedArtifactsJson(gson.toJson(updated))
+        return updated
+    }
+
+    fun dismissFailedWorkflow(runId: Long, deleteFiles: Boolean) {
         if (runId <= 0L) return
+        lateFailedArtifactWatchJobs.remove(runId)?.cancel()
         _uiState.update { state ->
-            state.copy(dismissedFailedRunIds = state.dismissedFailedRunIds + runId)
+            state.copy(
+                dismissedFailedRunIds = state.dismissedFailedRunIds + runId,
+                sessionGhostFailedRuns = state.sessionGhostFailedRuns - runId,
+            )
+        }
+        runBlocking(Dispatchers.IO) {
+            ghostPersistMutex.withLock {
+                persistGhostState()
+            }
+        }
+        if (deleteFiles) {
+            viewModelScope.launch(Dispatchers.IO) {
+                if (_uiState.value.pendingAutoDownloadRunId == runId) {
+                    prefs.clearPendingAutoDownloadRunId()
+                }
+                _uiState.value.activeDownloadTasks
+                    .filter { it.runId == runId }
+                    .forEach { cancelDownload(it.key) }
+                removeDownloadedArtifactsForRun(runId)
+            }
         }
     }
 
@@ -2466,6 +2595,9 @@ class MainViewModel @JvmOverloads constructor(
     ) {
         if (!requestedByMonitor || !_uiState.value.autoDownload) return
         if (prefs.pendingAutoDownloadRunId.first() != runId) return
+        val run = _uiState.value.recentRuns.find { it.id == runId }
+            ?: _uiState.value.sessionGhostFailedRuns[runId]
+        if (run?.isFailedFlashRun() == true) return
         if (artifacts.isEmpty()) return
 
         val targets = artifacts
@@ -3989,6 +4121,26 @@ class MainViewModel @JvmOverloads constructor(
         }.getOrDefault(emptyList())
     }
 
+    private fun parseGhostFailedRuns(json: String?): Map<Long, WorkflowRun> {
+        if (json.isNullOrBlank()) return emptyMap()
+        return runCatching {
+            val type = object : TypeToken<List<WorkflowRun>>() {}.type
+            gson.fromJson<List<WorkflowRun>>(json, type).orEmpty()
+                .filter { it.isFailedFlashRun() }
+                .associateBy { it.id }
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun parseDismissedGhostRunIds(json: String?): Set<Long> {
+        if (json.isNullOrBlank()) return emptySet()
+        return runCatching {
+            val type = object : TypeToken<List<Long>>() {}.type
+            gson.fromJson<List<Long>>(json, type).orEmpty()
+                .filter { it > 0L }
+                .toSet()
+        }.getOrDefault(emptySet())
+    }
+
     private fun parseBuildPlans(json: String?): List<BuildPlan> {
         if (json.isNullOrBlank()) return emptyList()
         return runCatching<List<BuildPlan>> {
@@ -4558,6 +4710,9 @@ private fun buildPlanShareScopeFromWireValue(
     1 -> BuildPlanShareScope.FEATURES_ONLY
     else -> throw IllegalArgumentException(messages.unsupportedShareType)
 }
+
+private const val LATE_FAILED_ARTIFACT_POLL_ATTEMPTS = 6
+private const val LATE_FAILED_ARTIFACT_POLL_INTERVAL_MS = 5_000L
 
 private const val BUILD_PLAN_CODE_PREFIX = "ABKP2:"
 private const val BUILD_PLAN_LEGACY_CODE_PREFIX = "ABKP1:"
