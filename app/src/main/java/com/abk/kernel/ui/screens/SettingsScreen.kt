@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -63,11 +64,19 @@ import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveSwitchItem
 import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.ui.theme.uiSurfaceColor
+import com.abk.kernel.data.model.APP_UPDATE_LINE_DEV
+import com.abk.kernel.data.model.APP_UPDATE_LINE_NORMAL
+import com.abk.kernel.data.model.APP_UPDATE_STABILITY_STABLE
+import com.abk.kernel.data.model.APP_UPDATE_STABILITY_UNSTABLE
+import com.abk.kernel.data.model.AppUpdateCheckResult
 import com.abk.kernel.data.repository.PreferencesRepository
 import com.abk.kernel.data.model.ManagerSettingItem
 import com.abk.kernel.data.model.ManagerSettingKind
+import com.abk.kernel.data.model.normalizeAppUpdateLine
+import com.abk.kernel.data.model.normalizeAppUpdateStability
 import com.abk.kernel.viewmodel.MainUiState
 import com.abk.kernel.viewmodel.MainViewModel
+import java.io.File
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsScreen(
@@ -102,6 +111,12 @@ fun SettingsScreen(
             showAppProfileTemplates = false
             showManagerTools = false
         }
+    }
+
+    LaunchedEffect(state.appUpdatePendingInstallPath) {
+        val apkPath = state.appUpdatePendingInstallPath ?: return@LaunchedEffect
+        launchAppUpdateInstaller(context, apkPath)
+        vm.consumeAppUpdatePendingInstallPath()
     }
 
     fun closeChildPage() {
@@ -502,6 +517,7 @@ private fun SettingsMainContent(
     onAbout: () -> Unit,
     onOpenSourceLicenses: () -> Unit
 ) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .padding(padding)
@@ -595,6 +611,72 @@ private fun SettingsMainContent(
                 value = state.downloadMirrorBaseUrl,
                 onValueChange = { vm.setDownloadMirrorBaseUrl(it) }
             )
+        }
+
+        SettingsGroup(title = stringResource(R.string.settings_app_update)) {
+            AppUpdateStabilityPicker(
+                selected = state.appUpdateStability,
+                onSelect = vm::setAppUpdateStability
+            )
+            AppUpdateLinePicker(
+                selected = state.appUpdateLine,
+                onSelect = vm::setAppUpdateLine
+            )
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_check_app_update),
+                subtitle = appUpdateCheckSubtitle(state),
+                leadingIcon = Icons.Default.Download,
+                trailingContent = {
+                    if (state.appUpdateChecking) {
+                        LoadingIndicator(Modifier.size(22.dp))
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.settings_check_app_update))
+                    }
+                },
+                onClick = vm::checkAppUpdate
+            )
+            state.appUpdateInfo?.let { info ->
+                ExpressiveListItem(
+                    title = if (info.hasUpdate) {
+                        stringResource(R.string.settings_app_update_available)
+                    } else {
+                        stringResource(R.string.settings_app_update_latest)
+                    },
+                    subtitle = appUpdateResultSubtitle(info),
+                    leadingIcon = if (info.hasUpdate) Icons.Default.Download else Icons.Default.Verified
+                )
+                if (info.hasUpdate) {
+                    val downloadUrl = info.remote.downloadUrl
+                    ExpressiveListItem(
+                        title = stringResource(R.string.settings_download_install_update),
+                        subtitle = when {
+                            state.appUpdateDownloading -> stringResource(
+                                R.string.settings_app_update_downloading_progress,
+                                state.appUpdateDownloadProgress
+                            )
+                            downloadUrl.isBlank() -> stringResource(R.string.settings_app_update_link_missing)
+                            else -> downloadUrl
+                        },
+                        leadingIcon = Icons.Default.InstallMobile,
+                        enabled = downloadUrl.isNotBlank(),
+                        trailingContent = {
+                            if (state.appUpdateDownloading) {
+                                LoadingIndicator(Modifier.size(22.dp))
+                            } else if (downloadUrl.isNotBlank()) {
+                                Icon(Icons.Default.Download, contentDescription = stringResource(R.string.settings_download_install_update))
+                            }
+                        },
+                        onClick = downloadUrl.takeIf { it.isNotBlank() }?.let { { vm.downloadAndInstallAppUpdate() } }
+                    )
+                }
+            }
+            state.appUpdateError?.takeIf { it.isNotBlank() }?.let { error ->
+                ExpressiveListItem(
+                    title = stringResource(R.string.settings_app_update_error),
+                    subtitle = error,
+                    leadingIcon = Icons.Default.Error
+                )
+            }
         }
 
         ManagerInjectedSettingsGroup(
@@ -1819,6 +1901,43 @@ private fun openUrl(context: android.content.Context, url: String) {
     }
 }
 
+private fun launchAppUpdateInstaller(context: android.content.Context, apkPath: String) {
+    val apkFile = File(apkPath)
+    if (!apkFile.isFile) {
+        Toast.makeText(context, context.getString(R.string.ru_apk_not_found, apkPath), Toast.LENGTH_SHORT).show()
+        return
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+        !context.packageManager.canRequestPackageInstalls()
+    ) {
+        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+            data = Uri.parse("package:${context.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(intent) }
+            .onFailure {
+                Toast.makeText(context, context.getString(R.string.settings_app_update_install_permission), Toast.LENGTH_LONG).show()
+            }
+        return
+    }
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        apkFile
+    )
+    val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+        data = uri
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+        putExtra(Intent.EXTRA_RETURN_RESULT, false)
+    }
+    runCatching { context.startActivity(intent) }
+        .onFailure {
+            Toast.makeText(context, context.getString(R.string.settings_app_update_install_failed), Toast.LENGTH_LONG).show()
+        }
+}
+
 @Composable
 private fun SettingsHero(
     login: String?,
@@ -1862,6 +1981,7 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
         subtitle = when (title) {
             stringResource(R.string.settings_account) -> stringResource(R.string.settings_group_account_desc)
             stringResource(R.string.settings_build) -> stringResource(R.string.settings_group_build_desc)
+            stringResource(R.string.settings_app_update) -> stringResource(R.string.settings_group_app_update_desc)
             stringResource(R.string.settings_notification) -> stringResource(R.string.settings_group_notification_desc)
             stringResource(R.string.settings_navigation) -> stringResource(R.string.settings_group_navigation_desc)
             stringResource(R.string.settings_language) -> stringResource(R.string.settings_language_desc)
@@ -1885,6 +2005,7 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
         icon = when (title) {
             stringResource(R.string.settings_account) -> Icons.Default.AccountCircle
             stringResource(R.string.settings_build) -> Icons.Default.Build
+            stringResource(R.string.settings_app_update) -> Icons.Default.Download
             stringResource(R.string.settings_notification) -> Icons.Default.Notifications
             stringResource(R.string.settings_navigation) -> Icons.Default.ArrowBack
             stringResource(R.string.settings_language) -> Icons.Default.Language
@@ -1906,6 +2027,131 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
     }
+}
+
+@Composable
+private fun AppUpdateStabilityPicker(
+    selected: String,
+    onSelect: (String) -> Unit
+) {
+    val options = listOf(
+        APP_UPDATE_STABILITY_STABLE to stringResource(R.string.settings_app_update_stable),
+        APP_UPDATE_STABILITY_UNSTABLE to stringResource(R.string.settings_app_update_unstable)
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 8.dp, bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.settings_app_update_stability),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { (value, label) ->
+                FilterChip(
+                    selected = normalizeAppUpdateStability(selected) == value,
+                    onClick = { onSelect(value) },
+                    label = { Text(label, maxLines = 1) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppUpdateLinePicker(
+    selected: String,
+    onSelect: (String) -> Unit
+) {
+    val options = listOf(
+        APP_UPDATE_LINE_NORMAL to stringResource(R.string.settings_app_update_line_normal),
+        APP_UPDATE_LINE_DEV to stringResource(R.string.settings_app_update_line_dev)
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 8.dp, bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.settings_app_update_line),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { (value, label) ->
+                FilterChip(
+                    selected = normalizeAppUpdateLine(selected) == value,
+                    onClick = { onSelect(value) },
+                    label = { Text(label, maxLines = 1) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun appUpdateCheckSubtitle(state: MainUiState): String = when {
+    state.appUpdateDownloading -> stringResource(
+        R.string.settings_app_update_downloading_progress,
+        state.appUpdateDownloadProgress
+    )
+    state.appUpdateChecking -> stringResource(R.string.settings_app_update_checking)
+    state.appUpdateInfo != null -> appUpdateResultSubtitle(state.appUpdateInfo)
+    state.appUpdateError?.isNotBlank() == true -> state.appUpdateError
+    else -> stringResource(
+        R.string.settings_app_update_desc,
+        appUpdateStabilityLabel(state.appUpdateStability),
+        appUpdateLineLabel(state.appUpdateLine)
+    )
+}
+
+@Composable
+private fun appUpdateResultSubtitle(info: AppUpdateCheckResult): String {
+    val status = if (info.hasUpdate) {
+        stringResource(R.string.settings_app_update_status_available)
+    } else {
+        stringResource(R.string.settings_app_update_status_latest)
+    }
+    val publishedAt = info.remote.publishedAt.ifBlank {
+        stringResource(R.string.settings_unknown)
+    }
+    return stringResource(
+        R.string.settings_app_update_result,
+        info.currentVersionName,
+        info.remote.versionName,
+        appUpdateStabilityLabel(info.stability),
+        appUpdateLineLabel(info.line),
+        publishedAt,
+        status
+    )
+}
+
+@Composable
+private fun appUpdateStabilityLabel(value: String): String = when (normalizeAppUpdateStability(value)) {
+    APP_UPDATE_STABILITY_UNSTABLE -> stringResource(R.string.settings_app_update_unstable)
+    else -> stringResource(R.string.settings_app_update_stable)
+}
+
+@Composable
+private fun appUpdateLineLabel(value: String): String = when (normalizeAppUpdateLine(value)) {
+    APP_UPDATE_LINE_DEV -> stringResource(R.string.settings_app_update_line_dev)
+    else -> stringResource(R.string.settings_app_update_line_normal)
 }
 
 @Composable

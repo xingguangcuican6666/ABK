@@ -17,8 +17,6 @@ enum class FlashFilterWorkflowState { Running, Finished }
 data class FlashFilter(
     val kernelEnabled: Boolean = true,
     val kernelKinds: Set<FlashFilterKernelKind> = emptySet(),
-    val managerEnabled: Boolean = true,
-    val managerKinds: Set<FlashFilterManagerKind> = setOf(FlashFilterManagerKind.Release),
     val workflowStates: Set<FlashFilterWorkflowState> = emptySet(),
 )
 
@@ -98,11 +96,7 @@ object FlashWorkflowFilter {
         }
         return when (primary) {
             WorkflowPrimary.Kernel -> matchesKernelKindFilter(filter, kernelKind, workflowState)
-            WorkflowPrimary.Manager -> {
-                if (!filter.managerEnabled) return false
-                if (filter.managerKinds.isEmpty()) return true
-                managerKind != null && managerKind in filter.managerKinds
-            }
+            WorkflowPrimary.Manager -> true
             WorkflowPrimary.Unknown -> {
                 if (!filter.kernelEnabled) return false
                 matchesKernelKindFilter(filter, kernelKind, workflowState)

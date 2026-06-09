@@ -347,6 +347,9 @@ fun FlashScreen(
                     return@filter false
                 }
                 val run = recentRunById[group.runId]
+                if (run.isAbkManagerFlashRun(group.runTitle)) {
+                    return@filter false
+                }
                 val isActive = run?.isActive() == true
                 val isSessionGhost = group.runId in state.sessionGhostFailedRuns
                 isActive || isSessionGhost || group.shouldAppearInWorkflowList(run)
@@ -706,8 +709,9 @@ fun FlashScreen(
                             onOutput = ::appendTerminalOutput
                         )
                         ArtifactType.SUSFS_MODULE -> RootUtils.installModule(preparedFile.absolutePath, ::appendTerminalOutput)
-                        ArtifactType.ABK_MANAGER,
                         ArtifactType.KSU_MANAGER -> RootUtils.installApk(context, preparedFile.absolutePath, ::appendTerminalOutput)
+                        ArtifactType.ABK_MANAGER ->
+                            RootUtils.ShellResult(false, listOf(context.getString(R.string.flash_unsupported_auto_flash)))
                         else -> RootUtils.ShellResult(false, listOf(context.getString(R.string.flash_unsupported_auto_flash)))
                     }
                 }
@@ -1677,4 +1681,3 @@ fun FlashScreen(
         }
     }
 }
-

@@ -253,6 +253,86 @@ data class PrebuiltGkiRelease(
     val assetCount: Int = 0
 )
 
+const val APP_UPDATE_STABILITY_STABLE = "stable"
+const val APP_UPDATE_STABILITY_UNSTABLE = "unstable"
+const val APP_UPDATE_LINE_NORMAL = "normal"
+const val APP_UPDATE_LINE_DEV = "dev"
+
+val APP_UPDATE_STABILITY_OPTIONS = listOf(
+    APP_UPDATE_STABILITY_STABLE,
+    APP_UPDATE_STABILITY_UNSTABLE,
+)
+
+val APP_UPDATE_LINE_OPTIONS = listOf(
+    APP_UPDATE_LINE_NORMAL,
+    APP_UPDATE_LINE_DEV,
+)
+
+data class AppUpdateMetadata(
+    val stable: AppUpdateChannelEntries = AppUpdateChannelEntries(),
+    val unstable: AppUpdateChannelEntries = AppUpdateChannelEntries()
+) {
+    fun entryFor(stability: String, line: String): AppUpdateEntry? {
+        val normalizedStability = normalizeAppUpdateStability(stability)
+        val normalizedLine = normalizeAppUpdateLine(line)
+        val channel = when (normalizedStability) {
+            APP_UPDATE_STABILITY_UNSTABLE -> unstable
+            else -> stable
+        }
+        return when (normalizedLine) {
+            APP_UPDATE_LINE_DEV -> channel.dev
+            else -> channel.normal
+        }
+    }
+}
+
+data class AppUpdateChannelEntries(
+    val normal: AppUpdateEntry? = null,
+    val dev: AppUpdateEntry? = null
+)
+
+data class AppUpdateEntry(
+    val versionName: String = "",
+    val versionCode: Long = 0L,
+    val downloadUrl: String = "",
+    val publishedAt: String = "",
+    val buildTimestampEpochMillis: Long = 0L,
+    val sourceWorkflow: String = "",
+    val commitSha: String = "",
+    val runId: Long = 0L
+)
+
+data class AppUpdateCheckResult(
+    val stability: String,
+    val line: String,
+    val currentVersionName: String,
+    val currentVersionCode: Long,
+    val currentBuildTimestampEpochMillis: Long,
+    val remote: AppUpdateEntry,
+    val hasUpdate: Boolean
+)
+
+fun normalizeAppUpdateStability(value: String): String = when (value.trim().lowercase()) {
+    APP_UPDATE_STABILITY_UNSTABLE -> APP_UPDATE_STABILITY_UNSTABLE
+    else -> APP_UPDATE_STABILITY_STABLE
+}
+
+fun normalizeAppUpdateLine(value: String): String = when (value.trim().lowercase()) {
+    APP_UPDATE_LINE_DEV -> APP_UPDATE_LINE_DEV
+    else -> APP_UPDATE_LINE_NORMAL
+}
+
+fun shouldOfferAppUpdate(
+    remote: AppUpdateEntry,
+    currentVersionCode: Long,
+    currentBuildTimestampEpochMillis: Long
+): Boolean = when {
+    remote.versionCode > currentVersionCode -> true
+    remote.versionCode < currentVersionCode -> false
+    remote.buildTimestampEpochMillis > currentBuildTimestampEpochMillis -> true
+    else -> false
+}
+
 // GitHub Device Flow OAuth
 data class DeviceCodeResponse(
     @SerializedName("device_code") val deviceCode: String,
@@ -610,6 +690,8 @@ data class DownloadedArtifact(
     val runId: Long = -1L,
     val runTitle: String = "",
     val runNumber: Int = 0,
+    val sourceAssetId: Long = 0L,
+    val sourceAssetName: String? = null,
     val category: ArtifactCategory = type.toArtifactCategory()
 )
 
@@ -693,6 +775,17 @@ fun WorkflowRun.isManagerBuild(): Boolean {
 fun WorkflowRun.isPureManagerBuild(): Boolean =
     isManagerBuild() && !isKernelBuild()
 
+/** ABK app workflow only (Build ABK App / Build ABK App Dev). */
+fun WorkflowRun.isAbkManagerBuild(): Boolean {
+    val workflowName = name.orEmpty().lowercase()
+    val lower = "${name.orEmpty()} ${displayTitle.orEmpty()}".lowercase()
+    if (lower.hasUtilityWorkflowSignal()) return false
+    if (workflowName.hasAbkManagerBuildSignal()) return true
+    if (workflowName.hasKernelBuildSignal()) return false
+    if (lower.hasKernelBuildSignal()) return false
+    return lower.hasAbkManagerBuildSignal()
+}
+
 /**
  * Dev manager workflow (e.g. Build ABK App Dev). Uses workflow [name] only — not
  * [WorkflowRun.displayTitle]. Avoids bare `"dev" in text` so "device" does not match.
@@ -719,8 +812,12 @@ private val MANAGER_DEV_WORKFLOW_NAME_MARKERS = listOf(
 private val MANAGER_DEV_NAME_TOKEN =
     Regex("""(^|[\s_.-])dev($|[\s_.-]|\.apk)""", RegexOption.IGNORE_CASE)
 
-private fun String.hasManagerBuildSignal(): Boolean =
+private fun String.hasAbkManagerBuildSignal(): Boolean =
     "abk app" in this || "abk-app" in this ||
+        "build abk app" in this
+
+private fun String.hasManagerBuildSignal(): Boolean =
+    hasAbkManagerBuildSignal() ||
         "build app" in this || "build-app" in this ||
         "debug apk" in this ||
         "manager" in this || "ksu manager" in this || "sukisu manager" in this ||

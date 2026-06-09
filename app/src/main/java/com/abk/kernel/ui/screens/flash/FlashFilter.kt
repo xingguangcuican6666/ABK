@@ -182,7 +182,6 @@ import com.abk.kernel.data.model.WorkflowStep
 import com.abk.kernel.data.model.isFailedFlashRun
 import com.abk.kernel.utils.FlashFilter
 import com.abk.kernel.utils.FlashFilterKernelKind
-import com.abk.kernel.utils.FlashFilterManagerKind
 import com.abk.kernel.utils.FlashFilterWorkflowState
 import com.abk.kernel.utils.FlashWorkflowFilter
 import com.abk.kernel.utils.WorkflowPrimary
@@ -226,7 +225,7 @@ internal val artifactCategoryOrder = listOf(
 internal const val MAX_VISIBLE_WORKFLOWS_PER_CATEGORY = 15
 
 internal fun DownloadedArtifact.isInstallableApk(): Boolean =
-    type.isManagerArtifactType() || name.endsWith(".apk", ignoreCase = true)
+    type == ArtifactType.KSU_MANAGER || (type != ArtifactType.ABK_MANAGER && name.endsWith(".apk", ignoreCase = true))
 
 @StringRes
 internal fun ArtifactCategory.labelRes(): Int = when (this) {
@@ -244,8 +243,6 @@ internal fun ArtifactCategory.icon(): ImageVector = when (this) {
 internal fun flashFilterToMap(f: FlashFilter): Map<String, String> = mapOf(
     "ke" to f.kernelEnabled.toString(),
     "kk" to f.kernelKinds.joinToString(",") { it.name },
-    "me" to f.managerEnabled.toString(),
-    "mk" to f.managerKinds.joinToString(",") { it.name },
     "ws" to f.workflowStates.joinToString(",") { it.name }
 )
 
@@ -254,10 +251,6 @@ internal fun flashFilterFromMap(m: Map<String, String?>): FlashFilter = FlashFil
     kernelKinds = m["kk"]?.takeIf { it.isNotBlank() }?.split(",")
         ?.mapNotNull { runCatching { FlashFilterKernelKind.valueOf(it) }.getOrNull() }
         ?.toSet() ?: emptySet(),
-    managerEnabled = m["me"]?.toBooleanStrictOrNull() ?: true,
-    managerKinds = m["mk"]?.takeIf { it.isNotBlank() }?.split(",")
-        ?.mapNotNull { runCatching { FlashFilterManagerKind.valueOf(it) }.getOrNull() }
-        ?.toSet() ?: setOf(FlashFilterManagerKind.Release),
     workflowStates = m["ws"]?.takeIf { it.isNotBlank() }?.split(",")
         ?.mapNotNull { runCatching { FlashFilterWorkflowState.valueOf(it) }.getOrNull() }
         ?.toSet() ?: emptySet(),
@@ -306,7 +299,9 @@ internal fun WorkflowRun?.workflowState(): FlashFilterWorkflowState? = when {
 }
 
 internal fun WorkflowArtifactGroup.shouldAppearInWorkflowList(run: WorkflowRun?): Boolean =
-    when (
+    if (run.isAbkManagerFlashRun(runTitle) || (remote.isEmpty() && local.isEmpty())) {
+        false
+    } else when (
         FlashWorkflowFilter.primaryKind(
             run = run,
             runTitle = runTitle,
@@ -363,12 +358,6 @@ internal fun FlashFilterKernelKind.shortLabelRes() = when (this) {
 }
 
 @StringRes
-internal fun FlashFilterManagerKind.labelRes() = when (this) {
-    FlashFilterManagerKind.Release -> R.string.flash_filter_manager_release
-    FlashFilterManagerKind.Dev -> R.string.flash_filter_manager_dev
-}
-
-@StringRes
 internal fun FlashFilterWorkflowState.labelRes() = when (this) {
     FlashFilterWorkflowState.Running -> R.string.flash_filter_workflow_running
     FlashFilterWorkflowState.Finished -> R.string.flash_filter_workflow_finished
@@ -412,26 +401,6 @@ internal fun FlashFilterButton(
                         onFilterChange(
                             filter.copy(
                                 kernelKinds = if (add) filter.kernelKinds + kind else filter.kernelKinds - kind
-                            )
-                        )
-                    }
-                )
-            }
-            HorizontalDivider()
-            FilterCheckRow(
-                label = stringResource(R.string.flash_filter_manager),
-                checked = filter.managerEnabled,
-                onCheckedChange = { onFilterChange(filter.copy(managerEnabled = it)) }
-            )
-            FlashFilterManagerKind.entries.forEach { kind ->
-                FilterCheckRow(
-                    label = stringResource(kind.labelRes()),
-                    checked = kind in filter.managerKinds,
-                    indent = true,
-                    onCheckedChange = { add ->
-                        onFilterChange(
-                            filter.copy(
-                                managerKinds = if (add) filter.managerKinds + kind else filter.managerKinds - kind
                             )
                         )
                     }

@@ -179,6 +179,7 @@ import com.abk.kernel.data.model.PrebuiltGkiRelease
 import com.abk.kernel.data.model.WorkflowJob
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.WorkflowStep
+import com.abk.kernel.data.model.isAbkManagerBuild
 import com.abk.kernel.data.model.isFailedFlashRun
 import com.abk.kernel.utils.FlashFilter
 import com.abk.kernel.utils.FlashFilterKernelKind
@@ -260,8 +261,12 @@ internal fun buildWorkflowGroups(
             ?: runs[runId]?.displayTitle?.ifBlank { null }
             ?: runs[runId]?.name?.ifBlank { null }
             ?: unlinkedWorkflowTitle
-        val filteredRemote = remote.filterNot { shouldHideManagerCertArtifact(runTitle, it.name) }
-        val filteredLocal = local.filterNot { shouldHideManagerCertArtifact(runTitle, it.name) }
+        val filteredRemote = remote.filterNot {
+            shouldHideManagerCertArtifact(runTitle, it.name) || shouldHideAbkManagerArtifact(it.name)
+        }
+        val filteredLocal = local.filterNot {
+            shouldHideManagerCertArtifact(runTitle, it.name) || it.type == ArtifactType.ABK_MANAGER
+        }
         val runCreatedAt = runs[runId]?.createdAt
             ?: firstRemote?.runCreatedAt
             ?: ""
@@ -302,6 +307,9 @@ internal fun shouldHideManagerCertArtifact(runTitle: String, artifactName: Strin
         .any { it in lowerTitle }
 }
 
+internal fun shouldHideAbkManagerArtifact(artifactName: String): Boolean =
+    DownloadUtils.classifyArtifact(artifactName) == ArtifactType.ABK_MANAGER
+
 internal data class WorkflowArtifactGroup(
     val runId: Long,
     val runTitle: String,
@@ -338,6 +346,9 @@ internal fun List<WorkflowArtifactGroup>.sortedForWorkflowDisplay(
 
 internal fun ArtifactType.isManagerArtifactType(): Boolean =
     this == ArtifactType.ABK_MANAGER || this == ArtifactType.KSU_MANAGER
+
+internal fun WorkflowRun?.isAbkManagerFlashRun(runTitle: String): Boolean =
+    this?.isAbkManagerBuild() == true || runTitle.titleLooksLikeAbkManager()
 
 internal fun artifactIcon(type: ArtifactType) = when (type) {
     ArtifactType.KERNEL_PACKAGE -> Icons.Default.Inventory2
@@ -412,3 +423,7 @@ internal data class PrebuiltGkiFilter(
     val onlyMatches: Boolean = true
 )
 
+internal fun String.titleLooksLikeAbkManager(): Boolean {
+    val n = lowercase()
+    return "abk app" in n || "abk-app" in n || "build abk app" in n
+}
