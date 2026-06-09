@@ -420,7 +420,9 @@ data class ModuleSetChildMetadata(
     val recommendedStages: List<String> = listOf(CustomExternalModuleStage.AFTER_PATCH),
     val groupRole: String = "",
     val controllable: Boolean = false,
-    val hasWebUi: Boolean = false
+    val hasWebUi: Boolean = false,
+    val magiskModuleName: String = "",
+    val magiskModuleDownloadUrl: String = ""
 )
 
 data class ExternalModuleMetadata(
@@ -432,7 +434,9 @@ data class ExternalModuleMetadata(
     val supportedStages: List<String> = CustomExternalModuleStage.options,
     val defaultStage: String = CustomExternalModuleStage.AFTER_PATCH,
     val recommendedStages: List<String> = listOf(CustomExternalModuleStage.AFTER_PATCH),
-    val children: List<ModuleSetChildMetadata> = emptyList()
+    val children: List<ModuleSetChildMetadata> = emptyList(),
+    val magiskModuleName: String = "",
+    val magiskModuleDownloadUrl: String = ""
 )
 
 data class ModuleCatalogItem(

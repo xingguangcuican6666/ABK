@@ -123,8 +123,8 @@ class GitHubRepositoryParsingTest {
                 ABK_MODULE_DEFAULT_STAGE="after_patch"
                 ABK_MODULE_RECOMMENDED_STAGES="after_patch"
                 ABK_MODULE_SET_ITEMS='
-                feat_guard|SELinux Guard|Harden checks|https://github.com/demo/security-suite|after_patch,before_build|after_patch|after_patch|feat|true|false
-                fix_cleanup|Policy Cleanup|Remove redundant grants|https://github.com/demo/security-suite|before_build|before_build|before_build|fix|false|false
+                feat_guard|SELinux Guard|Harden checks|https://github.com/demo/security-suite|after_patch,before_build|after_patch|after_patch|feat|true|false|Play Integrity Fix|https://example.com/pif.zip
+                fix_cleanup|Policy Cleanup|Remove redundant grants|https://github.com/demo/security-suite|before_build|before_build|before_build|fix|false|false||
                 '
             """.trimIndent()
         )
@@ -134,6 +134,8 @@ class GitHubRepositoryParsingTest {
         assertEquals(2, metadata.children.size)
         assertEquals("feat_guard", metadata.children.first().id)
         assertEquals(CustomExternalModuleStage.AFTER_PATCH, metadata.children.first().defaultStage)
+        assertEquals("Play Integrity Fix", metadata.children.first().magiskModuleName)
+        assertEquals("https://example.com/pif.zip", metadata.children.first().magiskModuleDownloadUrl)
     }
 
     @Test
@@ -146,6 +148,8 @@ class GitHubRepositoryParsingTest {
                 ABK_MODULE_SUPPORTED_STAGES=after-patch,before_build
                 ABK_MODULE_DEFAULT_STAGE=before-build
                 ABK_MODULE_RECOMMENDED_STAGES=before-build
+                ABK_MAGISK_MODULE_NAME="Play Integrity Fix"
+                ABK_MAGISK_MODULE_DOWNLOAD_URL="https://example.com/pif.zip"
             """.trimIndent()
         )
 
@@ -158,6 +162,8 @@ class GitHubRepositoryParsingTest {
         )
         assertEquals(CustomExternalModuleStage.BEFORE_BUILD, metadata.defaultStage)
         assertEquals(listOf(CustomExternalModuleStage.BEFORE_BUILD), metadata.recommendedStages)
+        assertEquals("Play Integrity Fix", metadata.magiskModuleName)
+        assertEquals("https://example.com/pif.zip", metadata.magiskModuleDownloadUrl)
 
         assertThrows(IllegalStateException::class.java) {
             repository.parseExternalModuleConf("ABK_MODULE_VERSION=1")

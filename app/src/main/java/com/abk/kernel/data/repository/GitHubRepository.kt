@@ -802,7 +802,9 @@ open class GitHubRepository(
             supportedStages = supportedStages,
             defaultStage = defaultStage,
             recommendedStages = recommendedStages,
-            children = children
+            children = children,
+            magiskModuleName = values["ABK_MAGISK_MODULE_NAME"].orEmpty().trim(),
+            magiskModuleDownloadUrl = values["ABK_MAGISK_MODULE_DOWNLOAD_URL"].orEmpty().trim()
         )
     }
 
@@ -840,6 +842,8 @@ open class GitHubRepository(
                 val groupRole = parts.getOrNull(7).orEmpty().trim()
                 val controllable = parts.getOrNull(8).orEmpty().trim().lowercase() in setOf("1", "true", "yes", "on")
                 val hasWebUi = parts.getOrNull(9).orEmpty().trim().lowercase() in setOf("1", "true", "yes", "on")
+                val magiskModuleName = parts.getOrNull(10).orEmpty().trim()
+                val magiskModuleDownloadUrl = parts.getOrNull(11).orEmpty().trim()
                 ModuleSetChildMetadata(
                     id = id,
                     name = name,
@@ -850,7 +854,9 @@ open class GitHubRepository(
                     recommendedStages = recommendedStages,
                     groupRole = groupRole,
                     controllable = controllable,
-                    hasWebUi = hasWebUi
+                    hasWebUi = hasWebUi,
+                    magiskModuleName = magiskModuleName,
+                    magiskModuleDownloadUrl = magiskModuleDownloadUrl
                 )
             }
             .distinctBy { it.id.lowercase() }
