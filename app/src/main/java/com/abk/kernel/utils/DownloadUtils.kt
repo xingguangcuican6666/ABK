@@ -892,6 +892,7 @@ object DownloadUtils {
                     ?.ifBlank { null }
             }
             .orEmpty()
+            .toList()
 
     private suspend fun resolveBundledMagiskModules(
         stagingRoot: File,
