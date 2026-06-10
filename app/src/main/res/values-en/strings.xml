@@ -582,8 +582,8 @@
     <string name="settings_clear_artifacts_confirm">Clear</string>
     <string name="settings_notify_build_desc">Show build status in notifications</string>
     <string name="settings_navigation">Navigation</string>
-    <string name="settings_predictive_back">In-app M3E back animation</string>
-    <string name="settings_predictive_back_desc">Use Material 3 Expressive page back animation, independent from system predictive back.</string>
+    <string name="settings_predictive_back">Predictive back gesture</string>
+    <string name="settings_predictive_back_desc">Enable edge-swipe back preview and custom page dismiss animation</string>
     <string name="settings_color_appearance">Color and appearance</string>
     <string name="settings_enter_color_appearance">Open color and appearance</string>
     <string name="settings_about_desc">Repository entry points, version information, and contributors</string>
