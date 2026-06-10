@@ -1053,6 +1053,15 @@
     <string name="vm_template_name_empty">Template name can not be empty</string>
     <string name="vm_template_save_failed">Failed to save template</string>
     <string name="vm_template_delete_failed">Failed to delete template</string>
+    <string name="template_profile_fields">Profile Fields</string>
+    <string name="template_field_uid">UID</string>
+    <string name="template_field_gid">GID</string>
+    <string name="template_field_groups">Groups</string>
+    <string name="template_field_capabilities">Capabilities</string>
+    <string name="template_field_context">Context</string>
+    <string name="template_field_namespace">Namespace</string>
+    <string name="template_field_namespace_hint">Leave empty for default namespace</string>
+    <string name="template_field_rules">Rules</string>
     <string name="vm_setting_su_compat_title">Legacy su command support</string>
     <string name="vm_setting_su_compat_desc">Allow root access through /system/bin/su</string>
     <string name="vm_setting_kernel_umount_title">Kernel-handled module unmount</string>

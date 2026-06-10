@@ -1053,6 +1053,15 @@
     <string name="vm_template_name_empty">模板名称不能为空</string>
     <string name="vm_template_save_failed">模板保存失败</string>
     <string name="vm_template_delete_failed">模板删除失败</string>
+    <string name="template_profile_fields">模板字段</string>
+    <string name="template_field_uid">UID</string>
+    <string name="template_field_gid">GID</string>
+    <string name="template_field_groups">用户组</string>
+    <string name="template_field_capabilities">能力</string>
+    <string name="template_field_context">上下文</string>
+    <string name="template_field_namespace">命名空间</string>
+    <string name="template_field_namespace_hint">留空使用默认命名空间</string>
+    <string name="template_field_rules">规则</string>
     <string name="vm_setting_su_compat_title">传统 su 命令支持</string>
     <string name="vm_setting_su_compat_desc">允许通过 /system/bin/su 获取 Root 权限</string>
     <string name="vm_setting_kernel_umount_title">内核处理卸载模块</string>

@@ -1039,6 +1039,15 @@
     <string name="vm_template_name_empty">Имя шаблона не может быть пустым</string>
     <string name="vm_template_save_failed">Не удалось сохранить шаблон</string>
     <string name="vm_template_delete_failed">Не удалось удалить шаблон</string>
+    <string name="template_profile_fields">Поля шаблона</string>
+    <string name="template_field_uid">UID</string>
+    <string name="template_field_gid">GID</string>
+    <string name="template_field_groups">Группы</string>
+    <string name="template_field_capabilities">Возможности</string>
+    <string name="template_field_context">Контекст</string>
+    <string name="template_field_namespace">Пространство имен</string>
+    <string name="template_field_namespace_hint">Оставьте пустым для пространства имен по умолчанию</string>
+    <string name="template_field_rules">Правила</string>
     <string name="vm_setting_su_compat_title">Поддержка устаревшей команды su</string>
     <string name="vm_setting_su_compat_desc">Разрешать получать root через /system/bin/su</string>
     <string name="vm_setting_kernel_umount_title">Размонтирование модулей средствами ядра</string>
