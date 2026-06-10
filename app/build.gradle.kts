@@ -43,6 +43,12 @@ android {
     namespace = "com.abk.kernel"
     compileSdk = 37
 
+    lint {
+        checkDependencies = true
+        abortOnError = true
+        checkReleaseBuilds = false
+    }
+
     defaultConfig {
         applicationId = "com.abk.kernel"
         minSdk = 26
