@@ -62,6 +62,7 @@ import com.abk.kernel.data.model.KSU_VARIANT_NONE
 import com.abk.kernel.data.model.KSU_VARIANT_RESUKISU
 import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
 import com.abk.kernel.data.model.ModuleCatalogItem
+import com.abk.kernel.data.model.ModuleCatalogItemKind
 import com.abk.kernel.data.model.ModuleCatalogRepository
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.isKernelBuild
@@ -155,6 +156,10 @@ fun BuildScreen(
     var selectedCustomModuleStages by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var editingCustomModuleGroup by remember { mutableStateOf<BuildCustomModuleGroup?>(null) }
     var editingCustomModuleStages by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var editingModuleSetGroup by remember { mutableStateOf<BuildCustomModuleGroup?>(null) }
+    var editingModuleSetMetadata by remember { mutableStateOf<ExternalModuleMetadata?>(null) }
+    var editingModuleSetChildIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var editingModuleSetStageSelections by remember { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
     var removingCustomModuleKeys by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val coroutineScope = rememberCoroutineScope()
     val catalogModules = remember(state.buildModuleRepositories) {
@@ -216,6 +221,50 @@ fun BuildScreen(
 
     DisposableEffect(Unit) {
         onDispose { onPlanPageVisibleChange(false) }
+    }
+
+    fun clearModuleSetEditor() {
+        editingModuleSetGroup = null
+        editingModuleSetMetadata = null
+        editingModuleSetChildIds = emptyList()
+        editingModuleSetStageSelections = emptyMap()
+    }
+
+    fun openModuleSetEditor(group: BuildCustomModuleGroup) {
+        val repoUrl = group.groupRepoUrl.ifBlank {
+            group.catalogModule?.module?.repoUrl ?: group.url
+        }.trim()
+        if (repoUrl.isBlank()) return
+        coroutineScope.launch {
+            val metadata = vm.checkCustomExternalModuleMetadata(repoUrl) ?: return@launch
+            if (metadata.kind != ModuleCatalogItemKind.MODULE_SET) return@launch
+            val currentGroupModules = config.customExternalModules.filter {
+                CustomExternalModuleEntryKind.normalize(it.entryKind) == CustomExternalModuleEntryKind.MODULE_SET_CHILD &&
+                    (
+                        it.groupRepoUrl.equals(repoUrl, ignoreCase = true) ||
+                            (it.groupRepoUrl.isBlank() && it.url.equals(repoUrl, ignoreCase = true))
+                        )
+            }
+            val selectedChildIds = currentGroupModules
+                .mapNotNull { childId -> childId.childId.trim().takeIf { it.isNotBlank() } }
+                .distinct()
+            val stageSelections = metadata.children.associate { child ->
+                val existingStages = currentGroupModules
+                    .filter { it.childId.equals(child.id, ignoreCase = true) }
+                    .map { CustomExternalModuleStage.normalize(it.stage) }
+                    .distinct()
+                    .filter { it in child.supportedStages }
+                child.id to existingStages.ifEmpty {
+                    child.recommendedStages
+                        .filter { it in child.supportedStages }
+                        .ifEmpty { listOf(child.defaultStage) }
+                }
+            }
+            editingModuleSetGroup = group
+            editingModuleSetMetadata = metadata
+            editingModuleSetChildIds = selectedChildIds
+            editingModuleSetStageSelections = stageSelections
+        }
     }
 
     if (showConfirmDialog) {
@@ -578,6 +627,164 @@ fun BuildScreen(
                         editingCustomModuleStages = emptyList()
                     }
                 ) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    val moduleSetGroup = editingModuleSetGroup
+    val moduleSetMetadata = editingModuleSetMetadata
+    if (moduleSetGroup != null && moduleSetMetadata != null) {
+        AlertDialog(
+            onDismissRequest = ::clearModuleSetEditor,
+            icon = { Icon(Icons.Default.Edit, null) },
+            title = { Text(stringResource(R.string.build_edit_injection_stage)) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = moduleSetMetadata.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (moduleSetMetadata.version.isNotBlank() || moduleSetMetadata.description.isNotBlank()) {
+                        Text(
+                            text = buildString {
+                                if (moduleSetMetadata.version.isNotBlank()) {
+                                    append(stringResource(R.string.module_repo_version, moduleSetMetadata.version))
+                                }
+                                if (moduleSetMetadata.version.isNotBlank() && moduleSetMetadata.description.isNotBlank()) {
+                                    appendLine()
+                                }
+                                if (moduleSetMetadata.description.isNotBlank()) {
+                                    append(moduleSetMetadata.description)
+                                }
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    moduleSetMetadata.children.forEach { child ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Checkbox(
+                                checked = child.id in editingModuleSetChildIds,
+                                onCheckedChange = { checked ->
+                                    editingModuleSetChildIds = if (checked) {
+                                        (editingModuleSetChildIds + child.id).distinct()
+                                    } else {
+                                        editingModuleSetChildIds - child.id
+                                    }
+                                }
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = child.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                if (child.description.isNotBlank()) {
+                                    Text(
+                                        text = child.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (child.id in editingModuleSetChildIds) {
+                                    val options = child.supportedStages
+                                    val initialStages = child.recommendedStages
+                                        .filter { it in options }
+                                        .ifEmpty { listOf(child.defaultStage) }
+                                    val selectedStages = editingModuleSetStageSelections[child.id] ?: initialStages
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        options.forEach { stage ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Checkbox(
+                                                    checked = stage in selectedStages,
+                                                    onCheckedChange = { checked ->
+                                                        val updatedStages = if (checked) {
+                                                            (selectedStages + stage).distinct()
+                                                        } else {
+                                                            selectedStages - stage
+                                                        }
+                                                        editingModuleSetStageSelections =
+                                                            editingModuleSetStageSelections + (child.id to updatedStages)
+                                                    }
+                                                )
+                                                Text(
+                                                    text = buildString {
+                                                        append(stage)
+                                                        if (stage in child.recommendedStages) {
+                                                            append(stringResource(R.string.module_repo_recommended))
+                                                        }
+                                                    },
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val repoUrl = moduleSetGroup.groupRepoUrl.ifBlank {
+                            moduleSetGroup.catalogModule?.module?.repoUrl ?: moduleSetGroup.url
+                        }
+                        val selections = moduleSetMetadata.children
+                            .filter { it.id in editingModuleSetChildIds }
+                            .map { child ->
+                                child to (
+                                    editingModuleSetStageSelections[child.id]
+                                        ?.distinct()
+                                        ?.filter { stage -> stage in child.supportedStages }
+                                        ?.ifEmpty {
+                                            child.recommendedStages
+                                                .filter { stage -> stage in child.supportedStages }
+                                                .ifEmpty { listOf(child.defaultStage) }
+                                        }
+                                        ?: child.recommendedStages
+                                            .filter { stage -> stage in child.supportedStages }
+                                            .ifEmpty { listOf(child.defaultStage) }
+                                    )
+                            }
+                            .filter { (_, stages) -> stages.isNotEmpty() }
+                        if (vm.replaceModuleSetSelection(repoUrl, moduleSetMetadata, selections)) {
+                            clearModuleSetEditor()
+                        }
+                    },
+                    enabled = editingModuleSetChildIds.isNotEmpty() && moduleSetMetadata.children
+                        .filter { it.id in editingModuleSetChildIds }
+                        .all { child ->
+                            val selectedStages = editingModuleSetStageSelections[child.id]
+                                ?: child.recommendedStages
+                                    .filter { it in child.supportedStages }
+                                    .ifEmpty { listOf(child.defaultStage) }
+                            selectedStages.any { it in child.supportedStages }
+                        }
+                ) {
+                    Text(stringResource(R.string.build_save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = ::clearModuleSetEditor) {
                     Text(stringResource(R.string.cancel))
                 }
             }
@@ -1157,8 +1364,12 @@ fun BuildScreen(
                                                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                                     IconButton(
                                                         onClick = {
-                                                            editingCustomModuleGroup = group
-                                                            editingCustomModuleStages = group.stages
+                                                            if (group.entryKind == CustomExternalModuleEntryKind.MODULE_SET_CHILD) {
+                                                                openModuleSetEditor(group)
+                                                            } else {
+                                                                editingCustomModuleGroup = group
+                                                                editingCustomModuleStages = group.stages
+                                                            }
                                                         }
                                                     ) {
                                                         Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.build_edit_injection_stage))
@@ -1170,7 +1381,11 @@ fun BuildScreen(
                                                                 (removingCustomModuleKeys + group.key).distinct()
                                                             coroutineScope.launch {
                                                                 delay(CATALOG_MODULE_REMOVE_DELAY_MS)
-                                                                vm.setCustomExternalModuleStages(group.url, emptyList())
+                                                                if (group.entryKind == CustomExternalModuleEntryKind.MODULE_SET_CHILD) {
+                                                                    vm.removeModuleSetSelection(group.groupRepoUrl.ifBlank { group.url })
+                                                                } else {
+                                                                    vm.setCustomExternalModuleStages(group.url, emptyList())
+                                                                }
                                                                 removingCustomModuleKeys =
                                                                     removingCustomModuleKeys - group.key
                                                             }
@@ -1212,8 +1427,12 @@ fun BuildScreen(
                                                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                                     IconButton(
                                                         onClick = {
-                                                            editingCustomModuleGroup = group
-                                                            editingCustomModuleStages = group.stages
+                                                            if (group.entryKind == CustomExternalModuleEntryKind.MODULE_SET_CHILD) {
+                                                                openModuleSetEditor(group)
+                                                            } else {
+                                                                editingCustomModuleGroup = group
+                                                                editingCustomModuleStages = group.stages
+                                                            }
                                                         }
                                                     ) {
                                                         Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.build_edit_injection_stage))
@@ -1225,7 +1444,11 @@ fun BuildScreen(
                                                                 (removingCustomModuleKeys + group.key).distinct()
                                                             coroutineScope.launch {
                                                                 delay(CATALOG_MODULE_REMOVE_DELAY_MS)
-                                                                vm.setCustomExternalModuleStages(group.url, emptyList())
+                                                                if (group.entryKind == CustomExternalModuleEntryKind.MODULE_SET_CHILD) {
+                                                                    vm.removeModuleSetSelection(group.groupRepoUrl.ifBlank { group.url })
+                                                                } else {
+                                                                    vm.setCustomExternalModuleStages(group.url, emptyList())
+                                                                }
                                                                 removingCustomModuleKeys =
                                                                     removingCustomModuleKeys - group.key
                                                             }

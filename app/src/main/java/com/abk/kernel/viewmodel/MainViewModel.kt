@@ -4004,7 +4004,10 @@ class MainViewModel @JvmOverloads constructor(
         val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
         val remainingModules = currentConfig.customExternalModules.filterNot {
             CustomExternalModuleEntryKind.normalize(it.entryKind) == CustomExternalModuleEntryKind.MODULE_SET_CHILD &&
-                it.groupRepoUrl.equals(cleanGroupRepo, ignoreCase = true)
+                (
+                    it.groupRepoUrl.equals(cleanGroupRepo, ignoreCase = true) ||
+                        (it.groupRepoUrl.isBlank() && it.url.equals(cleanGroupRepo, ignoreCase = true))
+                    )
         }
         updateBuildConfig(
             currentConfig.copy(
@@ -4014,6 +4017,26 @@ class MainViewModel @JvmOverloads constructor(
         )
         _uiState.update { it.copy(customExternalModuleError = null) }
         return true
+    }
+
+    fun removeModuleSetSelection(groupRepoUrl: String) {
+        val cleanGroupRepo = groupRepoUrl.trim()
+        if (cleanGroupRepo.isBlank()) return
+        val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
+        val remainingModules = currentConfig.customExternalModules.filterNot {
+            CustomExternalModuleEntryKind.normalize(it.entryKind) == CustomExternalModuleEntryKind.MODULE_SET_CHILD &&
+                (
+                    it.groupRepoUrl.equals(cleanGroupRepo, ignoreCase = true) ||
+                        (it.groupRepoUrl.isBlank() && it.url.equals(cleanGroupRepo, ignoreCase = true))
+                    )
+        }
+        updateBuildConfig(
+            currentConfig.copy(
+                useCustomExternalModules = remainingModules.isNotEmpty(),
+                customExternalModules = remainingModules
+            )
+        )
+        _uiState.update { it.copy(customExternalModuleError = null) }
     }
 
     private fun saveBuildPlans(plans: List<BuildPlan>) {
