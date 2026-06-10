@@ -57,6 +57,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
@@ -101,6 +102,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -640,3 +642,58 @@ internal val RELEASE_EXTRA_PARAMETER_LABELS = setOf(
     "一加8e支持",
     "自定义注入参数列表"
 )
+
+@Composable
+internal fun DismissFailedRunDialog(
+    hasDownloadedFiles: Boolean,
+    onConfirm: (deleteFiles: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var deleteFiles by remember(hasDownloadedFiles) { mutableStateOf(hasDownloadedFiles) }
+    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Close, contentDescription = null) },
+        title = { Text(stringResource(R.string.flash_dismiss_failed_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.flash_dismiss_failed_message))
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (hasDownloadedFiles) {
+                                Modifier.clickable { deleteFiles = !deleteFiles }
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .padding(vertical = 4.dp)
+                ) {
+                    Checkbox(
+                        checked = deleteFiles,
+                        onCheckedChange = { if (hasDownloadedFiles) deleteFiles = it },
+                        enabled = hasDownloadedFiles,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        stringResource(R.string.flash_dismiss_delete_files),
+                        color = if (hasDownloadedFiles) LocalContentColor.current else muted,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(deleteFiles) }) {
+                Text(stringResource(R.string.flash_dismiss_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(android.R.string.cancel))
+            }
+        }
+    )
+}

@@ -12,7 +12,7 @@ class RuntimeStatusJsonTest {
         val status = Gson().fromJson(
             """
             {
-              "schema": 4,
+              "schema": 5,
               "modules": [
                 {
                   "id": "meta-abk-mount",
@@ -23,6 +23,11 @@ class RuntimeStatusJsonTest {
                   "web_root": "/data/adb/modules/meta-abk-mount/webroot",
                   "controllable": true,
                   "enabled": true,
+                  "group_id": "security_suite",
+                  "group_name": "Security Suite",
+                  "group_role": "feat",
+                  "group_description": "Grouped security features",
+                  "group_repo_url": "https://github.com/example/security-suite",
                   "has_web_ui": true,
                   "has_action_script": true,
                   "action_supported": true
@@ -39,5 +44,7 @@ class RuntimeStatusJsonTest {
         assertTrue(module.hasWebUi)
         assertTrue(module.hasActionScript)
         assertTrue(module.actionSupported)
+        assertEquals("security_suite", module.groupId)
+        assertEquals("Security Suite", module.groupName)
     }
 }

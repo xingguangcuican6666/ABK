@@ -673,11 +673,39 @@ jobs:
               exit 1
             fi
 
-            repo_url="$(printf '%s' "${block%%;*}" | trim)"
+            lhs="$(printf '%s' "${block%%;*}" | trim)"
             stage_raw="$(printf '%s' "${block#*;}" | trim)"
+            entry_kind="module"
+            group_repo_url=""
+            child_id=""
+
+            case "$lhs" in
+              module:*)
+                repo_url="$(printf '%s' "${lhs#module:}" | trim)"
+                ;;
+              set:*)
+                descriptor="$(printf '%s' "${lhs#set:}" | trim)"
+                if [[ "$descriptor" != *"#"* ]]; then
+                  echo "::error::模块集格式错误，缺少子模块 id: $block"
+                  exit 1
+                fi
+                group_repo_url="$(printf '%s' "${descriptor%%#*}" | trim)"
+                child_id="$(printf '%s' "${descriptor#*#}" | trim)"
+                repo_url="$group_repo_url"
+                entry_kind="module_set_child"
+                ;;
+              *)
+                repo_url="$lhs"
+                ;;
+            esac
 
             if [ -z "$repo_url" ] || [ -z "$stage_raw" ]; then
               echo "::error::自定义外部模块格式错误，链接或阶段为空: $block"
+              exit 1
+            fi
+
+            if [ "$entry_kind" = "module_set_child" ] && [ -z "$child_id" ]; then
+              echo "::error::模块集子模块 id 不能为空: $block"
               exit 1
             fi
 
@@ -701,9 +729,15 @@ jobs:
             [ -n "$repo_name" ] || repo_name="module"
             module_dir="$GITHUB_WORKSPACE/custom_external_module_$(printf '%02d' "$index")-$repo_name"
 
-            echo "克隆自定义外部模块 #$index ($stage): $repo_url"
+            echo "克隆自定义外部模块 #$index ($stage/$entry_kind): $repo_url"
             git clone --depth 1 "$repo_url" "$module_dir"
-            printf '%s\t%s\t%s\n' "$stage" "$module_dir" "$repo_url" >> "$manifest"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+              "$stage" \
+              "$module_dir" \
+              "$repo_url" \
+              "$entry_kind" \
+              "$group_repo_url" \
+              "$child_id" >> "$manifest"
           done
 
           if [ ! -s "$manifest" ]; then
@@ -712,6 +746,141 @@ jobs:
             echo "自定义外部模块清单:"
             cut -f1,3 "$manifest"
           fi
+
+      - name: 生成刷写外层 Magisk 依赖清单
+        if: inputs.use_custom_external_modules
+        env:
+          ABK_FLASH_DEPENDENCY_MANIFEST: ${{ github.workspace }}/ABK_FLASH_DEPENDENCIES.json
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          manifest_path = Path(os.environ["CUSTOM_EXTERNAL_MODULES_MANIFEST"])
+          output_path = Path(os.environ["ABK_FLASH_DEPENDENCY_MANIFEST"])
+
+          def parse_shell_like_conf(text: str) -> dict[str, str]:
+              result: dict[str, str] = {}
+              lines = text.splitlines()
+              index = 0
+              while index < len(lines):
+                  clean = lines[index].split("#", 1)[0].strip()
+                  if not clean or "=" not in clean:
+                      index += 1
+                      continue
+                  key, value = clean.split("=", 1)
+                  key = key.strip()
+                  value = value.strip()
+                  if not key:
+                      index += 1
+                      continue
+                  if value in {"'", '"'}:
+                      quote = value
+                      index += 1
+                      collected: list[str] = []
+                      while index < len(lines):
+                          raw = lines[index]
+                          if raw.strip() == quote:
+                              break
+                          collected.append(raw)
+                          index += 1
+                      result[key] = "\n".join(collected)
+                  else:
+                      if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+                          value = value[1:-1]
+                      result[key] = value
+                  index += 1
+              return result
+
+          def parse_module_set_items(raw: str) -> list[dict[str, str]]:
+              items: list[dict[str, str]] = []
+              for line in raw.splitlines():
+                  clean = line.strip()
+                  if not clean or clean.startswith("#"):
+                      continue
+                  parts = [part.strip() for part in clean.split("|")]
+                  if len(parts) < 4:
+                      continue
+                  item = {
+                      "id": parts[0],
+                      "name": parts[1] if len(parts) > 1 else "",
+                      "description": parts[2] if len(parts) > 2 else "",
+                      "repo_url": parts[3] if len(parts) > 3 else "",
+                      "magisk_module_name": parts[10] if len(parts) > 10 else "",
+                      "magisk_module_download_url": parts[11] if len(parts) > 11 else "",
+                  }
+                  items.append(item)
+              return items
+
+          dependencies: list[dict[str, str]] = []
+          seen_urls: set[str] = set()
+
+          if manifest_path.exists() and manifest_path.stat().st_size > 0:
+              for line in manifest_path.read_text(encoding="utf-8").splitlines():
+                  if not line.strip():
+                      continue
+                  parts = line.split("\t")
+                  if len(parts) < 3:
+                      continue
+                  entry_kind = parts[3].strip() if len(parts) > 3 and parts[3].strip() else "module"
+                  group_repo_url = parts[4].strip() if len(parts) > 4 else ""
+                  child_id = parts[5].strip() if len(parts) > 5 else ""
+                  module_dir = Path(parts[1].strip())
+                  repo_url = parts[2].strip()
+                  conf_path = module_dir / "module.conf"
+                  if not conf_path.is_file():
+                      continue
+                  conf = parse_shell_like_conf(conf_path.read_text(encoding="utf-8"))
+
+                  dep_name = ""
+                  dep_url = ""
+                  source_name = conf.get("ABK_MODULE_NAME", "").strip()
+                  source_id = conf.get("ABK_MODULE_ID", "").strip()
+                  if entry_kind == "module_set_child":
+                      child = next(
+                          (item for item in parse_module_set_items(conf.get("ABK_MODULE_SET_ITEMS", "")) if item.get("id", "") == child_id),
+                          None
+                      )
+                      if child is None:
+                          continue
+                      dep_name = child.get("magisk_module_name", "").strip()
+                      dep_url = child.get("magisk_module_download_url", "").strip()
+                      source_name = child.get("name", "").strip() or source_name
+                      source_id = child_id or source_id
+                  else:
+                      dep_name = conf.get("ABK_MAGISK_MODULE_NAME", "").strip()
+                      dep_url = conf.get("ABK_MAGISK_MODULE_DOWNLOAD_URL", "").strip()
+
+                  if not dep_url:
+                      continue
+                  key = dep_url.lower()
+                  if key in seen_urls:
+                      continue
+                  seen_urls.add(key)
+                  dependencies.append(
+                      {
+                          "id": source_id,
+                          "name": dep_name or source_name or "magisk-module",
+                          "downloadUrl": dep_url,
+                          "moduleRepoUrl": repo_url,
+                          "groupRepoUrl": group_repo_url,
+                          "childId": child_id,
+                          "sourceName": source_name,
+                      }
+                  )
+
+          if dependencies:
+              output_path.write_text(
+                  json.dumps({"schema": 1, "magiskModules": dependencies}, ensure_ascii=False, indent=2),
+                  encoding="utf-8",
+              )
+              print(f"Wrote {output_path} with {len(dependencies)} Magisk dependencies")
+          elif output_path.exists():
+              output_path.unlink()
+          PY
 
       - name: 初始化并同步内核源码
         working-directory: ${{ env.KERNEL_ROOT }}
@@ -2572,7 +2741,7 @@ jobs:
           fi
 
           executed=0
-          while IFS=$'\t' read -r stage module_dir repo_url; do
+          while IFS=$'\t' read -r stage module_dir repo_url entry_kind group_repo_url child_id; do
             [ "$stage" = "$CUSTOM_EXTERNAL_MODULE_STAGE" ] || continue
 
             setup="$module_dir/setup.sh"
@@ -2585,6 +2754,9 @@ jobs:
             echo "::group::执行自定义外部模块 [$stage] $repo_url"
             (
               cd "$module_dir"
+              export ABK_MODULE_ENTRY_KIND="${entry_kind:-module}"
+              export ABK_MODULE_GROUP_REPO_URL="${group_repo_url:-}"
+              export ABK_MODULE_CHILD_ID="${child_id:-}"
               bash "$setup"
             )
             echo "::endgroup::"
@@ -2801,7 +2973,7 @@ jobs:
           fi
 
           executed=0
-          while IFS=$'\t' read -r stage module_dir repo_url; do
+          while IFS=$'\t' read -r stage module_dir repo_url entry_kind group_repo_url child_id; do
             [ "$stage" = "$CUSTOM_EXTERNAL_MODULE_STAGE" ] || continue
 
             setup="$module_dir/setup.sh"
@@ -2814,6 +2986,9 @@ jobs:
             echo "::group::执行自定义外部模块 [$stage] $repo_url"
             (
               cd "$module_dir"
+              export ABK_MODULE_ENTRY_KIND="${entry_kind:-module}"
+              export ABK_MODULE_GROUP_REPO_URL="${group_repo_url:-}"
+              export ABK_MODULE_CHILD_ID="${child_id:-}"
               bash "$setup"
             )
             echo "::endgroup::"
@@ -4329,6 +4504,7 @@ jobs:
           path: |
             *AnyKernel3.zip
             *.img
+            ABK_FLASH_DEPENDENCIES.json
             LICENSE
             THIRD_PARTY_NOTICES.md
           compression-level: 9

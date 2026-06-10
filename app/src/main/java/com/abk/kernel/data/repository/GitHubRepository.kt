@@ -668,6 +668,12 @@ open class GitHubRepository(
     private fun sanitizeCatalogItem(raw: JsonObject): ModuleCatalogItem? {
         val repoUrl = raw.stringOrEmpty("repoUrl")
         if (repoUrl.isBlank()) return null
+        val kind = ModuleCatalogItemKind.normalize(
+            raw.stringOrEmpty("kind").ifBlank { raw.stringOrEmpty("type") }
+        )
+        val moduleSetId = raw.stringOrEmpty("moduleSetId")
+            .ifBlank { raw.stringOrEmpty("module_set_id") }
+            .ifBlank { if (kind == ModuleCatalogItemKind.MODULE_SET) repoUrl.toCatalogFallbackName() else "" }
         val supportedStages = raw.stringList("supportedStages")
             .map { CustomExternalModuleStage.normalize(it) }
             .distinct()
@@ -689,6 +695,8 @@ open class GitHubRepository(
             name = raw.stringOrEmpty("name").ifBlank { repoUrl.toCatalogFallbackName() },
             version = raw.stringOrEmpty("version"),
             description = raw.stringOrEmpty("description"),
+            kind = kind,
+            moduleSetId = moduleSetId,
             repoUrl = repoUrl,
             defaultStage = defaultStage,
             supportedStages = supportedStages,
@@ -727,8 +735,16 @@ open class GitHubRepository(
 
     internal fun parseExternalModuleConf(body: String): ExternalModuleMetadata {
         val values = parseShellLikeConf(body)
-        val name = values["ABK_MODULE_NAME"].orEmpty().trim()
+        val kind = ModuleCatalogItemKind.normalize(values["ABK_MODULE_KIND"])
+        val name = (
+            if (kind == ModuleCatalogItemKind.MODULE_SET) {
+                values["ABK_MODULE_SET_NAME"]
+            } else {
+                values["ABK_MODULE_NAME"]
+            }
+        ).orEmpty().trim()
         if (name.isBlank()) error(tr(R.string.gh_missing_module_name))
+        val moduleSetId = values["ABK_MODULE_SET_ID"].orEmpty().trim()
         val supportedStages = values["ABK_MODULE_SUPPORTED_STAGES"]
             ?.takeIf { it.isNotBlank() }
             ?.split(',')
@@ -757,26 +773,130 @@ open class GitHubRepository(
             ?.filter { it in supportedStages }
             .orEmpty()
             .ifEmpty { listOf(defaultStage) }
+        val children = if (kind == ModuleCatalogItemKind.MODULE_SET) {
+            parseModuleSetChildren(values["ABK_MODULE_SET_ITEMS"].orEmpty())
+        } else {
+            emptyList()
+        }
+        if (kind == ModuleCatalogItemKind.MODULE_SET && children.isEmpty()) {
+            error(tr(R.string.gh_missing_module_name))
+        }
         return ExternalModuleMetadata(
             name = name,
-            version = values["ABK_MODULE_VERSION"].orEmpty().trim(),
-            description = values["ABK_MODULE_DESCRIPTION"].orEmpty().trim(),
+            version = (
+                if (kind == ModuleCatalogItemKind.MODULE_SET) {
+                    values["ABK_MODULE_SET_VERSION"]
+                } else {
+                    values["ABK_MODULE_VERSION"]
+                }
+            ).orEmpty().trim(),
+            description = (
+                if (kind == ModuleCatalogItemKind.MODULE_SET) {
+                    values["ABK_MODULE_SET_DESCRIPTION"]
+                } else {
+                    values["ABK_MODULE_DESCRIPTION"]
+                }
+            ).orEmpty().trim(),
+            kind = kind,
+            moduleSetId = moduleSetId,
             supportedStages = supportedStages,
             defaultStage = defaultStage,
-            recommendedStages = recommendedStages
+            recommendedStages = recommendedStages,
+            children = children,
+            magiskModuleName = values["ABK_MAGISK_MODULE_NAME"].orEmpty().trim(),
+            magiskModuleDownloadUrl = values["ABK_MAGISK_MODULE_DOWNLOAD_URL"].orEmpty().trim()
         )
     }
 
-    private fun parseShellLikeConf(body: String): Map<String, String> =
-        body.lineSequence()
+    private fun parseModuleSetChildren(raw: String): List<ModuleSetChildMetadata> =
+        raw.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.startsWith("#") }
             .mapNotNull { line ->
-                val clean = line.substringBefore('#').trim()
-                if (clean.isBlank() || '=' !in clean) return@mapNotNull null
-                val key = clean.substringBefore('=').trim()
-                val value = clean.substringAfter('=').trim().trimShellQuotes()
-                if (key.isBlank()) null else key to value
+                val parts = line.split('|')
+                if (parts.size < 6) return@mapNotNull null
+                val id = parts.getOrNull(0).orEmpty().trim()
+                val name = parts.getOrNull(1).orEmpty().trim()
+                val description = parts.getOrNull(2).orEmpty().trim()
+                val repoUrl = parts.getOrNull(3).orEmpty().trim()
+                if (id.isBlank() || name.isBlank() || repoUrl.isBlank()) return@mapNotNull null
+                val supportedStages = parts.getOrNull(4)
+                    .orEmpty()
+                    .split(',')
+                    .map { CustomExternalModuleStage.normalize(it) }
+                    .filter { it in CustomExternalModuleStage.options }
+                    .distinct()
+                    .ifEmpty { listOf(CustomExternalModuleStage.AFTER_PATCH) }
+                val defaultStage = CustomExternalModuleStage.normalize(parts.getOrNull(5).orEmpty())
+                    .takeIf { it in supportedStages }
+                    ?: supportedStages.first()
+                val recommendedStages = parts.getOrNull(6)
+                    .orEmpty()
+                    .split(',')
+                    .mapNotNull { token ->
+                        token.trim().takeIf { it.isNotBlank() }?.let(CustomExternalModuleStage::normalize)
+                    }
+                    .filter { it in supportedStages }
+                    .distinct()
+                    .ifEmpty { listOf(defaultStage) }
+                val groupRole = parts.getOrNull(7).orEmpty().trim()
+                val controllable = parts.getOrNull(8).orEmpty().trim().lowercase() in setOf("1", "true", "yes", "on")
+                val hasWebUi = parts.getOrNull(9).orEmpty().trim().lowercase() in setOf("1", "true", "yes", "on")
+                val magiskModuleName = parts.getOrNull(10).orEmpty().trim()
+                val magiskModuleDownloadUrl = parts.getOrNull(11).orEmpty().trim()
+                ModuleSetChildMetadata(
+                    id = id,
+                    name = name,
+                    description = description,
+                    repoUrl = repoUrl,
+                    supportedStages = supportedStages,
+                    defaultStage = defaultStage,
+                    recommendedStages = recommendedStages,
+                    groupRole = groupRole,
+                    controllable = controllable,
+                    hasWebUi = hasWebUi,
+                    magiskModuleName = magiskModuleName,
+                    magiskModuleDownloadUrl = magiskModuleDownloadUrl
+                )
             }
-            .toMap()
+            .distinctBy { it.id.lowercase() }
+            .toList()
+
+    private fun parseShellLikeConf(body: String): Map<String, String> {
+        val result = linkedMapOf<String, String>()
+        val lines = body.lines()
+        var index = 0
+        while (index < lines.size) {
+            val clean = lines[index].substringBefore('#').trim()
+            if (clean.isBlank() || '=' !in clean) {
+                index++
+                continue
+            }
+            val key = clean.substringBefore('=').trim()
+            var value = clean.substringAfter('=').trim()
+            if (key.isBlank()) {
+                index++
+                continue
+            }
+            if ((value == "'" || value == "\"") && index + 1 < lines.size) {
+                val quote = value
+                val collected = mutableListOf<String>()
+                index++
+                while (index < lines.size) {
+                    val rawLine = lines[index]
+                    if (rawLine.trim() == quote) break
+                    collected += rawLine
+                    index++
+                }
+                value = collected.joinToString("\n")
+            } else {
+                value = value.trimShellQuotes()
+            }
+            result[key] = value
+            index++
+        }
+        return result
+    }
 
     private fun String.trimShellQuotes(): String {
         val clean = trim()

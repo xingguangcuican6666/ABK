@@ -61,6 +61,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Error
@@ -354,7 +355,7 @@ internal fun WorkflowRunCard(
                 }
                 IconButton(onClick = onDelete) {
                     Icon(
-                        Icons.Default.Delete,
+                        if (failedGhost) Icons.Default.Close else Icons.Default.Delete,
                         contentDescription = if (failedGhost) {
                             stringResource(R.string.flash_dismiss_failed)
                         } else {

@@ -27,6 +27,7 @@ class DownloadAndProgressUtilsTest {
     fun classifiesKnownArtifactNames() {
         assertEquals(ArtifactType.KERNEL_PACKAGE, DownloadUtils.classifyArtifact("GKI_kernel-android14-6.1.zip"))
         assertEquals(ArtifactType.KERNEL_IMG, DownloadUtils.classifyArtifact("boot-android14-6.1.162.img"))
+        assertEquals(ArtifactType.KERNEL_IMG, DownloadUtils.classifyArtifact("oneplus_12_sukisu_raw-image-debug"))
         assertEquals(ArtifactType.ANYKERNEL3, DownloadUtils.classifyArtifact("AnyKernel3-android14.zip"))
         assertEquals(ArtifactType.SUSFS_MODULE, DownloadUtils.classifyArtifact("susfs-module.zip"))
         assertEquals(ArtifactType.ABK_MANAGER, DownloadUtils.classifyArtifact("abk-apks"))

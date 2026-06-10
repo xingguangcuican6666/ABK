@@ -322,11 +322,27 @@ object KernelSupport {
                         } else {
                             module.copy(
                                 url = url,
-                                stage = CustomExternalModuleStage.normalize(module.stage)
+                                stage = CustomExternalModuleStage.normalize(module.stage),
+                                entryKind = CustomExternalModuleEntryKind.normalize(module.entryKind),
+                                groupRepoUrl = module.groupRepoUrl.trim(),
+                                childId = module.childId.trim(),
+                                childName = module.childName.trim(),
+                                groupId = module.groupId.trim(),
+                                groupName = module.groupName.trim(),
+                                groupRole = module.groupRole.trim(),
+                                groupDescription = module.groupDescription.trim()
                             )
                         }
                 }
-                    .distinctBy { it.url.lowercase() to CustomExternalModuleStage.normalize(it.stage) }
+                    .distinctBy {
+                        listOf(
+                            it.url.lowercase(),
+                            CustomExternalModuleStage.normalize(it.stage),
+                            CustomExternalModuleEntryKind.normalize(it.entryKind),
+                            it.groupRepoUrl.lowercase(),
+                            it.childId.lowercase()
+                        )
+                    }
             },
             onePlusCpu = if (isOnePlus) onePlusCpu else "sm8650",
             onePlusDeviceManifest = if (isOnePlus) onePlusDeviceManifest else "oneplus_12_b",

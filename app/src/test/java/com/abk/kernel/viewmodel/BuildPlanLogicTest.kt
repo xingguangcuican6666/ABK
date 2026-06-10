@@ -1,6 +1,7 @@
 package com.abk.kernel.viewmodel
 
 import com.abk.kernel.data.model.CustomExternalModule
+import com.abk.kernel.data.model.CustomExternalModuleEntryKind
 import com.abk.kernel.data.model.CustomExternalModuleStage
 import com.abk.kernel.data.model.BUILD_TARGET_GKI
 import com.abk.kernel.data.model.BUILD_TARGET_ONEPLUS
@@ -133,7 +134,31 @@ class BuildPlanLogicTest {
         assertEquals("main:5", inputs["custom_ref"])
         assertEquals("true", inputs["use_custom_external_modules"])
         assertEquals(
-            "https://github.com/example/a.git;after_patch|https://github.com/example/b.git;before_build",
+            "module:https://github.com/example/a.git;after_patch|module:https://github.com/example/b.git;before_build",
+            inputs["custom_external_modules"]
+        )
+    }
+
+    @Test
+    fun workflowInputMapSerializesModuleSetChildren() {
+        val inputs = KernelBuildConfig(
+            useCustomExternalModules = true,
+            customExternalModules = listOf(
+                CustomExternalModule(
+                    url = "https://github.com/example/security-suite.git",
+                    stage = "before_build",
+                    entryKind = CustomExternalModuleEntryKind.MODULE_SET_CHILD,
+                    groupRepoUrl = "https://github.com/example/security-suite.git",
+                    childId = "fix_cleanup",
+                    childName = "Policy Cleanup",
+                    groupId = "security_suite",
+                    groupName = "Security Suite"
+                )
+            )
+        ).toInputMap()
+
+        assertEquals(
+            "set:https://github.com/example/security-suite.git#fix_cleanup;before_build",
             inputs["custom_external_modules"]
         )
     }

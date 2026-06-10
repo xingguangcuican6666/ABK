@@ -105,6 +105,16 @@ on:
         required: false
         type: string
         default: ""
+      use_custom_external_modules:
+        description: "启用自定义外部模块注入"
+        required: false
+        type: boolean
+        default: false
+      custom_external_modules:
+        description: "自定义外部模块（兼容旧 repo;stage，也支持 module:repo;stage 与 set:repo#child;stage，用 | 分隔）"
+        required: false
+        type: string
+        default: ""
   workflow_call:
     inputs:
       kernelsu_variant:
@@ -163,6 +173,14 @@ on:
         type: string
         default: ""
       kpm_password:
+        required: false
+        type: string
+        default: ""
+      use_custom_external_modules:
+        required: false
+        type: boolean
+        default: false
+      custom_external_modules:
         required: false
         type: string
         default: ""
@@ -271,6 +289,8 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo || false }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
+      use_custom_external_modules: ${{ inputs.use_custom_external_modules || false }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       upload_aux_artifacts: false
 
   # 仅在直接触发时运行，从 main.yml 调用时跳过
