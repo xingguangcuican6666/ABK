@@ -582,8 +582,8 @@
     <string name="settings_clear_artifacts_confirm">清除</string>
     <string name="settings_notify_build_desc">在通知栏显示构建状态</string>
     <string name="settings_navigation">导航</string>
-    <string name="settings_predictive_back">应用内 M3E 返回动效</string>
-    <string name="settings_predictive_back_desc">使用 Material 3 Expressive 的页面返回动画，不依赖系统预测性返回</string>
+    <string name="settings_predictive_back">预测性返回手势</string>
+    <string name="settings_predictive_back_desc">启用边缘滑动返回预览和自定义页面关闭动画</string>
     <string name="settings_color_appearance">颜色与外观</string>
     <string name="settings_enter_color_appearance">进入颜色与外观</string>
     <string name="settings_about_desc">本仓库入口、版本信息与贡献者</string>
