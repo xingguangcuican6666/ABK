@@ -22,6 +22,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -38,6 +39,8 @@ object DownloadUtils {
     private const val LICENSE_FILE_NAME = "LICENSE"
     private const val THIRD_PARTY_NOTICES_FILE_NAME = "THIRD_PARTY_NOTICES.md"
     private const val BUNDLE_MANIFEST_FILE_NAME = "ABK_BUNDLE_MANIFEST.txt"
+    private const val FLASH_DEPENDENCIES_FILE_NAME = "ABK_FLASH_DEPENDENCIES.json"
+    private const val BUNDLE_DEPENDENCY_DIR_NAME = "magisk-dependencies"
     private const val NOTICE_STAGING_DIR_NAME = "__abk_notices"
 
     internal fun isBundledNoticeFileName(fileName: String): Boolean =
@@ -51,7 +54,8 @@ object DownloadUtils {
 
     data class PreparedDownloadedArtifact(
         val file: File,
-        val cleanupDir: File? = null
+        val cleanupDir: File? = null,
+        val dependencyModules: List<File> = emptyList()
     )
 
     data class AppUpdatePackageResult(
@@ -70,6 +74,11 @@ object DownloadUtils {
         val type: ArtifactType
     )
 
+    private data class BundledMagiskModuleDependency(
+        val name: String,
+        val downloadUrl: String
+    )
+
     fun classifyArtifact(name: String): ArtifactType {
         val lower = normalizedArtifactName(name).lowercase()
         return when {
@@ -77,6 +86,7 @@ object DownloadUtils {
             lower.contains("_kernel-android") || lower.contains("kernel-android") -> ArtifactType.KERNEL_PACKAGE
             lower.endsWith(".img") && (lower.contains("boot") || lower.contains("kernel") || lower.contains("gki")) -> ArtifactType.KERNEL_IMG
             lower.contains("boot-img") || lower.contains("boot_img") || lower.contains("kernel-img") -> ArtifactType.KERNEL_IMG
+            lower.contains("raw-image") || lower.contains("raw_image") -> ArtifactType.KERNEL_IMG
             lower.contains("anykernel") || lower.contains("ak3") -> ArtifactType.ANYKERNEL3
             lower.endsWith(".zip") && isLikelyModuleZipName(lower) -> ArtifactType.SUSFS_MODULE
             isLikelyModuleZipName(lower) && !lower.contains("anykernel") -> ArtifactType.SUSFS_MODULE
@@ -258,11 +268,13 @@ object DownloadUtils {
                             errorMessage = "Failed to fetch $LICENSE_FILE_NAME or $THIRD_PARTY_NOTICES_FILE_NAME"
                         )
                     }
+                val bundledDependencies = resolveBundledMagiskModules(stagingRoot, token)
 
                 createBundledDownloadEntries(
                     bundleRootDir = requireNotNull(outDir),
                     candidates = candidates,
-                    notices = notices
+                    notices = notices,
+                    bundledDependencies = bundledDependencies
                 )
             } else {
                 val targetOutDir = File(requireNotNull(runDir), safeFileName(artifact.name))
@@ -431,10 +443,12 @@ object DownloadUtils {
                             errorMessage = "Failed to fetch $LICENSE_FILE_NAME or $THIRD_PARTY_NOTICES_FILE_NAME"
                         )
                     }
+                val bundledDependencies = resolveBundledMagiskModules(requireNotNull(stageDir), token)
                 createBundledDownloadEntries(
                     bundleRootDir = requireNotNull(assetDir),
                     candidates = candidateFiles,
-                    notices = notices
+                    notices = notices,
+                    bundledDependencies = bundledDependencies
                 )
                 }
             } else {
@@ -588,7 +602,8 @@ object DownloadUtils {
         val extractDir = createStageDir(context, "prepared-${safeFileName(artifact.name)}")
         unzip(source, extractDir)
         val manifest = File(extractDir, BUNDLE_MANIFEST_FILE_NAME)
-        val payloadName = parseBundledPayloadName(manifest.takeIf { it.isFile }?.readText())
+        val manifestText = manifest.takeIf { it.isFile }?.readText()
+        val payloadName = parseBundledPayloadName(manifestText)
         val payload = payloadName?.let { File(extractDir, it).takeIf(File::isFile) }
             ?: extractDir.walkTopDown()
                 .firstOrNull {
@@ -597,7 +612,11 @@ object DownloadUtils {
                         !isBundledNoticeFileName(it.name)
                 }
             ?: throw IllegalStateException("Bundled artifact missing payload: ${artifact.name}")
-        return PreparedDownloadedArtifact(payload, extractDir)
+        val dependencyModules = parseBundledDependencyNames(manifestText)
+            .mapNotNull { relativePath ->
+                File(extractDir, relativePath).takeIf(File::isFile)
+            }
+        return PreparedDownloadedArtifact(payload, extractDir, dependencyModules)
     }
 
     private fun runFolderName(run: WorkflowRun?): String {
@@ -761,7 +780,8 @@ object DownloadUtils {
     private fun createBundledDownloadEntries(
         bundleRootDir: File,
         candidates: List<File>,
-        notices: NoticeFiles
+        notices: NoticeFiles,
+        bundledDependencies: List<File> = emptyList()
     ): List<LocalDownloadEntry> {
         return candidates.mapIndexed { index, candidate ->
             val dirName = safeFileName(candidate.name).ifBlank { "artifact-${index + 1}" }
@@ -770,7 +790,12 @@ object DownloadUtils {
                 mkdirs()
             }
             val bundleFile = File(candidateDir, "${safeFileName(candidate.name)}.bundle.zip")
-            createNoticeBundle(bundleFile, candidate, notices)
+            val dependenciesForPayload = if (classifyDownloadedFile(candidate) in setOf(ArtifactType.KERNEL_IMG, ArtifactType.ANYKERNEL3)) {
+                bundledDependencies
+            } else {
+                emptyList()
+            }
+            createNoticeBundle(bundleFile, candidate, notices, dependenciesForPayload)
             LocalDownloadEntry(
                 displayName = candidate.name,
                 file = bundleFile,
@@ -801,7 +826,8 @@ object DownloadUtils {
     private fun createNoticeBundle(
         bundleFile: File,
         payload: File,
-        notices: NoticeFiles
+        notices: NoticeFiles,
+        bundledDependencies: List<File> = emptyList()
     ) {
         ZipOutputStream(FileOutputStream(bundleFile)).use { zip ->
             val addedEntryNames = mutableSetOf<String>()
@@ -812,13 +838,22 @@ object DownloadUtils {
             }
 
             zip.putNextEntry(ZipEntry(BUNDLE_MANIFEST_FILE_NAME))
-            zip.write("payload=${payload.name}\n".toByteArray(Charsets.UTF_8))
+            val manifestLines = buildString {
+                append("payload=${payload.name}\n")
+                bundledDependencies.forEach { dependency ->
+                    append("dependency=${BUNDLE_DEPENDENCY_DIR_NAME}/${dependency.name}\n")
+                }
+            }
+            zip.write(manifestLines.toByteArray(Charsets.UTF_8))
             zip.closeEntry()
             addedEntryNames.add(BUNDLE_MANIFEST_FILE_NAME.lowercase(Locale.ROOT))
 
             addUniqueEntry(payload, payload.name)
             addUniqueEntry(notices.license, LICENSE_FILE_NAME)
             addUniqueEntry(notices.thirdPartyNotices, THIRD_PARTY_NOTICES_FILE_NAME)
+            bundledDependencies.forEach { dependency ->
+                addUniqueEntry(dependency, "${BUNDLE_DEPENDENCY_DIR_NAME}/${dependency.name}")
+            }
         }
     }
 
@@ -846,6 +881,102 @@ object DownloadUtils {
             ?.substringAfter('=')
             ?.trim()
             ?.ifBlank { null }
+
+    private fun parseBundledDependencyNames(manifest: String?): List<String> =
+        manifest
+            ?.lineSequence()
+            ?.mapNotNull { line ->
+                line.takeIf { it.startsWith("dependency=") }
+                    ?.substringAfter('=')
+                    ?.trim()
+                    ?.ifBlank { null }
+            }
+            .orEmpty()
+            .toList()
+
+    private suspend fun resolveBundledMagiskModules(
+        stagingRoot: File,
+        token: String?
+    ): List<File> {
+        val manifestFile = stagingRoot.walkTopDown()
+            .firstOrNull { it.isFile && it.name.equals(FLASH_DEPENDENCIES_FILE_NAME, ignoreCase = true) }
+            ?: return emptyList()
+        val raw = runCatching { manifestFile.readText(Charsets.UTF_8) }.getOrDefault("")
+        if (raw.isBlank()) return emptyList()
+        val dependencies = parseBundledMagiskDependencyManifest(raw)
+        if (dependencies.isEmpty()) return emptyList()
+        val dependencyDir = File(stagingRoot, "$NOTICE_STAGING_DIR_NAME/$BUNDLE_DEPENDENCY_DIR_NAME").apply {
+            mkdirs()
+        }
+        return dependencies.mapNotNull { dependency ->
+            val fromUrl = dependency.downloadUrl.substringAfterLast('/').ifBlank { dependency.name }
+            val safeName = safeFileName(fromUrl).ifBlank { "magisk-module.zip" }
+            val target = File(
+                dependencyDir,
+                if (safeName.endsWith(".zip", ignoreCase = true)) safeName else "$safeName.zip"
+            )
+            if (target.exists() && target.length() > 0L) {
+                target
+            } else if (downloadAuxiliaryFile(dependency.downloadUrl, target, token)) {
+                target
+            } else {
+                throw IllegalStateException("Failed to download bundled Magisk dependency: ${dependency.name}")
+            }
+        }
+    }
+
+    private fun parseBundledMagiskDependencyManifest(raw: String): List<BundledMagiskModuleDependency> {
+        val root = runCatching { JSONObject(raw) }.getOrNull() ?: return emptyList()
+        val items = root.optJSONArray("magiskModules") ?: return emptyList()
+        return buildList {
+            for (index in 0 until items.length()) {
+                val item = items.optJSONObject(index) ?: continue
+                val downloadUrl = item.optString("downloadUrl").trim()
+                if (downloadUrl.isBlank()) continue
+                add(
+                    BundledMagiskModuleDependency(
+                        name = item.optString("name").trim().ifBlank { "magisk-module" },
+                        downloadUrl = downloadUrl
+                    )
+                )
+            }
+        }.distinctBy { it.downloadUrl.lowercase(Locale.ROOT) }
+    }
+
+    private suspend fun downloadAuxiliaryFile(
+        url: String,
+        destination: File,
+        token: String?
+    ): Boolean {
+        destination.parentFile?.mkdirs()
+        val request = Request.Builder()
+            .url(url)
+            .header("Accept", "application/octet-stream")
+            .apply {
+                if (!token.isNullOrBlank()) {
+                    header("Authorization", "Bearer $token")
+                }
+            }
+            .build()
+        val call = client.newCall(request)
+        val cancellationHandle = coroutineContext.job.invokeOnCompletion { cause ->
+            if (cause is CancellationException) {
+                call.cancel()
+            }
+        }
+        return try {
+            call.execute().use { response ->
+                if (!response.isSuccessful) return false
+                val body = response.body ?: return false
+                body.byteStream().use { input ->
+                    writeStreamToFile(input, destination, body.contentLength().coerceAtLeast(1L)) {}
+                }
+                true
+            }
+        } finally {
+            cancellationHandle.dispose()
+        }
+    }
 
     internal fun collectArtifactPayloadFiles(outDir: File): List<File> = collectCandidateFiles(outDir)
 

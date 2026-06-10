@@ -51,6 +51,7 @@ import com.abk.kernel.data.model.BuildStatus
 import com.abk.kernel.data.model.BUILD_TARGET_GKI
 import com.abk.kernel.data.model.BUILD_TARGET_ONEPLUS
 import com.abk.kernel.data.model.CustomExternalModule
+import com.abk.kernel.data.model.CustomExternalModuleEntryKind
 import com.abk.kernel.data.model.CustomExternalModuleStage
 import com.abk.kernel.data.model.ExternalModuleMetadata
 import com.abk.kernel.data.model.KernelSupport
@@ -2649,9 +2650,17 @@ private data class BuildCatalogModule(
 private data class BuildCustomModuleGroup(
     val url: String,
     val stages: List<String>,
-    val catalogModule: BuildCatalogModule?
+    val catalogModule: BuildCatalogModule?,
+    val entryKind: String = CustomExternalModuleEntryKind.MODULE,
+    val groupRepoUrl: String = "",
+    val childNames: List<String> = emptyList(),
+    val groupName: String = ""
 ) {
-    val key: String = url.trim().lowercase()
+    val key: String = if (entryKind == CustomExternalModuleEntryKind.MODULE_SET_CHILD) {
+        "set:${groupRepoUrl.trim().lowercase()}"
+    } else {
+        url.trim().lowercase()
+    }
 }
 
 private fun mergeBuildCatalogModules(repositories: List<ModuleCatalogRepository>): List<BuildCatalogModule> =
@@ -2682,20 +2691,44 @@ private fun groupBuildCustomExternalModules(
             if (url.isBlank()) {
                 null
             } else {
-                url to CustomExternalModuleStage.normalize(module.stage)
+                module.copy(
+                    url = url,
+                    stage = CustomExternalModuleStage.normalize(module.stage),
+                    entryKind = CustomExternalModuleEntryKind.normalize(module.entryKind),
+                    groupRepoUrl = module.groupRepoUrl.trim(),
+                    childName = module.childName.trim(),
+                    groupName = module.groupName.trim()
+                )
             }
         }
-        .groupBy { (url, _) -> url.lowercase() }
+        .groupBy { module ->
+            if (module.entryKind == CustomExternalModuleEntryKind.MODULE_SET_CHILD) {
+                "set:${module.groupRepoUrl.lowercase()}"
+            } else {
+                module.url.lowercase()
+            }
+        }
         .values
         .map { entries ->
-            val url = entries.first().first
+            val first = entries.first()
+            val url = first.url
             val stages = CustomExternalModuleStage.options.filter { stage ->
-                entries.any { (_, entryStage) -> entryStage == stage }
+                entries.any { entry -> entry.stage == stage }
             }
             BuildCustomModuleGroup(
                 url = url,
                 stages = stages,
-                catalogModule = catalogModuleByUrl[url.lowercase()]
+                catalogModule = catalogModuleByUrl[
+                    if (first.entryKind == CustomExternalModuleEntryKind.MODULE_SET_CHILD) {
+                        first.groupRepoUrl.lowercase()
+                    } else {
+                        url.lowercase()
+                    }
+                ],
+                entryKind = first.entryKind,
+                groupRepoUrl = first.groupRepoUrl,
+                childNames = entries.mapNotNull { it.childName.takeIf { name -> name.isNotBlank() } }.distinct(),
+                groupName = first.groupName
             )
         }
         .sortedWith(
@@ -2704,8 +2737,12 @@ private fun groupBuildCustomExternalModules(
         )
 
 private fun BuildCustomModuleGroup.displayName(defaultName: String): String =
-    catalogModule?.module?.catalogModuleTitle()
-        ?: url.trim().trimEnd('/').removeSuffix(".git").substringAfterLast('/').ifBlank { defaultName }
+    if (entryKind == CustomExternalModuleEntryKind.MODULE_SET_CHILD && groupName.isNotBlank()) {
+        groupName
+    } else {
+        catalogModule?.module?.catalogModuleTitle()
+            ?: url.trim().trimEnd('/').removeSuffix(".git").substringAfterLast('/').ifBlank { defaultName }
+    }
 
 private fun BuildCustomModuleGroup.subtitle(noStageLabel: String, sourcePrefix: String): String {
     val stageLabel = stages.joinToString(" + ").ifBlank { noStageLabel }
@@ -2713,6 +2750,10 @@ private fun BuildCustomModuleGroup.subtitle(noStageLabel: String, sourcePrefix: 
     return if (catalog != null) {
         buildString {
             append(stageLabel)
+            if (childNames.isNotEmpty()) {
+                append(" · ")
+                append(childNames.joinToString(", "))
+            }
             append(" · ")
             append(sourcePrefix.replace("%s", catalog.sources.joinToString(", ")))
             if (catalog.module.version.isNotBlank()) append(" · v${catalog.module.version}")
@@ -2720,7 +2761,15 @@ private fun BuildCustomModuleGroup.subtitle(noStageLabel: String, sourcePrefix: 
             append(catalog.module.description.ifBlank { catalog.module.repoUrl })
         }
     } else {
-        "$stageLabel\n$url"
+        buildString {
+            append(stageLabel)
+            if (childNames.isNotEmpty()) {
+                append(" · ")
+                append(childNames.joinToString(", "))
+            }
+            appendLine()
+            append(url)
+        }
     }
 }
 

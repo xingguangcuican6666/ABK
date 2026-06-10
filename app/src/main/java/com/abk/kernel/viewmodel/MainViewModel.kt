@@ -3822,6 +3822,7 @@ class MainViewModel @JvmOverloads constructor(
         val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
         val exists = currentConfig.customExternalModules.any {
             it.url.equals(cleanUrl, ignoreCase = true) &&
+                CustomExternalModuleEntryKind.normalize(it.entryKind) == CustomExternalModuleEntryKind.MODULE &&
                 CustomExternalModuleStage.normalize(it.stage) == normalizedStage
         }
         val modules = if (exists) {
@@ -3829,7 +3830,8 @@ class MainViewModel @JvmOverloads constructor(
         } else {
             currentConfig.customExternalModules + CustomExternalModule(
                 url = cleanUrl,
-                stage = normalizedStage
+                stage = normalizedStage,
+                entryKind = CustomExternalModuleEntryKind.MODULE
             )
         }
         updateBuildConfig(
@@ -3849,6 +3851,7 @@ class MainViewModel @JvmOverloads constructor(
             currentConfig.copy(
                 customExternalModules = currentConfig.customExternalModules.filterNot {
                     it.url.equals(cleanUrl, ignoreCase = true) &&
+                        CustomExternalModuleEntryKind.normalize(it.entryKind) == CustomExternalModuleEntryKind.MODULE &&
                         CustomExternalModuleStage.normalize(it.stage) == normalizedStage
                 }
             )
@@ -3864,10 +3867,15 @@ class MainViewModel @JvmOverloads constructor(
             .distinct()
         val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
         val remainingModules = currentConfig.customExternalModules.filterNot {
-            it.url.equals(cleanUrl, ignoreCase = true)
+            it.url.equals(cleanUrl, ignoreCase = true) &&
+                CustomExternalModuleEntryKind.normalize(it.entryKind) == CustomExternalModuleEntryKind.MODULE
         }
         val updatedModules = remainingModules + normalizedStages.map { stage ->
-            CustomExternalModule(url = cleanUrl, stage = stage)
+            CustomExternalModule(
+                url = cleanUrl,
+                stage = stage,
+                entryKind = CustomExternalModuleEntryKind.MODULE
+            )
         }
         updateBuildConfig(
             currentConfig.copy(
@@ -3909,11 +3917,23 @@ class MainViewModel @JvmOverloads constructor(
             .ifEmpty { listOf(CustomExternalModuleStage.AFTER_PATCH) }
         val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
         val existing = currentConfig.customExternalModules.map {
-            it.url.trim().lowercase() to CustomExternalModuleStage.normalize(it.stage)
+            Triple(
+                it.url.trim().lowercase(),
+                CustomExternalModuleEntryKind.normalize(it.entryKind),
+                CustomExternalModuleStage.normalize(it.stage)
+            )
         }.toSet()
         val modules = currentConfig.customExternalModules + normalizedStages
-            .filterNot { stage -> cleanUrl.lowercase() to stage in existing }
-            .map { stage -> CustomExternalModule(url = cleanUrl, stage = stage) }
+            .filterNot { stage ->
+                Triple(cleanUrl.lowercase(), CustomExternalModuleEntryKind.MODULE, stage) in existing
+            }
+            .map { stage ->
+                CustomExternalModule(
+                    url = cleanUrl,
+                    stage = stage,
+                    entryKind = CustomExternalModuleEntryKind.MODULE
+                )
+            }
         updateBuildConfig(
             currentConfig.copy(
                 useCustomExternalModules = true,
@@ -3939,6 +3959,61 @@ class MainViewModel @JvmOverloads constructor(
             _uiState.update { it.copy(customExternalModuleError = text(R.string.vm_module_stage_unsupported, normalizedStage)) }
             false
         }
+    }
+
+    fun replaceModuleSetSelection(
+        groupRepoUrl: String,
+        metadata: ExternalModuleMetadata,
+        selections: List<Pair<ModuleSetChildMetadata, List<String>>>
+    ): Boolean {
+        val cleanGroupRepo = groupRepoUrl.trim()
+        if (cleanGroupRepo.isBlank() || metadata.kind != ModuleCatalogItemKind.MODULE_SET) return false
+        val normalizedSelections = selections.flatMap { (child, stages) ->
+            val childRepo = child.repoUrl.trim()
+            val childId = child.id.trim()
+            if (childRepo.isBlank() || childId.isBlank()) {
+                emptyList()
+            } else {
+                stages
+                    .map { CustomExternalModuleStage.normalize(it) }
+                    .distinct()
+                    .filter { stage -> stage in child.supportedStages }
+                    .map { normalizedStage ->
+                    CustomExternalModule(
+                        url = childRepo,
+                        stage = normalizedStage,
+                        entryKind = CustomExternalModuleEntryKind.MODULE_SET_CHILD,
+                        groupRepoUrl = cleanGroupRepo,
+                        childId = childId,
+                        childName = child.name.trim(),
+                        groupId = metadata.moduleSetId.trim().ifBlank { cleanGroupRepo.moduleCatalogFallbackName("module-set") },
+                        groupName = metadata.name.trim(),
+                        groupRole = child.groupRole.trim(),
+                        groupDescription = metadata.description.trim()
+                    )
+                }
+            }
+        }.distinctBy {
+            listOf(
+                it.url.lowercase(),
+                it.childId.lowercase(),
+                CustomExternalModuleStage.normalize(it.stage),
+                it.groupRepoUrl.lowercase()
+            )
+        }
+        val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
+        val remainingModules = currentConfig.customExternalModules.filterNot {
+            CustomExternalModuleEntryKind.normalize(it.entryKind) == CustomExternalModuleEntryKind.MODULE_SET_CHILD &&
+                it.groupRepoUrl.equals(cleanGroupRepo, ignoreCase = true)
+        }
+        updateBuildConfig(
+            currentConfig.copy(
+                useCustomExternalModules = remainingModules.isNotEmpty() || normalizedSelections.isNotEmpty(),
+                customExternalModules = remainingModules + normalizedSelections
+            )
+        )
+        _uiState.update { it.copy(customExternalModuleError = null) }
+        return true
     }
 
     private fun saveBuildPlans(plans: List<BuildPlan>) {
@@ -4241,6 +4316,7 @@ class MainViewModel @JvmOverloads constructor(
     private fun sanitizeBuildModuleCatalogItem(item: ModuleCatalogItem): ModuleCatalogItem? {
         val repoUrl = item.repoUrl.trim()
         if (repoUrl.isBlank()) return null
+        val kind = ModuleCatalogItemKind.normalize(item.kind)
         val supportedStages = item.supportedStages
             .map { CustomExternalModuleStage.normalize(it) }
             .distinct()
@@ -4257,6 +4333,10 @@ class MainViewModel @JvmOverloads constructor(
             name = item.name.trim().ifBlank { repoUrl.moduleCatalogFallbackName(localizedBuildModuleRepoTitle()) },
             version = item.version.trim(),
             description = item.description.trim(),
+            kind = kind,
+            moduleSetId = item.moduleSetId.trim().ifBlank {
+                if (kind == ModuleCatalogItemKind.MODULE_SET) repoUrl.moduleCatalogFallbackName(localizedBuildModuleRepoTitle()) else ""
+            },
             repoUrl = repoUrl,
             defaultStage = defaultStage,
             supportedStages = supportedStages,
@@ -4477,7 +4557,15 @@ internal fun encodeBuildPlanPayload(
                 } else {
                     CustomExternalModule(
                         url = url,
-                        stage = CustomExternalModuleStage.normalize(module.stage)
+                        stage = CustomExternalModuleStage.normalize(module.stage),
+                        entryKind = CustomExternalModuleEntryKind.normalize(module.entryKind),
+                        groupRepoUrl = module.groupRepoUrl.trim(),
+                        childId = module.childId.trim(),
+                        childName = module.childName.trim(),
+                        groupId = module.groupId.trim(),
+                        groupName = module.groupName.trim(),
+                        groupRole = module.groupRole.trim(),
+                        groupDescription = module.groupDescription.trim()
                     )
                 }
             }
@@ -4489,6 +4577,14 @@ internal fun encodeBuildPlanPayload(
     modules.forEach { module ->
         writer.writeString(module.url)
         writer.writeByte(BUILD_PLAN_MODULE_STAGES.indexOrZero(CustomExternalModuleStage.normalize(module.stage)))
+        writer.writeString(CustomExternalModuleEntryKind.normalize(module.entryKind))
+        writer.writeString(module.groupRepoUrl.trim())
+        writer.writeString(module.childId.trim())
+        writer.writeString(module.childName.trim())
+        writer.writeString(module.groupId.trim())
+        writer.writeString(module.groupName.trim())
+        writer.writeString(module.groupRole.trim())
+        writer.writeString(module.groupDescription.trim())
     }
     return writer.toByteArray()
 }
@@ -4557,13 +4653,30 @@ internal fun decodeBuildPlanPayload(
     val moduleCount = reader.readVarInt()
     require(moduleCount in 0..BUILD_PLAN_MAX_MODULES) { messages.tooManyModules }
     val modules = List(moduleCount) {
-        CustomExternalModule(
-            url = reader.readString().trim(),
-            stage = BUILD_PLAN_MODULE_STAGES.valueOrDefault(
-                reader.readByte(),
-                CustomExternalModuleStage.AFTER_PATCH
-            )
+        val url = reader.readString().trim()
+        val stage = BUILD_PLAN_MODULE_STAGES.valueOrDefault(
+            reader.readByte(),
+            CustomExternalModuleStage.AFTER_PATCH
         )
+        if (version >= BUILD_PLAN_MODULE_METADATA_VERSION) {
+            CustomExternalModule(
+                url = url,
+                stage = stage,
+                entryKind = CustomExternalModuleEntryKind.normalize(reader.readString()),
+                groupRepoUrl = reader.readString().trim(),
+                childId = reader.readString().trim(),
+                childName = reader.readString().trim(),
+                groupId = reader.readString().trim(),
+                groupName = reader.readString().trim(),
+                groupRole = reader.readString().trim(),
+                groupDescription = reader.readString().trim()
+            )
+        } else {
+            CustomExternalModule(
+                url = url,
+                stage = stage
+            )
+        }
     }.filter { it.url.isNotBlank() }
     reader.requireFullyRead()
     val merged = versionBase.copy(
@@ -4716,11 +4829,12 @@ private const val LATE_FAILED_ARTIFACT_POLL_INTERVAL_MS = 5_000L
 
 private const val BUILD_PLAN_CODE_PREFIX = "ABKP2:"
 private const val BUILD_PLAN_LEGACY_CODE_PREFIX = "ABKP1:"
-private const val BUILD_PLAN_CODE_VERSION = 5
+private const val BUILD_PLAN_CODE_VERSION = 6
 private const val BUILD_PLAN_MIN_SUPPORTED_VERSION = 2
 private const val BUILD_PLAN_CUSTOM_REF_VERSION = 3
 private const val BUILD_PLAN_ONEPLUS_FIELDS_VERSION = 4
 private const val BUILD_PLAN_KSU_BRANCH_V5_VERSION = 5
+private const val BUILD_PLAN_MODULE_METADATA_VERSION = 6
 private const val BUILD_PLAN_NAME_LIMIT = 80
 private const val BUILD_PLAN_MAX_STRING_BYTES = 4096
 private const val BUILD_PLAN_MAX_MODULES = 32
@@ -5081,7 +5195,19 @@ private fun List<CustomExternalModule>?.toWorkflowInput(): String = this.orEmpty
         if (url.isBlank()) {
             null
         } else {
-            "$url;${CustomExternalModuleStage.normalize(module.stage)}"
+            val stage = CustomExternalModuleStage.normalize(module.stage)
+            when (CustomExternalModuleEntryKind.normalize(module.entryKind)) {
+                CustomExternalModuleEntryKind.MODULE_SET_CHILD -> {
+                    val groupRepo = module.groupRepoUrl.trim()
+                    val childId = module.childId.trim()
+                    if (groupRepo.isBlank() || childId.isBlank()) {
+                        "module:$url;$stage"
+                    } else {
+                        "set:${groupRepo}#${childId};$stage"
+                    }
+                }
+                else -> "module:$url;$stage"
+            }
         }
     }
     .joinToString("|")

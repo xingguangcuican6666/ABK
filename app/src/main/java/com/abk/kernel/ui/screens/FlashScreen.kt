@@ -619,15 +619,18 @@ fun FlashScreen(
 
     suspend fun executeWithPreparedArtifact(
         item: DownloadedArtifact,
-        block: (File) -> RootUtils.ShellResult
+        block: (DownloadUtils.PreparedDownloadedArtifact) -> RootUtils.ShellResult
     ): RootUtils.ShellResult = withContext(Dispatchers.IO) {
         val prepared = DownloadUtils.prepareDownloadedArtifact(context, item)
         try {
             if (prepared.cleanupDir != null) {
                 appendTerminalOutput("[ABK] 已解包下载包到缓存目录")
                 appendTerminalOutput("[ABK] Payload: ${prepared.file.absolutePath}")
+                if (prepared.dependencyModules.isNotEmpty()) {
+                    appendTerminalOutput("[ABK] 附带 Magisk 依赖模块: ${prepared.dependencyModules.joinToString { it.name }}")
+                }
             }
-            block(prepared.file)
+            block(prepared)
         } finally {
             prepared.cleanupDir?.deleteRecursively()
         }
@@ -655,11 +658,11 @@ fun FlashScreen(
             "",
             context.getString(R.string.flash_wait_root_shell)
         )
-        showTerminal = true
+            showTerminal = true
         scope.launch {
             val result = runCatching {
-                executeWithPreparedArtifact(item) { preparedFile ->
-                    RootUtils.installApk(context, preparedFile.absolutePath, ::appendTerminalOutput)
+                executeWithPreparedArtifact(item) { prepared ->
+                    RootUtils.installApk(context, prepared.file.absolutePath, ::appendTerminalOutput)
                 }
             }.getOrElse { error ->
                 RootUtils.ShellResult(false, listOf(error.message ?: error::class.java.simpleName))
@@ -724,17 +727,26 @@ fun FlashScreen(
         showTerminal = true
         scope.launch {
             val result = runCatching {
-                executeWithPreparedArtifact(item) { preparedFile ->
+                executeWithPreparedArtifact(item) { prepared ->
+                    if (item.type == ArtifactType.KERNEL_IMG || item.type == ArtifactType.ANYKERNEL3) {
+                        prepared.dependencyModules.forEach { dependency ->
+                            appendTerminalOutput("[ABK] 先安装依赖模块: ${dependency.name}")
+                            val dependencyResult = RootUtils.installModule(dependency.absolutePath, ::appendTerminalOutput)
+                            if (!dependencyResult.success) {
+                                return@executeWithPreparedArtifact dependencyResult
+                            }
+                        }
+                    }
                     when (item.type) {
-                        ArtifactType.KERNEL_IMG -> RootUtils.flashImage(preparedFile.absolutePath, onOutput = ::appendTerminalOutput)
+                        ArtifactType.KERNEL_IMG -> RootUtils.flashImage(prepared.file.absolutePath, onOutput = ::appendTerminalOutput)
                         ArtifactType.ANYKERNEL3 -> RootUtils.flashAnyKernel3(
                             context,
-                            preparedFile.absolutePath,
+                            prepared.file.absolutePath,
                             targetSlot = anyKernelSlotTarget,
                             onOutput = ::appendTerminalOutput
                         )
-                        ArtifactType.SUSFS_MODULE -> RootUtils.installModule(preparedFile.absolutePath, ::appendTerminalOutput)
-                        ArtifactType.KSU_MANAGER -> RootUtils.installApk(context, preparedFile.absolutePath, ::appendTerminalOutput)
+                        ArtifactType.SUSFS_MODULE -> RootUtils.installModule(prepared.file.absolutePath, ::appendTerminalOutput)
+                        ArtifactType.KSU_MANAGER -> RootUtils.installApk(context, prepared.file.absolutePath, ::appendTerminalOutput)
                         ArtifactType.ABK_MANAGER ->
                             RootUtils.ShellResult(false, listOf(context.getString(R.string.flash_unsupported_auto_flash)))
                         else -> RootUtils.ShellResult(false, listOf(context.getString(R.string.flash_unsupported_auto_flash)))

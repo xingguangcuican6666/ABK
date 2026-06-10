@@ -119,7 +119,7 @@ on:
         type: boolean
         default: false
       custom_external_modules:
-        description: "自定义外部模块（repo;stage|repo;stage，stage=after_patch/before_build）"
+        description: "自定义外部模块（兼容旧 repo;stage，也支持 module:repo;stage 与 set:repo#child;stage，用 | 分隔）"
         required: false
         type: string
         default: ""

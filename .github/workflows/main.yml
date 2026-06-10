@@ -124,6 +124,15 @@ on:
         type: string
         default: ""
         required: false
+      use_custom_external_modules:
+        description: "启用自定义外部模块注入"
+        type: boolean
+        default: false
+      custom_external_modules:
+        description: "自定义外部模块（兼容旧 repo;stage，也支持 module:repo;stage 与 set:repo#child;stage，用 | 分隔）"
+        type: string
+        default: ""
+        required: false
 
       # ==================== 构建版本选择 ====================
       build_a12_5_10:
@@ -183,6 +192,8 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
+      use_custom_external_modules: ${{ inputs.use_custom_external_modules || false }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       called_from_main: true
 
   # ==================== Android 13 - 5.15 构建 ====================
@@ -207,6 +218,8 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
+      use_custom_external_modules: ${{ inputs.use_custom_external_modules || false }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       called_from_main: true
 
   # ==================== Android 14 - 6.1 构建 ====================
@@ -231,6 +244,8 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
+      use_custom_external_modules: ${{ inputs.use_custom_external_modules || false }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       called_from_main: true
 
   # ==================== Android 15 - 6.6 构建 ====================
@@ -255,6 +270,8 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
+      use_custom_external_modules: ${{ inputs.use_custom_external_modules || false }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       called_from_main: true
 
   # ==================== Android 16 - 6.12 构建 ====================
@@ -279,6 +296,8 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
+      use_custom_external_modules: ${{ inputs.use_custom_external_modules || false }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       called_from_main: true
 
   # ==================== 收集补丁冲突文件 ====================

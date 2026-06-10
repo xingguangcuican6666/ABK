@@ -1,6 +1,7 @@
 package com.abk.kernel.data.repository
 
 import com.abk.kernel.data.model.CustomExternalModuleStage
+import com.abk.kernel.data.model.ModuleCatalogItemKind
 import com.abk.kernel.data.model.shouldOfferAppUpdate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -88,6 +89,56 @@ class GitHubRepositoryParsingTest {
     }
 
     @Test
+    fun parsesModuleSetCatalogAndModuleConfChildren() {
+        val document = """
+            {
+              "name": "Demo Catalog",
+              "modules": [
+                {
+                  "name": "Security Suite",
+                  "kind": "module_set",
+                  "moduleSetId": "security_suite",
+                  "repoUrl": "https://github.com/demo/security-suite",
+                  "supportedStages": ["after_patch", "before_build"],
+                  "defaultStage": "after_patch",
+                  "recommendedStages": ["after_patch"]
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val parsed = repository.parseModuleCatalogDocument(document, "https://github.com/demo/catalog")
+        val module = parsed.modules.single()
+        assertEquals(ModuleCatalogItemKind.MODULE_SET, module.kind)
+        assertEquals("security_suite", module.moduleSetId)
+
+        val metadata = repository.parseExternalModuleConf(
+            """
+                ABK_MODULE_KIND="module_set"
+                ABK_MODULE_SET_ID="security_suite"
+                ABK_MODULE_SET_NAME="Security Suite"
+                ABK_MODULE_SET_VERSION="0.1.0"
+                ABK_MODULE_SET_DESCRIPTION="Grouped security patches"
+                ABK_MODULE_SUPPORTED_STAGES="after_patch,before_build"
+                ABK_MODULE_DEFAULT_STAGE="after_patch"
+                ABK_MODULE_RECOMMENDED_STAGES="after_patch"
+                ABK_MODULE_SET_ITEMS='
+                feat_guard|SELinux Guard|Harden checks|https://github.com/demo/security-suite|after_patch,before_build|after_patch|after_patch|feat|true|false|Play Integrity Fix|https://example.com/pif.zip
+                fix_cleanup|Policy Cleanup|Remove redundant grants|https://github.com/demo/security-suite|before_build|before_build|before_build|fix|false|false||
+                '
+            """.trimIndent()
+        )
+
+        assertEquals(ModuleCatalogItemKind.MODULE_SET, metadata.kind)
+        assertEquals("security_suite", metadata.moduleSetId)
+        assertEquals(2, metadata.children.size)
+        assertEquals("feat_guard", metadata.children.first().id)
+        assertEquals(CustomExternalModuleStage.AFTER_PATCH, metadata.children.first().defaultStage)
+        assertEquals("Play Integrity Fix", metadata.children.first().magiskModuleName)
+        assertEquals("https://example.com/pif.zip", metadata.children.first().magiskModuleDownloadUrl)
+    }
+
+    @Test
     fun parsesExternalModuleConfAndRejectsMissingName() {
         val metadata = repository.parseExternalModuleConf(
             """
@@ -97,6 +148,8 @@ class GitHubRepositoryParsingTest {
                 ABK_MODULE_SUPPORTED_STAGES=after-patch,before_build
                 ABK_MODULE_DEFAULT_STAGE=before-build
                 ABK_MODULE_RECOMMENDED_STAGES=before-build
+                ABK_MAGISK_MODULE_NAME="Play Integrity Fix"
+                ABK_MAGISK_MODULE_DOWNLOAD_URL="https://example.com/pif.zip"
             """.trimIndent()
         )
 
@@ -109,6 +162,8 @@ class GitHubRepositoryParsingTest {
         )
         assertEquals(CustomExternalModuleStage.BEFORE_BUILD, metadata.defaultStage)
         assertEquals(listOf(CustomExternalModuleStage.BEFORE_BUILD), metadata.recommendedStages)
+        assertEquals("Play Integrity Fix", metadata.magiskModuleName)
+        assertEquals("https://example.com/pif.zip", metadata.magiskModuleDownloadUrl)
 
         assertThrows(IllegalStateException::class.java) {
             repository.parseExternalModuleConf("ABK_MODULE_VERSION=1")
