@@ -556,7 +556,13 @@ private fun BuildModuleRepositoryScreenContent(
                     icon = { Icon(Icons.Default.Extension, null) },
                     title = { Text(module.buildDisplayName()) },
                     text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 420.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
                             Text(
                                 text = if (module.description.isNotBlank()) module.description else addToBuildLabel,
                                 style = MaterialTheme.typography.bodySmall,
