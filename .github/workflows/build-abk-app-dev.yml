@@ -34,10 +34,15 @@ jobs:
       SUKISU_ULTRA_REF: main
       SUKISU_KSUD_ABIS: arm64-v8a,armeabi-v7a,x86_64
     steps:
-      - name: Checkout
+      - name: Checkout pull request merge ref
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/checkout@v6
+
+      - name: Checkout branch or tag ref
+        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.head_ref || github.ref_name }}
+          ref: ${{ github.ref_name }}
 
       - name: Stamp app build metadata
         run: |

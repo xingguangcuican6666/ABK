@@ -252,6 +252,7 @@ fun InstalledModulesScreen(
                     .thenBy { it.displayName().lowercase() }
             )
     }
+    val groupedModules = remember(modules) { groupRuntimeModulesForDisplay(modules) }
 
     fun appendInstallLog(line: String) {
         scope.launch(Dispatchers.Main.immediate) {
@@ -440,21 +441,39 @@ fun InstalledModulesScreen(
                     modifier = Modifier.padding(vertical = 24.dp)
                 )
             } else {
-                modules.forEach { module ->
-                    InstalledRuntimeModuleCard(
-                        module = module,
-                        actionInFlight = state.abkRuntimeModuleActionId == module.id,
-                        onSetEnabled = { enabled -> vm.setAbkRuntimeModuleEnabled(module.id, enabled) },
-                        onRequestUninstall = { uninstallTarget = module },
-                        onRunAction = { vm.runRuntimeModuleAction(module.id) },
-                        onOpenWebUi = {
-                            context.startActivity(
-                                Intent(context, ModuleWebUiActivity::class.java)
-                                    .putExtra(ModuleWebUiActivity.EXTRA_MODULE_ID, module.id)
-                                    .putExtra(ModuleWebUiActivity.EXTRA_MODULE_NAME, module.displayName())
+                groupedModules.forEach { grouped ->
+                    grouped.groupName?.let { groupName ->
+                        Text(
+                            text = groupName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        grouped.groupDescription?.takeIf { it.isNotBlank() }?.let { description ->
+                            Text(
+                                text = description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    )
+                    }
+                    grouped.modules.forEach { module ->
+                        InstalledRuntimeModuleCard(
+                            module = module,
+                            actionInFlight = state.abkRuntimeModuleActionId == module.id,
+                            onSetEnabled = { enabled -> vm.setAbkRuntimeModuleEnabled(module.id, enabled) },
+                            onRequestUninstall = { uninstallTarget = module },
+                            onRunAction = { vm.runRuntimeModuleAction(module.id) },
+                            onOpenWebUi = {
+                                context.startActivity(
+                                    Intent(context, ModuleWebUiActivity::class.java)
+                                        .putExtra(ModuleWebUiActivity.EXTRA_MODULE_ID, module.id)
+                                        .putExtra(ModuleWebUiActivity.EXTRA_MODULE_NAME, module.displayName())
+                                )
+                            }
+                        )
+                    }
                 }
             }
 
@@ -1316,6 +1335,28 @@ private fun AbkRuntimeModule.typeOrder(): Int = when (normalizedType()) {
     "kpm" -> 2
     else -> 3
 }
+
+private data class RuntimeModuleDisplayGroup(
+    val groupName: String? = null,
+    val groupDescription: String? = null,
+    val modules: List<AbkRuntimeModule> = emptyList()
+)
+
+private fun groupRuntimeModulesForDisplay(modules: List<AbkRuntimeModule>): List<RuntimeModuleDisplayGroup> =
+    modules
+        .groupBy { module ->
+            module.groupId.trim().ifBlank { "single:${module.id}" }
+        }
+        .values
+        .map { grouped ->
+            val first = grouped.first()
+            RuntimeModuleDisplayGroup(
+                groupName = first.groupName.trim().takeIf { it.isNotBlank() },
+                groupDescription = first.groupDescription.trim().takeIf { it.isNotBlank() },
+                modules = grouped.sortedBy { it.displayName().lowercase() }
+            )
+        }
+        .sortedBy { it.groupName.orEmpty().lowercase() }
 
 private fun internalRuntimeControlCapability(): String =
     intArrayOf(97, 98, 107, 95, 99, 111, 110, 116, 114, 111, 108)

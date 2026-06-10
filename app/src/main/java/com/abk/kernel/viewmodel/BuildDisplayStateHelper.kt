@@ -86,10 +86,15 @@ internal fun MainUiState.withBuildRunDisplay(
         managerActiveBuildRuns = managerActive,
         managerBuildProgress = managerBuildProgressMerged,
     )
-    return if (status == BuildStatus.FAILURE && run.isFailedFlashRun() && run.id !in dismissedFailedRunIds) {
-        withDisplay.copy(sessionGhostFailedRuns = withDisplay.sessionGhostFailedRuns + (run.id to run))
-    } else {
-        withDisplay
+    return when {
+        status == BuildStatus.FAILURE && run.isFailedFlashRun() && run.id !in dismissedFailedRunIds -> {
+            withDisplay.copy(sessionGhostFailedRuns = withDisplay.sessionGhostFailedRuns + (run.id to run))
+        }
+        run.id in withDisplay.sessionGhostFailedRuns &&
+            (status != BuildStatus.FAILURE || !run.isFailedFlashRun()) -> {
+            withDisplay.copy(sessionGhostFailedRuns = withDisplay.sessionGhostFailedRuns - run.id)
+        }
+        else -> withDisplay
     }
 }
 

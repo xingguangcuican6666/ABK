@@ -49,6 +49,7 @@ import coil.compose.AsyncImage
 import com.abk.kernel.BuildConfig
 import com.abk.kernel.R
 import com.abk.kernel.utils.DownloadDirectoryUtils
+import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.LocaleHelper
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.ObserveChildPageVisibility
@@ -611,6 +612,43 @@ private fun SettingsMainContent(
                 value = state.downloadMirrorBaseUrl,
                 onValueChange = { vm.setDownloadMirrorBaseUrl(it) }
             )
+            Spacer(Modifier.height(10.dp))
+            val hasArtifacts = state.downloadedArtifacts.isNotEmpty()
+            var showClearArtifactsDialog by remember { mutableStateOf(false) }
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_clear_artifacts),
+                subtitle = if (hasArtifacts) {
+                    val count = state.downloadedArtifacts.size
+                    val totalBytes = state.downloadedArtifacts.sumOf { it.sizeBytes }
+                    "$count ${stringResource(R.string.settings_clear_artifacts_files)} · ${DownloadUtils.formatSize(totalBytes)}"
+                } else {
+                    stringResource(R.string.settings_clear_artifacts_empty)
+                },
+                leadingIcon = Icons.Default.Delete,
+                enabled = hasArtifacts,
+                onClick = if (hasArtifacts) {{ showClearArtifactsDialog = true }} else null
+            )
+            if (showClearArtifactsDialog) {
+                AlertDialog(
+                    onDismissRequest = { showClearArtifactsDialog = false },
+                    icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                    title = { Text(stringResource(R.string.settings_clear_artifacts_title)) },
+                    text = { Text(stringResource(R.string.settings_clear_artifacts_message)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            vm.clearAllDownloadedArtifacts()
+                            showClearArtifactsDialog = false
+                        }) {
+                            Text(stringResource(R.string.settings_clear_artifacts_confirm))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showClearArtifactsDialog = false }) {
+                            Text(stringResource(android.R.string.cancel))
+                        }
+                    }
+                )
+            }
         }
 
         SettingsGroup(title = stringResource(R.string.settings_app_update)) {
