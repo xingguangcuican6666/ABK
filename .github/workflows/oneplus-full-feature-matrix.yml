@@ -228,6 +228,11 @@ jobs:
           def env_enabled(name):
               return "on" if os.environ.get(name, "").lower() == "true" else "off"
 
+          effective_use_kpm = (
+              os.environ.get("MATRIX_USE_KPM", "").lower() == "true"
+              and os.environ.get("MATRIX_KSU_VARIANT", "") in {"SukiSU", "ReSukiSU"}
+          )
+
           supported_manifest_set = set(SUPPORTED_MANIFESTS)
           cpu_order = {cpu: index for index, cpu in enumerate(SUPPORTED_CPUS)}
           manifest_order = {manifest: index for index, manifest in enumerate(SUPPORTED_MANIFESTS)}
@@ -320,7 +325,7 @@ jobs:
               summary.write(f"- 总任务数: {len(matrix)}\n")
               summary.write(f"- KernelSU 变体: {os.environ.get('MATRIX_KSU_VARIANT', '')}\n")
               summary.write(f"- SUSFS: {env_enabled('MATRIX_ENABLE_SUSFS')}（仅 android14/6.1 与 android15/6.6 生效，5.10/5.15 自动 off）\n")
-              summary.write(f"- KPM: {env_enabled('MATRIX_USE_KPM')}（仅 SukiSU/ReSukiSU 生效）\n")
+              summary.write(f"- KPM: {'on' if effective_use_kpm else 'off'}（仅 SukiSU/ReSukiSU 生效）\n")
               summary.write(f"- lz4kd: {env_enabled('MATRIX_USE_LZ4KD')}\n")
               summary.write(f"- BBG: {env_enabled('MATRIX_USE_BBG')}\n")
               summary.write(f"- BBR: {env_enabled('MATRIX_USE_BBR')}\n")
@@ -354,7 +359,7 @@ jobs:
       kernel_version: ${{ matrix.kernel_version }}
       ksu_variant: ${{ inputs.kernelsu_variant }}
       enable_susfs: ${{ matrix.enable_susfs }}
-      use_kpm: ${{ inputs.use_kpm }}
+      use_kpm: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ReSukiSU') }}
       use_lz4kd: ${{ inputs.use_lz4kd }}
       use_bbg: ${{ inputs.use_bbg }}
       use_bbr: ${{ inputs.use_bbr }}

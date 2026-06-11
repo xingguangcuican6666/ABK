@@ -7,56 +7,40 @@ import org.junit.Test
 class RootUtilsAnyKernelSlotTest {
 
     @Test
-    fun rewritesSlotSelectToInactive() {
-        val original = """
-            do_device_check=1
-            slot_select=active
-            block=/dev/block/bootdevice/by-name/boot
-        """.trimIndent()
+    fun normalizesBootSlotSuffixVariants() {
+        assertEquals("_a", RootUtils.normalizeBootSlotSuffix("_A"))
+        assertEquals("_a", RootUtils.normalizeBootSlotSuffix("a"))
+        assertEquals("_b", RootUtils.normalizeBootSlotSuffix("_b"))
+        assertNull(RootUtils.normalizeBootSlotSuffix("normal"))
+    }
 
-        val rewritten = RootUtils.rewriteAnyKernelSlotSelect(
-            original,
-            RootUtils.Ak3SlotTarget.INACTIVE
-        )
-
+    @Test
+    fun resolvesCurrentAk3TargetSlotSuffix() {
         assertEquals(
-            """
-                do_device_check=1
-                slot_select=inactive
-                block=/dev/block/bootdevice/by-name/boot
-            """.trimIndent(),
-            rewritten
+            "_a",
+            RootUtils.resolveAk3TargetSlotSuffix("_a", RootUtils.Ak3SlotTarget.CURRENT)
+        )
+        assertEquals(
+            "_b",
+            RootUtils.resolveAk3TargetSlotSuffix("b", RootUtils.Ak3SlotTarget.CURRENT)
         )
     }
 
     @Test
-    fun rewritesAutoSelectionToCurrentSlot() {
-        val original = """
-            do.devicecheck=1
-            slot_select=auto
-        """.trimIndent()
-
-        val rewritten = RootUtils.rewriteAnyKernelSlotSelect(
-            original,
-            RootUtils.Ak3SlotTarget.CURRENT
-        )
-
+    fun resolvesInactiveAk3TargetSlotSuffix() {
         assertEquals(
-            """
-                do.devicecheck=1
-                slot_select=active
-            """.trimIndent(),
-            rewritten
+            "_b",
+            RootUtils.resolveAk3TargetSlotSuffix("_a", RootUtils.Ak3SlotTarget.INACTIVE)
+        )
+        assertEquals(
+            "_a",
+            RootUtils.resolveAk3TargetSlotSuffix("_b", RootUtils.Ak3SlotTarget.INACTIVE)
         )
     }
 
     @Test
-    fun returnsNullWhenSlotSelectIsMissing() {
-        assertNull(
-            RootUtils.rewriteAnyKernelSlotSelect(
-                "do.devicecheck=1\nblock=boot",
-                RootUtils.Ak3SlotTarget.INACTIVE
-            )
-        )
+    fun returnsNullWhenCurrentSlotIsUnknown() {
+        assertNull(RootUtils.resolveAk3TargetSlotSuffix(null, RootUtils.Ak3SlotTarget.INACTIVE))
+        assertNull(RootUtils.slotNameFromSuffix("normal"))
     }
 }

@@ -239,6 +239,8 @@ jobs:
         env:
           MATRIX_KSU_VARIANT: ${{ inputs.kernelsu_variant }}
           MATRIX_KSU_BRANCH: ${{ inputs.kernelsu_branch }}
+          MATRIX_EFFECTIVE_USE_KPM: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
+          MATRIX_EFFECTIVE_KPM_PASSWORD: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
           MATRIX_REVISION: ${{ inputs.revision || '' }}
           MATRIX_BUILD_TIME: ${{ inputs.build_time || '' }}
           MATRIX_ENABLE_SUSFS: ${{ inputs.enable_susfs }}
@@ -349,8 +351,8 @@ jobs:
               summary.write(f"- 虚拟化支持: {env_value('MATRIX_VIRTUALIZATION_SUPPORT', 'off')}\n")
               summary.write(f"- NTsync: {env_enabled('MATRIX_USE_NTSYNC')}\n")
               summary.write(f"- Networking: {env_enabled('MATRIX_USE_NETWORKING')}\n")
-              summary.write(f"- KPM: {env_enabled('MATRIX_USE_KPM')}\n")
-              summary.write(f"- KPM 密码: {'已自定义' if os.environ.get('MATRIX_KPM_PASSWORD', '') else '默认'}\n")
+              summary.write(f"- KPM: {env_enabled('MATRIX_EFFECTIVE_USE_KPM')}\n")
+              summary.write(f"- KPM 密码: {'已自定义' if os.environ.get('MATRIX_EFFECTIVE_KPM_PASSWORD', '') else '默认'}\n")
               summary.write(f"- Re-Kernel: {env_enabled('MATRIX_USE_REKERNEL')}\n")
               summary.write(f"- 一加 8E: {env_enabled('MATRIX_SUPP_OP')}\n")
               summary.write(f"- 自定义外部模块: {env_enabled('MATRIX_USE_CUSTOM_EXTERNAL_MODULES')}\n")
@@ -389,14 +391,14 @@ jobs:
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync }}
       use_networking: ${{ inputs.use_networking }}
-      use_kpm: ${{ inputs.use_kpm }}
+      use_kpm: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
       use_rekernel: ${{ inputs.use_rekernel }}
       enable_susfs: ${{ inputs.enable_susfs }}
       supp_op: ${{ inputs.supp_op }}
       virtualization_support: ${{ inputs.virtualization_support == 'off' && 'off' || (matrix.kernel_version == '6.12' && 'on' || (inputs.virtualization_support == 'on' && '678' || inputs.virtualization_support)) }}
       zram_full_algo: ${{ inputs.zram_full_algo && matrix.kernel_version != '6.12' }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
+      kpm_password: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
       use_custom_external_modules: ${{ inputs.use_custom_external_modules }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       upload_aux_artifacts: ${{ inputs.upload_aux_artifacts }}
@@ -425,8 +427,8 @@ jobs:
       ZRAM_EXTRA_ALGOS: ${{ inputs.zram_extra_algos || '' }}
       USE_BBG: ${{ inputs.use_bbg }}
       USE_DDK: ${{ inputs.use_ddk }}
-      KPM_PASSWORD: ${{ inputs.kpm_password || '' }}
-      USE_KPM: ${{ inputs.use_kpm }}
+      KPM_PASSWORD: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
+      USE_KPM: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
       USE_REKERNEL: ${{ inputs.use_rekernel }}
       SUPP_OP: ${{ inputs.supp_op }}
       USE_CUSTOM_EXTERNAL_MODULES: ${{ inputs.use_custom_external_modules }}

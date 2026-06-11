@@ -219,6 +219,19 @@ jobs:
               ;;
           esac
 
+          if [ "${{ inputs.use_kpm }}" = "true" ] \
+            && [ "${{ inputs.ksu_variant }}" = "Official" ]; then
+            echo "::error::Official / KernelSU 变体不支持 KPM，请关闭 KPM 后重试。"
+            exit 1
+          fi
+
+          if [ "${{ inputs.use_kpm }}" = "true" ] \
+            && [ "${{ inputs.ksu_variant }}" = "ReSukiSU" ] \
+            && { [ "${{ inputs.ksu_branch }}" = "Dev(开发)" ] || [ "${{ inputs.ksu_branch }}" = "Latest(最新)" ]; }; then
+            echo "::error::ReSukiSU 仅 Stable(标准) / Custom(自定义) 支持 KPM，请切换分支或关闭 KPM。"
+            exit 1
+          fi
+
           if [ "$sub_level" = "X" ] || [ "$os_patch_level" = "lts" ]; then
             if [ "$sub_level" = "X" ] && [ "$os_patch_level" = "lts" ]; then
               echo "LTS 构建组合校验通过: ${combo}.${sub_level}-${os_patch_level}"
@@ -1968,6 +1981,73 @@ jobs:
           print(f"已注入 {path} 的 SukiSU SUSFS Kconfig 符号")
           PY
 
+      - name: 注入 SukiSU/ReSukiSU KPM Kconfig
+        if: inputs.use_kpm && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU')
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+          set -euo pipefail
+          KSU_KERNEL_DIR=""
+          for dir in ./common/drivers/kernelsu ./drivers/kernelsu ./KernelSU/kernel ./kernel; do
+            if [ -f "$dir/Kconfig" ]; then
+              KSU_KERNEL_DIR="$dir"
+              break
+            fi
+          done
+          if [ -z "$KSU_KERNEL_DIR" ]; then
+            echo "::error::未找到 ${{ inputs.ksu_variant }} Kconfig，无法注入 KPM Kconfig 符号"
+            exit 1
+          fi
+
+          {
+            echo "ABK_KPM_KCONFIG_DIR=$KSU_KERNEL_DIR"
+            echo "ABK_KPM_KCONFIG_PATH=$KSU_KERNEL_DIR/Kconfig"
+          } >> "$GITHUB_ENV"
+
+          python3 - "$KSU_KERNEL_DIR/Kconfig" "$GITHUB_ENV" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          path = Path(sys.argv[1])
+          github_env = Path(sys.argv[2])
+          text = path.read_text()
+          pattern = re.compile(r"(?m)^[ \t]*config[ \t]+KPM\b")
+          if pattern.search(text):
+              with github_env.open("a", encoding="utf-8") as handle:
+                  handle.write("ABK_KPM_KCONFIG_STATUS=native\n")
+                  handle.write("ABK_KPM_KCONFIG_READY=true\n")
+              print(f"{path} 已包含 KPM Kconfig 符号")
+              raise SystemExit(0)
+
+          lines = [
+              "",
+              'menu "KernelSU - KPM"',
+              "config KPM",
+              '  bool "KernelPatch Module support"',
+              "  depends on KSU",
+              "  default y",
+              "",
+              "endmenu",
+          ]
+          block = "\n".join(lines)
+
+          marker = "\nendmenu\n"
+          if marker in text:
+              text = text.rsplit(marker, 1)[0].rstrip() + "\n" + block + marker
+          else:
+              text = text.rstrip() + "\n" + block + "\n"
+          path.write_text(text)
+
+          final_text = path.read_text()
+          if not pattern.search(final_text):
+              raise SystemExit(f"{path} 注入后仍缺少 config KPM")
+
+          with github_env.open("a", encoding="utf-8") as handle:
+              handle.write("ABK_KPM_KCONFIG_STATUS=injected\n")
+              handle.write("ABK_KPM_KCONFIG_READY=true\n")
+          print(f"已注入 {path} 的 KPM Kconfig 符号")
+          PY
+
       - name: 应用 Kernel 特定补丁
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
@@ -2771,6 +2851,9 @@ jobs:
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
+          kpm_kconfig_status="${ABK_KPM_KCONFIG_STATUS:-unknown}"
+          kpm_kconfig_ready="${ABK_KPM_KCONFIG_READY:-false}"
+          kpm_kconfig_path="${ABK_KPM_KCONFIG_PATH:-}"
 
           if [ "${{ inputs.ksu_variant }}" != "None" ]; then
             cat >> "$DEFCONFIG" << 'EOF'
@@ -2782,20 +2865,40 @@ jobs:
 
           kpm_config_supported="false"
           if [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; then
-            if rg -n '^[[:space:]]*config[[:space:]]+KPM\b' KernelSU common/drivers/kernelsu drivers/kernelsu -g 'Kconfig*' >/dev/null 2>&1; then
+            if [ "$kpm_kconfig_ready" = "true" ] && [ -f "$kpm_kconfig_path" ]; then
               kpm_config_supported="true"
+            else
+              for dir in KernelSU/kernel common/drivers/kernelsu drivers/kernelsu kernel; do
+              if [ -f "$dir/Kconfig" ] && rg -n '^[[:space:]]*config[[:space:]]+KPM\b' "$dir/Kconfig" >/dev/null 2>&1; then
+                kpm_config_supported="true"
+                break
+              fi
+              done
             fi
           fi
 
           if [ "${{ inputs.use_kpm }}" == "true" ] && { [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; }; then
             if [ "$kpm_config_supported" = "true" ]; then
               echo "CONFIG_KPM=y" >> "$DEFCONFIG"
+              case "$kpm_kconfig_status" in
+                native)
+                  echo "检测到原生 KPM Kconfig，已启用 CONFIG_KPM。"
+                  ;;
+                injected)
+                  echo "源码未暴露 KPM Kconfig，已自动注入并启用 CONFIG_KPM。"
+                  ;;
+                *)
+                  echo "检测到 KPM Kconfig，已启用 CONFIG_KPM。"
+                  ;;
+              esac
             else
-              echo "::notice::${{ inputs.ksu_variant }} 当前源码未暴露 CONFIG_KPM；跳过 defconfig 注入，保留后续 Image KPM patch。"
+              echo "::error::请求启用 KPM，但当前 ${{ inputs.ksu_variant }} 源码树仍未提供 config KPM。"
+              exit 1
             fi
           elif [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; then
             if [ "$kpm_config_supported" = "true" ]; then
               echo "# CONFIG_KPM is not set" >> "$DEFCONFIG"
+              echo "检测到 KPM Kconfig，已显式关闭 CONFIG_KPM。"
             fi
           fi
 
@@ -3399,6 +3502,165 @@ jobs:
               print(f"已补齐 {path} 的 ksu_stop_input_hook_runtime 声明")
               return True
 
+          def ensure_line_after_any(text, anchors, line, error_message):
+              if line in text:
+                  return text
+              for anchor in anchors:
+                  if anchor in text:
+                      return text.replace(anchor, anchor + line, 1)
+              raise SystemExit(error_message)
+
+          def normalize_official_selinux_hide_exports(text):
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*struct\s+selinux_state\s+fake_state\s*;",
+                  "struct selinux_state fake_state;",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;",
+                  "bool ksu_selinux_hide_running __read_mostly = false;",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*bool\s+ksu_selinux_hide_enabled\s+__read_mostly\s*=\s*false\s*;",
+                  "bool ksu_selinux_hide_enabled __read_mostly = false;",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*int\s+security_context_to_sid_with_policy\s*\(",
+                  "int security_context_to_sid_with_policy(",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*int\s+security_sid_to_context_with_policy\s*\(",
+                  "int security_sid_to_context_with_policy(",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*void\s+__nocfi\s+security_compute_av_user_with_policy\s*\(",
+                  "void __nocfi security_compute_av_user_with_policy(",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*void\s+security_compute_av_user_with_policy\s*\(",
+                  "void security_compute_av_user_with_policy(",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*DEFINE_STATIC_KEY_FALSE\s*\(\s*fake_status_initialize_key\s*\)\s*;",
+                  "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*struct\s+page\s*\*\s*fake_status\s*(?:=\s*NULL)?\s*;",
+                  "struct page *fake_status = NULL;",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*void\s+initialize_fake_status\s*\(\s*(?:void)?\s*\)",
+                  "void initialize_fake_status(void)",
+                  text,
+              )
+              return text
+
+          def ensure_official_selinux_hide_exports(text, path):
+              text = normalize_official_selinux_hide_exports(text)
+
+              if not re.search(r"(?m)^\s*bool\s+ksu_selinux_hide_enabled\s+__read_mostly\s*=\s*false\s*;", text):
+                  text = ensure_line_after_any(
+                      text,
+                      ("static DEFINE_MUTEX(selinux_hide_mutex);\n", "DEFINE_MUTEX(selinux_hide_mutex);\n"),
+                      "bool ksu_selinux_hide_enabled __read_mostly = false;\n",
+                      f"{path} 缺少 selinux_hide_mutex 锚点，无法插入 ksu_selinux_hide_enabled",
+                  )
+              if not re.search(r"(?m)^\s*bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;", text):
+                  text = ensure_line_after_any(
+                      text,
+                      ("bool ksu_selinux_hide_enabled __read_mostly = false;\n",),
+                      "bool ksu_selinux_hide_running __read_mostly = false;\n",
+                      f"{path} 缺少 ksu_selinux_hide_enabled 锚点，无法插入 ksu_selinux_hide_running",
+                  )
+              if not re.search(r"(?m)^\s*struct\s+selinux_state\s+fake_state\s*;", text):
+                  text = ensure_line_after_any(
+                      text,
+                      ("bool ksu_selinux_hide_running __read_mostly = false;\n",),
+                      "struct selinux_state fake_state;\n",
+                      f"{path} 缺少 ksu_selinux_hide_running 锚点，无法插入 fake_state",
+                  )
+
+              fake_status_additions = []
+              if not re.search(r"(?m)^\s*DEFINE_STATIC_KEY_FALSE\s*\(\s*fake_status_initialize_key\s*\)\s*;", text):
+                  fake_status_additions.append("DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);")
+              if not re.search(r"(?m)^\s*struct\s+page\s*\*\s*fake_status\s*=\s*NULL\s*;", text):
+                  fake_status_additions.append("struct page *fake_status = NULL;")
+              if not re.search(r"(?m)^\s*void\s+initialize_fake_status\s*\(\s*(?:void)?\s*\)\s*\{", text):
+                  fake_status_additions.extend([
+                      "void initialize_fake_status(void)",
+                      "{",
+                      "}",
+                  ])
+              if fake_status_additions:
+                  if "#include <linux/jump_label.h>" not in text:
+                      text = ensure_include(text, "#include <linux/jump_label.h>", "#include <linux/mutex.h>\n")
+                  block = "\n".join([
+                      "",
+                      "#ifdef CONFIG_KSU_SUSFS",
+                      *fake_status_additions,
+                      "#endif",
+                      "",
+                  ])
+                  text = ensure_line_after_any(
+                      text,
+                      ("bool ksu_selinux_hide_running __read_mostly = false;\n",),
+                      block,
+                      f"{path} 缺少 fake status 插入锚点",
+                  )
+
+              return text
+
+          def validate_official_selinux_hide_exports(text, path, scope):
+              required_patterns = {
+                  "ksu_selinux_hide_enabled": r"(?m)^\s*bool\s+ksu_selinux_hide_enabled\s+__read_mostly\s*=\s*false\s*;",
+                  "ksu_selinux_hide_running": r"(?m)^\s*bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;",
+                  "fake_state": r"(?m)^\s*struct\s+selinux_state\s+fake_state\s*;",
+                  "fake_status_initialize_key": r"(?m)^\s*DEFINE_STATIC_KEY_FALSE\s*\(\s*fake_status_initialize_key\s*\)\s*;",
+                  "fake_status": r"(?m)^\s*struct\s+page\s*\*\s*fake_status\s*=\s*NULL\s*;",
+                  "initialize_fake_status": r"(?m)^\s*void\s+initialize_fake_status\s*\(\s*(?:void)?\s*\)\s*\{",
+              }
+              missing = [name for name, pattern in required_patterns.items() if not re.search(pattern, text)]
+              if missing:
+                  raise SystemExit(f"{path} 缺少 {scope}: {missing}")
+
+              forbidden_patterns = {
+                  "ksu_selinux_hide_enabled": r"(?m)^\s*(?:static|__maybe_static)\s+bool\s+ksu_selinux_hide_enabled\s+__read_mostly\s*=\s*false\s*;",
+                  "ksu_selinux_hide_running": r"(?m)^\s*(?:static|__maybe_static)\s+bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;",
+                  "fake_state": r"(?m)^\s*(?:static|__maybe_static)\s+struct\s+selinux_state\s+fake_state\s*;",
+                  "fake_status_initialize_key": r"(?m)^\s*(?:static|__maybe_static)\s+DEFINE_STATIC_KEY_FALSE\s*\(\s*fake_status_initialize_key\s*\)\s*;",
+                  "fake_status": r"(?m)^\s*(?:static|__maybe_static)\s+struct\s+page\s*\*\s*fake_status\s*(?:=\s*NULL)?\s*;",
+                  "initialize_fake_status": r"(?m)^\s*(?:static|__maybe_static)\s+void\s+initialize_fake_status\s*\(",
+              }
+              stale = [name for name, pattern in forbidden_patterns.items() if re.search(pattern, text)]
+              if stale:
+                  raise SystemExit(f"{path} 仍残留 static {scope}: {stale}")
+
+              running_match = re.search(
+                  r"(?m)^\s*bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;",
+                  text,
+              )
+              if not running_match:
+                  raise SystemExit(f"{path} 缺少 {scope} 锚点: ksu_selinux_hide_running")
+
+              for name, pattern in (
+                  ("fake_status_initialize_key", r"(?m)^\s*DEFINE_STATIC_KEY_FALSE\s*\(\s*fake_status_initialize_key\s*\)\s*;"),
+                  ("fake_status", r"(?m)^\s*struct\s+page\s*\*\s*fake_status\s*=\s*NULL\s*;"),
+                  ("initialize_fake_status", r"(?m)^\s*void\s+initialize_fake_status\s*\(\s*(?:void)?\s*\)\s*\{"),
+              ):
+                  match = re.search(pattern, text)
+                  if not match:
+                      raise SystemExit(f"{path} 缺少 {scope}: {name}")
+                  if match.start() < running_match.start():
+                      raise SystemExit(f"{path} 的 {name} 仍位于错误的预处理分支中")
+
           def patch_official_selinux_hide(ksu_dir):
               path = ksu_dir / "feature/selinux_hide.c"
               if not path.exists():
@@ -3407,82 +3669,7 @@ jobs:
               text = path.read_text()
               original = text
 
-              text = text.replace("static struct selinux_state fake_state;", "struct selinux_state fake_state;")
-              text = text.replace("__maybe_static struct selinux_state fake_state;", "struct selinux_state fake_state;")
-              text = text.replace(
-                  "static bool ksu_selinux_hide_running __read_mostly = false;",
-                  "bool ksu_selinux_hide_running __read_mostly = false;",
-              )
-              text = text.replace(
-                  "static bool ksu_selinux_hide_enabled __read_mostly = false;",
-                  "bool ksu_selinux_hide_enabled __read_mostly = false;",
-              )
-              if "bool ksu_selinux_hide_enabled __read_mostly" not in text:
-                  text = ensure_line_after(
-                      text,
-                      "static DEFINE_MUTEX(selinux_hide_mutex);\n",
-                      "bool ksu_selinux_hide_enabled __read_mostly = false;\n",
-                  )
-              if "bool ksu_selinux_hide_running __read_mostly" not in text:
-                  text = ensure_line_after(
-                      text,
-                      "bool ksu_selinux_hide_enabled __read_mostly = false;\n",
-                      "bool ksu_selinux_hide_running __read_mostly = false;\n",
-                  )
-              if "struct selinux_state fake_state;" not in text:
-                  text = ensure_line_after(
-                      text,
-                      "bool ksu_selinux_hide_running __read_mostly = false;\n",
-                      "struct selinux_state fake_state;\n",
-                  )
-              text = text.replace(
-                  "static DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
-                  "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
-              )
-              text = text.replace(
-                  "static struct page *fake_status = NULL;",
-                  "struct page *fake_status = NULL;",
-              )
-              text = re.sub(
-                  r"(?m)^static void initialize_fake_status\s*\(\s*(?:void)?\s*\)",
-                  "void initialize_fake_status(void)",
-                  text,
-              )
-              if "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)" not in text:
-                  if "jump_label.h" not in text:
-                      text = ensure_include(text, "#include <linux/jump_label.h>", "#include <linux/mutex.h>\n")
-                  block = dedent("""\
-
-                  #ifdef CONFIG_KSU_SUSFS
-                  DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);
-                  struct page *fake_status = NULL;
-
-                  void initialize_fake_status(void)
-                  {
-                  }
-                  #endif
-                  """)
-                  text = ensure_line_after(
-                      text,
-                      "struct selinux_state fake_state;\n",
-                      block,
-                  )
-              text = text.replace(
-                  "static int security_context_to_sid_with_policy(",
-                  "int security_context_to_sid_with_policy(",
-              )
-              text = text.replace(
-                  "static int security_sid_to_context_with_policy(",
-                  "int security_sid_to_context_with_policy(",
-              )
-              text = text.replace(
-                  "static void __nocfi security_compute_av_user_with_policy(",
-                  "void __nocfi security_compute_av_user_with_policy(",
-              )
-              text = text.replace(
-                  "static void security_compute_av_user_with_policy(",
-                  "void security_compute_av_user_with_policy(",
-              )
+              text = ensure_official_selinux_hide_exports(text, path)
 
               dump_is_pointer = re.search(r"\(\s*\*\s*security_dump_masked_av_fn\s*\)", text) is not None
               compute_is_pointer = re.search(r"\(\s*\*\s*context_struct_compute_av_fn\s*\)", text) is not None
@@ -3517,11 +3704,13 @@ jobs:
                       text,
                   )
 
+              validate_official_selinux_hide_exports(text, path, "Official selinux_hide 导出")
+
               if text == original:
                   return False
 
               path.write_text(text)
-              print(f"已修复 {path} 的 Official selinux_hide 函数指针判断")
+              print(f"已修复 {path} 的 Official selinux_hide 导出与函数指针判断")
               return True
 
           def ensure_official_susfs_objects(ksu_dir):
@@ -3594,6 +3783,41 @@ jobs:
               print(f"已补齐 {path} 的 Official SUSFS hook 符号")
               return True
 
+          def ensure_official_susfs_dispatch_compat(ksu_dir):
+              path = ksu_dir / "supercall/dispatch.c"
+              if not path.exists():
+                  raise SystemExit(f"未找到 {path}，无法补齐 Official SUSFS supercall 声明")
+
+              text = path.read_text()
+              if not any(marker in text for marker in ("SUSFS_MAGIC", "CMD_SUSFS_", "susfs_")):
+                  return False
+
+              original = text
+              missing = []
+              if "#include <linux/namei.h>" not in text:
+                  missing.append("#include <linux/namei.h>")
+              if "#include <linux/susfs.h>" not in text:
+                  missing.append("#include <linux/susfs.h>")
+              if missing:
+                  line = "\n".join(missing) + "\n"
+                  for anchor in (
+                      "#include <linux/thread_info.h>\n",
+                      "#include <linux/version.h>\n",
+                      "#include <linux/uaccess.h>\n",
+                  ):
+                      if anchor in text:
+                          text = text.replace(anchor, anchor + line, 1)
+                          break
+                  else:
+                      raise SystemExit(f"{path} 缺少 Official SUSFS supercall include 插入锚点")
+
+              if text == original:
+                  return False
+
+              path.write_text(text)
+              print(f"已补齐 {path} 的 Official SUSFS supercall 声明")
+              return True
+
           ksu_dir = Path("common/drivers/kernelsu")
           if not ksu_dir.exists():
               raise SystemExit("未找到 common/drivers/kernelsu，无法修复 Official SUSFS")
@@ -3647,6 +3871,7 @@ jobs:
           changed = ensure_official_susfs_objects(ksu_dir) or changed
           changed = patch_official_selinux_hide(ksu_dir) or changed
           changed = ensure_official_symbol_resolver_exports(ksu_dir) or changed
+          changed = ensure_official_susfs_dispatch_compat(ksu_dir) or changed
           changed = ensure_official_runtime_compat(ksu_dir) or changed
           changed = ensure_official_boot_event_compat(ksu_dir) or changed
 
@@ -3681,20 +3906,25 @@ jobs:
           if boot_event_c.exists() and "void ksu_stop_input_hook_runtime(void);" not in boot_event_c.read_text():
               raise SystemExit(f"{boot_event_c} 缺少 ksu_stop_input_hook_runtime 声明")
 
+          dispatch_c = ksu_dir / "supercall/dispatch.c"
+          if dispatch_c.exists():
+              dispatch_text = dispatch_c.read_text()
+              if any(marker in dispatch_text for marker in ("SUSFS_MAGIC", "CMD_SUSFS_", "susfs_")):
+                  missing = [
+                      include
+                      for include in ("#include <linux/namei.h>", "#include <linux/susfs.h>")
+                      if include not in dispatch_text
+                  ]
+                  if missing:
+                      raise SystemExit(f"{dispatch_c} 缺少 Official SUSFS supercall include: {missing}")
+
           selinux_hide_c = ksu_dir / "feature/selinux_hide.c"
           if selinux_hide_c.exists():
-              selinux_hide_text = selinux_hide_c.read_text()
-              required_selinux_hide = [
-                  "bool ksu_selinux_hide_enabled __read_mostly",
-                  "bool ksu_selinux_hide_running __read_mostly",
-                  "struct selinux_state fake_state;",
-                  "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)",
-                  "struct page *fake_status",
-                  "void initialize_fake_status(",
-              ]
-              missing = [marker for marker in required_selinux_hide if marker not in selinux_hide_text]
-              if missing:
-                  raise SystemExit(f"{selinux_hide_c} 缺少 Official SUSFS SELinux 导出: {missing}")
+              validate_official_selinux_hide_exports(
+                  selinux_hide_c.read_text(),
+                  selinux_hide_c,
+                  "Official SUSFS SELinux 导出",
+              )
 
           if not changed:
               print("Official SUSFS 源码兼容修复无需修改。")
@@ -3710,6 +3940,152 @@ jobs:
           from pathlib import Path
           import re
 
+          def ensure_line_after_any(text, anchors, line, error_message):
+              if line in text:
+                  return text
+              for anchor in anchors:
+                  if anchor in text:
+                      return text.replace(anchor, anchor + line, 1)
+              raise SystemExit(error_message)
+
+          def ensure_include(text, include, anchor):
+              if include in text:
+                  return text
+              if anchor in text:
+                  return text.replace(anchor, anchor + include + "\n", 1)
+              return include + "\n" + text
+
+          def normalize_official_selinux_hide_exports(text):
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*struct\s+selinux_state\s+fake_state\s*;",
+                  "struct selinux_state fake_state;",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*bool\s+ksu_selinux_hide_enabled\s+__read_mostly\s*=\s*false\s*;",
+                  "bool ksu_selinux_hide_enabled __read_mostly = false;",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;",
+                  "bool ksu_selinux_hide_running __read_mostly = false;",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*DEFINE_STATIC_KEY_FALSE\s*\(\s*fake_status_initialize_key\s*\)\s*;",
+                  "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*struct\s+page\s*\*\s*fake_status\s*(?:=\s*NULL)?\s*;",
+                  "struct page *fake_status = NULL;",
+                  text,
+              )
+              text = re.sub(
+                  r"(?m)^\s*(?:static\s+|__maybe_static\s+)*void\s+initialize_fake_status\s*\(\s*(?:void)?\s*\)",
+                  "void initialize_fake_status(void)",
+                  text,
+              )
+              return text
+
+          def ensure_official_selinux_hide_exports(text, path):
+              text = normalize_official_selinux_hide_exports(text)
+
+              if not re.search(r"(?m)^\s*bool\s+ksu_selinux_hide_enabled\s+__read_mostly\s*=\s*false\s*;", text):
+                  text = ensure_line_after_any(
+                      text,
+                      ("static DEFINE_MUTEX(selinux_hide_mutex);\n", "DEFINE_MUTEX(selinux_hide_mutex);\n"),
+                      "bool ksu_selinux_hide_enabled __read_mostly = false;\n",
+                      f"{path} 缺少 selinux_hide_mutex 锚点，无法插入 ksu_selinux_hide_enabled",
+                  )
+              if not re.search(r"(?m)^\s*bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;", text):
+                  text = ensure_line_after_any(
+                      text,
+                      ("bool ksu_selinux_hide_enabled __read_mostly = false;\n",),
+                      "bool ksu_selinux_hide_running __read_mostly = false;\n",
+                      f"{path} 缺少 ksu_selinux_hide_enabled 锚点，无法插入 ksu_selinux_hide_running",
+                  )
+              if not re.search(r"(?m)^\s*struct\s+selinux_state\s+fake_state\s*;", text):
+                  text = ensure_line_after_any(
+                      text,
+                      ("bool ksu_selinux_hide_running __read_mostly = false;\n",),
+                      "struct selinux_state fake_state;\n",
+                      f"{path} 缺少 ksu_selinux_hide_running 锚点，无法插入 fake_state",
+                  )
+
+              fake_status_additions = []
+              if not re.search(r"(?m)^\s*DEFINE_STATIC_KEY_FALSE\s*\(\s*fake_status_initialize_key\s*\)\s*;", text):
+                  fake_status_additions.append("DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);")
+              if not re.search(r"(?m)^\s*struct\s+page\s*\*\s*fake_status\s*=\s*NULL\s*;", text):
+                  fake_status_additions.append("struct page *fake_status = NULL;")
+              if not re.search(r"(?m)^\s*void\s+initialize_fake_status\s*\(\s*(?:void)?\s*\)\s*\{", text):
+                  fake_status_additions.extend([
+                      "void initialize_fake_status(void)",
+                      "{",
+                      "}",
+                  ])
+              if fake_status_additions:
+                  if "#include <linux/jump_label.h>" not in text:
+                      text = ensure_include(text, "#include <linux/jump_label.h>", "#include <linux/mutex.h>\n")
+                  block = "\n".join([
+                      "",
+                      "#ifdef CONFIG_KSU_SUSFS",
+                      *fake_status_additions,
+                      "#endif",
+                      "",
+                  ])
+                  text = ensure_line_after_any(
+                      text,
+                      ("bool ksu_selinux_hide_running __read_mostly = false;\n",),
+                      block,
+                      f"{path} 缺少 fake status 插入锚点",
+                  )
+
+              return text
+
+          def validate_official_selinux_hide_exports(text, path, scope):
+              required_patterns = {
+                  "ksu_selinux_hide_enabled": r"(?m)^\s*bool\s+ksu_selinux_hide_enabled\s+__read_mostly\s*=\s*false\s*;",
+                  "ksu_selinux_hide_running": r"(?m)^\s*bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;",
+                  "fake_state": r"(?m)^\s*struct\s+selinux_state\s+fake_state\s*;",
+                  "fake_status_initialize_key": r"(?m)^\s*DEFINE_STATIC_KEY_FALSE\s*\(\s*fake_status_initialize_key\s*\)\s*;",
+                  "fake_status": r"(?m)^\s*struct\s+page\s*\*\s*fake_status\s*=\s*NULL\s*;",
+                  "initialize_fake_status": r"(?m)^\s*void\s+initialize_fake_status\s*\(\s*(?:void)?\s*\)\s*\{",
+              }
+              missing = [name for name, pattern in required_patterns.items() if not re.search(pattern, text)]
+              if missing:
+                  raise SystemExit(f"{path} 缺少 {scope}: {missing}")
+
+              forbidden_patterns = {
+                  "ksu_selinux_hide_enabled": r"(?m)^\s*(?:static|__maybe_static)\s+bool\s+ksu_selinux_hide_enabled\s+__read_mostly\s*=\s*false\s*;",
+                  "ksu_selinux_hide_running": r"(?m)^\s*(?:static|__maybe_static)\s+bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;",
+                  "fake_state": r"(?m)^\s*(?:static|__maybe_static)\s+struct\s+selinux_state\s+fake_state\s*;",
+                  "fake_status_initialize_key": r"(?m)^\s*(?:static|__maybe_static)\s+DEFINE_STATIC_KEY_FALSE\s*\(\s*fake_status_initialize_key\s*\)\s*;",
+                  "fake_status": r"(?m)^\s*(?:static|__maybe_static)\s+struct\s+page\s*\*\s*fake_status\s*(?:=\s*NULL)?\s*;",
+                  "initialize_fake_status": r"(?m)^\s*(?:static|__maybe_static)\s+void\s+initialize_fake_status\s*\(",
+              }
+              stale = [name for name, pattern in forbidden_patterns.items() if re.search(pattern, text)]
+              if stale:
+                  raise SystemExit(f"{path} 仍残留 static {scope}: {stale}")
+
+              running_match = re.search(
+                  r"(?m)^\s*bool\s+ksu_selinux_hide_running\s+__read_mostly\s*=\s*false\s*;",
+                  text,
+              )
+              if not running_match:
+                  raise SystemExit(f"{path} 缺少 {scope} 锚点: ksu_selinux_hide_running")
+
+              for name, pattern in (
+                  ("fake_status_initialize_key", r"(?m)^\s*DEFINE_STATIC_KEY_FALSE\s*\(\s*fake_status_initialize_key\s*\)\s*;"),
+                  ("fake_status", r"(?m)^\s*struct\s+page\s*\*\s*fake_status\s*=\s*NULL\s*;"),
+                  ("initialize_fake_status", r"(?m)^\s*void\s+initialize_fake_status\s*\(\s*(?:void)?\s*\)\s*\{"),
+              ):
+                  match = re.search(pattern, text)
+                  if not match:
+                      raise SystemExit(f"{path} 缺少 {scope}: {name}")
+                  if match.start() < running_match.start():
+                      raise SystemExit(f"{path} 的 {name} 仍位于错误的预处理分支中")
+
           path = Path("common/drivers/kernelsu/feature/selinux_hide.c")
           if not path.exists():
               raise SystemExit(f"未找到 {path}")
@@ -3717,38 +4093,8 @@ jobs:
           text = path.read_text()
           original = text
 
-          text = text.replace(
-              "static bool ksu_selinux_hide_enabled __read_mostly = false;",
-              "bool ksu_selinux_hide_enabled __read_mostly = false;",
-          )
-          text = text.replace(
-              "static bool ksu_selinux_hide_running __read_mostly = false;",
-              "bool ksu_selinux_hide_running __read_mostly = false;",
-          )
-          text = text.replace(
-              "static DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
-              "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
-          )
-          text = text.replace(
-              "static struct page *fake_status = NULL;",
-              "struct page *fake_status = NULL;",
-          )
-          text = re.sub(
-              r"(?m)^static void initialize_fake_status\s*\(\s*(?:void)?\s*\)",
-              "void initialize_fake_status(void)",
-              text,
-          )
-
-          required = [
-              "bool ksu_selinux_hide_enabled __read_mostly",
-              "bool ksu_selinux_hide_running __read_mostly",
-              "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)",
-              "struct page *fake_status",
-              "void initialize_fake_status(",
-          ]
-          missing = [marker for marker in required if marker not in text]
-          if missing:
-              raise SystemExit(f"{path} 缺少 Official 6.1-6.12 SELinux 导出: {missing}")
+          text = ensure_official_selinux_hide_exports(text, path)
+          validate_official_selinux_hide_exports(text, path, "Official 6.1-6.12 SELinux 导出")
 
           if text != original:
               path.write_text(text)

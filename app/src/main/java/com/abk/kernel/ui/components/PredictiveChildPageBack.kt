@@ -92,7 +92,7 @@ fun rememberChildPageBackController(
 
     suspend fun animateToDismissed() {
         val current = animatable.value.coerceIn(0f, 1f)
-        if (current < 1f) {
+        if (current < 1f && predictiveBackEnabled) {
             animatable.animateChildPageBackDismiss(motionScheme)
         }
         onBack()

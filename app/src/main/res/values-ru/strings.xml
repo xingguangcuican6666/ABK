@@ -582,8 +582,8 @@
     <string name="settings_clear_artifacts_confirm">Очистить</string>
     <string name="settings_notify_build_desc">Показывать статус сборки в уведомлениях</string>
     <string name="settings_navigation">Навигация</string>
-    <string name="settings_predictive_back">M3E-анимация возврата в приложении</string>
-    <string name="settings_predictive_back_desc">Использовать анимацию возврата страниц Material 3 Expressive, независимо от системной predictive back.</string>
+    <string name="settings_predictive_back">Жест predictive back</string>
+    <string name="settings_predictive_back_desc">Включить предпросмотр при свайпе назад и кастомную анимацию закрытия страницы</string>
     <string name="settings_color_appearance">Цвет и внешний вид</string>
     <string name="settings_enter_color_appearance">Открыть «Цвет и внешний вид»</string>
     <string name="settings_about_desc">Ссылки репозитория, версия и участники</string>

@@ -1215,8 +1215,12 @@ fun BuildScreen(
 
             SectionCard(section = BuildSection.Features) {
                 val noRootScheme = config.kernelsuVariant == KSU_VARIANT_NONE
+                val kpmSupported = KernelSupport.isKpmSupported(
+                    config.buildTarget,
+                    config.kernelsuVariant,
+                    config.kernelsuBranch
+                )
                 if (isOnePlusBuild) {
-                    val kpmSupported = config.kernelsuVariant in setOf(KSU_VARIANT_SUKISU, KSU_VARIANT_RESUKISU)
                     val proxyAllowed = !config.onePlusCpu.startsWith("mt")
                     val onePlusSusfsSupported = KernelSupport.onePlusSusfsSupported(config.androidVersion, config.kernelVersion)
                     SwitchRow(
@@ -1281,8 +1285,8 @@ fun BuildScreen(
                     SwitchRow(stringResource(R.string.build_enable_networking), config.useNetworking) {
                         vm.updateBuildConfig(config.copy(useNetworking = it))
                     }
-                    SwitchRow(stringResource(R.string.build_enable_kpm), config.useKpm, enabled = !noRootScheme) {
-                        vm.updateBuildConfig(config.copy(useKpm = it))
+                    SwitchRow(stringResource(R.string.build_enable_kpm), config.useKpm, enabled = kpmSupported && !noRootScheme) {
+                        vm.updateBuildConfig(KernelSupport.normalize(config.copy(useKpm = it)))
                     }
                     SwitchRow(stringResource(R.string.build_enable_rekernel), config.useRekernel) {
                         vm.updateBuildConfig(config.copy(useRekernel = it))

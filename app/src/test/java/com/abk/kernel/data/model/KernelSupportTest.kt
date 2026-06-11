@@ -130,4 +130,79 @@ class KernelSupportTest {
         assertEquals("5.10", normalized.kernelVersion)
         assertTrue(normalized.cancelSusfs)
     }
+
+    @Test
+    fun normalizeDisablesKpmForResukisuDevAndLatest() {
+        val dev = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_RESUKISU,
+                kernelsuBranch = KSU_BRANCH_DEV,
+                useKpm = true,
+                kpmPassword = "secret"
+            )
+        )
+        val latest = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_RESUKISU,
+                kernelsuBranch = KSU_BRANCH_LATEST,
+                useKpm = true,
+                kpmPassword = "secret"
+            )
+        )
+
+        assertFalse(dev.useKpm)
+        assertEquals("", dev.kpmPassword)
+        assertFalse(latest.useKpm)
+        assertEquals("", latest.kpmPassword)
+    }
+
+    @Test
+    fun normalizeKeepsKpmForResukisuStableAndCustom() {
+        val stable = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_RESUKISU,
+                kernelsuBranch = KSU_BRANCH_STABLE,
+                useKpm = true,
+                kpmPassword = "secret"
+            )
+        )
+        val custom = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_RESUKISU,
+                kernelsuBranch = KSU_BRANCH_CUSTOM,
+                useKpm = true,
+                kpmPassword = "secret"
+            )
+        )
+
+        assertTrue(stable.useKpm)
+        assertEquals("secret", stable.kpmPassword)
+        assertTrue(custom.useKpm)
+        assertEquals("secret", custom.kpmPassword)
+    }
+
+    @Test
+    fun normalizeDisablesKpmForOfficialOnStableAndCustom() {
+        val stable = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_OFFICIAL,
+                kernelsuBranch = KSU_BRANCH_STABLE,
+                useKpm = true,
+                kpmPassword = "secret"
+            )
+        )
+        val custom = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_OFFICIAL,
+                kernelsuBranch = KSU_BRANCH_CUSTOM,
+                useKpm = true,
+                kpmPassword = "secret"
+            )
+        )
+
+        assertFalse(stable.useKpm)
+        assertEquals("", stable.kpmPassword)
+        assertFalse(custom.useKpm)
+        assertEquals("", custom.kpmPassword)
+    }
 }
