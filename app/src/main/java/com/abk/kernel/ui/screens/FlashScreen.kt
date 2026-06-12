@@ -629,6 +629,9 @@ fun FlashScreen(
                 if (prepared.dependencyModules.isNotEmpty()) {
                     appendTerminalOutput("[ABK] 附带 Magisk 依赖模块: ${prepared.dependencyModules.joinToString { it.name }}")
                 }
+                if (prepared.dependencyApps.isNotEmpty()) {
+                    appendTerminalOutput("[ABK] 附带扩展应用: ${prepared.dependencyApps.joinToString { it.name }}")
+                }
             }
             block(prepared)
         } finally {
@@ -729,6 +732,13 @@ fun FlashScreen(
             val result = runCatching {
                 executeWithPreparedArtifact(item) { prepared ->
                     if (item.type == ArtifactType.KERNEL_IMG || item.type == ArtifactType.ANYKERNEL3) {
+                        prepared.dependencyApps.forEach { dependency ->
+                            appendTerminalOutput("[ABK] 先安装依赖扩展应用: ${dependency.name}")
+                            val dependencyResult = RootUtils.installApk(context, dependency.absolutePath, ::appendTerminalOutput)
+                            if (!dependencyResult.success) {
+                                return@executeWithPreparedArtifact dependencyResult
+                            }
+                        }
                         prepared.dependencyModules.forEach { dependency ->
                             appendTerminalOutput("[ABK] 先安装依赖模块: ${dependency.name}")
                             val dependencyResult = RootUtils.installModule(dependency.absolutePath, ::appendTerminalOutput)

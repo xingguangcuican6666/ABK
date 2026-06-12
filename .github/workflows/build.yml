@@ -829,7 +829,9 @@ jobs:
               return items
 
           dependencies: list[dict[str, str]] = []
+          companion_apps: list[dict[str, str]] = []
           seen_urls: set[str] = set()
+          seen_companion_urls: set[str] = set()
 
           if manifest_path.exists() and manifest_path.stat().st_size > 0:
               for line in manifest_path.read_text(encoding="utf-8").splitlines():
@@ -867,6 +869,31 @@ jobs:
                       dep_name = conf.get("ABK_MAGISK_MODULE_NAME", "").strip()
                       dep_url = conf.get("ABK_MAGISK_MODULE_DOWNLOAD_URL", "").strip()
 
+                  extension_id = conf.get("ABK_EXTENSION_ID", "").strip()
+                  companion_package = conf.get("ABK_EXTENSION_COMPANION_PACKAGE", "").strip()
+                  companion_name = conf.get("ABK_EXTENSION_COMPANION_DISPLAY_NAME", "").strip() or source_name
+                  companion_asset = conf.get("ABK_EXTENSION_COMPANION_ASSET_NAME", "").strip()
+                  companion_url = conf.get("ABK_EXTENSION_COMPANION_DOWNLOAD_URL", "").strip()
+                  requires_companion = conf.get("ABK_EXTENSION_REQUIRES_COMPANION_APP", "").strip().lower() in {
+                      "1", "y", "yes", "true", "on"
+                  }
+                  if requires_companion and companion_url:
+                      companion_key = companion_url.lower()
+                      if companion_key not in seen_companion_urls:
+                          seen_companion_urls.add(companion_key)
+                          companion_apps.append(
+                              {
+                                  "extensionId": extension_id,
+                                  "packageName": companion_package,
+                                  "displayName": companion_name,
+                                  "assetName": companion_asset,
+                                  "downloadUrl": companion_url,
+                                  "moduleId": source_id,
+                                  "moduleName": source_name,
+                                  "moduleRepoUrl": repo_url,
+                              }
+                          )
+
                   if not dep_url:
                       continue
                   key = dep_url.lower()
@@ -885,12 +912,24 @@ jobs:
                       }
                   )
 
-          if dependencies:
+          if dependencies or companion_apps:
               output_path.write_text(
-                  json.dumps({"schema": 1, "magiskModules": dependencies}, ensure_ascii=False, indent=2),
+                  json.dumps(
+                      {
+                          "schema": 2,
+                          "magiskModules": dependencies,
+                          "companionApps": companion_apps,
+                      },
+                      ensure_ascii=False,
+                      indent=2,
+                  ),
                   encoding="utf-8",
               )
-              print(f"Wrote {output_path} with {len(dependencies)} Magisk dependencies")
+              print(
+                  f"Wrote {output_path} with "
+                  f"{len(dependencies)} Magisk dependencies and "
+                  f"{len(companion_apps)} companion apps"
+              )
           elif output_path.exists():
               output_path.unlink()
           PY

@@ -5,6 +5,7 @@ import com.abk.kernel.R
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.content.pm.PackageManager.NameNotFoundException
 import android.os.Build
 import android.os.Environment
 import android.util.Base64
@@ -40,8 +41,10 @@ object RootUtils {
     private const val ABK_META_MOUNT_WEB_ROOT = "/data/adb/modules/meta-abk-mount/webroot"
     private const val ABK_META_MOUNT_SYSFS_ENABLED = "/sys/kernel/abk_meta_mount/enabled"
     private const val ABK_META_MOUNT_SYSFS_PREPARE = "/sys/kernel/abk_meta_mount/prepare"
+    private const val ABK_EXTENSION_STATE_DIR = "/data/adb/abk/extensions"
     private val BOOT_PATCH_PARTITIONS = listOf("init_boot", "boot", "vendor_boot")
     private val KSU_FEATURE_NAME_REGEX = Regex("^[a-z0-9_]+$")
+    private val SAFE_EXTENSION_ID = Regex("^[A-Za-z0-9._-]+$")
     private var appContext: Context? = null
     private val bundledKsudLock = Any()
     @Volatile
@@ -216,6 +219,7 @@ object RootUtils {
         val stagedApk = File(stageDir, "manager-${System.currentTimeMillis()}.apk")
         return try {
             source.copyTo(stagedApk, overwrite = true)
+            val archive = apkArchiveMetadata(context.packageManager, stagedApk.absolutePath)
             val safeApk = shellQuote(stagedApk.absolutePath)
             val script = """
                 echo "[ABK] 开始安装管理器 APK"
@@ -248,7 +252,23 @@ object RootUtils {
                 fi
                 exit "${'$'}rc"
             """.trimIndent()
-            execRootScript(script, timeoutSeconds = 240, onOutput = onOutput)
+            val result = execRootScript(script, timeoutSeconds = 240, onOutput = onOutput)
+            if (result.success || archive == null) {
+                result
+            } else {
+                val installedVersion = installedPackageVersionCode(
+                    context.packageManager,
+                    archive.packageName
+                )
+                if (shouldRecoverSuccessfulApkInstall(result.output, archive.versionCode, installedVersion)) {
+                    ShellResult(
+                        success = true,
+                        output = result.output + "[ABK] 安装后校验通过：${archive.packageName} 已实际安装，忽略 shell 收尾失败"
+                    )
+                } else {
+                    result
+                }
+            }
         } catch (error: Exception) {
             val line = error.message ?: error::class.java.simpleName
             onOutput?.invoke(line)
@@ -544,6 +564,57 @@ object RootUtils {
     }
 
     fun reboot(): ShellResult = execRootScript("svc power reboot || reboot", timeoutSeconds = 15L)
+
+    fun launchActivityAsRoot(componentName: String, extras: Map<String, String> = emptyMap()): ShellResult {
+        if (componentName.isBlank()) {
+            return ShellResult(false, listOf(tr(R.string.extension_launch_failed)))
+        }
+        val args = buildString {
+            append("am start -n ")
+            append(shellQuote(componentName))
+            extras.forEach { (key, value) ->
+                append(" --es ")
+                append(shellQuote(key))
+                append(" ")
+                append(shellQuote(value))
+            }
+        }
+        return execRootScript(args, timeoutSeconds = 20L)
+    }
+
+    fun readForegroundPackage(): String? {
+        val script = """
+            dumpsys activity activities 2>/dev/null | sed -n 's/.*mResumedActivity: .* \([^[:space:]/]*\)\/.*/\1/p' | head -n 1
+            dumpsys window windows 2>/dev/null | sed -n 's/.*mCurrentFocus=.* \([^[:space:]/]*\)\/.*/\1/p' | head -n 1
+            dumpsys activity activities 2>/dev/null | sed -n 's/.*mFocusedApp=.* \([^[:space:]/]*\)\/.*/\1/p' | head -n 1
+        """.trimIndent()
+        val result = execRootScript(script, timeoutSeconds = 10L)
+        if (!result.success) return null
+        return result.output
+            .map { it.trim() }
+            .firstOrNull { it.isNotBlank() && it != "null" }
+    }
+
+    fun applySchedPowerProfile(mode: String, conservativeDisplayState: Int): ShellResult {
+        val normalizedMode = when (mode.trim().lowercase()) {
+            "perf", "performance", "aggressive", "game" -> "aggressive"
+            else -> "conservative"
+        }
+        val safeState = conservativeDisplayState.coerceAtLeast(0)
+        val script = if (normalizedMode == "aggressive") {
+            """
+                set -e
+                echo aggressive > /proc/abk_sched_profile
+            """.trimIndent()
+        } else {
+            """
+                set -e
+                echo $safeState > /proc/abk_sched_display_conservative_state
+                echo conservative > /proc/abk_sched_profile
+            """.trimIndent()
+        }
+        return execRootScript(script, timeoutSeconds = 15L)
+    }
 
     fun readAbkControlStatus(): ShellResult {
         if (!isNativeManagerActive()) {
@@ -980,6 +1051,59 @@ object RootUtils {
         return moduleJson
     }
 
+    fun readAbkExtensionState(extensionId: String): String? {
+        val cleanId = sanitizeExtensionId(extensionId) ?: return null
+        val filePath = "$ABK_EXTENSION_STATE_DIR/$cleanId.json"
+        return try {
+            createRootShell(timeoutSeconds = 20L).use { shell ->
+                val result = execWithShell(
+                    shell = shell,
+                    script = """
+                        file=${shellQuote(filePath)}
+                        [ -f "${'$'}file" ] || exit 3
+                        base64 "${'$'}file" 2>/dev/null | tr -d '\n'
+                    """.trimIndent(),
+                    normalizeOutput = false
+                )
+                if (!result.success) return null
+                val encoded = result.output.joinToString("").trim()
+                if (encoded.isBlank()) "" else String(Base64.decode(encoded, Base64.DEFAULT))
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    fun writeAbkExtensionState(extensionId: String, json: String): ShellResult {
+        val cleanId = sanitizeExtensionId(extensionId)
+            ?: return ShellResult(false, listOf(tr(R.string.extension_invalid_id)))
+        val payload = Base64.encodeToString(json.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+        val script = """
+            set -e
+            dir=${shellQuote(ABK_EXTENSION_STATE_DIR)}
+            file="${'$'}dir/${cleanId}.json"
+            mkdir -p "${'$'}dir"
+            printf '%s' ${shellQuote(payload)} | base64 -d > "${'$'}file"
+            chmod 0600 "${'$'}file" 2>/dev/null || true
+            restorecon "${'$'}file" 2>/dev/null || true
+        """.trimIndent()
+        return execRootScript(script, timeoutSeconds = 30L)
+    }
+
+    fun clearAbkExtensionState(extensionId: String): ShellResult {
+        val cleanId = sanitizeExtensionId(extensionId)
+            ?: return ShellResult(false, listOf(tr(R.string.extension_invalid_id)))
+        val script = """
+            rm -f ${shellQuote("$ABK_EXTENSION_STATE_DIR/$cleanId.json")}
+        """.trimIndent()
+        return execRootScript(script, timeoutSeconds = 15L)
+    }
+
+    private fun sanitizeExtensionId(value: String): String? {
+        val clean = value.trim()
+        return clean.takeIf { it.isNotBlank() && SAFE_EXTENSION_ID.matches(it) }
+    }
+
     private fun abkMetaMountPlaceholderScript(): String = """
         set -e
         MOD=${shellQuote(ABK_META_MOUNT_DIR)}
@@ -1043,6 +1167,11 @@ object RootUtils {
     private fun isAbkMetaMountModuleDir(moduleDir: String): Boolean =
         moduleDir.trim().trimEnd('/') == ABK_META_MOUNT_DIR
 
+    private data class ApkArchiveMetadata(
+        val packageName: String,
+        val versionCode: Long?
+    )
+
     @Suppress("DEPRECATION")
     private fun installedApplications(packageManager: PackageManager): List<ApplicationInfo> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -1050,6 +1179,59 @@ object RootUtils {
         } else {
             packageManager.getInstalledApplications(0)
         }
+
+    @Suppress("DEPRECATION")
+    private fun apkArchiveMetadata(packageManager: PackageManager, apkPath: String): ApkArchiveMetadata? {
+        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getPackageArchiveInfo(apkPath, PackageManager.PackageInfoFlags.of(0))
+        } else {
+            packageManager.getPackageArchiveInfo(apkPath, 0)
+        } ?: return null
+        val packageName = info.packageName?.trim().orEmpty()
+        if (packageName.isBlank()) return null
+        val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            info.versionCode.toLong()
+        }
+        return ApkArchiveMetadata(packageName, versionCode)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun installedPackageVersionCode(
+        packageManager: PackageManager,
+        packageName: String
+    ): Long? {
+        if (packageName.isBlank()) return null
+        return try {
+            val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                packageManager.getPackageInfo(packageName, 0)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                info.longVersionCode
+            } else {
+                info.versionCode.toLong()
+            }
+        } catch (_: NameNotFoundException) {
+            null
+        }
+    }
+
+    internal fun shouldRecoverSuccessfulApkInstall(
+        output: List<String>,
+        expectedVersionCode: Long?,
+        installedVersionCode: Long?
+    ): Boolean {
+        val sawInstallSuccess = output.any { line ->
+            val clean = line.trim()
+            clean == "Success" || clean.contains("管理器 APK 安装完成")
+        }
+        if (!sawInstallSuccess) return false
+        if (installedVersionCode == null) return false
+        return expectedVersionCode == null || installedVersionCode == expectedVersionCode
+    }
 
     private fun setProfileSepolicy(packageName: String, rules: String): Boolean {
         if (packageName.isBlank()) return false

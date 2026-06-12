@@ -24,12 +24,17 @@ import com.google.android.material.color.utilities.CorePalette
 import com.google.android.material.color.utilities.TonalPalette
 
 val LocalUiSurfaceAlpha = staticCompositionLocalOf { 1f }
+val LocalAppBackgroundEnabled = staticCompositionLocalOf { false }
 
 @Composable
 fun uiSurfaceColor(color: Color): Color {
     val alpha = LocalUiSurfaceAlpha.current
     return if (alpha >= 0.995f) color else color.copy(alpha = color.alpha * alpha)
 }
+
+@Composable
+fun appPageBackgroundColor(color: Color): Color =
+    if (LocalAppBackgroundEnabled.current) Color.Transparent else color
 
 @Composable
 fun AbkTheme(

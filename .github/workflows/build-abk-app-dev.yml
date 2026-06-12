@@ -440,7 +440,6 @@ jobs:
       - name: Patch for Dev APK
         run: |
           cp -rvf "app_dev/build.gradle.kts" "app/build.gradle.kts"
-          cp -rvf "app_dev/strings.xml" "app/src/main/res/values/strings.xml"
 
       - name: Build debug APK
         run: gradle assembleDebug

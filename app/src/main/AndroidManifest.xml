@@ -69,10 +69,34 @@
             android:exported="false"
             android:theme="@style/Theme.ABK" />
 
+        <activity
+            android:name=".extensions.AbkExtensionBootstrapActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:noHistory="true"
+            android:theme="@style/Theme.ABK" />
+
+        <activity
+            android:name=".extensions.AbkExtensionManagerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ABK" />
+
         <service
             android:name=".utils.BuildMonitorService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+
+        <receiver
+            android:name=".extensions.AbkExtensionBootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.USER_UNLOCKED" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -83,6 +107,12 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <provider
+            android:name=".extensions.AbkExtensionHostProvider"
+            android:authorities="${applicationId}.extensionhost"
+            android:exported="true"
+            android:grantUriPermissions="false" />
 
     </application>
 

@@ -69,7 +69,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -79,10 +78,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
+import com.abk.kernel.ui.components.AppBackgroundHost
 import com.abk.kernel.ui.components.AbkSnackbarHost
 import com.abk.kernel.ui.components.animateBottomNavForChildPage
 import com.abk.kernel.ui.components.showAbkSnackbar
+import com.abk.kernel.extensions.AbkExtensionBootstrapActivity
 import com.abk.kernel.ui.screens.BuildScreen
 import com.abk.kernel.ui.screens.FlashScreen
 import com.abk.kernel.ui.screens.InstalledModulesScreen
@@ -94,6 +94,7 @@ import com.abk.kernel.ui.screens.SettingsScreen
 import com.abk.kernel.ui.screens.StatusScreen
 import com.abk.kernel.ui.theme.AbkTheme
 import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
+import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.viewmodel.MainViewModel
 
@@ -116,6 +117,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val vm: MainViewModel = viewModel()
             val state by vm.uiState.collectAsState()
+            var extensionBootstrapIssued by rememberSaveable { mutableStateOf(false) }
 
             LaunchedEffect(Unit) {
                 vm.checkRoot()
@@ -130,6 +132,17 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(state.termsAccepted, state.oobeCompleted) {
                 if (state.termsAccepted && !state.oobeCompleted) {
                     vm.maybeShowInitialOobe()
+                }
+            }
+
+            LaunchedEffect(state.termsAccepted, state.showOobe, extensionBootstrapIssued) {
+                if (state.termsAccepted && !state.showOobe && !extensionBootstrapIssued) {
+                    extensionBootstrapIssued = true
+                    startActivity(
+                        Intent(this@MainActivity, AbkExtensionBootstrapActivity::class.java).apply {
+                            putExtra("boot_action", "foreground")
+                        }
+                    )
                 }
             }
 
@@ -218,36 +231,6 @@ private fun SyncPromptDialog(
             }
         }
     )
-}
-
-@Composable
-private fun AppBackgroundHost(
-    backgroundUri: String?,
-    backgroundEnabled: Boolean,
-    uiSurfaceAlpha: Float,
-    content: @Composable () -> Unit
-) {
-    val hasBackground = backgroundEnabled && !backgroundUri.isNullOrBlank()
-    val colorScheme = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colorScheme.surface)
-    ) {
-        if (hasBackground) {
-            AsyncImage(
-                model = backgroundUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-        CompositionLocalProvider(
-            LocalUiSurfaceAlpha provides if (hasBackground) uiSurfaceAlpha.coerceIn(0f, 1f) else 1f
-        ) {
-            content()
-        }
-    }
 }
 
 @Composable
@@ -388,7 +371,7 @@ private fun AbkMainScaffold(
 
     var selectedTab by rememberSaveable { mutableStateOf(AbkTab.Status) }
     var flashDetailPageVisible by rememberSaveable { mutableStateOf(false) }
-    var settingsThemePageVisible by rememberSaveable { mutableStateOf(false) }
+    var settingsChildPageVisible by rememberSaveable { mutableStateOf(false) }
     var buildPlanPageVisible by rememberSaveable { mutableStateOf(false) }
     var moduleRepositoryPageVisible by rememberSaveable { mutableStateOf(false) }
     var rootAuthDetailPageVisible by rememberSaveable { mutableStateOf(false) }
@@ -419,7 +402,7 @@ private fun AbkMainScaffold(
         AbkTab.Build -> buildPlanPageVisible
         AbkTab.Modules -> moduleRepositoryPageVisible
         AbkTab.Flash -> flashDetailPageVisible
-        AbkTab.Settings -> settingsThemePageVisible
+        AbkTab.Settings -> settingsChildPageVisible
         AbkTab.RootAuth -> rootAuthDetailPageVisible
         AbkTab.RuntimeHome -> managerPatchPageVisible
         else -> false
@@ -456,14 +439,14 @@ private fun AbkMainScaffold(
             AbkTab.Build -> {
                 moduleRepositoryPageVisible = false
                 flashDetailPageVisible = false
-                settingsThemePageVisible = false
+                settingsChildPageVisible = false
                 rootAuthDetailPageVisible = false
                 managerPatchPageVisible = false
             }
             AbkTab.Flash -> {
                 buildPlanPageVisible = false
                 moduleRepositoryPageVisible = false
-                settingsThemePageVisible = false
+                settingsChildPageVisible = false
                 rootAuthDetailPageVisible = false
                 managerPatchPageVisible = false
                 // Flash NavHost is recreated on tab entry — clear stale saveable
@@ -473,7 +456,7 @@ private fun AbkMainScaffold(
             AbkTab.Modules -> {
                 buildPlanPageVisible = false
                 flashDetailPageVisible = false
-                settingsThemePageVisible = false
+                settingsChildPageVisible = false
                 rootAuthDetailPageVisible = false
                 managerPatchPageVisible = false
             }
@@ -488,21 +471,21 @@ private fun AbkMainScaffold(
                 buildPlanPageVisible = false
                 moduleRepositoryPageVisible = false
                 flashDetailPageVisible = false
-                settingsThemePageVisible = false
+                settingsChildPageVisible = false
                 managerPatchPageVisible = false
             }
             AbkTab.RuntimeHome -> {
                 buildPlanPageVisible = false
                 moduleRepositoryPageVisible = false
                 flashDetailPageVisible = false
-                settingsThemePageVisible = false
+                settingsChildPageVisible = false
                 rootAuthDetailPageVisible = false
             }
             else -> {
                 buildPlanPageVisible = false
                 moduleRepositoryPageVisible = false
                 flashDetailPageVisible = false
-                settingsThemePageVisible = false
+                settingsChildPageVisible = false
                 rootAuthDetailPageVisible = false
                 managerPatchPageVisible = false
             }
@@ -541,7 +524,7 @@ private fun AbkMainScaffold(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(uiSurfaceColor(MaterialTheme.colorScheme.surface))
+            .background(appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)))
     ) {
         Box(
             modifier = Modifier
@@ -672,7 +655,7 @@ private fun AbkMainScaffold(
                         AbkTab.Settings -> SettingsScreen(
                             vm = vm,
                             outerPadding = contentPadding,
-                            onThemePageVisibleChange = { settingsThemePageVisible = it },
+                            onChildPageVisibleChange = { settingsChildPageVisible = it },
                             onOpenInstalledModules = {
                                 if (!state.runtimeNavigationEnabled) vm.setRuntimeNavigationEnabled(true)
                                 selectedTab = if (state.rootGranted) {

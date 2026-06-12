@@ -73,6 +73,7 @@ import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.ui.components.ShimmerLinearProgress
+import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.ui.webui.ModuleWebUiActivity
 import com.abk.kernel.utils.RootUtils
@@ -137,7 +138,7 @@ fun RuntimeHomeScreen(
             .height(maxHeight + childPageBottomInset)
 
         Scaffold(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surface),
+            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
             topBar = {
                 ExpressiveTopBar(
                     title = "AnyBase Kernel",
@@ -375,7 +376,7 @@ fun InstalledModulesScreen(
     }
 
     Scaffold(
-        containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surface),
+        containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
         topBar = {
             ExpressiveTopBar(
                 title = stringResource(R.string.runtime_installed_modules_title),
@@ -1345,7 +1346,12 @@ private data class RuntimeModuleDisplayGroup(
 private fun groupRuntimeModulesForDisplay(modules: List<AbkRuntimeModule>): List<RuntimeModuleDisplayGroup> =
     modules
         .groupBy { module ->
-            module.groupId.trim().ifBlank { "single:${module.id}" }
+            module.groupId.trim().ifBlank {
+                module.groupName.trim()
+                    .takeIf { it.isNotBlank() }
+                    ?.let { "name:${it.lowercase()}" }
+                    ?: "single:${module.id}"
+            }
         }
         .values
         .map { grouped ->

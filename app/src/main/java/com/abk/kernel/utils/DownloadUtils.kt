@@ -55,7 +55,8 @@ object DownloadUtils {
     data class PreparedDownloadedArtifact(
         val file: File,
         val cleanupDir: File? = null,
-        val dependencyModules: List<File> = emptyList()
+        val dependencyModules: List<File> = emptyList(),
+        val dependencyApps: List<File> = emptyList()
     )
 
     data class AppUpdatePackageResult(
@@ -75,6 +76,11 @@ object DownloadUtils {
     )
 
     private data class BundledMagiskModuleDependency(
+        val name: String,
+        val downloadUrl: String
+    )
+
+    private data class BundledCompanionAppDependency(
         val name: String,
         val downloadUrl: String
     )
@@ -269,12 +275,14 @@ object DownloadUtils {
                         )
                     }
                 val bundledDependencies = resolveBundledMagiskModules(stagingRoot, token)
+                val bundledCompanionApps = resolveBundledCompanionApps(stagingRoot, token)
 
                 createBundledDownloadEntries(
                     bundleRootDir = requireNotNull(outDir),
                     candidates = candidates,
                     notices = notices,
-                    bundledDependencies = bundledDependencies
+                    bundledDependencies = bundledDependencies,
+                    bundledCompanionApps = bundledCompanionApps
                 )
             } else {
                 val targetOutDir = File(requireNotNull(runDir), safeFileName(artifact.name))
@@ -444,11 +452,13 @@ object DownloadUtils {
                         )
                     }
                 val bundledDependencies = resolveBundledMagiskModules(requireNotNull(stageDir), token)
+                val bundledCompanionApps = resolveBundledCompanionApps(requireNotNull(stageDir), token)
                 createBundledDownloadEntries(
                     bundleRootDir = requireNotNull(assetDir),
                     candidates = candidateFiles,
                     notices = notices,
-                    bundledDependencies = bundledDependencies
+                    bundledDependencies = bundledDependencies,
+                    bundledCompanionApps = bundledCompanionApps
                 )
                 }
             } else {
@@ -616,7 +626,11 @@ object DownloadUtils {
             .mapNotNull { relativePath ->
                 File(extractDir, relativePath).takeIf(File::isFile)
             }
-        return PreparedDownloadedArtifact(payload, extractDir, dependencyModules)
+        val dependencyApps = parseBundledCompanionAppNames(manifestText)
+            .mapNotNull { relativePath ->
+                File(extractDir, relativePath).takeIf(File::isFile)
+            }
+        return PreparedDownloadedArtifact(payload, extractDir, dependencyModules, dependencyApps)
     }
 
     private fun runFolderName(run: WorkflowRun?): String {
@@ -781,7 +795,8 @@ object DownloadUtils {
         bundleRootDir: File,
         candidates: List<File>,
         notices: NoticeFiles,
-        bundledDependencies: List<File> = emptyList()
+        bundledDependencies: List<File> = emptyList(),
+        bundledCompanionApps: List<File> = emptyList()
     ): List<LocalDownloadEntry> {
         return candidates.mapIndexed { index, candidate ->
             val dirName = safeFileName(candidate.name).ifBlank { "artifact-${index + 1}" }
@@ -795,7 +810,12 @@ object DownloadUtils {
             } else {
                 emptyList()
             }
-            createNoticeBundle(bundleFile, candidate, notices, dependenciesForPayload)
+            val appsForPayload = if (classifyDownloadedFile(candidate) in setOf(ArtifactType.KERNEL_IMG, ArtifactType.ANYKERNEL3)) {
+                bundledCompanionApps
+            } else {
+                emptyList()
+            }
+            createNoticeBundle(bundleFile, candidate, notices, dependenciesForPayload, appsForPayload)
             LocalDownloadEntry(
                 displayName = candidate.name,
                 file = bundleFile,
@@ -827,7 +847,8 @@ object DownloadUtils {
         bundleFile: File,
         payload: File,
         notices: NoticeFiles,
-        bundledDependencies: List<File> = emptyList()
+        bundledDependencies: List<File> = emptyList(),
+        bundledCompanionApps: List<File> = emptyList()
     ) {
         ZipOutputStream(FileOutputStream(bundleFile)).use { zip ->
             val addedEntryNames = mutableSetOf<String>()
@@ -843,6 +864,9 @@ object DownloadUtils {
                 bundledDependencies.forEach { dependency ->
                     append("dependency=${BUNDLE_DEPENDENCY_DIR_NAME}/${dependency.name}\n")
                 }
+                bundledCompanionApps.forEach { dependency ->
+                    append("companion_app=companion-apps/${dependency.name}\n")
+                }
             }
             zip.write(manifestLines.toByteArray(Charsets.UTF_8))
             zip.closeEntry()
@@ -853,6 +877,9 @@ object DownloadUtils {
             addUniqueEntry(notices.thirdPartyNotices, THIRD_PARTY_NOTICES_FILE_NAME)
             bundledDependencies.forEach { dependency ->
                 addUniqueEntry(dependency, "${BUNDLE_DEPENDENCY_DIR_NAME}/${dependency.name}")
+            }
+            bundledCompanionApps.forEach { dependency ->
+                addUniqueEntry(dependency, "companion-apps/${dependency.name}")
             }
         }
     }
@@ -887,6 +914,18 @@ object DownloadUtils {
             ?.lineSequence()
             ?.mapNotNull { line ->
                 line.takeIf { it.startsWith("dependency=") }
+                    ?.substringAfter('=')
+                    ?.trim()
+                    ?.ifBlank { null }
+            }
+            .orEmpty()
+            .toList()
+
+    private fun parseBundledCompanionAppNames(manifest: String?): List<String> =
+        manifest
+            ?.lineSequence()
+            ?.mapNotNull { line ->
+                line.takeIf { it.startsWith("companion_app=") }
                     ?.substringAfter('=')
                     ?.trim()
                     ?.ifBlank { null }
@@ -941,6 +980,55 @@ object DownloadUtils {
                 )
             }
         }.distinctBy { it.downloadUrl.lowercase(Locale.ROOT) }
+    }
+
+    private fun parseBundledCompanionDependencyManifest(raw: String): List<BundledCompanionAppDependency> {
+        val root = runCatching { JSONObject(raw) }.getOrNull() ?: return emptyList()
+        val items = root.optJSONArray("companionApps") ?: return emptyList()
+        return buildList {
+            for (index in 0 until items.length()) {
+                val item = items.optJSONObject(index) ?: continue
+                val downloadUrl = item.optString("downloadUrl").trim()
+                if (downloadUrl.isBlank()) continue
+                add(
+                    BundledCompanionAppDependency(
+                        name = item.optString("displayName").trim().ifBlank { "companion-app" },
+                        downloadUrl = downloadUrl
+                    )
+                )
+            }
+        }.distinctBy { it.downloadUrl.lowercase(Locale.ROOT) }
+    }
+
+    private suspend fun resolveBundledCompanionApps(
+        stagingRoot: File,
+        token: String?
+    ): List<File> {
+        val manifestFile = stagingRoot.walkTopDown()
+            .firstOrNull { it.isFile && it.name.equals(FLASH_DEPENDENCIES_FILE_NAME, ignoreCase = true) }
+            ?: return emptyList()
+        val raw = runCatching { manifestFile.readText(Charsets.UTF_8) }.getOrDefault("")
+        if (raw.isBlank()) return emptyList()
+        val dependencies = parseBundledCompanionDependencyManifest(raw)
+        if (dependencies.isEmpty()) return emptyList()
+        val dependencyDir = File(stagingRoot, "$NOTICE_STAGING_DIR_NAME/companion-apps").apply {
+            mkdirs()
+        }
+        return dependencies.mapNotNull { dependency ->
+            val fromUrl = dependency.downloadUrl.substringAfterLast('/').ifBlank { dependency.name }
+            val safeName = safeFileName(fromUrl).ifBlank { "companion.apk" }
+            val target = File(
+                dependencyDir,
+                if (safeName.endsWith(".apk", ignoreCase = true)) safeName else "$safeName.apk"
+            )
+            if (target.exists() && target.length() > 0L) {
+                target
+            } else if (downloadAuxiliaryFile(dependency.downloadUrl, target, token)) {
+                target
+            } else {
+                throw IllegalStateException("Failed to download bundled companion app: ${dependency.name}")
+            }
+        }
     }
 
     private suspend fun downloadAuxiliaryFile(
