@@ -15,6 +15,12 @@
 
 </div>
 
+## 支持我的工作
+
+如果你喜欢这个项目，欢迎在 Ko-fi 上为我点一杯咖啡喵
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/xingguangcuican)
+
 ## 项目定位
 
 ABK 的目标是把手动 fork、启用 Actions、填写 GKI 或 OnePlus/Oplus 参数、触发构建、下载产物和刷写安装这些步骤收敛到一个更顺手的流程里。

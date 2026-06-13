@@ -226,6 +226,7 @@ internal fun mergeRuntimeModules(
                     .filter { it.isNotBlank() }
                     .distinct()
                     .joinToString(","),
+                entryKind = current.entryKind.ifBlank { module.entryKind },
                 source = listOf(current.source, module.source)
                     .flatMap { it.split(',') }
                     .map { it.trim() }
@@ -242,6 +243,20 @@ internal fun mergeRuntimeModules(
                 hasWebUi = current.hasWebUi || module.hasWebUi,
                 hasActionScript = current.hasActionScript || module.hasActionScript,
                 actionSupported = current.actionSupported || module.actionSupported,
+                extensionId = current.extensionId.ifBlank { module.extensionId },
+                companionPackage = current.companionPackage.ifBlank { module.companionPackage },
+                companionDisplayName = current.companionDisplayName.ifBlank { module.companionDisplayName },
+                companionAssetName = current.companionAssetName.ifBlank { module.companionAssetName },
+                companionDownloadUrl = current.companionDownloadUrl.ifBlank { module.companionDownloadUrl },
+                requiresCompanionApp = current.requiresCompanionApp || module.requiresCompanionApp,
+                settingsSupported = current.settingsSupported || module.settingsSupported,
+                perAppSupported = current.perAppSupported || module.perAppSupported,
+                oobePriority = maxOf(current.oobePriority, module.oobePriority),
+                groupId = current.groupId.ifBlank { module.groupId },
+                groupName = current.groupName.ifBlank { module.groupName },
+                groupRole = current.groupRole.ifBlank { module.groupRole },
+                groupDescription = current.groupDescription.ifBlank { module.groupDescription },
+                groupRepoUrl = current.groupRepoUrl.ifBlank { module.groupRepoUrl },
                 kpmArgs = current.kpmArgs.ifBlank { module.kpmArgs }
             )
         }

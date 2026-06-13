@@ -15,6 +15,12 @@ An automation repository and Android app for building, distributing, and managin
 
 </div>
 
+## Support My Work
+
+If you like this project, please consider buying me a coffee to support its ongoing development!
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/xingguangcuican)
+
 ## Purpose
 
 ABK exists to turn the manual workflow of forking, enabling Actions, filling GKI or OnePlus/Oplus parameters, starting builds, downloading artifacts, and flashing/installing outputs into a more direct process.

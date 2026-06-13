@@ -583,7 +583,8 @@ data class AbkRuntimeStatus(
     val manager: AbkRuntimeManagerInfo? = null,
     @SerializedName("runtime_backend") val runtimeBackend: AbkRuntimeManagerInfo? = null,
     val build: AbkRuntimeBuildInfo? = null,
-    val modules: List<AbkRuntimeModule> = emptyList()
+    val modules: List<AbkRuntimeModule> = emptyList(),
+    @SerializedName("extension_modules") val extensionModules: List<AbkRuntimeModule> = emptyList()
 )
 
 data class AbkRuntimeManagerInfo(
@@ -621,6 +622,7 @@ data class AbkRuntimeModule(
     val description: String = "",
     @SerializedName("repo_url") val repoUrl: String = "",
     val stage: String = "",
+    @SerializedName("entry_kind") val entryKind: String = "",
     val source: String = "",
     @SerializedName("extension_id") val extensionId: String = "",
     @SerializedName("companion_package") val companionPackage: String = "",

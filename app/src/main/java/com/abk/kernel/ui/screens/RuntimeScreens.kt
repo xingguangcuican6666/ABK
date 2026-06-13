@@ -1346,12 +1346,15 @@ private data class RuntimeModuleDisplayGroup(
 private fun groupRuntimeModulesForDisplay(modules: List<AbkRuntimeModule>): List<RuntimeModuleDisplayGroup> =
     modules
         .groupBy { module ->
-            module.groupId.trim().ifBlank {
-                module.groupName.trim()
-                    .takeIf { it.isNotBlank() }
-                    ?.let { "name:${it.lowercase()}" }
-                    ?: "single:${module.id}"
-            }
+            module.groupRepoUrl.trim()
+                .takeIf { it.isNotBlank() }
+                ?.let { "repo:${it.lowercase()}" }
+                ?: module.groupId.trim().ifBlank {
+                    module.groupName.trim()
+                        .takeIf { it.isNotBlank() }
+                        ?.let { "name:${it.lowercase()}" }
+                        ?: "single:${module.id}"
+                }
         }
         .values
         .map { grouped ->
