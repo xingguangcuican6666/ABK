@@ -29,11 +29,13 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -130,6 +132,7 @@ fun AbkExtensionManagerScreen(
     var extensions by remember { mutableStateOf<List<AbkManagedExtension>>(emptyList()) }
     var refreshToken by remember { mutableIntStateOf(0) }
     var autoLaunchConsumed by rememberSaveable(focusExtensionId, bootstrapMode) { mutableStateOf(false) }
+    var missingCompanionDialog by remember { mutableStateOf<AbkManagedExtension?>(null) }
 
     fun requestRefresh() {
         refreshToken += 1
@@ -170,8 +173,31 @@ fun AbkExtensionManagerScreen(
 
     fun launchOobe(extension: AbkManagedExtension, finishAfterLaunch: Boolean = bootstrapMode && !dismissLocked) {
         val hostActivity = activity ?: return
+        if (!extension.isCompanionInstalled) {
+            missingCompanionDialog = extension
+            return
+        }
         if (!abkLaunchExtensionOobe(hostActivity, extension)) {
             Toast.makeText(hostActivity, hostActivity.getString(R.string.extension_oobe_missing), Toast.LENGTH_SHORT).show()
+            requestRefresh()
+            return
+        }
+        if (finishAfterLaunch) {
+            onExternalFlowLaunched()
+        }
+    }
+
+    fun launchServiceActivity(
+        extension: AbkManagedExtension,
+        finishAfterLaunch: Boolean = bootstrapMode && !dismissLocked
+    ) {
+        val hostActivity = activity ?: return
+        if (!extension.isCompanionInstalled) {
+            missingCompanionDialog = extension
+            return
+        }
+        if (!abkLaunchExtensionServiceActivity(hostActivity, extension)) {
+            Toast.makeText(hostActivity, hostActivity.getString(R.string.extension_launch_failed), Toast.LENGTH_SHORT).show()
             requestRefresh()
             return
         }
@@ -224,7 +250,15 @@ fun AbkExtensionManagerScreen(
     LaunchedEffect(bootstrapMode, focused?.extensionId, focused?.needsOobe, focused?.canLaunchOobe, loading) {
         val target = focused ?: return@LaunchedEffect
         if (!bootstrapMode || loading || autoLaunchConsumed) return@LaunchedEffect
-        if (target.needsOobe && target.canLaunchOobe) {
+        if (!target.isCompanionInstalled) {
+            autoLaunchConsumed = true
+            missingCompanionDialog = target
+            return@LaunchedEffect
+        }
+        if (target.canLaunchServiceActivity) {
+            autoLaunchConsumed = true
+            launchServiceActivity(target, finishAfterLaunch = false)
+        } else if (target.needsOobe && target.canLaunchOobe) {
             autoLaunchConsumed = true
             launchOobe(target, finishAfterLaunch = false)
         }
@@ -309,7 +343,8 @@ fun AbkExtensionManagerScreen(
                     ExtensionBootstrapCard(
                         extension = focused,
                         onInstall = { installExtension(focused) },
-                        onOpenOobe = { launchOobe(focused) }
+                        onOpenOobe = { launchOobe(focused) },
+                        onOpenService = { launchServiceActivity(focused) }
                     )
                 }
             }
@@ -321,6 +356,7 @@ fun AbkExtensionManagerScreen(
                         emphasize = true,
                         onInstall = { installExtension(it) },
                         onOpenOobe = { launchOobe(it) },
+                        onOpenService = { launchServiceActivity(it) },
                         onReset = { resetExtension(it) },
                     )
                 }
@@ -335,10 +371,43 @@ fun AbkExtensionManagerScreen(
                     emphasize = false,
                     onInstall = { installExtension(it) },
                     onOpenOobe = { launchOobe(it) },
+                    onOpenService = { launchServiceActivity(it) },
                     onReset = { resetExtension(it) },
                 )
             }
         }
+    }
+
+    missingCompanionDialog?.let { extension ->
+        AlertDialog(
+            onDismissRequest = { missingCompanionDialog = null },
+            title = { Text(stringResource(R.string.extension_bootstrap_install_dialog_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.extension_bootstrap_install_dialog_desc,
+                        extension.name,
+                        extension.companionLabel()
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        missingCompanionDialog = null
+                        installExtension(extension)
+                    },
+                    enabled = extension.companionDownloadUrl.isNotBlank()
+                ) {
+                    Text(stringResource(R.string.extension_install_action))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { missingCompanionDialog = null }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        )
     }
 }
 
@@ -347,20 +416,24 @@ private fun ExtensionBootstrapCard(
     extension: AbkManagedExtension,
     onInstall: () -> Unit,
     onOpenOobe: () -> Unit,
+    onOpenService: () -> Unit,
 ) {
     val companionLabel = extension.companionLabel()
     val titleRes = when {
         !extension.isCompanionInstalled -> R.string.extension_bootstrap_install_title
+        extension.canLaunchServiceActivity -> R.string.extension_bootstrap_service_title
         extension.canLaunchOobe -> R.string.extension_bootstrap_oobe_required_title
         else -> R.string.extension_bootstrap_oobe_missing_title
     }
     val subtitle = when {
         !extension.isCompanionInstalled -> stringResource(R.string.extension_bootstrap_install_desc, companionLabel)
+        extension.canLaunchServiceActivity -> stringResource(R.string.extension_bootstrap_service_desc)
         extension.canLaunchOobe -> stringResource(R.string.extension_bootstrap_oobe_required_desc)
         else -> stringResource(R.string.extension_bootstrap_oobe_missing_desc, companionLabel)
     }
     val containerColor = when {
         !extension.isCompanionInstalled -> MaterialTheme.colorScheme.secondaryContainer
+        extension.canLaunchServiceActivity -> MaterialTheme.colorScheme.tertiaryContainer
         extension.canLaunchOobe -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.errorContainer
     }
@@ -386,6 +459,13 @@ private fun ExtensionBootstrapCard(
                         Text(stringResource(R.string.extension_install_action))
                     }
                 }
+                extension.canLaunchServiceActivity -> {
+                    Button(onClick = onOpenService) {
+                        Icon(Icons.Default.OpenInNew, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.extension_run_service_action))
+                    }
+                }
                 extension.canLaunchOobe -> {
                     Button(onClick = onOpenOobe) {
                         Icon(Icons.Default.Build, contentDescription = null)
@@ -404,6 +484,7 @@ private fun ExtensionCard(
     emphasize: Boolean,
     onInstall: (AbkManagedExtension) -> Unit,
     onOpenOobe: (AbkManagedExtension) -> Unit,
+    onOpenService: (AbkManagedExtension) -> Unit,
     onReset: (AbkManagedExtension) -> Unit,
 ) {
     val chipColor = if (extension.needsOobe) {
@@ -484,7 +565,13 @@ private fun ExtensionCard(
                     Text(stringResource(R.string.extension_install_action))
                 }
             } else {
-                if (extension.canLaunchOobe) {
+                if (extension.canLaunchServiceActivity) {
+                    Button(onClick = { onOpenService(extension) }) {
+                        Icon(Icons.Default.OpenInNew, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.extension_run_service_action))
+                    }
+                } else if (extension.canLaunchOobe) {
                     Button(onClick = { onOpenOobe(extension) }) {
                         Icon(Icons.Default.Build, contentDescription = null)
                         Spacer(Modifier.width(6.dp))

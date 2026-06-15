@@ -221,12 +221,17 @@
     <string name="extension_manager_empty_desc">No injected ABK extensions are active in the current runtime. They will appear here after injection.</string>
     <string name="extension_bootstrap_install_title">Install the companion app first</string>
     <string name="extension_bootstrap_install_desc">This extension depends on %1$s. Install it before continuing setup.</string>
+    <string name="extension_bootstrap_install_dialog_title">Companion app required</string>
+    <string name="extension_bootstrap_install_dialog_desc">Extension %1$s requires %2$s to be installed before setup or service startup can continue.</string>
     <string name="extension_bootstrap_oobe_required_title">Extension setup is required</string>
     <string name="extension_bootstrap_oobe_required_desc">An OOBE entry was detected for this extension. You must complete the first-time setup to continue.</string>
+    <string name="extension_bootstrap_service_title">Extension service will be opened</string>
+    <string name="extension_bootstrap_service_desc">This extension declares a startup service entry. Continuing will open that page directly.</string>
     <string name="extension_bootstrap_oobe_missing_title">The extension does not provide OOBE</string>
     <string name="extension_bootstrap_oobe_missing_desc">%1$s is installed, but it does not declare an OOBE entry. Open the companion app and complete setup there.</string>
     <string name="extension_install_action">Install extension</string>
     <string name="extension_run_oobe_action">Run OOBE</string>
+    <string name="extension_run_service_action">Start service</string>
     <string name="extension_open_companion_action">Open companion app</string>
     <string name="extension_open_settings_action">Extension settings</string>
     <string name="extension_reset_action">Reset</string>

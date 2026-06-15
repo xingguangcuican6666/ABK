@@ -5,6 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import android.content.ComponentName
 import org.junit.Test
 
 class AbkExtensionHostTest {
@@ -89,5 +90,60 @@ class AbkExtensionHostTest {
         )
 
         assertNull(selected)
+    }
+
+    @Test
+    fun `bootstrap is required when companion app is missing`() {
+        val extension = AbkManagedExtension(
+            moduleId = "demo",
+            extensionId = "demo.extension",
+            name = "Demo",
+            description = "",
+            companionPackage = "com.example.demo",
+            companionDisplayName = "Demo",
+            companionAssetName = "",
+            companionDownloadUrl = "https://example.invalid/demo.apk",
+            serviceActivity = "",
+            requiresCompanionApp = true,
+            settingsSupported = false,
+            perAppSupported = false,
+            oobePriority = 0,
+            installedPackageName = ""
+        )
+
+        assertTrue(abkNeedsBootstrap(extension))
+    }
+
+    @Test
+    fun `bootstrap is required when service activity can be launched`() {
+        val extension = AbkManagedExtension(
+            moduleId = "demo",
+            extensionId = "demo.extension",
+            name = "Demo",
+            description = "",
+            companionPackage = "com.example.demo",
+            companionDisplayName = "Demo",
+            companionAssetName = "",
+            companionDownloadUrl = "",
+            serviceActivity = ".BootServiceActivity",
+            requiresCompanionApp = true,
+            settingsSupported = false,
+            perAppSupported = false,
+            oobePriority = 0,
+            installedPackageName = "com.example.demo",
+            discoveredApp = AbkDiscoveredExtensionApp(
+                extensionId = "demo.extension",
+                packageName = "com.example.demo",
+                displayName = "Demo",
+                oobeComponent = null,
+                settingsComponent = null,
+                serviceComponent = ComponentName("com.example.demo", "com.example.demo.BootServiceActivity"),
+                serviceIsBackgroundStart = true
+            )
+        )
+
+        assertTrue(extension.canLaunchServiceActivity)
+        assertTrue(extension.canStartServiceSilently)
+        assertTrue(abkNeedsBootstrap(extension))
     }
 }

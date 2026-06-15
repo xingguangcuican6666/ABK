@@ -5,8 +5,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ResolveInfo
 import android.os.Build
+import android.content.pm.PackageManager.GET_SERVICES
+import android.content.pm.ResolveInfo
 import com.abk.kernel.data.model.CustomExternalModuleEntryKind
 import com.abk.kernel.data.model.AbkRuntimeModule
 import com.abk.kernel.data.model.AbkRuntimeStatus
@@ -22,6 +23,7 @@ const val ABK_EXTENSION_META_ID = "com.abk.kernel.extension.ID"
 const val ABK_EXTENSION_META_NAME = "com.abk.kernel.extension.NAME"
 const val ABK_EXTENSION_META_OOBE_ACTIVITY = "com.abk.kernel.extension.OOBE_ACTIVITY"
 const val ABK_EXTENSION_META_SETTINGS_ACTIVITY = "com.abk.kernel.extension.SETTINGS_ACTIVITY"
+const val ABK_EXTENSION_META_SERVICE_ACTIVITY = "com.abk.kernel.extension.SERVICE_ACTIVITY"
 
 data class AbkDiscoveredExtensionApp(
     val extensionId: String,
@@ -29,6 +31,8 @@ data class AbkDiscoveredExtensionApp(
     val displayName: String,
     val oobeComponent: ComponentName?,
     val settingsComponent: ComponentName?,
+    val serviceComponent: ComponentName?,
+    val serviceIsBackgroundStart: Boolean = false,
 )
 
 data class AbkExtensionState(
@@ -47,6 +51,7 @@ data class AbkManagedExtension(
     val companionDisplayName: String,
     val companionAssetName: String,
     val companionDownloadUrl: String,
+    val serviceActivity: String,
     val requiresCompanionApp: Boolean,
     val settingsSupported: Boolean,
     val perAppSupported: Boolean,
@@ -63,6 +68,22 @@ data class AbkManagedExtension(
 
     val summary: String
         get() = state?.summary.orEmpty()
+
+    val serviceComponent: ComponentName?
+        get() {
+            discoveredApp?.serviceComponent?.let { return it }
+            val className = serviceActivity.trim().takeIf { it.isNotBlank() } ?: return null
+            val packageName = companionPackage.takeIf { it.isNotBlank() }
+                ?: discoveredApp?.packageName
+                ?: return null
+            return componentNameFromString(packageName, className)
+        }
+
+    val canLaunchServiceActivity: Boolean
+        get() = isCompanionInstalled && serviceComponent != null
+
+    val canStartServiceSilently: Boolean
+        get() = isCompanionInstalled && discoveredApp?.serviceIsBackgroundStart == true
 
     private val requiresInteractiveSetup: Boolean
         get() = settingsSupported || perAppSupported || discoveredApp?.oobeComponent != null
@@ -142,7 +163,12 @@ internal fun abkPickManagedExtensionModule(
 }
 
 fun abkPickPendingExtension(context: Context): AbkManagedExtension? =
-    abkLoadManagedExtensions(context).firstOrNull { it.needsOobe }
+    abkLoadManagedExtensions(context).firstOrNull(::abkNeedsBootstrap)
+
+internal fun abkNeedsBootstrap(extension: AbkManagedExtension): Boolean =
+    !extension.isCompanionInstalled ||
+        extension.needsOobe ||
+        extension.canLaunchServiceActivity
 
 fun abkOpenExtensionManager(
     context: Context,
@@ -164,6 +190,39 @@ fun abkLaunchExtensionOobe(activity: Activity, extension: AbkManagedExtension): 
             .putExtra(ABK_EXTENSION_EXTRA_HOST_PACKAGE, activity.packageName)
             .putExtra(ABK_EXTENSION_EXTRA_HOST_PROVIDER, abkExtensionHostAuthority(activity))
     )
+    return true
+}
+
+fun abkLaunchExtensionServiceActivity(activity: Activity, extension: AbkManagedExtension): Boolean {
+    val component = extension.serviceComponent ?: return false
+    val extras = mapOf(
+        ABK_EXTENSION_EXTRA_ID to extension.extensionId,
+        ABK_EXTENSION_EXTRA_HOST_PACKAGE to activity.packageName,
+        ABK_EXTENSION_EXTRA_HOST_PROVIDER to abkExtensionHostAuthority(activity),
+    )
+    if (extension.canStartServiceSilently) {
+        val rootResult = RootUtils.launchServiceAsRoot(
+            componentName = component.flattenToShortString(),
+            extras = extras,
+            foreground = true
+        )
+        if (rootResult.success) {
+            return true
+        }
+    }
+    val intent = Intent().setComponent(component)
+        .putExtra(ABK_EXTENSION_EXTRA_ID, extension.extensionId)
+        .putExtra(ABK_EXTENSION_EXTRA_HOST_PACKAGE, activity.packageName)
+        .putExtra(ABK_EXTENSION_EXTRA_HOST_PROVIDER, abkExtensionHostAuthority(activity))
+    if (extension.canStartServiceSilently) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            activity.startForegroundService(intent)
+        } else {
+            activity.startService(intent)
+        }
+    } else {
+        activity.startActivity(intent)
+    }
     return true
 }
 
@@ -208,6 +267,7 @@ private fun toManagedExtension(
         companionDisplayName = module.companionDisplayName.ifBlank { discoveredApp?.displayName.orEmpty() },
         companionAssetName = module.companionAssetName,
         companionDownloadUrl = module.companionDownloadUrl,
+        serviceActivity = module.serviceActivity,
         requiresCompanionApp = module.requiresCompanionApp,
         settingsSupported = module.settingsSupported,
         perAppSupported = module.perAppSupported,
@@ -296,12 +356,21 @@ private fun discoverExtensionApps(context: Context): Map<String, AbkDiscoveredEx
             ?.trim()
             ?.takeIf { it.isNotBlank() }
             ?.let { componentNameFromString(packageName, it) }
+        val serviceClassName = meta.getString(ABK_EXTENSION_META_SERVICE_ACTIVITY)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        val serviceComponent = serviceClassName?.let { componentNameFromString(packageName, it) }
+        val serviceIsBackgroundStart = serviceClassName?.let { className ->
+            isServiceComponent(context.packageManager, packageName, className)
+        } ?: false
         AbkDiscoveredExtensionApp(
             extensionId = extensionId,
             packageName = packageName,
             displayName = displayName,
             oobeComponent = oobeComponent,
             settingsComponent = settingsComponent,
+            serviceComponent = serviceComponent,
+            serviceIsBackgroundStart = serviceIsBackgroundStart,
         )
     }.associateBy { it.extensionId }
 }
@@ -309,6 +378,25 @@ private fun discoverExtensionApps(context: Context): Map<String, AbkDiscoveredEx
 private fun componentNameFromString(packageName: String, className: String): ComponentName {
     val normalized = if (className.startsWith('.')) "$packageName$className" else className
     return ComponentName(packageName, normalized)
+}
+
+@Suppress("DEPRECATION")
+private fun isServiceComponent(
+    packageManager: PackageManager,
+    packageName: String,
+    className: String,
+): Boolean {
+    val normalized = if (className.startsWith('.')) "$packageName$className" else className
+    return runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getPackageInfo(
+                packageName,
+                PackageManager.PackageInfoFlags.of(PackageManager.GET_SERVICES.toLong())
+            )
+        } else {
+            packageManager.getPackageInfo(packageName, GET_SERVICES)
+        }
+    }.getOrNull()?.services?.any { it.name == normalized } == true
 }
 
 @Suppress("DEPRECATION")

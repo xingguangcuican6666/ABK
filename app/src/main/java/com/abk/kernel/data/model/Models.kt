@@ -629,6 +629,7 @@ data class AbkRuntimeModule(
     @SerializedName("companion_display_name") val companionDisplayName: String = "",
     @SerializedName("companion_asset_name") val companionAssetName: String = "",
     @SerializedName("companion_download_url") val companionDownloadUrl: String = "",
+    @SerializedName("service_activity") val serviceActivity: String = "",
     @SerializedName("module_dir") val moduleDir: String = "",
     @SerializedName("web_root") val webRoot: String = "",
     val readonly: Boolean = false,

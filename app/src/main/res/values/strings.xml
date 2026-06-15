@@ -221,12 +221,17 @@
     <string name="extension_manager_empty_desc">当前运行环境没有已注入的 ABK 扩展，后续注入后会显示在这里。</string>
     <string name="extension_bootstrap_install_title">需要先安装伴生应用</string>
     <string name="extension_bootstrap_install_desc">当前扩展依赖 %1$s，安装完成后才能继续初始化。</string>
+    <string name="extension_bootstrap_install_dialog_title">需要安装伴生应用</string>
+    <string name="extension_bootstrap_install_dialog_desc">扩展 %1$s 需要先安装 %2$s，安装完成后才能继续初始化或启动服务。</string>
     <string name="extension_bootstrap_oobe_required_title">需要完成扩展初始化</string>
     <string name="extension_bootstrap_oobe_required_desc">当前扩展已检测到 OOBE 入口，继续后必须完成首次配置。</string>
+    <string name="extension_bootstrap_service_title">将启动扩展服务</string>
+    <string name="extension_bootstrap_service_desc">当前扩展声明了启动服务入口，继续后会直接打开对应页面。</string>
     <string name="extension_bootstrap_oobe_missing_title">扩展未提供 OOBE</string>
     <string name="extension_bootstrap_oobe_missing_desc">%1$s 已安装，但没有声明 OOBE 入口。请打开伴生应用按其说明完成初始化。</string>
     <string name="extension_install_action">安装扩展</string>
     <string name="extension_run_oobe_action">运行 OOBE</string>
+    <string name="extension_run_service_action">启动服务</string>
     <string name="extension_open_companion_action">打开伴生应用</string>
     <string name="extension_open_settings_action">扩展设置</string>
     <string name="extension_reset_action">重置</string>

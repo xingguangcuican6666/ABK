@@ -35,6 +35,12 @@ class AbkExtensionBootstrapActivity : ComponentActivity() {
                 return@launch
             }
 
+            if (pending.canStartServiceSilently) {
+                abkLaunchExtensionServiceActivity(this@AbkExtensionBootstrapActivity, pending)
+                finish()
+                return@launch
+            }
+
             startActivity(
                 abkOpenExtensionManager(
                     context = this@AbkExtensionBootstrapActivity,

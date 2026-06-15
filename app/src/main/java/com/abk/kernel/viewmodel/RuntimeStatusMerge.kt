@@ -248,6 +248,7 @@ internal fun mergeRuntimeModules(
                 companionDisplayName = current.companionDisplayName.ifBlank { module.companionDisplayName },
                 companionAssetName = current.companionAssetName.ifBlank { module.companionAssetName },
                 companionDownloadUrl = current.companionDownloadUrl.ifBlank { module.companionDownloadUrl },
+                serviceActivity = current.serviceActivity.ifBlank { module.serviceActivity },
                 requiresCompanionApp = current.requiresCompanionApp || module.requiresCompanionApp,
                 settingsSupported = current.settingsSupported || module.settingsSupported,
                 perAppSupported = current.perAppSupported || module.perAppSupported,
