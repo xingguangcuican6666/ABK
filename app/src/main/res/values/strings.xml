@@ -120,6 +120,9 @@
     <string name="build_failed">构建失败</string>
     <string name="build_queued">构建已排队</string>
     <string name="build_confirm_submit">确认提交构建</string>
+    <string name="build_submitted_title">构建已提交</string>
+    <string name="build_submitted_desc">构建已成功提交，可前往「当前状态」页查看进度。</string>
+    <string name="build_submitted_ok">确定</string>
     <string name="build_config_overview">构建配置概览：</string>
     <string name="build_kernel_line">Android %1$s · 内核 %2$s.%3$s</string>
     <string name="build_patch_level_line">补丁级别: %1$s</string>

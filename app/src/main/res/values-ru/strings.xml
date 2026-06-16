@@ -120,6 +120,9 @@
     <string name="build_failed">Сборка не удалась</string>
     <string name="build_queued">Сборка в очереди</string>
     <string name="build_confirm_submit">Подтвердить сборку</string>
+    <string name="build_submitted_title">Сборка отправлена</string>
+    <string name="build_submitted_desc">Сборка успешно отправлена. Перейдите в «Текущий статус», чтобы отслеживать прогресс.</string>
+    <string name="build_submitted_ok">ОК</string>
     <string name="build_config_overview">Сводка конфигурации сборки:</string>
     <string name="build_kernel_line">Android %1$s · ядро %2$s.%3$s</string>
     <string name="build_patch_level_line">Уровень патча: %1$s</string>

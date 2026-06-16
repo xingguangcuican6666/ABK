@@ -120,6 +120,9 @@
     <string name="build_failed">Build failed</string>
     <string name="build_queued">Build queued</string>
     <string name="build_confirm_submit">Confirm build submission</string>
+    <string name="build_submitted_title">Build submitted</string>
+    <string name="build_submitted_desc">Build submitted successfully. Go to Status to track progress.</string>
+    <string name="build_submitted_ok">OK</string>
     <string name="build_config_overview">Build configuration overview:</string>
     <string name="build_kernel_line">Android %1$s · Kernel %2$s.%3$s</string>
     <string name="build_patch_level_line">Patch level: %1$s</string>
