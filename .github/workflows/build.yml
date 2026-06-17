@@ -33,6 +33,9 @@ on:
       custom_ref:
         required: false
         type: string
+      add_defconfig:
+        required: false
+        type: string
       version:
         required: false
         type: string
@@ -103,10 +106,6 @@ on:
         default: ""
 
       # ==================== 自定义外部模块 ====================
-      use_custom_external_modules:
-        required: false
-        type: boolean
-        default: false
       custom_external_modules:
         required: false
         type: string
@@ -183,6 +182,7 @@ jobs:
           echo "KSU 分支      : $effective_ksu_branch"
           echo "管理器包名    : ${{ inputs.manager_package || 'app/signing/abk-manager-cert.env' }}"
           echo "构建时间      : ${{ inputs.build_time }}"
+          echo "额外内核参数   : $(printf "%s" "${{ inputs.add_defconfig }}" | tr '\n' ' ')"
           echo "SUSFS 状态    : ${{ inputs.enable_susfs }}"
           echo "ZRAM 增强     : $effective_use_zram"
           echo "ZRAM 完整算法 : $effective_zram_full_algo"
@@ -195,7 +195,7 @@ jobs:
           echo "KPM 密码      : ${{ inputs.kpm_password && '已自定义' || '默认' }}"
           echo "Re-Kernel     : ${{ inputs.use_rekernel }}"
           echo "虚拟化支持   : ${{ inputs.virtualization_support }}"
-          echo "自定义注入    : ${{ inputs.use_custom_external_modules }}"
+          echo "自定义注入    : ${{ inputs.custom_external_modules }}"
           echo "Stock Config  : 自动检测 config/stock_defconfig"
           echo "========================================"
 
@@ -639,7 +639,7 @@ jobs:
           git clone https://github.com/Numbersf/Action-Build.git --depth=1
 
       - name: 克隆自定义外部模块
-        if: inputs.use_custom_external_modules
+        if: inputs.custom_external_modules != ''
         env:
           CUSTOM_EXTERNAL_MODULES: ${{ inputs.custom_external_modules }}
         run: |
@@ -2825,7 +2825,7 @@ jobs:
           grep -q '^CONFIG_REKERNEL_NETWORK=y$' "$DEFCONFIG" || echo "CONFIG_REKERNEL_NETWORK=y" >> "$DEFCONFIG"
 
       - name: 执行自定义外部模块 (after_patch)
-        if: inputs.use_custom_external_modules
+        if: inputs.custom_external_modules != ''
         env:
           CUSTOM_EXTERNAL_MODULE_STAGE: after_patch
           ABK_BUILD_ANDROID_VERSION: ${{ inputs.android_version }}
@@ -2889,6 +2889,39 @@ jobs:
       - name: 配置内核选项
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
+          ensure_defconfig_value() {
+            local cfg="$1"
+            local value="$2"
+            local line="${cfg}=${value}"
+
+            if [ "$value" = "n" ]; then
+              line="# ${cfg} is not set"
+            fi
+
+            if grep -qxF "$line" "$DEFCONFIG"; then
+              return 0
+            fi
+
+            if grep -Eq "^${cfg}=|^# ${cfg} is not set$" "$DEFCONFIG"; then
+              sed -i -E "s|^${cfg}=.*|${line}|; s|^# ${cfg} is not set$|${line}|" "$DEFCONFIG"
+            else
+              echo "$line" >> "$DEFCONFIG"
+            fi
+          }
+ 
+          if [ "${{ inputs.add_defconfig }}" != "" ]; then
+            echo "set custom kernel config:"
+            echo "${{ inputs.add_defconfig }}" | tr ' ' '\n' | while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            if echo "$line" | grep -Eq "^CONFIG_[A-Za-z0-9_]+=.+$"; then
+              cfg=$(echo "$line" | cut -d= -f1)
+              val=$(echo "$line" | cut -d= -f2-)
+              echo "$cfg=$val"
+              ensure_defconfig_value "$cfg" "$val"
+              continue
+            fi
+            done
+          fi
           set -euo pipefail
           kpm_kconfig_status="${ABK_KPM_KCONFIG_STATUS:-unknown}"
           kpm_kconfig_ready="${ABK_KPM_KCONFIG_READY:-false}"
@@ -3080,7 +3113,7 @@ jobs:
           fi
 
       - name: 执行自定义外部模块 (before_build)
-        if: inputs.use_custom_external_modules
+        if: inputs.custom_external_modules != ''
         env:
           CUSTOM_EXTERNAL_MODULE_STAGE: before_build
           ABK_BUILD_ANDROID_VERSION: ${{ inputs.android_version }}
@@ -4391,7 +4424,7 @@ jobs:
           PY
 
       - name: 校验 ABK 管理器桥接
-        if: inputs.use_custom_external_modules && inputs.ksu_variant != 'None'
+        if: inputs.custom_external_modules != '' && inputs.ksu_variant != 'None'
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail

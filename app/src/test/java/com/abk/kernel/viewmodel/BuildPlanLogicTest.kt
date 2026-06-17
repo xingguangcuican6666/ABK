@@ -30,6 +30,7 @@ class BuildPlanLogicTest {
                 customRef = "feature:5",
                 version = "test-build",
                 buildTime = "Sun Dec 01 08:10:00 UTC 2024",
+                addDefconfig = "",
                 useZram = true,
                 useBbg = true,
                 useDdk = true,
@@ -64,6 +65,7 @@ class BuildPlanLogicTest {
         assertEquals(config.customRef, decoded.config.customRef)
         assertEquals(config.version, decoded.config.version)
         assertEquals(config.buildTime, decoded.config.buildTime)
+        assertEquals(config.addDefconfig, decoded.config.addDefconfig)
         assertEquals(config.zramExtraAlgos, decoded.config.zramExtraAlgos)
         assertEquals(config.kpmPassword, decoded.config.kpmPassword)
         assertEquals(config.virtualizationSupport, decoded.config.virtualizationSupport)
@@ -132,7 +134,6 @@ class BuildPlanLogicTest {
         assertEquals("true", inputs["use_ddk"])
         assertEquals(KSU_BRANCH_CUSTOM, inputs["kernelsu_branch"])
         assertEquals("main:5", inputs["custom_ref"])
-        assertEquals("true", inputs["use_custom_external_modules"])
         assertEquals(
             "module:https://github.com/example/a.git;after_patch|module:https://github.com/example/b.git;before_build",
             inputs["custom_external_modules"]

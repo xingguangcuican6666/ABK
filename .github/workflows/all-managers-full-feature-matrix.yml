@@ -285,7 +285,6 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       supp_op: ${{ inputs.supp_op }}
       virtualization_support: ${{ inputs.virtualization_support }}
-      use_custom_external_modules: ${{ inputs.use_custom_external_modules }}
       custom_external_modules: ${{ inputs.custom_external_modules }}
       upload_aux_artifacts: ${{ inputs.upload_aux_artifacts }}
       trigger_release: false

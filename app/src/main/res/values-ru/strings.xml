@@ -252,6 +252,8 @@
     <string name="build_custom_version_optional">Своё название версии (необязательно)</string>
     <string name="build_custom_time_optional">Своё время сборки (необязательно)</string>
     <string name="build_time_placeholder">Пусто/N = текущее UTC</string>
+    <string name="build_add_defconfig">Дополнительные параметры ядра (необязательно)</string>
+    <string name="build_add_defconfig_placeholder">например: CONFIG_TMPFS_XATTR=y CONFIG_USER_NS=n</string>
     <string name="build_add_queue">Добавить в очередь</string>
     <string name="build_queue_title">Очередь сборок</string>
     <string name="build_plan_library">Библиотека пресетов</string>
@@ -464,6 +466,7 @@
     <string name="flash_unknown">Неизвестно</string>
     <string name="flash_version_params">Параметры версии</string>
     <string name="flash_build_time">Время сборки</string>
+    <string name="flash_add_defconfig">Добавить defconfig</string>
     <string name="flash_ksu_variant">Вариант KSU</string>
     <string name="flash_ksu_branch">Ветка KSU</string>
     <string name="flash_susfs_status">Статус SUSFS</string>

@@ -252,6 +252,8 @@
     <string name="build_custom_version_optional">Custom version name (optional)</string>
     <string name="build_custom_time_optional">Custom build time (optional)</string>
     <string name="build_time_placeholder">Empty/N = current UTC time</string>
+    <string name="build_add_defconfig">Extra kernel parameters (optional)</string>
+    <string name="build_add_defconfig_placeholder">e.g. CONFIG_TMPFS_XATTR=y CONFIG_USER_NS=n</string>
     <string name="build_add_queue">Add to queue</string>
     <string name="build_queue_title">Build queue</string>
     <string name="build_plan_library">Plan library</string>
@@ -464,6 +466,7 @@
     <string name="flash_unknown">Unknown</string>
     <string name="flash_version_params">Version parameters</string>
     <string name="flash_build_time">Build time</string>
+    <string name="flash_add_defconfig">Add defconfig</string>
     <string name="flash_ksu_variant">KSU variant</string>
     <string name="flash_ksu_branch">KSU branch</string>
     <string name="flash_susfs_status">SUSFS status</string>

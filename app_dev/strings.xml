@@ -244,6 +244,8 @@
     <string name="build_custom_version_optional">自定义版本名 (可选)</string>
     <string name="build_custom_time_optional">自定义构建时间 (可选)</string>
     <string name="build_time_placeholder">留空/N=当前 UTC 时间</string>
+    <string name="build_add_defconfig">额外内核参数 (可选)</string>
+    <string name="build_add_defconfig_placeholder">如: CONFIG_TMPFS_XATTR=y CONFIG_USER_NS=n</string>
     <string name="build_add_queue">加入队列</string>
     <string name="build_queue_title">构建队列</string>
     <string name="build_plan_library">方案库</string>
@@ -456,6 +458,7 @@
     <string name="flash_unknown">未知</string>
     <string name="flash_version_params">版本参数</string>
     <string name="flash_build_time">构建时间</string>
+    <string name="flash_add_defconfig">额外内核参数</string>
     <string name="flash_ksu_variant">KSU 变体</string>
     <string name="flash_ksu_branch">KSU 分支</string>
     <string name="flash_susfs_status">SUSFS 状态</string>

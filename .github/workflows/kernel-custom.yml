@@ -73,6 +73,10 @@ on:
         description: "自定义引用 (仅在KSU分支为'Custom(自定义)'时使用)"
         required: false
         type: string
+      add_defconfig:
+        description: "自定义内核参数"
+        required: false
+        type: string
       version:
         description: "自定义版本名 (可选)"
         required: false
@@ -163,11 +167,6 @@ on:
         default: ""
 
       # ==================== 自定义外部模块 ====================
-      use_custom_external_modules:
-        description: "启用自定义外部模块注入"
-        required: false
-        type: boolean
-        default: false
       custom_external_modules:
         description: "自定义外部模块（兼容旧 repo;stage，也支持 module:repo;stage 与 set:repo#child;stage，用 | 分隔）"
         required: false
@@ -188,6 +187,7 @@ jobs:
       ksu_variant: ${{ inputs.kernelsu_variant }}
       ksu_branch: ${{ inputs.kernelsu_branch }}
       custom_ref: ${{ inputs.custom_ref || '' }}
+      add_defconfig: ${{ inputs.add_defconfig || '' }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
@@ -203,7 +203,6 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo || false }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
-      use_custom_external_modules: ${{ inputs.use_custom_external_modules || false }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
 
   get-ksu-manager:

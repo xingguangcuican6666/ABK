@@ -4688,6 +4688,7 @@ internal fun encodeBuildPlanPayload(
     writer.writeVarInt(config.toBuildPlanFeatureMask())
     writer.writeString(config.version)
     writer.writeString(config.buildTime)
+    writer.writeString(config.addDefconfig)
     writer.writeString(config.zramExtraAlgos)
     writer.writeString(config.kpmPassword)
     writer.writeString(config.customRef)
@@ -4786,6 +4787,7 @@ internal fun decodeBuildPlanPayload(
     val featureMask = reader.readVarInt()
     val versionName = reader.readString()
     val buildTime = reader.readString()
+    val addDefconfig = reader.readString()
     val zramExtraAlgos = reader.readString()
     val kpmPassword = reader.readString()
     val customRef = if (version >= BUILD_PLAN_CUSTOM_REF_VERSION) {
@@ -4827,6 +4829,7 @@ internal fun decodeBuildPlanPayload(
         kernelsuBranch = ksuBranch,
         version = versionName,
         buildTime = buildTime,
+        addDefconfig = addDefconfig,
         useZram = featureMask.hasBuildPlanFlag(0),
         useBbg = featureMask.hasBuildPlanFlag(1),
         useDdk = featureMask.hasBuildPlanFlag(2),
@@ -5002,6 +5005,7 @@ private const val SUMMARY_LABEL_PATCH_LEVEL = "\u8865\u4e01\u7ea7\u522b"
 private const val SUMMARY_LABEL_KSU_VARIANT = "ksu\u53d8\u4f53"
 private const val SUMMARY_LABEL_KSU_BRANCH = "ksu\u5206\u652f"
 private const val SUMMARY_LABEL_BUILD_TIME = "\u6784\u5efa\u65f6\u95f4"
+private const val SUMMARY_LABEL_ADD_DEFCONFIG = "\u989d\u5916\u5185\u6838\u53c2\u6570"
 private const val SUMMARY_LABEL_SUSFS_STATUS = "susfs\u72b6\u6001"
 private const val SUMMARY_LABEL_ZRAM = "zram\u589e\u5f3a"
 private const val SUMMARY_LABEL_ZRAM_FULL_ALGO = "zram\u5b8c\u6574\u7b97\u6cd5"
@@ -5071,6 +5075,7 @@ internal fun parseBuildParameterSummary(
         ksuVariant = values["ksuVariant"].orEmpty(),
         ksuBranch = values["ksuBranch"].orEmpty(),
         buildTime = values["buildTime"].orEmpty(),
+        addDefconfig = values["addDefconfig"].orEmpty(),
         susfsEnabled = values["susfsEnabled"].orEmpty(),
         zramEnabled = values["zramEnabled"].orEmpty(),
         zramFullAlgo = values["zramFullAlgo"].orEmpty(),
@@ -5106,6 +5111,7 @@ private fun normalizeBuildSummaryLabel(label: String): String? {
         compact.contains(SUMMARY_LABEL_KSU_VARIANT) -> "ksuVariant"
         compact.contains(SUMMARY_LABEL_KSU_BRANCH) -> "ksuBranch"
         compact.contains(SUMMARY_LABEL_BUILD_TIME) -> "buildTime"
+        compact.contains(SUMMARY_LABEL_ADD_DEFCONFIG) -> "addDefconfig"
         compact.contains(SUMMARY_LABEL_SUSFS_STATUS) -> "susfsEnabled"
         compact.contains(SUMMARY_LABEL_ZRAM) -> "zramEnabled"
         compact.contains(SUMMARY_LABEL_ZRAM_FULL_ALGO) -> "zramFullAlgo"
@@ -5305,6 +5311,7 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
         "kernelsu_branch" to config.kernelsuBranch,
         "version" to config.version,
         "build_time" to config.buildTime,
+        "add_defconfig" to config.addDefconfig,
         "use_zram" to config.useZram.toString(),
         "use_bbg" to config.useBbg.toString(),
         "use_ddk" to config.useDdk.toString(),
@@ -5318,7 +5325,6 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
         "zram_extra_algos" to config.zramExtraAlgos,
         "kpm_password" to config.kpmPassword,
         "virtualization_support" to config.virtualizationSupport,
-        "use_custom_external_modules" to config.useCustomExternalModules.toString(),
         "custom_ref" to if (config.kernelsuBranch == KSU_BRANCH_CUSTOM) {
             config.customRef.trim()
         } else {
