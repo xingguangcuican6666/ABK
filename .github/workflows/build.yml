@@ -537,21 +537,38 @@ jobs:
           apt_update_retry
           sudo apt-get install -y ccache python3 git curl build-essential libssl-dev bison flex libelf-dev dwarves
 
-      - name: 配置 ccache
+      - name: 配置缓存
         run: |
           mkdir -p ~/.cache/bazel
           ccache --version
-          ccache --max-size=2G
+          ccache --max-size=4G
           ccache --set-config=compression=true
-          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+          export CCACHE_DIR="$HOME/.ccache"
+          echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$CCACHE_DIR"
+
+          CACHE_CODE="$([[ '${{ inputs.enable_susfs }}' == 'true' ]] && echo -n 1 || echo -n 0)"
+          CACHE_CODE="$CACHE_CODE$([[ '${{ inputs.use_ddk }}' == 'true' ]] && echo -n 1 || echo -n 0)"
+          CACHE_CODE="$CACHE_CODE$([[ '${{ inputs.use_ntsync }}' == 'true' ]] && echo -n 1 || echo -n 0)"
+          CACHE_CODE="$CACHE_CODE$([[ '${{ inputs.use_rekernel }}' == 'true' ]] && echo -n 1 || echo -n 0)"
+          CACHE_CODE="$CACHE_CODE$([[ '${{ inputs.virtualization_support }}' != 'off' ]] && echo -n 1 || echo -n 0)"
+          echo "CACHE_CODE=$CACHE_CODE" >> $GITHUB_ENV
 
       - name: 恢复 ccache 缓存
         uses: actions/cache@v5
         with:
-          path: ~/.ccache
-          key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-${{ github.sha }}
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-${{ env.CACHE_CODE }}
           restore-keys: |
             ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-
+
+      - name: 恢复 Bazel 缓存
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/bazel
+          key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-bazel-${{ env.CACHE_CODE }}
+          restore-keys: |
+            ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-bazel-
 
       - name: 缓存工具链
         id: cache-toolchain
@@ -4548,6 +4565,7 @@ jobs:
           command: |
             echo "当前 KSU 最新提交日期: ${KSU_LATEST_COMMIT_DATE}"
             echo "当前 SUSFS 最新提交日期: ${SUSFS_LATEST_COMMIT_DATE}"
+            echo "如果日期不同或相差过远则补丁失效、编译失败"
             set -ex
             cd "$KERNEL_ROOT"
 
@@ -4766,6 +4784,8 @@ jobs:
             if [ -f "build/build.sh" ]; then
               LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang" || exit 1
               strings "out/${{ inputs.android_version }}-${{ inputs.kernel_version }}/dist/Image" | grep 'Linux version'
+              echo "ccache状态："
+              ccache -s
             else
               # 提取 gki_defconfig 修改到 fragment，避免 bazel trim 检查失败
               FRAG="common/arch/arm64/configs/ksu.fragment"
@@ -4785,11 +4805,8 @@ jobs:
               tools/bazel build --disk_cache=/home/runner/.cache/bazel --config=fast $LTO_FLAG $FRAG_FLAG //common:kernel_aarch64_dist || exit 1
               strings ./bazel-bin/common/kernel_aarch64/Image | grep 'Linux version'
             fi
-
-            echo "当前 KSU 最新提交日期: ${KSU_LATEST_COMMIT_DATE}"
-            echo "当前 SUSFS 最新提交日期: ${SUSFS_LATEST_COMMIT_DATE}"
-            echo "如果日期不同或相差过远则补丁失效、编译失败"
-
+            echo "内核编译完成！"
+  
       - name: 应用 KPM 补丁 (SukiSU/ReSukiSU)
         if: inputs.use_kpm && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU')
         env:
