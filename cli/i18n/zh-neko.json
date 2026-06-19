@@ -231,5 +231,13 @@
   "cancel_fail": "取消失败喵: {error}",
   "rerun_ok": "构建 #{id} 已重新运行喵",
   "rerun_fail": "重新运行失败喵: {error}",
-  "arg_build_time": "自定义构建时间喵（可选）"
+  "artifact_verifying": "正在检查产物包喵...",
+  "artifact_verified_ok": "签名验证通过啦喵！✨",
+  "artifact_legacy_warning": "这是旧版包喵...继续的话会进入高风险流程喵！",
+  "artifact_unverified_warning": "这个包还没有通过签名验证喵！",
+  "artifact_verify_skip": "不是签名包喵，跳过验证啦~",
+  "artifact_verify_no_key": "没有配置签名密钥喵，没法验证呢...",
+  "arg_build_time": "自定义构建时间喵（可选）",
+  "arg_set_download_dir": "设置默认下载目录喵（会保存到配置文件里哦）",
+  "download_dir_saved": "默认下载目录已设置为 {dir} 喵~"
 }

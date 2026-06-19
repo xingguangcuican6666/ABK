@@ -226,5 +226,13 @@
   "cancel_fail": "Nuligo malsukcesis: {error}",
   "rerun_ok": "Konstruo #{id} ree rulanta",
   "rerun_fail": "Ree rulado malsukcesis: {error}",
-  "arg_build_time": "Propra konstru-horo (laŭvola)"
+  "artifact_verifying": "Kontrolante artefakto-pakaĵon...",
+  "artifact_verified_ok": "Subskribo sukcese kontrolita.",
+  "artifact_legacy_warning": "Ĉi tio estas malnova pakaĵo. Daŭrigo eniras alt-riskan fluon.",
+  "artifact_unverified_warning": "Ĉi tiu pakaĵo ne trapasis subskriban kontrolon.",
+  "artifact_verify_skip": "Ne subskribita pakaĵo, preterpasante kontrolon.",
+  "artifact_verify_no_key": "Neniu subskriba ŝlosilo agordita, ne eblas kontroli.",
+  "arg_build_time": "Propra konstru-horo (laŭvola)",
+  "arg_set_download_dir": "Agordu defaŭltan elŝutdosierujon (konservita al agordo)",
+  "download_dir_saved": "Defaŭlta elŝutdosierujo agordita al: {dir}"
 }
