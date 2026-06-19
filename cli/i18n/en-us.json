@@ -239,5 +239,7 @@
   "artifact_verify_skip": "Not a signed bundle, skipping verification.",
   "artifact_verify_no_key": "No signing key configured, unable to verify.",
   "arg_set_download_dir": "Set default download directory (saved to config)",
-  "download_dir_saved": "Default download directory set to: {dir}"
+  "download_dir_saved": "Default download directory set to: {dir}",
+  "artifact_verify_confirm": "Verification not passed. Continue anyway? (y/n): ",
+  "artifact_verify_skip_user": "Skipped."
 }

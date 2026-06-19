@@ -239,5 +239,7 @@
   "artifact_verify_skip": "非打包格式，跳过校验。",
   "artifact_verify_no_key": "未配置签名密钥，无法验证。",
   "arg_set_download_dir": "设置默认下载目录（保存到配置文件）",
-  "download_dir_saved": "默认下载目录已设置为: {dir}"
+  "download_dir_saved": "默认下载目录已设置为: {dir}",
+  "artifact_verify_confirm": "校验失败，是否继续？(y/n): ",
+  "artifact_verify_skip_user": "已跳过。"
 }
