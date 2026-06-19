@@ -102,6 +102,26 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.python_arch }}
 
+      - name: Cache pip and cargo (cryptography Rust build)
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.target_id }}-pip-crypto-v3
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target_id }}-pip-crypto-
+        # Windows pip cache: ~\AppData\Local\pip\Cache — handled via different ~ mapping
+
+      - name: Ensure pip cache on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Pip cache location differs on Windows; ensure the cache dir exists
+          $pipCache = Join-Path $env:LOCALAPPDATA "pip\Cache"
+          if (-not (Test-Path $pipCache)) { New-Item -ItemType Directory -Force $pipCache | Out-Null }
+
       - name: Install build dependencies
         if: runner.os != 'Windows'
         shell: bash
