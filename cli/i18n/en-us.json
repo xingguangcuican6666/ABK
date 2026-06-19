@@ -235,11 +235,11 @@
   "artifact_verifying": "Verifying artifact bundle...",
   "artifact_verified_ok": "Signature verified successfully.",
   "artifact_legacy_warning": "This is a legacy bundle. Proceeding enters the high-risk flow.",
-  "artifact_unverified_warning": "This bundle has not passed signature verification.",
+  "artifact_unverified_warning": "This bundle has not passed signature verification — may have been tampered with during download.",
   "artifact_verify_skip": "Not a signed bundle, skipping verification.",
   "artifact_verify_no_key": "No signing key configured, unable to verify.",
   "arg_set_download_dir": "Set default download directory (saved to config)",
   "download_dir_saved": "Default download directory set to: {dir}",
-  "artifact_verify_confirm": "Verification not passed. Continue anyway? (y/n): ",
+  "artifact_verify_confirm": "SECURITY: File may have been tampered with during download (network hijacking risk). Continue high-risk operation? (y/n): ",
   "artifact_verify_skip_user": "Skipped."
 }

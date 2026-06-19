@@ -235,11 +235,11 @@
   "artifact_verifying": "正在校验下载结果...",
   "artifact_verified_ok": "签名验证通过",
   "artifact_legacy_warning": "这是旧版刷写包，继续将进入高风险流程。",
-  "artifact_unverified_warning": "该刷写包尚未通过签名验证。",
+  "artifact_unverified_warning": "该刷写包未通过签名验证，下载传输中可能已被篡改。",
   "artifact_verify_skip": "非打包格式，跳过校验。",
   "artifact_verify_no_key": "未配置签名密钥，无法验证。",
   "arg_set_download_dir": "设置默认下载目录（保存到配置文件）",
   "download_dir_saved": "默认下载目录已设置为: {dir}",
-  "artifact_verify_confirm": "校验失败，是否继续？(y/n): ",
+  "artifact_verify_confirm": "安全警告：文件在下载传输中可能已被篡改，是否继续高风险操作？(y/n): ",
   "artifact_verify_skip_user": "已跳过。"
 }
