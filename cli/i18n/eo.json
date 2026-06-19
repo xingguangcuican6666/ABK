@@ -235,6 +235,8 @@
   "arg_build_time": "Propra konstru-horo (laŭvola)",
   "arg_set_download_dir": "Agordu defaŭltan elŝutdosierujon (konservita al agordo)",
   "download_dir_saved": "Defaŭlta elŝutdosierujo agordita al: {dir}",
+  "signing_key_generating": "Generante subskriban ŝlosilparon...",
+  "signing_key_generated": "Subskriba ŝlosilo generita kaj alŝutita al fork.",
   "artifact_verify_confirm": "SEKURECO: Dosiero eble estis manipulita dum elŝuto (reta forkapta risko). Ĉu daŭrigi altriskan operacion? (y/n): ",
   "artifact_verify_skip_user": "Preterpasita."
 }

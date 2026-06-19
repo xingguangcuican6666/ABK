@@ -239,6 +239,8 @@
   "arg_build_time": "Benutzerdefinierte Build-Zeit (optional)",
   "arg_set_download_dir": "Standard-Download-Verzeichnis festlegen (in Konfiguration gespeichert)",
   "download_dir_saved": "Standard-Download-Verzeichnis gesetzt auf: {dir}",
+  "signing_key_generating": "Generiere Signaturschlüsselpaar...",
+  "signing_key_generated": "Signaturschlüssel generiert und zum Fork hochgeladen.",
   "artifact_verify_confirm": "SICHERHEIT: Datei wurde möglicherweise während des Downloads manipuliert (Netzwerk-Hijacking-Risiko). Hochrisiko-Vorgang trotzdem fortsetzen? (y/n): ",
   "artifact_verify_skip_user": "Übersprungen."
 }

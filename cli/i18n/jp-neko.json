@@ -240,6 +240,8 @@
   "arg_build_time": "カスタムビルド時刻ニャ（オプション）",
   "arg_set_download_dir": "デフォルトのダウンロードディレクトリを設定するニャ（設定ファイルに保存）",
   "download_dir_saved": "デフォルトのダウンロードディレクトリを {dir} に設定したニャ",
+  "signing_key_generating": "署名キーペアを生成中ニャ...",
+  "signing_key_generated": "署名キーを生成して fork にアップロードしたニャ",
   "artifact_verify_confirm": "セキュリティ警告ニャ：ダウンロード中にファイルが改ざんされたかもしれないニャ（ネットワークハイジャックのリスク）…ハイリスク操作を続けるニャ？(y/n): ",
   "artifact_verify_skip_user": "スキップしたニャ。"
 }

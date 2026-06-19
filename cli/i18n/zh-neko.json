@@ -240,6 +240,8 @@
   "arg_build_time": "自定义构建时间喵（可选）",
   "arg_set_download_dir": "设置默认下载目录喵（会保存到配置文件里哦）",
   "download_dir_saved": "默认下载目录已设置为 {dir} 喵~",
+  "signing_key_generating": "正在生成签名密钥对喵...",
+  "signing_key_generated": "签名密钥已生成并自动上传至 fork 喵~",
   "artifact_verify_confirm": "安全警告喵：文件在下载传输中可能被篡改了喵（网络劫持风险）…主人还要继续高风险操作吗？(y/n): ",
   "artifact_verify_skip_user": "已跳过喵~"
 }

@@ -240,6 +240,8 @@
   "arg_build_time": "自定义构建时间（不填也行）",
   "arg_set_download_dir": "设置默认下载目录（存到配置文件里啦，省得杂鱼每次都手打）",
   "download_dir_saved": "默认下载目录已设置为 {dir}（帮你记住了，还不快感谢我？）",
+  "signing_key_generating": "正在帮你生成签名密钥对...别着急啦~",
+  "signing_key_generated": "签名密钥已生成并自动上传至 fork（看看，本小姐效率多高~）",
   "artifact_verify_confirm": "安全警告啦笨蛋：文件在下载传输中可能被篡改了（网络劫持风险懂不懂？），你确定要继续这种高风险操作吗？(y/n): ",
   "artifact_verify_skip_user": "哼，跳过了。"
 }

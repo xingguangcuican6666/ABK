@@ -240,6 +240,8 @@
   "arg_build_time": "커스텀 빌드 시간 (선택)",
   "arg_set_download_dir": "기본 다운로드 디렉토리 설정 (설정 파일에 저장됨)",
   "download_dir_saved": "기본 다운로드 디렉토리가 설정되었습니다: {dir}",
+  "signing_key_generating": "서명 키페어 생성 중...",
+  "signing_key_generated": "서명 키가 생성되어 fork에 업로드되었습니다.",
   "artifact_verify_confirm": "보안: 다운로드 중에 파일이 변조되었을 수 있습니다 (네트워크 하이재킹 위험). 고위험 작업을 계속하시겠습니까? (y/n): ",
   "artifact_verify_skip_user": "건너뛰었습니다."
 }
