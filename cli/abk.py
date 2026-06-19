@@ -14,9 +14,15 @@ import zipfile
 import hashlib
 import base64
 
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.exceptions import InvalidSignature
+# cryptography is optional — only needed for bundle signature verification.
+# On platforms without pre-built wheels (e.g. 32-bit), verification is skipped.
+try:
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography.exceptions import InvalidSignature
+    _HAS_CRYPTO = True
+except ImportError:
+    _HAS_CRYPTO = False
 
 # PyInstaller bundle: point SSL certs to certifi if available
 try:
@@ -612,14 +618,15 @@ def verify_artifact_bundle(bundle_path, public_key_pem=None):
             
             if not public_key_pem:
                 return {'verified': False, 'status': 'no_key', 'message': t("artifact_verify_no_key")}
-            
-            # Parse RSA public key (PEM format)
+
+            if not _HAS_CRYPTO:
+                return {'verified': False, 'status': 'no_key', 'message': t("artifact_verify_no_key")}
+
             try:
                 public_key = serialization.load_pem_public_key(public_key_pem.encode())
             except Exception:
                 return {'verified': False, 'status': 'no_key', 'message': t("artifact_verify_no_key")}
             
-            # Verify manifest signature (SHA256withRSA)
             try:
                 public_key.verify(
                     sig_bytes,
