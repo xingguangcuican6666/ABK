@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -6,8 +8,8 @@ plugins {
 val githubClientId = providers.gradleProperty("ABK_GITHUB_CLIENT_ID")
     .orElse(providers.environmentVariable("ABK_GITHUB_CLIENT_ID"))
     .orElse("Ov23li8skGo6AFPBeSTh")
-val appVersionCode = 10022
-val appVersionName = "1.2.2"
+val appVersionCode = 10023
+val appVersionName = "1.2.3"
 val appUpdateMetadataUrl = providers.environmentVariable("ABK_APP_UPDATE_METADATA_URL")
     .orElse("https://raw.githubusercontent.com/xingguangcuican6666/ABK/dev/version.json")
 val appBuildTimestamp = providers.environmentVariable("ABK_APP_BUILD_TIMESTAMP")
@@ -38,6 +40,35 @@ val hasReleaseSigning = !releaseStoreFile.orNull.isNullOrBlank() &&
     !releaseStorePassword.orNull.isNullOrBlank() &&
     !releaseKeyAlias.orNull.isNullOrBlank() &&
     !releaseKeyPassword.orNull.isNullOrBlank()
+val libsodiumAarCoordinate = "com.goterl:lazysodium-android:5.2.0@aar"
+
+val extractLibsodium by tasks.registering {
+    val outputDir = layout.buildDirectory.dir("generated/abk-jniLibs/main/libsodium")
+    outputs.dir(outputDir)
+    doLast {
+        val jniRoot = outputDir.get().asFile
+        jniRoot.deleteRecursively()
+        jniRoot.mkdirs()
+
+        val lazysodium = configurations.detachedConfiguration(
+            dependencies.create(libsodiumAarCoordinate)
+        ).singleFile
+        ZipFile(lazysodium).use { zip ->
+            val entries = zip.entries()
+            while (entries.hasMoreElements()) {
+                val entry = entries.nextElement()
+                if (entry.name.startsWith("jni/") && entry.name.endsWith("/libsodium.so")) {
+                    val relative = entry.name.removePrefix("jni/")
+                    val target = jniRoot.resolve(relative)
+                    target.parentFile?.mkdirs()
+                    zip.getInputStream(entry).use { input ->
+                        target.outputStream().use { output -> input.copyTo(output) }
+                    }
+                }
+            }
+        }
+    }
+}
 
 android {
     namespace = "com.abk.kernel"
@@ -47,8 +78,8 @@ android {
         applicationId = "com.abk.kernel"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10022
-        versionName = "1.2.2"
+        versionCode = 10023
+        versionName = "1.2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -123,6 +154,14 @@ android {
             path = file("src/main/cpp/CMakeLists.txt")
         }
     }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(extractLibsodium)
+}
+
+tasks.matching { it.name.startsWith("configureCMake") || it.name.startsWith("buildCMake") }.configureEach {
+    dependsOn(extractLibsodium)
 }
 
 dependencies {

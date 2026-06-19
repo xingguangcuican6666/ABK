@@ -4856,6 +4856,87 @@ jobs:
           $AVBTOOL add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image boot-lz4.img --algorithm SHA256_RSA2048 --key $BOOT_SIGN_KEY_PATH
           cp ./boot-lz4.img ../${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-boot-lz4.img
 
+      - name: 打包签名内核 Bundle
+        env:
+          ABK_ARTIFACT_SIGNING_KEY_BASE64: ${{ secrets.ABK_ARTIFACT_SIGNING_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${ABK_ARTIFACT_SIGNING_KEY_BASE64:-}" ]; then
+            echo "::warning::缺少 ABK_ARTIFACT_SIGNING_KEY_BASE64 secret，将生成未签名 bundle"
+            export ABK_SKIP_BUNDLE_SIGNATURE=1
+          else
+            key_file="$RUNNER_TEMP/abk-artifact-signing.key"
+            printf '%s' "$ABK_ARTIFACT_SIGNING_KEY_BASE64" | base64 -d > "$key_file"
+          fi
+
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          import subprocess
+
+          manifest_name = "ABK_BUNDLE_MANIFEST.json"
+          signature_name = "ABK_BUNDLE_MANIFEST.sig"
+          text_manifest_name = "ABK_BUNDLE_MANIFEST.txt"
+          doc_names = ("LICENSE", "THIRD_PARTY_NOTICES.md")
+          key_file = Path(os.environ["RUNNER_TEMP"]) / "abk-artifact-signing.key"
+          skip_signature = os.environ.get("ABK_SKIP_BUNDLE_SIGNATURE") == "1"
+          root = Path(".")
+
+          def artifact_type(name: str) -> str:
+              lower = name.lower()
+              if lower.endswith(".img"):
+                  return "KERNEL_IMG"
+              if "anykernel" in lower or "ak3" in lower:
+                  return "ANYKERNEL3"
+              return "OTHER"
+
+          docs = {name: root / name for name in doc_names}
+          for path in docs.values():
+              if not path.is_file():
+                  raise SystemExit(f"missing compliance document: {path.name}")
+
+          for payload in sorted(root.glob("*")):
+              if not payload.is_file():
+                  continue
+              if payload.name.endswith(".bundle.zip"):
+                  continue
+              if not (payload.suffix.lower() == ".img" or payload.name.endswith("AnyKernel3.zip")):
+                  continue
+
+              bundle_path = payload.with_name(f"{payload.name}.bundle.zip")
+              payload_bytes = payload.read_bytes()
+              manifest = {
+                  "schema": 1,
+                  "bundle_name": bundle_path.name,
+                  "artifact_type": artifact_type(payload.name),
+                  "run_id": int(os.environ.get("GITHUB_RUN_ID", "0")),
+                  "payload_name": payload.name,
+                  "payload_sha256": hashlib.sha256(payload_bytes).hexdigest(),
+                  "payload_size_bytes": len(payload_bytes),
+                  "created_at": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
+              }
+              manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+              with ZipFile(bundle_path, "w", compression=ZIP_DEFLATED, compresslevel=9) as zf:
+                  zf.writestr(manifest_name, manifest_bytes)
+                  if not skip_signature:
+                      sig = subprocess.check_output(
+                          [
+                              "openssl", "dgst", "-sha256", "-sign", str(key_file), "-binary"
+                          ],
+                          input=manifest_bytes,
+                      )
+                      zf.writestr(signature_name, sig)
+                  zf.writestr(text_manifest_name, f"payload={payload.name}\n")
+                  zf.write(payload, arcname=payload.name)
+                  for doc_name, doc_path in docs.items():
+                      zf.write(doc_path, arcname=doc_name)
+          PY
+
       - name: 收集补丁冲突文件
         if: always()
         run: |
@@ -4887,8 +4968,7 @@ jobs:
         with:
           name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}
           path: |
-            *AnyKernel3.zip
-            *.img
+            *.bundle.zip
             ABK_FLASH_DEPENDENCIES.json
             LICENSE
             THIRD_PARTY_NOTICES.md

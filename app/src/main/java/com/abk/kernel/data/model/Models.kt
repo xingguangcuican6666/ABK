@@ -208,6 +208,7 @@ data class GitHubRelease(
     @SerializedName("published_at") val publishedAt: String? = null,
     val body: String? = null,
     @SerializedName("assets_url") val assetsUrl: String? = null,
+    @SerializedName("upload_url") val uploadUrl: String? = null,
     val assets: List<ReleaseAsset> = emptyList()
 )
 
@@ -348,6 +349,37 @@ data class AccessTokenResponse(
     @SerializedName("scope") val scope: String?,
     val error: String?,
     @SerializedName("error_description") val errorDescription: String?
+)
+
+data class GitHubSecretPublicKey(
+    @SerializedName("key_id") val keyId: String,
+    @SerializedName("key") val key: String
+)
+
+data class GitHubRepositorySecret(
+    val name: String,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("updated_at") val updatedAt: String? = null
+)
+
+data class GitHubRepositorySecretsResponse(
+    @SerializedName("total_count") val totalCount: Int,
+    @SerializedName("secrets") val secrets: List<GitHubRepositorySecret> = emptyList()
+)
+
+data class CreateOrUpdateRepositorySecretRequest(
+    @SerializedName("encrypted_value") val encryptedValue: String,
+    @SerializedName("key_id") val keyId: String
+)
+
+data class CreateReleaseRequest(
+    @SerializedName("tag_name") val tagName: String,
+    @SerializedName("target_commitish") val targetCommitish: String? = null,
+    val name: String? = null,
+    val body: String? = null,
+    val draft: Boolean = false,
+    val prerelease: Boolean = true,
+    @SerializedName("generate_release_notes") val generateReleaseNotes: Boolean = false
 )
 
 data class Workflow(
@@ -759,6 +791,8 @@ data class DownloadedArtifact(
     val runNumber: Int = 0,
     val sourceAssetId: Long = 0L,
     val sourceAssetName: String? = null,
+    val verified: Boolean = false,
+    val verificationSummary: String? = null,
     val category: ArtifactCategory = type.toArtifactCategory()
 )
 

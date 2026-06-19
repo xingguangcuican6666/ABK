@@ -120,6 +120,9 @@
     <string name="build_failed">Build failed</string>
     <string name="build_queued">Build queued</string>
     <string name="build_confirm_submit">Confirm build submission</string>
+    <string name="build_submitted_title">Build submitted</string>
+    <string name="build_submitted_desc">Build submitted successfully. Go to Status to track progress.</string>
+    <string name="build_submitted_ok">OK</string>
     <string name="build_config_overview">Build configuration overview:</string>
     <string name="build_kernel_line">Android %1$s · Kernel %2$s.%3$s</string>
     <string name="build_patch_level_line">Patch level: %1$s</string>
@@ -588,6 +591,9 @@
     <string name="settings_build">Build</string>
     <string name="settings_notification">Notifications</string>
     <string name="settings_about">About</string>
+    <string name="settings_extensions_title">Extensions</string>
+    <string name="settings_extensions_manage">Manage extensions</string>
+    <string name="settings_extensions_manage_desc">View injected extensions, install companion apps, rerun OOBE, and open extension settings.</string>
     <string name="settings_version">Version</string>
     <string name="settings_source_repo">Source repository</string>
     <string name="settings_workflow_foreground_refresh">Auto-refresh workflows</string>
@@ -740,6 +746,8 @@
     <string name="download_http_failed">Download request failed (HTTP %1$d)</string>
     <string name="download_empty_response">Download response was empty</string>
     <string name="download_unknown_error">Download failed</string>
+    <string name="flash_bundle_legacy_requires_confirmation">This is a legacy flash bundle. Continuing enters the high-risk flow.</string>
+    <string name="flash_bundle_unverified_requires_confirmation">This flash bundle has not passed signature verification. Continuing enters the high-risk flow.</string>
     <string name="settings_download_mirror">Download mirror</string>
     <string name="settings_download_mirror_desc">Leave empty to connect directly to GitHub. If set, artifacts mirror to releases before download.</string>
 

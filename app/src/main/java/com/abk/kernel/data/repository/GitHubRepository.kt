@@ -7,6 +7,7 @@ import com.abk.kernel.data.api.GitHubApiService
 import com.abk.kernel.data.api.GitHubAuthService
 import com.abk.kernel.data.api.NetworkClient
 import com.abk.kernel.data.model.*
+import com.abk.kernel.utils.ForkSigningManager
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
@@ -16,6 +17,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaType
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
 
@@ -30,12 +33,14 @@ open class GitHubRepository(
     private var apiService: GitHubApiService = NetworkClient.createApiService()
 ) {
     private val clientId = BuildConfig.GITHUB_CLIENT_ID
+    private var currentToken: String? = null
     private val publicHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
     fun updateToken(token: String?) {
+        currentToken = token
         apiService = NetworkClient.createApiService(token)
     }
 
@@ -255,6 +260,55 @@ open class GitHubRepository(
             val resp = api.forkRepo(owner, repo)
             if (resp.isSuccessful && resp.body() != null) Result.Success(resp.body()!!)
             else Result.Error("Fork failed: ${resp.code()}", resp.code())
+        }.getOrElse { Result.Error(it.message ?: "Unknown error") }
+    }
+
+    suspend fun getRepositorySecretPublicKey(owner: String, repo: String): Result<GitHubSecretPublicKey> {
+        val api = apiService
+        return runCatching {
+            val resp = api.getRepositorySecretPublicKey(owner, repo)
+            if (resp.isSuccessful && resp.body() != null) Result.Success(resp.body()!!)
+            else Result.Error("Get repo secret public key failed: ${resp.code()}", resp.code())
+        }.getOrElse { Result.Error(it.message ?: "Unknown error") }
+    }
+
+    suspend fun listRepositorySecrets(owner: String, repo: String): Result<List<GitHubRepositorySecret>> {
+        val api = apiService
+        return runCatching {
+            val resp = api.listRepositorySecrets(owner, repo)
+            if (resp.isSuccessful) {
+                Result.Success(resp.body()?.secrets.orEmpty())
+            } else {
+                Result.Error("List repo secrets failed: ${resp.code()}", resp.code())
+            }
+        }.getOrElse { Result.Error(it.message ?: "Unknown error") }
+    }
+
+    suspend fun createOrUpdateRepositorySecret(
+        owner: String,
+        repo: String,
+        secretName: String,
+        secretValue: String
+    ): Result<Unit> {
+        val publicKey = when (val result = getRepositorySecretPublicKey(owner, repo)) {
+            is Result.Success -> result.data
+            is Result.Error -> return result
+            Result.Loading -> return Result.Error("Repository secret public key is still loading")
+        }
+        val encryptedValue = ForkSigningManager.encryptSecretForGitHub(secretValue, publicKey)
+        val api = apiService
+        return runCatching {
+            val resp = api.createOrUpdateRepositorySecret(
+                owner,
+                repo,
+                secretName,
+                CreateOrUpdateRepositorySecretRequest(
+                    encryptedValue = encryptedValue,
+                    keyId = publicKey.keyId
+                )
+            )
+            if (resp.isSuccessful) Result.Success(Unit)
+            else Result.Error("Update repo secret failed: ${resp.code()}", resp.code())
         }.getOrElse { Result.Error(it.message ?: "Unknown error") }
     }
 
@@ -493,6 +547,92 @@ open class GitHubRepository(
             }
             Result.Success(collected)
         }.getOrElse { Result.Error(it.message ?: "Unknown error") }
+    }
+
+    suspend fun createRelease(owner: String, repo: String, request: CreateReleaseRequest): Result<GitHubRelease> {
+        val api = apiService
+        return runCatching {
+            val resp = api.createRelease(owner, repo, request)
+            if (resp.isSuccessful && resp.body() != null) Result.Success(resp.body()!!)
+            else Result.Error("Create release failed: ${resp.code()}", resp.code())
+        }.getOrElse { Result.Error(it.message ?: "Unknown error") }
+    }
+
+    suspend fun updateRelease(owner: String, repo: String, releaseId: Long, request: CreateReleaseRequest): Result<GitHubRelease> {
+        val api = apiService
+        return runCatching {
+            val resp = api.updateRelease(owner, repo, releaseId, request)
+            if (resp.isSuccessful && resp.body() != null) Result.Success(resp.body()!!)
+            else Result.Error("Update release failed: ${resp.code()}", resp.code())
+        }.getOrElse { Result.Error(it.message ?: "Unknown error") }
+    }
+
+    suspend fun deleteReleaseAsset(owner: String, repo: String, assetId: Long): Result<Unit> {
+        val api = apiService
+        return runCatching {
+            val resp = api.deleteReleaseAsset(owner, repo, assetId)
+            when {
+                resp.isSuccessful || resp.code() == 404 -> Result.Success(Unit)
+                else -> Result.Error("Delete release asset failed: ${resp.code()}", resp.code())
+            }
+        }.getOrElse { Result.Error(it.message ?: "Unknown error") }
+    }
+
+    suspend fun uploadReleaseAsset(
+        uploadUrlTemplate: String,
+        fileName: String,
+        contentType: String,
+        content: ByteArray
+    ): Result<ReleaseAsset> = withContext(Dispatchers.IO) {
+        val uploadUrl = uploadUrlTemplate.substringBefore('{')
+        val encodedName = java.net.URLEncoder.encode(fileName, "UTF-8")
+        val request = Request.Builder()
+            .url("$uploadUrl?name=$encodedName")
+            .header("Accept", "application/vnd.github+json")
+            .apply {
+                currentToken?.takeIf { it.isNotBlank() }?.let { header("Authorization", "Bearer $it") }
+            }
+            .post(content.toRequestBody(contentType.toMediaType()))
+            .build()
+        val response = runCatching { publicHttpClient.newCall(request).execute() }
+            .getOrElse { return@withContext Result.Error(it.message ?: "Unknown error") }
+        response.use { resp ->
+            if (!resp.isSuccessful) {
+                return@withContext Result.Error("Upload release asset failed: ${resp.code}", resp.code)
+            }
+            val body = resp.body?.string().orEmpty()
+            val json = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull()
+                ?: return@withContext Result.Error("Upload release asset returned invalid JSON")
+            Result.Success(
+                ReleaseAsset(
+                    id = json.get("id")?.asLong ?: 0L,
+                    name = json.get("name")?.asString ?: fileName,
+                    size = json.get("size")?.asLong ?: content.size.toLong(),
+                    contentType = json.get("content_type")?.asString,
+                    browserDownloadUrl = json.get("browser_download_url")?.asString.orEmpty()
+                )
+            )
+        }
+    }
+
+    suspend fun downloadReleaseAssetText(owner: String, repo: String, releaseId: Long, assetName: String): Result<String> {
+        return when (val assets = listReleaseAssets(owner, repo, releaseId)) {
+            is Result.Success -> {
+                val asset = assets.data.firstOrNull { it.name == assetName }
+                    ?: return Result.Error("Release asset $assetName not found")
+                val api = apiService
+                runCatching {
+                    val resp = api.downloadReleaseAssetById(owner, repo, asset.id)
+                    if (resp.isSuccessful) {
+                        Result.Success(resp.body()?.string().orEmpty())
+                    } else {
+                        Result.Error("Download release asset failed: ${resp.code()}", resp.code())
+                    }
+                }.getOrElse { Result.Error(it.message ?: "Unknown error") }
+            }
+            is Result.Error -> assets
+            Result.Loading -> Result.Loading
+        }
     }
 
     private fun ResponseBody.readZipText(): String {

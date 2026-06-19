@@ -42,6 +42,7 @@ object AbkKsuNative {
     external fun getUserName(uid: Int): String?
     external fun getControlStatus(): String?
     external fun runControlCommand(command: String): Boolean
+    private external fun encryptGitHubSecretNative(secretValue: String, publicKeyBase64: String): String
 
     @Volatile
     private var nativeBridgeAvailable = false
@@ -115,6 +116,13 @@ object AbkKsuNative {
     fun feature(featureId: Int): Feature? {
         if (!hasNativeBridge()) return null
         return runCatching { getFeature(featureId) }.getOrNull()
+    }
+
+    fun encryptGitHubSecret(secretValue: String, publicKeyBase64: String): String {
+        check(libraryLoaded) { "Native library unavailable for GitHub secret encryption" }
+        require(secretValue.isNotEmpty()) { "Secret value must not be empty" }
+        require(publicKeyBase64.isNotBlank()) { "Repository public key must not be blank" }
+        return encryptGitHubSecretNative(secretValue, publicKeyBase64.trim())
     }
 
     fun setDefaultUmountModules(umountModules: Boolean): Boolean {

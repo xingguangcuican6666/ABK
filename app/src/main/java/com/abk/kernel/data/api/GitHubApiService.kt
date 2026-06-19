@@ -18,6 +18,27 @@ interface GitHubApiService {
         @Path("repo") repo: String
     ): Response<GitHubRepo>
 
+    @GET("repos/{owner}/{repo}/actions/secrets/public-key")
+    suspend fun getRepositorySecretPublicKey(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String
+    ): Response<GitHubSecretPublicKey>
+
+    @GET("repos/{owner}/{repo}/actions/secrets")
+    suspend fun listRepositorySecrets(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Query("per_page") perPage: Int = 100
+    ): Response<GitHubRepositorySecretsResponse>
+
+    @PUT("repos/{owner}/{repo}/actions/secrets/{secret_name}")
+    suspend fun createOrUpdateRepositorySecret(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("secret_name") secretName: String,
+        @Body body: CreateOrUpdateRepositorySecretRequest
+    ): Response<Unit>
+
     @POST("repos/{owner}/{repo}/forks")
     suspend fun forkRepo(
         @Path("owner") owner: String,
@@ -141,6 +162,21 @@ interface GitHubApiService {
         @Path("tag") tag: String
     ): Response<GitHubRelease>
 
+    @POST("repos/{owner}/{repo}/releases")
+    suspend fun createRelease(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Body body: CreateReleaseRequest
+    ): Response<GitHubRelease>
+
+    @PATCH("repos/{owner}/{repo}/releases/{release_id}")
+    suspend fun updateRelease(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("release_id") releaseId: Long,
+        @Body body: CreateReleaseRequest
+    ): Response<GitHubRelease>
+
     @GET("repos/{owner}/{repo}/releases/{release_id}/assets")
     suspend fun listReleaseAssets(
         @Path("owner") owner: String,
@@ -149,6 +185,22 @@ interface GitHubApiService {
         @Query("per_page") perPage: Int = 100,
         @Query("page") page: Int = 1
     ): Response<List<ReleaseAsset>>
+
+    @DELETE("repos/{owner}/{repo}/releases/assets/{asset_id}")
+    suspend fun deleteReleaseAsset(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("asset_id") assetId: Long
+    ): Response<Unit>
+
+    @Streaming
+    @GET("repos/{owner}/{repo}/releases/assets/{asset_id}")
+    suspend fun downloadReleaseAssetById(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("asset_id") assetId: Long,
+        @Header("Accept") accept: String = "application/octet-stream"
+    ): Response<ResponseBody>
 
     @Streaming
     @GET("repos/{owner}/{repo}/actions/artifacts/{artifact_id}/zip")

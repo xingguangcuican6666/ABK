@@ -245,6 +245,8 @@ fun FlashScreen(
     var prebuiltParameterTarget by remember { mutableStateOf<PrebuiltGkiRelease?>(null) }
     var deleteRemoteWorkflowRun by remember { mutableStateOf(false) }
     var showFlashConfirm by remember { mutableStateOf(false) }
+    var showUnverifiedFlashConfirm by remember { mutableStateOf(false) }
+    var allowLegacyBundleFallback by remember { mutableStateOf(false) }
     var showInstallManagerConfirm by remember { mutableStateOf(false) }
     var cancelConfirmRunId by remember { mutableStateOf<Long?>(null) }
     var showTerminal by remember { mutableStateOf(false) }
@@ -619,9 +621,14 @@ fun FlashScreen(
 
     suspend fun executeWithPreparedArtifact(
         item: DownloadedArtifact,
+        allowHighRiskFallback: Boolean = false,
         block: (DownloadUtils.PreparedDownloadedArtifact) -> RootUtils.ShellResult
     ): RootUtils.ShellResult = withContext(Dispatchers.IO) {
-        val prepared = DownloadUtils.prepareDownloadedArtifact(context, item)
+        val prepared = DownloadUtils.prepareDownloadedArtifact(
+            context = context,
+            artifact = item,
+            allowHighRiskFallback = allowHighRiskFallback
+        )
         try {
             if (prepared.cleanupDir != null) {
                 appendTerminalOutput("[ABK] 已解包下载包到缓存目录")
@@ -690,7 +697,8 @@ fun FlashScreen(
 
     fun startFlash(
         item: DownloadedArtifact,
-        anyKernelSlotTarget: RootUtils.Ak3SlotTarget = RootUtils.Ak3SlotTarget.CURRENT
+        anyKernelSlotTarget: RootUtils.Ak3SlotTarget = RootUtils.Ak3SlotTarget.CURRENT,
+        allowHighRiskFallback: Boolean = false
     ) {
         if (!rootGranted) {
             showFailure(
@@ -730,8 +738,9 @@ fun FlashScreen(
         showTerminal = true
         scope.launch {
             val result = runCatching {
-                executeWithPreparedArtifact(item) { prepared ->
-                    if (item.type == ArtifactType.KERNEL_IMG || item.type == ArtifactType.ANYKERNEL3) {
+                executeWithPreparedArtifact(item, allowHighRiskFallback) { prepared ->
+                    val flashType = prepared.resolvedType ?: item.type
+                    if (flashType == ArtifactType.KERNEL_IMG || flashType == ArtifactType.ANYKERNEL3) {
                         prepared.dependencyApps.forEach { dependency ->
                             appendTerminalOutput("[ABK] 先安装依赖扩展应用: ${dependency.name}")
                             val dependencyResult = RootUtils.installApk(context, dependency.absolutePath, ::appendTerminalOutput)
@@ -747,7 +756,7 @@ fun FlashScreen(
                             }
                         }
                     }
-                    when (item.type) {
+                    when (flashType) {
                         ArtifactType.KERNEL_IMG -> RootUtils.flashImage(prepared.file.absolutePath, onOutput = ::appendTerminalOutput)
                         ArtifactType.ANYKERNEL3 -> RootUtils.flashAnyKernel3(
                             context,
@@ -765,6 +774,7 @@ fun FlashScreen(
             }.getOrElse { error ->
                 RootUtils.ShellResult(false, listOf(error.message ?: error::class.java.simpleName))
             }
+            allowLegacyBundleFallback = false
             terminalRunning = false
             terminalSuccess = result.success
             terminalLog = listOf(
@@ -781,6 +791,16 @@ fun FlashScreen(
                     }
                 )
             }
+        }
+    }
+
+    fun requestFlash(item: DownloadedArtifact) {
+        selectedItem = item
+        allowLegacyBundleFallback = false
+        if ((item.type == ArtifactType.KERNEL_PACKAGE || item.type == ArtifactType.KERNEL_IMG || item.type == ArtifactType.ANYKERNEL3) && !item.verified) {
+            showUnverifiedFlashConfirm = true
+        } else {
+            showFlashConfirm = true
         }
     }
 
@@ -839,7 +859,7 @@ fun FlashScreen(
                 Button(
                     onClick = {
                         showFlashConfirm = false
-                        startFlash(item, selectedAnyKernelSlotTarget)
+                        startFlash(item, selectedAnyKernelSlotTarget, allowLegacyBundleFallback)
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text(stringResource(R.string.flash_confirm)) }
@@ -848,6 +868,38 @@ fun FlashScreen(
                 TextButton(onClick = { showFlashConfirm = false }) { Text(stringResource(R.string.cancel)) }
             }
         )
+        }
+    }
+
+    if (showUnverifiedFlashConfirm) {
+        val item = selectedItem
+        if (item != null) {
+            AlertDialog(
+                onDismissRequest = { showUnverifiedFlashConfirm = false },
+                icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
+                title = { Text(stringResource(R.string.flash_confirm)) },
+                text = {
+                    Text(
+                        item.verificationSummary
+                            ?: context.getString(R.string.flash_bundle_unverified_requires_confirmation)
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showUnverifiedFlashConfirm = false
+                            allowLegacyBundleFallback = true
+                            showFlashConfirm = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) { Text(stringResource(R.string.flash_confirm)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showUnverifiedFlashConfirm = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
         }
     }
 
@@ -1285,11 +1337,8 @@ fun FlashScreen(
                                     LocalOnlyArtifactCard(
                                         artifact = artifact,
                                         onCopyPath = ::copyDownloadedFilePath,
-                                        onInstall = ::requestInstallManager,
-                                        onFlash = {
-                                            selectedItem = it
-                                            showFlashConfirm = true
-                                        },
+                            onInstall = ::requestInstallManager,
+                            onFlash = ::requestFlash,
                                         onDelete = { deleteFileTarget = it },
                                         allowRootActions = rootGranted
                                     )
@@ -1470,12 +1519,9 @@ fun FlashScreen(
                                 autoDownload = state.autoDownload,
                                 pendingAutoDownloadRunId = state.pendingAutoDownloadRunId,
                                 onDownload = vm::downloadArtifact,
-                                onCopyPath = ::copyDownloadedFilePath,
-                                onInstall = ::requestInstallManager,
-                                onFlash = {
-                                    selectedItem = it
-                                    showFlashConfirm = true
-                                },
+                                        onCopyPath = ::copyDownloadedFilePath,
+                                        onInstall = ::requestInstallManager,
+                                        onFlash = ::requestFlash,
                                 onDelete = { deleteFileTarget = it },
                                 allowRootActions = rootGranted,
                                 unlinkedWorkflowTitle = unlinkedWorkflowTitle,
@@ -1562,10 +1608,7 @@ fun FlashScreen(
                                             showDownloadCancelActions = true,
                                             onCopyPath = ::copyDownloadedFilePath,
                                             onInstall = ::requestInstallManager,
-                                            onFlash = {
-                                                selectedItem = it
-                                                showFlashConfirm = true
-                                            },
+                                            onFlash = ::requestFlash,
                                             onDelete = { deleteFileTarget = it },
                                             allowRootActions = rootGranted,
                                         )
@@ -1686,10 +1729,7 @@ fun FlashScreen(
                                             onDownload = { vm.downloadPrebuiltGki(asset) },
                                             onCopyPath = ::copyDownloadedFilePath,
                                             onInstall = ::requestInstallManager,
-                                            onFlash = {
-                                                selectedItem = it
-                                                showFlashConfirm = true
-                                            },
+                                            onFlash = ::requestFlash,
                                             onDelete = { deleteFileTarget = it },
                                             allowRootActions = rootGranted
                                         )

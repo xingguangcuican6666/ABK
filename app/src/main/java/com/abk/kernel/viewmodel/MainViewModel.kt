@@ -28,6 +28,7 @@ import com.abk.kernel.utils.BuildProgressUtils
 import com.abk.kernel.utils.buildDisplaySnapshot
 import com.abk.kernel.utils.computeKindBuildProgress
 import com.abk.kernel.utils.DownloadDirectoryUtils
+import com.abk.kernel.utils.ForkSigningManager
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.FailureLogExtractor
 import com.abk.kernel.utils.NotificationUtils
@@ -233,6 +234,7 @@ class MainViewModel @JvmOverloads constructor(
     github: GitHubRepository = GitHubRepository(),
     private val registerStatusBroadcast: Boolean = true,
 ) : AndroidViewModel(application) {
+    private val forkSigningInitMutex = Mutex()
 
     private val prefs = PreferencesRepository(application)
     val github: GitHubRepository = github
@@ -1000,6 +1002,7 @@ class MainViewModel @JvmOverloads constructor(
                                 showSyncPrompt = showSyncPrompt && behind > 0
                             )
                         }
+                        ensureForkArtifactSigningReady(username, fork)
                         onForkContextReady()
                         authOobe.completeIfRequested(closeOobeWhenReady)
                         if (behind <= 0) {
@@ -1027,6 +1030,7 @@ class MainViewModel @JvmOverloads constructor(
                             showSyncPrompt = false
                         )
                     }
+                    ensureForkArtifactSigningReady(readStateUserLogin() ?: return@launch, r.data)
                     onForkContextReady()
                     authOobe.completeIfRequested(closeOobeWhenReady = true)
                     maybeOpenForkI18nGate()
@@ -1065,6 +1069,118 @@ class MainViewModel @JvmOverloads constructor(
         loadRecentRuns()
         ensureBuildWorkflowEnabled()
         processBuildQueue()
+    }
+
+    private fun readStateUserLogin(): String? = _uiState.value.user?.login
+
+    private suspend fun ensureForkArtifactSigningReady(owner: String, fork: GitHubRepo) {
+        forkSigningInitMutex.withLock {
+            val secretName = FORK_ARTIFACT_SIGNING_SECRET_NAME
+            val releaseTag = FORK_ARTIFACT_SIGNING_RELEASE_TAG
+
+            val remoteRelease = when (val release = github.getReleaseByTag(owner, fork.name, releaseTag)) {
+                is Result.Success -> release.data
+                is Result.Error -> {
+                    showSnackbar("Fork signing init failed: ${release.message}", longDuration = true)
+                    return
+                }
+                Result.Loading -> return
+            }
+
+            val release = when {
+                remoteRelease != null -> remoteRelease
+                else -> when (val created = github.createRelease(
+                    owner,
+                    fork.name,
+                    CreateReleaseRequest(
+                        tagName = releaseTag,
+                        targetCommitish = fork.defaultBranch,
+                        name = "ABK Artifact Signing Key",
+                        body = "ABK fork-scoped artifact signing public key.",
+                        prerelease = true
+                    )
+                )) {
+                    is Result.Success -> created.data
+                    is Result.Error -> {
+                        showSnackbar("Fork signing release init failed: ${created.message}", longDuration = true)
+                        return
+                    }
+                    Result.Loading -> return
+                }
+            }
+
+            val releaseAssets = when (val assets = github.listReleaseAssets(owner, fork.name, release.id)) {
+                is Result.Success -> assets.data
+                is Result.Error -> {
+                    showSnackbar("Fork signing asset query failed: ${assets.message}", longDuration = true)
+                    return
+                }
+                Result.Loading -> return
+            }
+            val secretExists = when (val secrets = github.listRepositorySecrets(owner, fork.name)) {
+                is Result.Success -> secrets.data.any { it.name == secretName }
+                is Result.Error -> {
+                    showSnackbar("Fork signing secret query failed: ${secrets.message}", longDuration = true)
+                    return
+                }
+                Result.Loading -> return
+            }
+            val existingPublicKeyAsset = releaseAssets.firstOrNull { it.name == FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME }
+            val existingPublicKey = prefs.forkArtifactSigningPublicKey.first()
+            if (secretExists && !existingPublicKey.isNullOrBlank()) {
+                prefs.saveForkArtifactSigningSecretName(secretName)
+                prefs.saveForkArtifactSigningReleaseTag(releaseTag)
+                return
+            }
+            if (secretExists && existingPublicKeyAsset != null) {
+                val pem = when (val downloaded = github.downloadReleaseAssetText(owner, fork.name, release.id, FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME)) {
+                    is Result.Success -> downloaded.data
+                    else -> null
+                }
+                if (!pem.isNullOrBlank()) {
+                    val base64 = pem.lineSequence()
+                        .filterNot { it.startsWith("-----") }
+                        .joinToString("")
+                        .trim()
+                    if (base64.isNotBlank()) {
+                        prefs.saveForkArtifactSigningPublicKey(base64)
+                        prefs.saveForkArtifactSigningSecretName(secretName)
+                        prefs.saveForkArtifactSigningReleaseTag(releaseTag)
+                        return
+                    }
+                }
+            }
+
+            val material = ForkSigningManager.generateSigningMaterial()
+            when (val secret = github.createOrUpdateRepositorySecret(owner, fork.name, secretName, material.privateKeyBase64)) {
+                is Result.Success -> Unit
+                is Result.Error -> {
+                    showSnackbar("Fork signing secret init failed: ${secret.message}", longDuration = true)
+                    return
+                }
+                Result.Loading -> return
+            }
+
+            releaseAssets.filter { it.name == FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME }.forEach { asset ->
+                github.deleteReleaseAsset(owner, fork.name, asset.id)
+            }
+            when (val uploaded = github.uploadReleaseAsset(
+                uploadUrlTemplate = release.uploadUrl ?: "",
+                fileName = FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME,
+                contentType = "application/x-pem-file",
+                content = material.publicKeyPem.toByteArray(StandardCharsets.UTF_8)
+            )) {
+                is Result.Success -> {
+                    prefs.saveForkArtifactSigningPublicKey(material.publicKeyBase64)
+                    prefs.saveForkArtifactSigningSecretName(secretName)
+                    prefs.saveForkArtifactSigningReleaseTag(releaseTag)
+                }
+                is Result.Error -> {
+                    showSnackbar("Fork signing public key publish failed: ${uploaded.message}", longDuration = true)
+                }
+                Result.Loading -> {}
+            }
+        }
     }
 
     private fun ensureBuildWorkflowEnabled() {
@@ -2384,6 +2500,10 @@ class MainViewModel @JvmOverloads constructor(
         runCatching {
             val file = File(artifact.filePath)
             if (file.exists()) file.delete()
+            val sidecarDir = file.parentFile?.let { File(it, "${file.name}.deps") }
+            if (sidecarDir?.exists() == true) {
+                sidecarDir.deleteRecursively()
+            }
             val parent = file.parentFile
             if (parent?.listFiles()?.isEmpty() == true) {
                 parent.delete()
@@ -5113,9 +5233,9 @@ internal fun isPrebuiltGkiReleaseCandidate(release: GitHubReleaseSummary): Boole
 internal fun isPrebuiltGkiCandidate(asset: PrebuiltGkiAsset): Boolean {
     val lower = asset.name.lowercase()
     val type = DownloadUtils.classifyArtifact(asset.name)
+    if (!lower.endsWith(".bundle.zip")) return false
     return type in setOf(ArtifactType.KERNEL_PACKAGE, ArtifactType.KERNEL_IMG, ArtifactType.ANYKERNEL3) ||
-        ((lower.endsWith(".img") || lower.endsWith(".zip")) &&
-            listOf("gki", "kernel", "boot", "anykernel", "ak3").any { lower.contains(it) })
+        listOf("gki", "kernel", "boot", "anykernel", "ak3").any { lower.contains(it) }
 }
 
 internal fun prebuiltGkiComparator(
@@ -5236,6 +5356,9 @@ private fun List<CustomExternalModule>?.toWorkflowInput(): String = this.orEmpty
     .joinToString("|")
 
 private const val KERNEL_WORKFLOW_FILE = "kernel-custom.yml"
+private const val FORK_ARTIFACT_SIGNING_SECRET_NAME = "ABK_ARTIFACT_SIGNING_KEY_BASE64"
+private const val FORK_ARTIFACT_SIGNING_RELEASE_TAG = "abk-artifact-key"
+private const val FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME = "abk-artifact-signing-public.pem"
 private const val ONEPLUS_WORKFLOW_FILE = "oneplus-custom.yml"
 private val buildWorkflowFiles = listOf(KERNEL_WORKFLOW_FILE, ONEPLUS_WORKFLOW_FILE)
 private const val MIRROR_WORKFLOW_FILE = "mirror-custom-artifacts.yml"

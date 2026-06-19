@@ -618,7 +618,8 @@ private fun AbkMainScaffold(
                         AbkTab.Build -> BuildScreen(
                             vm = vm,
                             outerPadding = contentPadding,
-                            onPlanPageVisibleChange = { buildPlanPageVisible = it }
+                            onPlanPageVisibleChange = { buildPlanPageVisible = it },
+                            onNavigateToStatus = { selectedTab = AbkTab.Status }
                         )
                         AbkTab.Modules -> ModuleRepositoryScreen(
                             vm = vm,

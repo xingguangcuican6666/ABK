@@ -120,6 +120,9 @@
     <string name="build_failed">构建失败</string>
     <string name="build_queued">构建已排队</string>
     <string name="build_confirm_submit">确认提交构建</string>
+    <string name="build_submitted_title">构建已提交</string>
+    <string name="build_submitted_desc">构建已成功提交，可前往「当前状态」页查看进度。</string>
+    <string name="build_submitted_ok">确定</string>
     <string name="build_config_overview">构建配置概览：</string>
     <string name="build_kernel_line">Android %1$s · 内核 %2$s.%3$s</string>
     <string name="build_patch_level_line">补丁级别: %1$s</string>
@@ -743,6 +746,8 @@
     <string name="download_http_failed">下载请求失败 (HTTP %1$d)</string>
     <string name="download_empty_response">下载响应为空</string>
     <string name="download_unknown_error">下载失败</string>
+    <string name="flash_bundle_legacy_requires_confirmation">这是旧版刷写包，继续将进入高风险流程。</string>
+    <string name="flash_bundle_unverified_requires_confirmation">该刷写包尚未通过签名验证，继续将进入高风险流程。</string>
     <string name="settings_download_mirror">下载镜像站</string>
     <string name="settings_download_mirror_desc">留空直连 GitHub；填写后会先镜像到 Release 再下载</string>
 

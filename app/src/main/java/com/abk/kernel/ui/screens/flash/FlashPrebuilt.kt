@@ -609,9 +609,9 @@ internal fun releaseDateLabel(value: String, unknownDate: String): String =
 internal fun isPrebuiltGkiCandidateUi(asset: PrebuiltGkiAsset): Boolean {
     val lower = asset.name.lowercase()
     val type = DownloadUtils.classifyArtifact(asset.name)
+    if (!lower.endsWith(".bundle.zip")) return false
     return type in setOf(ArtifactType.KERNEL_PACKAGE, ArtifactType.KERNEL_IMG, ArtifactType.ANYKERNEL3) ||
-        ((lower.endsWith(".img") || lower.endsWith(".zip")) &&
-            listOf("gki", "kernel", "boot", "anykernel", "ak3").any { lower.contains(it) })
+        listOf("gki", "kernel", "boot", "anykernel", "ak3").any { lower.contains(it) }
 }
 
 internal fun prebuiltAssetMatchesFilter(asset: PrebuiltGkiAsset, filter: PrebuiltGkiFilter): Boolean {
