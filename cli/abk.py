@@ -1121,7 +1121,7 @@ def cmd_artifacts(args):
                         sys.stdout.write("    " + t("artifact_verify_confirm"))
                         sys.stdout.flush()
                         answer = sys.stdin.readline().strip().lower()
-                        if answer != 'y':
+                        if answer not in ('y', 'yes', 'j', 'ja', 'o', 'oui', 's', 'si', 'sí'):
                             print(f"    {t('artifact_verify_skip_user')}")
     except Exception as e:
         print(t("err_fork_failed", error=e), file=sys.stderr)

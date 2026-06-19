@@ -239,6 +239,6 @@
   "arg_build_time": "Heure de build personnalisée (optionnel)",
   "arg_set_download_dir": "Définir le répertoire de téléchargement par défaut (enregistré dans la configuration)",
   "download_dir_saved": "Répertoire de téléchargement par défaut défini sur: {dir}",
-  "artifact_verify_confirm": "SÉCURITÉ: Le fichier a peut-être été altéré lors du téléchargement (risque de détournement réseau). Poursuivre l'opération à haut risque? (o/n): ",
+  "artifact_verify_confirm": "SÉCURITÉ: Le fichier a peut-être été altéré lors du téléchargement (risque de détournement réseau). Poursuivre l'opération à haut risque? (y/n): ",
   "artifact_verify_skip_user": "Ignoré."
 }

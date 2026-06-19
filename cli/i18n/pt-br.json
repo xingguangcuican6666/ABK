@@ -239,6 +239,6 @@
   "arg_build_time": "Hora de build personalizada (opcional)",
   "arg_set_download_dir": "Definir diretório de download padrão (salvo na configuração)",
   "download_dir_saved": "Diretório de download padrão definido como: {dir}",
-  "artifact_verify_confirm": "SEGURANÇA: O arquivo pode ter sido adulterado durante o download (risco de sequestro de rede). Continuar operação de alto risco? (s/n): ",
+  "artifact_verify_confirm": "SEGURANÇA: O arquivo pode ter sido adulterado durante o download (risco de sequestro de rede). Continuar operação de alto risco? (y/n): ",
   "artifact_verify_skip_user": "Pulado."
 }

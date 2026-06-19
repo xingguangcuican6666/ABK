@@ -239,6 +239,6 @@
   "arg_build_time": "Hora de build personalizada (opcional)",
   "arg_set_download_dir": "Establecer directorio de descarga predeterminado (guardado en configuración)",
   "download_dir_saved": "Directorio de descarga predeterminado establecido en: {dir}",
-  "artifact_verify_confirm": "SEGURIDAD: El archivo puede haber sido manipulado durante la descarga (riesgo de secuestro de red). ¿Continuar operación de alto riesgo? (s/n): ",
+  "artifact_verify_confirm": "SEGURIDAD: El archivo puede haber sido manipulado durante la descarga (riesgo de secuestro de red). ¿Continuar operación de alto riesgo? (y/n): ",
   "artifact_verify_skip_user": "Omitido."
 }
