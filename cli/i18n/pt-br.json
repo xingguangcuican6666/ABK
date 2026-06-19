@@ -230,5 +230,13 @@
   "cancel_fail": "Falha ao cancelar: {error}",
   "rerun_ok": "Build #{id} re-executando",
   "rerun_fail": "Falha ao re-executar: {error}",
-  "arg_build_time": "Hora de build personalizada (opcional)"
+  "artifact_verifying": "Verificando pacote de artefatos...",
+  "artifact_verified_ok": "Assinatura verificada com sucesso.",
+  "artifact_legacy_warning": "Este é um pacote legado. Continuar ativa o fluxo de alto risco.",
+  "artifact_unverified_warning": "Este pacote não passou na verificação de assinatura.",
+  "artifact_verify_skip": "Pacote não assinado, pulando verificação.",
+  "artifact_verify_no_key": "Nenhuma chave de assinatura configurada, não é possível verificar.",
+  "arg_build_time": "Hora de build personalizada (opcional)",
+  "arg_set_download_dir": "Definir diretório de download padrão (salvo na configuração)",
+  "download_dir_saved": "Diretório de download padrão definido como: {dir}"
 }

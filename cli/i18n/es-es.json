@@ -230,5 +230,13 @@
   "cancel_fail": "Cancelación fallida: {error}",
   "rerun_ok": "Build #{id} re-ejecutando",
   "rerun_fail": "Re-ejecución fallida: {error}",
-  "arg_build_time": "Hora de build personalizada (opcional)"
+  "artifact_verifying": "Verificando paquete de artefactos...",
+  "artifact_verified_ok": "Firma verificada correctamente.",
+  "artifact_legacy_warning": "Este es un paquete heredado. Continuar activa el flujo de alto riesgo.",
+  "artifact_unverified_warning": "Este paquete no ha pasado la verificación de firma.",
+  "artifact_verify_skip": "Paquete no firmado, omitiendo verificación.",
+  "artifact_verify_no_key": "Sin clave de firma configurada, no se puede verificar.",
+  "arg_build_time": "Hora de build personalizada (opcional)",
+  "arg_set_download_dir": "Establecer directorio de descarga predeterminado (guardado en configuración)",
+  "download_dir_saved": "Directorio de descarga predeterminado establecido en: {dir}"
 }

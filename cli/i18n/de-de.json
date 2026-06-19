@@ -230,5 +230,13 @@
   "cancel_fail": "Abbruch fehlgeschlagen: {error}",
   "rerun_ok": "Build #{id} wird wiederholt",
   "rerun_fail": "Wiederholung fehlgeschlagen: {error}",
-  "arg_build_time": "Benutzerdefinierte Build-Zeit (optional)"
+  "artifact_verifying": "Verifiziere Artefakt-Bundle...",
+  "artifact_verified_ok": "Signatur erfolgreich verifiziert.",
+  "artifact_legacy_warning": "Dies ist ein Legacy-Bundle. Das Fortfahren aktiviert den Hochrisiko-Workflow.",
+  "artifact_unverified_warning": "Dieses Bundle hat die Signaturverifizierung nicht bestanden.",
+  "artifact_verify_skip": "Kein signiertes Bundle, Verifizierung übersprungen.",
+  "artifact_verify_no_key": "Kein Signaturschlüssel konfiguriert, Verifizierung nicht möglich.",
+  "arg_build_time": "Benutzerdefinierte Build-Zeit (optional)",
+  "arg_set_download_dir": "Standard-Download-Verzeichnis festlegen (in Konfiguration gespeichert)",
+  "download_dir_saved": "Standard-Download-Verzeichnis gesetzt auf: {dir}"
 }
