@@ -238,5 +238,7 @@
   "artifact_verify_no_key": "Aucune clé de signature configurée, vérification impossible.",
   "arg_build_time": "Heure de build personnalisée (optionnel)",
   "arg_set_download_dir": "Définir le répertoire de téléchargement par défaut (enregistré dans la configuration)",
-  "download_dir_saved": "Répertoire de téléchargement par défaut défini sur: {dir}"
+  "download_dir_saved": "Répertoire de téléchargement par défaut défini sur: {dir}",
+  "artifact_verify_confirm": "Vérification non réussie. Continuer quand même? (o/n): ",
+  "artifact_verify_skip_user": "Ignoré."
 }

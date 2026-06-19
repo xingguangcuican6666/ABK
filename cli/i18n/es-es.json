@@ -238,5 +238,7 @@
   "artifact_verify_no_key": "Sin clave de firma configurada, no se puede verificar.",
   "arg_build_time": "Hora de build personalizada (opcional)",
   "arg_set_download_dir": "Establecer directorio de descarga predeterminado (guardado en configuración)",
-  "download_dir_saved": "Directorio de descarga predeterminado establecido en: {dir}"
+  "download_dir_saved": "Directorio de descarga predeterminado establecido en: {dir}",
+  "artifact_verify_confirm": "Verificación no superada. ¿Continuar de todos modos? (s/n): ",
+  "artifact_verify_skip_user": "Omitido."
 }
