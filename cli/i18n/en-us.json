@@ -231,5 +231,13 @@
   "cancel_fail": "Cancel failed: {error}",
   "rerun_ok": "Build #{id} re-running",
   "rerun_fail": "Rerun failed: {error}",
-  "arg_build_time": "Custom build time (optional)"
+  "arg_build_time": "Custom build time (optional)",
+  "artifact_verifying": "Verifying artifact bundle...",
+  "artifact_verified_ok": "Signature verified successfully.",
+  "artifact_legacy_warning": "This is a legacy bundle. Proceeding enters the high-risk flow.",
+  "artifact_unverified_warning": "This bundle has not passed signature verification.",
+  "artifact_verify_skip": "Not a signed bundle, skipping verification.",
+  "artifact_verify_no_key": "No signing key configured, unable to verify.",
+  "arg_set_download_dir": "Set default download directory (saved to config)",
+  "download_dir_saved": "Default download directory set to: {dir}"
 }

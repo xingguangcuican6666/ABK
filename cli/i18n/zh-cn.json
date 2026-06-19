@@ -231,5 +231,13 @@
   "cancel_fail": "取消失败: {error}",
   "rerun_ok": "构建 #{id} 已重新运行",
   "rerun_fail": "重新运行失败: {error}",
-  "arg_build_time": "自定义构建时间 (可选)"
+  "arg_build_time": "自定义构建时间 (可选)",
+  "artifact_verifying": "正在校验下载结果...",
+  "artifact_verified_ok": "签名验证通过",
+  "artifact_legacy_warning": "这是旧版刷写包，继续将进入高风险流程。",
+  "artifact_unverified_warning": "该刷写包尚未通过签名验证。",
+  "artifact_verify_skip": "非打包格式，跳过校验。",
+  "artifact_verify_no_key": "未配置签名密钥，无法验证。",
+  "arg_set_download_dir": "设置默认下载目录（保存到配置文件）",
+  "download_dir_saved": "默认下载目录已设置为: {dir}"
 }
