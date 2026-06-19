@@ -1117,6 +1117,12 @@ def cmd_artifacts(args):
                     result = verify_artifact_bundle(path, signing_key)
                     status_icon = "✓" if result['verified'] else "⚠"
                     print(f"    {status_icon} {result['message']}")
+                    if not result['verified']:
+                        sys.stdout.write("    " + t("artifact_verify_confirm"))
+                        sys.stdout.flush()
+                        answer = sys.stdin.readline().strip().lower()
+                        if answer != 'y':
+                            print(f"    {t('artifact_verify_skip_user')}")
     except Exception as e:
         print(t("err_fork_failed", error=e), file=sys.stderr)
 
