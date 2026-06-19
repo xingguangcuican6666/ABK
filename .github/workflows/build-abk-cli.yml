@@ -231,7 +231,10 @@ jobs:
             bash -lc '
               set -euo pipefail
               apt-get update
-              apt-get install -y build-essential zlib1g-dev cargo libssl-dev pkg-config
+              apt-get install -y build-essential zlib1g-dev libssl-dev pkg-config curl
+              # Install Rust via rustup (apt cargo is too old for cryptography 49.x)
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+              . "$HOME/.cargo/env"
               python -m pip install --upgrade pip
               python -m pip install pyinstaller cryptography certifi pynacl
               pyinstaller \
@@ -268,7 +271,10 @@ jobs:
             bash -lc '
               set -euo pipefail
               apt-get update
-              apt-get install -y build-essential zlib1g-dev cargo libssl-dev pkg-config
+              apt-get install -y build-essential zlib1g-dev libssl-dev pkg-config curl
+              # Install Rust via rustup (apt cargo is too old for cryptography 49.x)
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+              . "$HOME/.cargo/env"
               python -m pip install --upgrade pip
               python -m pip install pyinstaller cryptography certifi pynacl
               pyinstaller \
