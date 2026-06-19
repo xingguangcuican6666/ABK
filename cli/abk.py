@@ -10,6 +10,13 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
+import zipfile
+import hashlib
+import base64
+
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.exceptions import InvalidSignature
 
 sys.path.insert(0, str(Path(__file__).parent))
 from i18n import t, load_translations, detect_language
@@ -558,6 +565,86 @@ class GitHubClient:
         }
 
 
+def get_signing_key():
+    """Load signing public key from config."""
+    config = load_config()
+    return config.get("signing_key") or os.environ.get("ABK_SIGNING_KEY")
+
+
+def verify_artifact_bundle(bundle_path, public_key_pem=None):
+    """
+    Verify a signed artifact bundle.
+    Mirrors ArtifactVerification.verifyBundleFile from the Android app.
+    
+    Returns dict with keys:
+        verified (bool): True if fully verified
+        status (str): 'verified' | 'legacy' | 'unverified' | 'no_key' | 'skip' | 'error'
+        message (str): Human-readable result
+    """
+    if not bundle_path.lower().endswith('.zip'):
+        return {'verified': False, 'status': 'skip', 'message': t("artifact_verify_skip")}
+    
+    try:
+        with zipfile.ZipFile(bundle_path, 'r') as z:
+            names = z.namelist()
+            
+            if 'ABK_BUNDLE_MANIFEST.json' not in names:
+                return {'verified': False, 'status': 'skip', 'message': t("artifact_verify_skip")}
+            
+            manifest_bytes = z.read('ABK_BUNDLE_MANIFEST.json')
+            
+            try:
+                manifest = json.loads(manifest_bytes)
+            except json.JSONDecodeError:
+                return {'verified': False, 'status': 'legacy', 'message': t("artifact_legacy_warning")}
+            
+            if 'ABK_BUNDLE_MANIFEST.sig' not in names:
+                return {'verified': False, 'status': 'legacy', 'message': t("artifact_legacy_warning")}
+            
+            sig_bytes = z.read('ABK_BUNDLE_MANIFEST.sig')
+            
+            if not public_key_pem:
+                return {'verified': False, 'status': 'no_key', 'message': t("artifact_verify_no_key")}
+            
+            # Parse RSA public key (PEM format)
+            try:
+                public_key = serialization.load_pem_public_key(public_key_pem.encode())
+            except Exception:
+                return {'verified': False, 'status': 'no_key', 'message': t("artifact_verify_no_key")}
+            
+            # Verify manifest signature (SHA256withRSA)
+            try:
+                public_key.verify(
+                    sig_bytes,
+                    manifest_bytes,
+                    padding.PKCS1v15(),
+                    hashes.SHA256()
+                )
+            except InvalidSignature:
+                return {'verified': False, 'status': 'unverified', 'message': t("artifact_unverified_warning")}
+            
+            # Verify payload integrity
+            payload_name = manifest.get('payload_name', '')
+            expected_sha256 = manifest.get('payload_sha256', '').strip().lower()
+            
+            if payload_name and expected_sha256 and payload_name in names:
+                payload_bytes = z.read(payload_name)
+                actual_sha256 = hashlib.sha256(payload_bytes).hexdigest()
+                if actual_sha256 != expected_sha256:
+                    return {
+                        'verified': False,
+                        'status': 'unverified',
+                        'message': t("artifact_unverified_warning")
+                    }
+            
+            return {'verified': True, 'status': 'verified', 'message': t("artifact_verified_ok")}
+    
+    except zipfile.BadZipFile:
+        return {'verified': False, 'status': 'error', 'message': 'Invalid zip file'}
+    except Exception as e:
+        return {'verified': False, 'status': 'error', 'message': f'Verification error: {e}'}
+
+
 def cmd_login(args):
     token = device_flow_login()
     if token:
@@ -992,6 +1079,14 @@ def cmd_artifacts(args):
     
     client = GitHubClient(token=token)
 
+    if args.set_download_dir:
+        config = load_config()
+        config["download_dir"] = args.set_download_dir
+        save_config(config)
+        print(t("download_dir_saved", dir=args.set_download_dir))
+        if not args.run_id and not args.download:
+            return
+
     if not args.run_id:
         print(t("err_need_run_id"), file=sys.stderr)
         sys.exit(1)
@@ -1008,14 +1103,20 @@ def cmd_artifacts(args):
             print(f"  {art['id']} | {art['name']} | {size_kb:.1f} KB")
 
         if args.download:
-            output_dir = args.output or "."
+            config = load_config()
+            output_dir = args.output or config.get("download_dir") or str(Path.home() / "Downloads")
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             print(f"\n" + t("artifacts_download_to", dir=output_dir))
+            signing_key = get_signing_key()
             for art in artifacts["artifacts"]:
                 print(f"  " + t("artifacts_downloading", name=art["name"]))
                 path = client.download_artifact(art["id"], output_dir)
                 if path:
                     print(f"    -> {path}")
+                    print(f"    " + t("artifact_verifying"))
+                    result = verify_artifact_bundle(path, signing_key)
+                    status_icon = "✓" if result['verified'] else "⚠"
+                    print(f"    {status_icon} {result['message']}")
     except Exception as e:
         print(t("err_fork_failed", error=e), file=sys.stderr)
 
@@ -1184,6 +1285,7 @@ def main():
     artifacts_parser.add_argument("--run-id", type=int, help=t("arg_run_id"))
     artifacts_parser.add_argument("--download", action="store_true", help=t("arg_download"))
     artifacts_parser.add_argument("--output", "-o", help=t("arg_output"))
+    artifacts_parser.add_argument("--set-download-dir", metavar="DIR", help=t("arg_set_download_dir"))
     artifacts_parser.set_defaults(func=cmd_artifacts)
 
     # list
