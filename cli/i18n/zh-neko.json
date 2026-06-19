@@ -234,12 +234,12 @@
   "artifact_verifying": "正在检查产物包喵...",
   "artifact_verified_ok": "签名验证通过啦喵！✨",
   "artifact_legacy_warning": "这是旧版包喵...继续的话会进入高风险流程喵！",
-  "artifact_unverified_warning": "这个包还没有通过签名验证喵！",
+  "artifact_unverified_warning": "这个包没有通过签名验证喵…下载传输中可能被篡改了喵！",
   "artifact_verify_skip": "不是签名包喵，跳过验证啦~",
   "artifact_verify_no_key": "没有配置签名密钥喵，没法验证呢...",
   "arg_build_time": "自定义构建时间喵（可选）",
   "arg_set_download_dir": "设置默认下载目录喵（会保存到配置文件里哦）",
   "download_dir_saved": "默认下载目录已设置为 {dir} 喵~",
-  "artifact_verify_confirm": "校验失败了喵……主人还要继续吗？(y/n): ",
+  "artifact_verify_confirm": "安全警告喵：文件在下载传输中可能被篡改了喵（网络劫持风险）…主人还要继续高风险操作吗？(y/n): ",
   "artifact_verify_skip_user": "已跳过喵~"
 }

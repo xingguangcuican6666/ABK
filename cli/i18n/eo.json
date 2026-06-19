@@ -229,12 +229,12 @@
   "artifact_verifying": "Kontrolante artefakto-pakaĵon...",
   "artifact_verified_ok": "Subskribo sukcese kontrolita.",
   "artifact_legacy_warning": "Ĉi tio estas malnova pakaĵo. Daŭrigo eniras alt-riskan fluon.",
-  "artifact_unverified_warning": "Ĉi tiu pakaĵo ne trapasis subskriban kontrolon.",
+  "artifact_unverified_warning": "Ĉi tiu pakaĵo ne trapasis subskriban kontrolon — eble estis manipulita dum elŝuto.",
   "artifact_verify_skip": "Ne subskribita pakaĵo, preterpasante kontrolon.",
   "artifact_verify_no_key": "Neniu subskriba ŝlosilo agordita, ne eblas kontroli.",
   "arg_build_time": "Propra konstru-horo (laŭvola)",
   "arg_set_download_dir": "Agordu defaŭltan elŝutdosierujon (konservita al agordo)",
   "download_dir_saved": "Defaŭlta elŝutdosierujo agordita al: {dir}",
-  "artifact_verify_confirm": "Kontrolo malsukcesis. Ĉu daŭrigi? (j/n): ",
+  "artifact_verify_confirm": "SEKURECO: Dosiero eble estis manipulita dum elŝuto (reta forkapta risko). Ĉu daŭrigi altriskan operacion? (j/n): ",
   "artifact_verify_skip_user": "Preterpasita."
 }
