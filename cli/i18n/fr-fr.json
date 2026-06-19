@@ -233,12 +233,12 @@
   "artifact_verifying": "Vérification du bundle d'artefacts...",
   "artifact_verified_ok": "Signature vérifiée avec succès.",
   "artifact_legacy_warning": "Ceci est un bundle hérité. Continuer active le flux à haut risque.",
-  "artifact_unverified_warning": "Ce bundle n'a pas passé la vérification de signature.",
+  "artifact_unverified_warning": "Ce bundle n'a pas passé la vérification de signature — a peut-être été altéré lors du téléchargement.",
   "artifact_verify_skip": "Bundle non signé, vérification ignorée.",
   "artifact_verify_no_key": "Aucune clé de signature configurée, vérification impossible.",
   "arg_build_time": "Heure de build personnalisée (optionnel)",
   "arg_set_download_dir": "Définir le répertoire de téléchargement par défaut (enregistré dans la configuration)",
   "download_dir_saved": "Répertoire de téléchargement par défaut défini sur: {dir}",
-  "artifact_verify_confirm": "Vérification non réussie. Continuer quand même? (o/n): ",
+  "artifact_verify_confirm": "SÉCURITÉ: Le fichier a peut-être été altéré lors du téléchargement (risque de détournement réseau). Poursuivre l'opération à haut risque? (o/n): ",
   "artifact_verify_skip_user": "Ignoré."
 }

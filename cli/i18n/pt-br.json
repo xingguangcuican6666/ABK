@@ -233,12 +233,12 @@
   "artifact_verifying": "Verificando pacote de artefatos...",
   "artifact_verified_ok": "Assinatura verificada com sucesso.",
   "artifact_legacy_warning": "Este é um pacote legado. Continuar ativa o fluxo de alto risco.",
-  "artifact_unverified_warning": "Este pacote não passou na verificação de assinatura.",
+  "artifact_unverified_warning": "Este pacote não passou na verificação de assinatura — pode ter sido adulterado durante o download.",
   "artifact_verify_skip": "Pacote não assinado, pulando verificação.",
   "artifact_verify_no_key": "Nenhuma chave de assinatura configurada, não é possível verificar.",
   "arg_build_time": "Hora de build personalizada (opcional)",
   "arg_set_download_dir": "Definir diretório de download padrão (salvo na configuração)",
   "download_dir_saved": "Diretório de download padrão definido como: {dir}",
-  "artifact_verify_confirm": "Verificação não aprovada. Continuar mesmo assim? (s/n): ",
+  "artifact_verify_confirm": "SEGURANÇA: O arquivo pode ter sido adulterado durante o download (risco de sequestro de rede). Continuar operação de alto risco? (s/n): ",
   "artifact_verify_skip_user": "Pulado."
 }

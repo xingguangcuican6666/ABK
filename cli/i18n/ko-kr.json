@@ -234,12 +234,12 @@
   "artifact_verifying": "아티팩트 번들 확인 중...",
   "artifact_verified_ok": "서명 확인 완료.",
   "artifact_legacy_warning": "레거시 번들입니다. 계속하면 고위험 흐름으로 진입합니다.",
-  "artifact_unverified_warning": "이 번들은 서명 확인을 통과하지 못했습니다.",
+  "artifact_unverified_warning": "이 번들은 서명 확인을 통과하지 못했습니다 — 다운로드 중에 변조되었을 수 있습니다.",
   "artifact_verify_skip": "서명된 번들이 아니므로 확인을 건너뜁니다.",
   "artifact_verify_no_key": "서명 키가 구성되지 않아 확인할 수 없습니다.",
   "arg_build_time": "커스텀 빌드 시간 (선택)",
   "arg_set_download_dir": "기본 다운로드 디렉토리 설정 (설정 파일에 저장됨)",
   "download_dir_saved": "기본 다운로드 디렉토리가 설정되었습니다: {dir}",
-  "artifact_verify_confirm": "검증에 실패했습니다. 계속하시겠습니까? (y/n): ",
+  "artifact_verify_confirm": "보안: 다운로드 중에 파일이 변조되었을 수 있습니다 (네트워크 하이재킹 위험). 고위험 작업을 계속하시겠습니까? (y/n): ",
   "artifact_verify_skip_user": "건너뛰었습니다."
 }

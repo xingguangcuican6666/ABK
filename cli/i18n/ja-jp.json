@@ -234,12 +234,12 @@
   "artifact_verifying": "アーティファクトバンドルを検証中...",
   "artifact_verified_ok": "署名検証に成功しました。",
   "artifact_legacy_warning": "これはレガシーバンドルです。続行すると高リスクフローに入ります。",
-  "artifact_unverified_warning": "このバンドルは署名検証に合格していません。",
+  "artifact_unverified_warning": "このバンドルは署名検証に合格していません — ダウンロード中に改ざんされた可能性があります。",
   "artifact_verify_skip": "署名付きバンドルではないため、検証をスキップします。",
   "artifact_verify_no_key": "署名キーが設定されていません、検証できません。",
   "arg_build_time": "カスタムビルド時刻 (オプション)",
   "arg_set_download_dir": "デフォルトのダウンロードディレクトリを設定（設定ファイルに保存）",
   "download_dir_saved": "デフォルトのダウンロードディレクトリを設定しました: {dir}",
-  "artifact_verify_confirm": "検証に失敗しました。続行しますか？(y/n): ",
+  "artifact_verify_confirm": "セキュリティ: ダウンロード中にファイルが改ざんされた可能性があります (ネットワークハイジャックのリスク)。高リスク操作を続行しますか？(y/n): ",
   "artifact_verify_skip_user": "スキップしました。"
 }

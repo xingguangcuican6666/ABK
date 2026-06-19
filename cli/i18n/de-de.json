@@ -233,12 +233,12 @@
   "artifact_verifying": "Verifiziere Artefakt-Bundle...",
   "artifact_verified_ok": "Signatur erfolgreich verifiziert.",
   "artifact_legacy_warning": "Dies ist ein Legacy-Bundle. Das Fortfahren aktiviert den Hochrisiko-Workflow.",
-  "artifact_unverified_warning": "Dieses Bundle hat die Signaturverifizierung nicht bestanden.",
+  "artifact_unverified_warning": "Dieses Bundle hat die Signaturverifizierung nicht bestanden — wurde möglicherweise während des Downloads manipuliert.",
   "artifact_verify_skip": "Kein signiertes Bundle, Verifizierung übersprungen.",
   "artifact_verify_no_key": "Kein Signaturschlüssel konfiguriert, Verifizierung nicht möglich.",
   "arg_build_time": "Benutzerdefinierte Build-Zeit (optional)",
   "arg_set_download_dir": "Standard-Download-Verzeichnis festlegen (in Konfiguration gespeichert)",
   "download_dir_saved": "Standard-Download-Verzeichnis gesetzt auf: {dir}",
-  "artifact_verify_confirm": "Verifizierung nicht bestanden. Trotzdem fortfahren? (j/n): ",
+  "artifact_verify_confirm": "SICHERHEIT: Datei wurde möglicherweise während des Downloads manipuliert (Netzwerk-Hijacking-Risiko). Hochrisiko-Vorgang trotzdem fortsetzen? (j/n): ",
   "artifact_verify_skip_user": "Übersprungen."
 }
