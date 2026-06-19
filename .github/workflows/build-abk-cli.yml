@@ -128,7 +128,8 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller cryptography certifi pynacl pycryptodome
+          python -m pip install pyinstaller certifi pynacl pycryptodome
+          python -m pip install cryptography 2>/dev/null || echo "::warning::cryptography unavailable, using pycryptodome"
 
       - name: Install Rust (cryptography build dependency)
         if: runner.os == 'Windows'
@@ -149,10 +150,7 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          python -m pip install setuptools-rust wheel
-          # pycryptodome has pre-built wheels for ALL Windows platforms incl. arm64/x86
-          # cryptography has wheels only for amd64 — compile from source on arm64/x86
-          python -m pip install pycryptodome
+          python -m pip install setuptools-rust wheel pycryptodome
           python -m pip install cryptography 2>&1 | Out-Null
           if (-not $?) { Write-Warning "cryptography unavailable, using pycryptodome instead" }
           python -m pip install pyinstaller certifi pynacl
@@ -236,7 +234,8 @@ jobs:
               curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
               . "$HOME/.cargo/env"
               python -m pip install --upgrade pip
-              python -m pip install pyinstaller cryptography certifi pynacl pycryptodome
+              python -m pip install pyinstaller certifi pynacl pycryptodome
+              python -m pip install cryptography 2>/dev/null || echo "::warning::cryptography unavailable, using pycryptodome"
               pyinstaller \
                 --noconfirm \
                 --clean \
@@ -280,7 +279,8 @@ jobs:
               curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
               . "$HOME/.cargo/env"
               python -m pip install --upgrade pip
-              python -m pip install pyinstaller cryptography certifi pynacl pycryptodome
+              python -m pip install pyinstaller certifi pynacl pycryptodome
+              python -m pip install cryptography 2>/dev/null || echo "::warning::cryptography unavailable, using pycryptodome"
               pyinstaller \
                 --noconfirm \
                 --clean \
