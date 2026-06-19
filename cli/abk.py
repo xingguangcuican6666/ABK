@@ -14,15 +14,9 @@ import zipfile
 import hashlib
 import base64
 
-# cryptography is optional — only needed for bundle signature verification.
-# On platforms without pre-built wheels (e.g. 32-bit), verification is skipped.
-try:
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import padding
-    from cryptography.exceptions import InvalidSignature
-    _HAS_CRYPTO = True
-except ImportError:
-    _HAS_CRYPTO = False
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.exceptions import InvalidSignature
 
 # PyInstaller bundle: point SSL certs to certifi if available
 try:
@@ -617,9 +611,6 @@ def verify_artifact_bundle(bundle_path, public_key_pem=None):
             sig_bytes = z.read('ABK_BUNDLE_MANIFEST.sig')
             
             if not public_key_pem:
-                return {'verified': False, 'status': 'no_key', 'message': t("artifact_verify_no_key")}
-
-            if not _HAS_CRYPTO:
                 return {'verified': False, 'status': 'no_key', 'message': t("artifact_verify_no_key")}
 
             try:

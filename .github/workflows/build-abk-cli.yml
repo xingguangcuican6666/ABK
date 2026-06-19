@@ -108,17 +108,30 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller certifi
-          python -m pip install cryptography || echo "::warning::cryptography not available, bundle verification will be skipped"
+          python -m pip install pyinstaller cryptography certifi
+
+      - name: Install Rust (cryptography build dependency)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Rust is needed for cryptography's native build on Windows ARM/x86
+          # where pre-built wheels may not be available
+          if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing Rust via rustup..."
+            Set-ExecutionPolicy Unrestricted -Scope Process -Force
+            & { iwr https://win.rustup.rs -UseBasicParsing | iex } -y --default-toolchain stable
+            $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+            [Environment]::SetEnvironmentVariable("Path", "$env:USERPROFILE\.cargo\bin;$env:Path", "User")
+          }
+          cargo --version
 
       - name: Install build dependencies
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller certifi
-          python -m pip install cryptography 2>&1 | Select-String -NotMatch "Building wheel" | Out-Host
-          if (-not $?) { Write-Warning "cryptography not available, bundle verification will be skipped" }
+          python -m pip install setuptools-rust wheel
+          python -m pip install pyinstaller cryptography certifi
 
       - name: Build native one-dir bundle
         if: ${{ matrix.target_id == 'linux-arm64' || matrix.target_id == 'linux-x64' || matrix.target_id == 'macos-arm64' || matrix.target_id == 'macos-x64' }}
@@ -194,10 +207,9 @@ jobs:
             bash -lc '
               set -euo pipefail
               apt-get update
-              apt-get install -y build-essential zlib1g-dev
+              apt-get install -y build-essential zlib1g-dev cargo
               python -m pip install --upgrade pip
-              python -m pip install pyinstaller certifi
-              python -m pip install cryptography || echo "::warning::cryptography not available, bundle verification will be skipped"
+              python -m pip install pyinstaller cryptography certifi
               pyinstaller \
                 --noconfirm \
                 --clean \
@@ -230,10 +242,9 @@ jobs:
             bash -lc '
               set -euo pipefail
               apt-get update
-              apt-get install -y build-essential zlib1g-dev
+              apt-get install -y build-essential zlib1g-dev cargo
               python -m pip install --upgrade pip
-              python -m pip install pyinstaller certifi
-              python -m pip install cryptography || echo "::warning::cryptography not available, bundle verification will be skipped"
+              python -m pip install pyinstaller cryptography certifi
               pyinstaller \
                 --noconfirm \
                 --clean \
