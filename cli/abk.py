@@ -14,9 +14,20 @@ import zipfile
 import hashlib
 import base64
 
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.exceptions import InvalidSignature
+# Crypto backend: prefer cryptography (fastest), fall back to pycryptodome (std lib)
+try:
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography.exceptions import InvalidSignature
+    _CRYPTO_BACKEND = 'cryptography'
+except ImportError:
+    try:
+        from Cryptodome.PublicKey import RSA
+        from Cryptodome.Signature import pkcs1_15
+        from Cryptodome.Hash import SHA256
+        _CRYPTO_BACKEND = 'pycryptodome'
+    except ImportError:
+        _CRYPTO_BACKEND = None
 
 # PyInstaller bundle: point SSL certs to certifi if available
 try:
@@ -613,12 +624,16 @@ def get_signing_key():
 
 def generate_signing_keypair():
     """Generate RSA-2048 keypair for artifact signing."""
-    from cryptography.hazmat.primitives.asymmetric import rsa
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_key_pem = key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    if _CRYPTO_BACKEND == 'cryptography':
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_key_pem = key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode()
+    else:
+        key = RSA.generate(2048)
+        public_key_pem = key.publickey().export_key('PEM').decode()
     return public_key_pem
 
 
@@ -678,21 +693,26 @@ def verify_artifact_bundle(bundle_path, public_key_pem=None):
             
             if not public_key_pem:
                 return {'verified': False, 'status': 'no_key', 'message': t("artifact_verify_no_key")}
-
-            try:
-                public_key = serialization.load_pem_public_key(public_key_pem.encode())
-            except Exception:
+            if not _CRYPTO_BACKEND:
                 return {'verified': False, 'status': 'no_key', 'message': t("artifact_verify_no_key")}
-            
-            try:
-                public_key.verify(
-                    sig_bytes,
-                    manifest_bytes,
-                    padding.PKCS1v15(),
-                    hashes.SHA256()
-                )
-            except InvalidSignature:
-                return {'verified': False, 'status': 'unverified', 'message': t("artifact_unverified_warning")}
+
+            if _CRYPTO_BACKEND == 'cryptography':
+                try:
+                    pub = serialization.load_pem_public_key(public_key_pem.encode())
+                except Exception:
+                    return {'verified': False, 'status': 'no_key', 'message': t("artifact_verify_no_key")}
+                try:
+                    pub.verify(sig_bytes, manifest_bytes, padding.PKCS1v15(), hashes.SHA256())
+                except InvalidSignature:
+                    return {'verified': False, 'status': 'unverified', 'message': t("artifact_unverified_warning")}
+            else:
+                # pycryptodome backend
+                try:
+                    pub = RSA.import_key(public_key_pem)
+                    h = SHA256.new(manifest_bytes)
+                    pkcs1_15.new(pub).verify(h, sig_bytes)
+                except (ValueError, TypeError):
+                    return {'verified': False, 'status': 'unverified', 'message': t("artifact_unverified_warning")}
             
             # Verify payload integrity
             payload_name = manifest.get('payload_name', '')

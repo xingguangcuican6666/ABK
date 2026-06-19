@@ -128,14 +128,13 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller cryptography certifi pynacl
+          python -m pip install pyinstaller cryptography certifi pynacl pycryptodome
 
-      - name: Install Rust + OpenSSL (cryptography build dependency)
+      - name: Install Rust (cryptography build dependency)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # Rust is needed for cryptography's native build on Windows ARM/x86
-          # where pre-built wheels may not be available
+          # Rust is needed for cryptography's pyo3-based native build
           if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
             Write-Host "Installing Rust via rustup..."
             Set-ExecutionPolicy Unrestricted -Scope Process -Force
@@ -145,58 +144,18 @@ jobs:
           }
           cargo --version
 
-      - name: Install OpenSSL (cryptography openssl-sys dependency)
-        if: runner.os == 'Windows' && (contains(matrix.target_id, 'arm64') || contains(matrix.target_id, 'x86'))
-        shell: pwsh
-        run: |
-          # cryptography 49.x uses openssl-sys Rust crate which needs OpenSSL headers/libs.
-          # Pre-built wheels exist only for amd64, so arm64 and x86 need source builds.
-          # openssl-sys auto-detects vcpkg installations via VCPKG_ROOT env var.
-          $triplet = if (python -c "import platform; print('arm64' in platform.machine().lower())" 2>$null) {
-            "arm64-windows"
-          } elseif (python -c "import platform; print(platform.machine())" 2>$null -eq 'ARM64') {
-            "arm64-windows"
-          } else {
-            "x86-windows"
-          }
-          Write-Host "Python arch: $(python -c 'import platform; print(platform.machine())')"
-          Write-Host "Target triplet: $triplet"
-          # Find vcpkg root
-          $vcpkgRoot = $null
-          foreach ($candidate in @($env:VCPKG_ROOT, $env:VCPKG_INSTALLATION_ROOT, "C:\vcpkg", "$env:LOCALAPPDATA\vcpkg")) {
-            if ($candidate -and (Test-Path (Join-Path $candidate "vcpkg.exe"))) {
-              $vcpkgRoot = $candidate
-              break
-            }
-          }
-          if (-not $vcpkgRoot) {
-            # vcpkg not bundled; download a minimal bootstrap
-            Write-Host "::group::Bootstrapping vcpkg"
-            git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:TEMP\vcpkg" 2>&1 | Out-Null
-            & "$env:TEMP\vcpkg\bootstrap-vcpkg.bat" 2>&1 | Out-Null
-            $vcpkgRoot = "$env:TEMP\vcpkg"
-            Write-Host "::endgroup::"
-          }
-          Write-Host "Vcpkg root: $vcpkgRoot"
-          echo "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          # Install OpenSSL via vcpkg
-          & $vcpkgRoot\vcpkg install openssl --triplet $triplet
-          if (-not $?) { throw "vcpkg install openssl failed for triplet $triplet" }
-          $opensslDir = "$vcpkgRoot\installed\$triplet"
-          echo "OPENSSL_DIR=$opensslDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "OPENSSL_LIB_DIR=$opensslDir\lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "OPENSSL_INCLUDE_DIR=$opensslDir\include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "OpenSSL installed:"
-          Write-Host "  dir: $opensslDir"
-          Write-Host "  libs: $(Get-ChildItem $opensslDir\lib\*.lib -Name | Select-Object -First 5)"
-
       - name: Install build dependencies
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
           python -m pip install setuptools-rust wheel
-          python -m pip install pyinstaller cryptography certifi pynacl
+          # pycryptodome has pre-built wheels for ALL Windows platforms incl. arm64/x86
+          # cryptography has wheels only for amd64 — compile from source on arm64/x86
+          python -m pip install pycryptodome
+          python -m pip install cryptography 2>&1 | Out-Null
+          if (-not $?) { Write-Warning "cryptography unavailable, using pycryptodome instead" }
+          python -m pip install pyinstaller certifi pynacl
 
       - name: Build native one-dir bundle
         if: ${{ matrix.target_id == 'linux-arm64' || matrix.target_id == 'linux-x64' || matrix.target_id == 'macos-arm64' || matrix.target_id == 'macos-x64' }}
@@ -277,7 +236,7 @@ jobs:
               curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
               . "$HOME/.cargo/env"
               python -m pip install --upgrade pip
-              python -m pip install pyinstaller cryptography certifi pynacl
+              python -m pip install pyinstaller cryptography certifi pynacl pycryptodome
               pyinstaller \
                 --noconfirm \
                 --clean \
@@ -293,6 +252,10 @@ jobs:
                 --collect-all certifi \
                 --hidden-import nacl \
                 --hidden-import nacl.bindings \
+                --hidden-import Cryptodome \
+                --hidden-import Cryptodome.PublicKey \
+                --hidden-import Cryptodome.Signature \
+                --hidden-import Cryptodome.Hash \
                 --add-data "cli/i18n:i18n" \
                 cli/abk.py
             '
@@ -317,7 +280,7 @@ jobs:
               curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
               . "$HOME/.cargo/env"
               python -m pip install --upgrade pip
-              python -m pip install pyinstaller cryptography certifi pynacl
+              python -m pip install pyinstaller cryptography certifi pynacl pycryptodome
               pyinstaller \
                 --noconfirm \
                 --clean \
@@ -333,6 +296,10 @@ jobs:
                 --collect-all certifi \
                 --hidden-import nacl \
                 --hidden-import nacl.bindings \
+                --hidden-import Cryptodome \
+                --hidden-import Cryptodome.PublicKey \
+                --hidden-import Cryptodome.Signature \
+                --hidden-import Cryptodome.Hash \
                 --add-data "cli/i18n:i18n" \
                 cli/abk.py
             '
