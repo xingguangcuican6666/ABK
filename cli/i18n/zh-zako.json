@@ -239,5 +239,7 @@
   "artifact_verify_no_key": "连签名密钥都没配置，还想验证？真是异想天开的杂鱼呢~",
   "arg_build_time": "自定义构建时间（不填也行）",
   "arg_set_download_dir": "设置默认下载目录（存到配置文件里啦，省得杂鱼每次都手打）",
-  "download_dir_saved": "默认下载目录已设置为 {dir}（帮你记住了，还不快感谢我？）"
+  "download_dir_saved": "默认下载目录已设置为 {dir}（帮你记住了，还不快感谢我？）",
+  "artifact_verify_confirm": "校验失败了哦笨蛋~ 就这样还要继续吗？(y/n): ",
+  "artifact_verify_skip_user": "哼，跳过了。"
 }

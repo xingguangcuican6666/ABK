@@ -234,5 +234,7 @@
   "artifact_verify_no_key": "Neniu subskriba ŝlosilo agordita, ne eblas kontroli.",
   "arg_build_time": "Propra konstru-horo (laŭvola)",
   "arg_set_download_dir": "Agordu defaŭltan elŝutdosierujon (konservita al agordo)",
-  "download_dir_saved": "Defaŭlta elŝutdosierujo agordita al: {dir}"
+  "download_dir_saved": "Defaŭlta elŝutdosierujo agordita al: {dir}",
+  "artifact_verify_confirm": "Kontrolo malsukcesis. Ĉu daŭrigi? (j/n): ",
+  "artifact_verify_skip_user": "Preterpasita."
 }

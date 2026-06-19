@@ -239,5 +239,7 @@
   "artifact_verify_no_key": "没有配置签名密钥喵，没法验证呢...",
   "arg_build_time": "自定义构建时间喵（可选）",
   "arg_set_download_dir": "设置默认下载目录喵（会保存到配置文件里哦）",
-  "download_dir_saved": "默认下载目录已设置为 {dir} 喵~"
+  "download_dir_saved": "默认下载目录已设置为 {dir} 喵~",
+  "artifact_verify_confirm": "校验失败了喵……主人还要继续吗？(y/n): ",
+  "artifact_verify_skip_user": "已跳过喵~"
 }

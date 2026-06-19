@@ -239,5 +239,7 @@
   "artifact_verify_no_key": "署名キーが設定されてないニャ、検証できないニャ...",
   "arg_build_time": "カスタムビルド時刻ニャ（オプション）",
   "arg_set_download_dir": "デフォルトのダウンロードディレクトリを設定するニャ（設定ファイルに保存）",
-  "download_dir_saved": "デフォルトのダウンロードディレクトリを {dir} に設定したニャ"
+  "download_dir_saved": "デフォルトのダウンロードディレクトリを {dir} に設定したニャ",
+  "artifact_verify_confirm": "検証失敗したニャ…それでも続けるニャ？(y/n): ",
+  "artifact_verify_skip_user": "スキップしたニャ。"
 }
