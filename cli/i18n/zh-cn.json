@@ -240,6 +240,8 @@
   "artifact_verify_no_key": "未配置签名密钥，无法验证。",
   "arg_set_download_dir": "设置默认下载目录（保存到配置文件）",
   "download_dir_saved": "默认下载目录已设置为: {dir}",
+  "signing_key_generating": "正在生成签名密钥对...",
+  "signing_key_generated": "签名密钥已生成并自动上传至 fork。",
   "artifact_verify_confirm": "安全警告：文件在下载传输中可能已被篡改，是否继续高风险操作？(y/n): ",
   "artifact_verify_skip_user": "已跳过。"
 }

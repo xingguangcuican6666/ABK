@@ -571,11 +571,77 @@ class GitHubClient:
             "needs_sync": behind.get("behind_by", 0) > 0
         }
 
+    def _api_url(self, path):
+        return f"{GITHUB_API}/repos/{self.repo}/{path.lstrip('/')}"
+
+    def get_repo_public_key(self):
+        url = self._api_url("actions/secrets/public-key")
+        req = Request(url, headers={
+            "Authorization": f"token {self.token}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "ABK-CLI",
+        })
+        with urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read())
+
+    def create_or_update_secret(self, secret_name, secret_value):
+        pub = self.get_repo_public_key()
+        import nacl.bindings
+        key_bytes = base64.b64decode(pub['key'])
+        encrypted = nacl.bindings.crypto_box_seal(secret_value.encode(), key_bytes)
+        encrypted_b64 = base64.b64encode(encrypted).decode()
+        data = json.dumps({
+            "encrypted_value": encrypted_b64,
+            "key_id": pub['key_id'],
+        }).encode()
+        url = self._api_url(f"actions/secrets/{secret_name}")
+        req = Request(url, data=data, method='PUT', headers={
+            "Authorization": f"token {self.token}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "ABK-CLI",
+            "Content-Type": "application/json",
+        })
+        with urlopen(req, timeout=30) as resp:
+            return resp.status in (201, 204)
+
 
 def get_signing_key():
     """Load signing public key from config."""
     config = load_config()
     return config.get("signing_key") or os.environ.get("ABK_SIGNING_KEY")
+
+
+def generate_signing_keypair():
+    """Generate RSA-2048 keypair for artifact signing."""
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key_pem = key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode()
+    return public_key_pem
+
+
+def ensure_signing_key(client):
+    """Generate signing key if missing, then upload public key to fork secrets."""
+    config = load_config()
+    existing = config.get("signing_key") or os.environ.get("ABK_SIGNING_KEY")
+    if existing:
+        return existing
+    if not client.token:
+        return None
+    print(t("signing_key_generating"))
+    public_key_pem = generate_signing_keypair()
+    fork = client.get_fork()
+    if fork:
+        try:
+            client.create_or_update_secret("ABK_ARTIFACT_SIGNING_PUBLIC_KEY", public_key_pem)
+        except Exception:
+            pass
+    config["signing_key"] = public_key_pem
+    save_config(config)
+    print(t("signing_key_generated"))
+    return public_key_pem
 
 
 def verify_artifact_bundle(bundle_path, public_key_pem=None):
@@ -753,6 +819,7 @@ def cmd_fork(args):
             print(t("fork_creating"))
             result = client.create_fork()
             print(t("fork_created", fork=result.get('full_name')))
+        ensure_signing_key(client)
     except Exception as e:
         print(t("err_fork_failed", error=e), file=sys.stderr)
         sys.exit(1)
@@ -781,6 +848,7 @@ def cmd_sync(args):
         print(t("syncing_n_commits", n=behind['behind_by']))
         client.sync_fork()
         print(t("fork_sync_done"))
+        ensure_signing_key(client)
     except Exception as e:
         print(t("err_sync_failed", error=e), file=sys.stderr)
         sys.exit(1)

@@ -240,6 +240,8 @@
   "artifact_verify_no_key": "No signing key configured, unable to verify.",
   "arg_set_download_dir": "Set default download directory (saved to config)",
   "download_dir_saved": "Default download directory set to: {dir}",
+  "signing_key_generating": "Generating signing keypair...",
+  "signing_key_generated": "Signing key generated and uploaded to fork.",
   "artifact_verify_confirm": "SECURITY: File may have been tampered with during download (network hijacking risk). Continue high-risk operation? (y/n): ",
   "artifact_verify_skip_user": "Skipped."
 }

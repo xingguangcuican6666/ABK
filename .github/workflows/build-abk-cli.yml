@@ -108,7 +108,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller cryptography certifi
+          python -m pip install pyinstaller cryptography certifi pynacl
 
       - name: Install Rust (cryptography build dependency)
         if: runner.os == 'Windows'
@@ -131,7 +131,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install setuptools-rust wheel
-          python -m pip install pyinstaller cryptography certifi
+          python -m pip install pyinstaller cryptography certifi pynacl
 
       - name: Build native one-dir bundle
         if: ${{ matrix.target_id == 'linux-arm64' || matrix.target_id == 'linux-x64' || matrix.target_id == 'macos-arm64' || matrix.target_id == 'macos-x64' }}
@@ -209,7 +209,7 @@ jobs:
               apt-get update
               apt-get install -y build-essential zlib1g-dev cargo
               python -m pip install --upgrade pip
-              python -m pip install pyinstaller cryptography certifi
+              python -m pip install pyinstaller cryptography certifi pynacl
               pyinstaller \
                 --noconfirm \
                 --clean \
@@ -223,6 +223,8 @@ jobs:
                 --hidden-import cryptography.hazmat.backends.openssl \
                 --hidden-import certifi \
                 --collect-all certifi \
+                --hidden-import nacl \
+                --hidden-import nacl.bindings \
                 --add-data "cli/i18n:i18n" \
                 cli/abk.py
             '
@@ -244,7 +246,7 @@ jobs:
               apt-get update
               apt-get install -y build-essential zlib1g-dev cargo
               python -m pip install --upgrade pip
-              python -m pip install pyinstaller cryptography certifi
+              python -m pip install pyinstaller cryptography certifi pynacl
               pyinstaller \
                 --noconfirm \
                 --clean \
@@ -258,6 +260,8 @@ jobs:
                 --hidden-import cryptography.hazmat.backends.openssl \
                 --hidden-import certifi \
                 --collect-all certifi \
+                --hidden-import nacl \
+                --hidden-import nacl.bindings \
                 --add-data "cli/i18n:i18n" \
                 cli/abk.py
             '
