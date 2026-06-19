@@ -18,6 +18,13 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.exceptions import InvalidSignature
 
+# PyInstaller bundle: point SSL certs to certifi if available
+try:
+    import certifi
+    os.environ.setdefault('SSL_CERT_FILE', certifi.where())
+except ImportError:
+    pass
+
 sys.path.insert(0, str(Path(__file__).parent))
 from i18n import t, load_translations, detect_language
 
