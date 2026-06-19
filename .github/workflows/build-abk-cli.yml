@@ -110,7 +110,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pyinstaller cryptography certifi pynacl
 
-      - name: Install Rust (cryptography build dependency)
+      - name: Install Rust + OpenSSL (cryptography build dependency)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -124,6 +124,30 @@ jobs:
             [Environment]::SetEnvironmentVariable("Path", "$env:USERPROFILE\.cargo\bin;$env:Path", "User")
           }
           cargo --version
+
+      - name: Install OpenSSL (cryptography openssl-sys dependency)
+        if: runner.os == 'Windows' && (contains(matrix.target_id, 'arm64') || contains(matrix.target_id, 'x86'))
+        shell: pwsh
+        run: |
+          # cryptography 49.x uses openssl-sys Rust crate which needs OpenSSL headers/libs
+          # Pre-built wheels exist only for amd64, so arm64 and x86 need to compile from source
+          $triplet = if (python -c "import platform; print('arm64' in platform.machine().lower())" 2>$null) {
+            "arm64-windows"
+          } elseif (python -c "import platform; print(platform.machine())" 2>$null -eq 'ARM64') {
+            "arm64-windows"
+          } else {
+            "x86-windows"
+          }
+          Write-Host "Target triplet: $triplet"
+          if (Get-Command vcpkg -ErrorAction SilentlyContinue) {
+            vcpkg install openssl --triplet $triplet
+            $opensslDir = "$env:VCPKG_INSTALLATION_ROOT\installed\$triplet"
+            echo "OPENSSL_DIR=$opensslDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Host "OpenSSL installed at $opensslDir"
+          } else {
+            Write-Host "::warning::vcpkg not found, try chocolatey fallback"
+            choco install openssl --no-progress -y 2>$null
+          }
 
       - name: Install build dependencies
         if: runner.os == 'Windows'
@@ -207,7 +231,7 @@ jobs:
             bash -lc '
               set -euo pipefail
               apt-get update
-              apt-get install -y build-essential zlib1g-dev cargo
+              apt-get install -y build-essential zlib1g-dev cargo libssl-dev pkg-config
               python -m pip install --upgrade pip
               python -m pip install pyinstaller cryptography certifi pynacl
               pyinstaller \
@@ -244,7 +268,7 @@ jobs:
             bash -lc '
               set -euo pipefail
               apt-get update
-              apt-get install -y build-essential zlib1g-dev cargo
+              apt-get install -y build-essential zlib1g-dev cargo libssl-dev pkg-config
               python -m pip install --upgrade pip
               python -m pip install pyinstaller cryptography certifi pynacl
               pyinstaller \
