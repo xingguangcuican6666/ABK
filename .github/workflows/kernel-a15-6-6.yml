@@ -96,12 +96,12 @@ on:
         type: boolean
         default: false
       zram_full_algo:
-        description: "启用 ZRAM 完整算法支持（LZO/LZ4/LZ4HC/LZ4K/LZ4KD/DEFLATE/842/ZSTD，默认 lzo-rle）"
+        description: "启用 ZRAM 完整算法支持（默认 zstdp；6.12 自动跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS）"
         required: false
         type: boolean
         default: false
       zram_extra_algos:
-        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；仅在未启用完整算法时生效）"
+        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd,zstdp；6.12 会忽略 lz4k/lz4kd/lz4k_oplus）"
         required: false
         type: string
         default: ""

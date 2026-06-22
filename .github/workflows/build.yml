@@ -148,20 +148,27 @@ jobs:
           effective_use_zram="${{ inputs.use_zram }}"
           effective_zram_full_algo="${{ inputs.zram_full_algo }}"
           effective_zram_extra_algos="${{ inputs.zram_extra_algos || '' }}"
+          effective_zram_legacy_lz4k="true"
 
           if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
-            if [ "$effective_use_zram" = "true" ] || [ "$effective_zram_full_algo" = "true" ] || [ -n "$effective_zram_extra_algos" ]; then
-              echo "::warning::Android16/6.12 暂不支持当前 ZRAM LZ4K 补丁栈，已强制关闭 ZRAM 增强和算法配置。"
+            effective_zram_legacy_lz4k="false"
+            if [ "$effective_zram_full_algo" = "true" ]; then
+              echo "::warning::Android16/6.12 会跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS 补丁栈，仅保留 zstdp 与内核原生支持的 ZRAM 算法。"
             fi
-            effective_use_zram="false"
-            effective_zram_full_algo="false"
-            effective_zram_extra_algos=""
+            if [ -n "$effective_zram_extra_algos" ]; then
+              filtered_algos="$(python3 -c 'import sys; blocked={\"lz4k\",\"lz4kd\",\"lz4k_oplus\"}; print(\",\".join(item.strip() for item in sys.argv[1].split(\",\") if item.strip() and item.strip().lower() not in blocked))' "$effective_zram_extra_algos")"
+              if [ "$filtered_algos" != "$effective_zram_extra_algos" ]; then
+                echo "::warning::Android16/6.12 不支持 legacy LZ4K/LZ4KD/LZ4K_OPLUS，已自动从自定义算法列表移除。"
+              fi
+              effective_zram_extra_algos="$filtered_algos"
+            fi
           fi
 
           {
             echo "EFFECTIVE_USE_ZRAM=$effective_use_zram"
             echo "EFFECTIVE_ZRAM_FULL_ALGO=$effective_zram_full_algo"
             echo "EFFECTIVE_ZRAM_EXTRA_ALGOS=$effective_zram_extra_algos"
+            echo "EFFECTIVE_ZRAM_LEGACY_LZ4K=$effective_zram_legacy_lz4k"
           } >> "$GITHUB_ENV"
 
           effective_ksu_branch="${{ inputs.ksu_branch }}"
@@ -744,6 +751,13 @@ jobs:
 
             echo "克隆自定义外部模块 #$index ($stage/$entry_kind): $repo_url"
             git clone --depth 1 "$repo_url" "$module_dir"
+            echo "external module checkout #$index:"
+            echo "  repo_url: $repo_url"
+            echo "  module_dir: $module_dir"
+            echo "  head_sha: $(git -C "$module_dir" rev-parse HEAD)"
+            echo "  branch: $(git -C "$module_dir" branch --show-current || true)"
+            echo "  origin: $(git -C "$module_dir" remote get-url origin)"
+            echo "  head_log: $(git -C "$module_dir" log -1 --oneline)"
             printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
               "$stage" \
               "$module_dir" \
@@ -2460,38 +2474,46 @@ jobs:
             patch -p1 --forward < "$ACTION_BUILD/patches/unicode_bypass_fix_6.1+.patch" || true
           fi
 
-      - name: 配置 ZRAM LZ4 补丁栈
-        if: ${{ inputs.use_zram && inputs.kernel_version != '6.12' }}
+      - name: 配置 ZRAM 补丁栈
+        if: ${{ inputs.use_zram }}
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
-          echo "升级 LZ4..."
-          rm -f lib/lz4/lz4_compress.c lib/lz4/lz4_decompress.c lib/lz4/lz4defs.h lib/lz4/lz4hc_compress.c
+          if [ "${EFFECTIVE_ZRAM_LEGACY_LZ4K:-true}" = "true" ]; then
+            echo "升级 LZ4..."
+            rm -f lib/lz4/lz4_compress.c lib/lz4/lz4_decompress.c lib/lz4/lz4defs.h lib/lz4/lz4hc_compress.c
 
-          cp -r $ZZH_PATCHES/zram/lz4/* ./lib/lz4/
-          cp -r $ZZH_PATCHES/zram/include/linux/* ./include/linux/
-          bash $ZZH_PATCHES/zram/apply_lz4_neon.sh
+            cp -r $ZZH_PATCHES/zram/lz4/* ./lib/lz4/
+            cp -r $ZZH_PATCHES/zram/include/linux/* ./include/linux/
+            bash $ZZH_PATCHES/zram/apply_lz4_neon.sh
 
-          if [ -f "fs/f2fs/Makefile" ] && ! grep -qF "f2fs-\$(CONFIG_F2FS_IOSTAT) += iostat.o" "fs/f2fs/Makefile"; then
-            echo "f2fs-\$(CONFIG_F2FS_IOSTAT) += iostat.o" >> "fs/f2fs/Makefile"
+            if [ -f "fs/f2fs/Makefile" ] && ! grep -qF "f2fs-\$(CONFIG_F2FS_IOSTAT) += iostat.o" "fs/f2fs/Makefile"; then
+              echo "f2fs-\$(CONFIG_F2FS_IOSTAT) += iostat.o" >> "fs/f2fs/Makefile"
+            fi
+
+            cp -r $SUKISU_PATCHES/other/zram/lz4k/include/linux/* ./include/linux/
+            cp -r $SUKISU_PATCHES/other/zram/lz4k/lib/* ./lib/
+            cp -r $SUKISU_PATCHES/other/zram/lz4k/crypto/* ./crypto/
+            cp -r $SUKISU_PATCHES/other/zram/lz4k_oplus ./lib/
+
+            for zram_patch_name in lz4kd.patch lz4k_oplus.patch; do
+              zram_patch_file="$SUKISU_PATCHES/other/zram/zram_patch/${{ inputs.kernel_version }}/$zram_patch_name"
+              if [ ! -f "$zram_patch_file" ]; then
+                echo "::warning::$zram_patch_name 不存在，跳过 ${{ inputs.kernel_version }} 的 SukiSU ZRAM 集成补丁"
+                continue
+              fi
+
+              cp "$zram_patch_file" ./
+              if ! patch -p1 -F 3 < "$zram_patch_name"; then
+                echo "::warning::$zram_patch_name 应用失败，可能已应用或上下文不匹配"
+              fi
+            done
+          else
+            echo "6.12 检测到新式 zram backend，跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS 补丁栈。"
           fi
 
-          cp -r $SUKISU_PATCHES/other/zram/lz4k/include/linux/* ./include/linux/
-          cp -r $SUKISU_PATCHES/other/zram/lz4k/lib/* ./lib/
-          cp -r $SUKISU_PATCHES/other/zram/lz4k/crypto/* ./crypto/
-          cp -r $SUKISU_PATCHES/other/zram/lz4k_oplus ./lib/
-
-          for zram_patch_name in lz4kd.patch lz4k_oplus.patch; do
-            zram_patch_file="$SUKISU_PATCHES/other/zram/zram_patch/${{ inputs.kernel_version }}/$zram_patch_name"
-            if [ ! -f "$zram_patch_file" ]; then
-              echo "::warning::$zram_patch_name 不存在，跳过 ${{ inputs.kernel_version }} 的 SukiSU ZRAM 集成补丁"
-              continue
-            fi
-
-            cp "$zram_patch_file" ./
-            if ! patch -p1 -F 3 < "$zram_patch_name"; then
-              echo "::warning::$zram_patch_name 应用失败，可能已应用或上下文不匹配"
-            fi
-          done
+          chmod +x "$ZZH_PATCHES/zram/setup_zstdp.sh"
+          ABK_ZSTDP_UPSTREAM_TAG="v6.15" \
+            bash "$ZZH_PATCHES/zram/setup_zstdp.sh" integrate "$PWD"
 
       - name: 修复 6.6 WiFi/蓝牙兼容性（三星 + 小米）
         if: inputs.kernel_version == '6.6'
@@ -2540,71 +2562,173 @@ jobs:
           ensure_line_once "$XIAOMI_SYMBOL_LIST" "device_find_any_child"
 
       - name: 配置 ZRAM 选项
-        if: ${{ inputs.use_zram && inputs.kernel_version != '6.12' }}
+        if: ${{ inputs.use_zram }}
         run: |
           CONFIG_FILE="$DEFCONFIG"
 
-          if [ "${{ inputs.kernel_version }}" = "5.10" ]; then
-            cat >> "$CONFIG_FILE" <<'EOF'
-          CONFIG_ZSMALLOC=y
-          CONFIG_ZRAM=y
-          CONFIG_MODULE_SIG=n
-          CONFIG_CRYPTO_LZO=y
-          CONFIG_ZRAM_DEF_COMP_LZ4KD=y
-          EOF
-          fi
+          set_config_value() {
+            local symbol="$1"
+            local value="$2"
+            local clean_symbol tmp
 
-          if [ "${{ inputs.kernel_version }}" != "6.6" ] && [ "${{ inputs.kernel_version }}" != "5.10" ]; then
-            if grep -q "CONFIG_ZSMALLOC" "$CONFIG_FILE"; then
-              sed -i 's/CONFIG_ZSMALLOC=m/CONFIG_ZSMALLOC=y/g' "$CONFIG_FILE"
-            else
-              echo "CONFIG_ZSMALLOC=y" >> "$CONFIG_FILE"
+            clean_symbol="${symbol#CONFIG_}"
+            tmp="$(mktemp)"
+            grep -v -E "^(CONFIG_${clean_symbol}=|# CONFIG_${clean_symbol} is not set$)" "$CONFIG_FILE" > "$tmp" || true
+            case "$value" in
+              n)
+                printf '# CONFIG_%s is not set\n' "$clean_symbol" >> "$tmp"
+                ;;
+              *)
+                printf 'CONFIG_%s=%s\n' "$clean_symbol" "$value" >> "$tmp"
+                ;;
+            esac
+            mv "$tmp" "$CONFIG_FILE"
+          }
+
+          disable_config() {
+            set_config_value "$1" n
+          }
+
+          enable_zstdp_base() {
+            set_config_value CONFIG_XXHASH y
+            set_config_value CONFIG_CRYPTO_ZSTDP y
+          }
+
+          set_legacy_zstdp_default() {
+            if [ "${{ inputs.kernel_version }}" = "5.10" ]; then
+              return 0
             fi
-            sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' "$CONFIG_FILE"
+            disable_config CONFIG_ZRAM_DEF_COMP_LZORLE
+            disable_config CONFIG_ZRAM_DEF_COMP_ZSTD
+            disable_config CONFIG_ZRAM_DEF_COMP_LZ4
+            disable_config CONFIG_ZRAM_DEF_COMP_LZO
+            disable_config CONFIG_ZRAM_DEF_COMP_LZ4HC
+            disable_config CONFIG_ZRAM_DEF_COMP_842
+            set_config_value CONFIG_ZRAM_DEF_COMP_ZSTDP y
+            set_config_value CONFIG_ZRAM_DEF_COMP '"zstdp"'
+          }
+
+          set_modern_zstdp_default() {
+            disable_config CONFIG_ZRAM_DEF_COMP_LZORLE
+            disable_config CONFIG_ZRAM_DEF_COMP_LZO
+            disable_config CONFIG_ZRAM_DEF_COMP_LZ4
+            disable_config CONFIG_ZRAM_DEF_COMP_LZ4HC
+            disable_config CONFIG_ZRAM_DEF_COMP_ZSTD
+            disable_config CONFIG_ZRAM_DEF_COMP_DEFLATE
+            disable_config CONFIG_ZRAM_DEF_COMP_842
+            set_config_value CONFIG_ZRAM_BACKEND_ZSTDP y
+            set_config_value CONFIG_ZRAM_DEF_COMP_ZSTDP y
+            set_config_value CONFIG_ZRAM_DEF_COMP '"zstdp"'
+          }
+
+          set_zstdp_default() {
+            if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
+              set_modern_zstdp_default
+            else
+              set_legacy_zstdp_default
+            fi
+          }
+
+          enable_legacy_full_algos() {
+            set_config_value CONFIG_CRYPTO_LZO y
+            set_config_value CONFIG_CRYPTO_LZ4 y
+            set_config_value CONFIG_CRYPTO_DEFLATE y
+            set_config_value CONFIG_CRYPTO_ZSTD y
+          }
+
+          enable_modern_full_algos() {
+            set_config_value CONFIG_ZRAM_BACKEND_LZO y
+            set_config_value CONFIG_ZRAM_BACKEND_LZ4 y
+            set_config_value CONFIG_ZRAM_BACKEND_LZ4HC y
+            set_config_value CONFIG_ZRAM_BACKEND_ZSTD y
+            set_config_value CONFIG_ZRAM_BACKEND_ZSTDP y
+            set_config_value CONFIG_ZRAM_BACKEND_DEFLATE y
+            set_config_value CONFIG_ZRAM_BACKEND_842 y
+          }
+
+          enable_legacy_algo() {
+            local algo="$1"
+            case "$algo" in
+              "lzo")        set_config_value CONFIG_CRYPTO_LZO y ;;
+              "lz4")        set_config_value CONFIG_CRYPTO_LZ4 y ;;
+              "lz4hc")      set_config_value CONFIG_CRYPTO_LZ4HC y ;;
+              "lz4k")       set_config_value CONFIG_CRYPTO_LZ4K y ;;
+              "lz4k_oplus") set_config_value CONFIG_CRYPTO_LZ4K_OPLUS y ;;
+              "lz4kd")      set_config_value CONFIG_CRYPTO_LZ4KD y ;;
+              "deflate")    set_config_value CONFIG_CRYPTO_DEFLATE y ;;
+              "842")        set_config_value CONFIG_CRYPTO_842 y ;;
+              "zstd")       set_config_value CONFIG_CRYPTO_ZSTD y ;;
+              "zstdp")      enable_zstdp_base ;;
+              *) echo "::warning::未知的 ZRAM 算法: $algo，跳过" ;;
+            esac
+          }
+
+          enable_modern_algo() {
+            local algo="$1"
+            case "$algo" in
+              "lzo")        set_config_value CONFIG_ZRAM_BACKEND_LZO y ;;
+              "lz4")        set_config_value CONFIG_ZRAM_BACKEND_LZ4 y ;;
+              "lz4hc")      set_config_value CONFIG_ZRAM_BACKEND_LZ4HC y ;;
+              "deflate")    set_config_value CONFIG_ZRAM_BACKEND_DEFLATE y ;;
+              "842")        set_config_value CONFIG_ZRAM_BACKEND_842 y ;;
+              "zstd")       set_config_value CONFIG_ZRAM_BACKEND_ZSTD y ;;
+              "zstdp")      set_config_value CONFIG_ZRAM_BACKEND_ZSTDP y; enable_zstdp_base ;;
+              "lz4k"|"lz4k_oplus"|"lz4kd")
+                echo "::warning::${algo} 暂不支持 6.12 新式 zram backend，跳过"
+                ;;
+              *)
+                echo "::warning::未知的 ZRAM 算法: $algo，跳过"
+                ;;
+            esac
+          }
+
+          if [ "${{ inputs.kernel_version }}" = "5.10" ]; then
+            set_config_value CONFIG_MODULE_SIG n
           fi
 
-          if [ "${{ inputs.kernel_version }}" = "6.6" ]; then
-            echo "CONFIG_ZSMALLOC=y" >> "$CONFIG_FILE"
-            sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' "$CONFIG_FILE"
-          fi
+          set_config_value CONFIG_ZSMALLOC y
+          set_config_value CONFIG_ZRAM y
 
-          if [ "${{ inputs.android_version }}" = "android14" ] || [ "${{ inputs.android_version }}" = "android15" ]; then
+          if [ -f "$KERNEL_ROOT/common/modules.bzl" ]; then
             sed -i 's/"drivers\/block\/zram\/zram\.ko",//g; s/"mm\/zsmalloc\.ko",//g' "$KERNEL_ROOT/common/modules.bzl"
           fi
 
           if grep -q "CONFIG_ZSMALLOC=y" "$CONFIG_FILE" && grep -q "CONFIG_ZRAM=y" "$CONFIG_FILE"; then
-            cat "$ZZH_PATCHES/config/zram.config" >> "$CONFIG_FILE"
+            if [ "${{ inputs.kernel_version }}" != "6.12" ]; then
+              while IFS= read -r line; do
+                case "$line" in
+                  ''|'#'*) continue ;;
+                  CONFIG_*=*)
+                    set_config_value "${line%%=*}" "${line#*=}"
+                    ;;
+                esac
+              done < "$ZZH_PATCHES/config/zram.config"
+            fi
           fi
+
+          enable_zstdp_base
+          set_zstdp_default
 
           # ---- ZRAM 完整算法支持 ----
           if [ "${EFFECTIVE_ZRAM_FULL_ALGO:-false}" = "true" ]; then
             echo "启用 ZRAM 完整算法支持..."
-            cat >> "$CONFIG_FILE" <<'EOF'
-          CONFIG_CRYPTO_LZO=y
-          CONFIG_CRYPTO_LZ4=y
-          CONFIG_CRYPTO_DEFLATE=y
-          CONFIG_CRYPTO_ZSTD=y
-          CONFIG_ZRAM_DEF_COMP_LZORLE=y
-          CONFIG_ZRAM_DEF_COMP="lzo-rle"
-          EOF
+            if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
+              enable_modern_full_algos
+            else
+              enable_legacy_full_algos
+            fi
+            set_zstdp_default
           elif [ -n "${EFFECTIVE_ZRAM_EXTRA_ALGOS:-}" ]; then
             # ---- 自定义单独算法 ----
             echo "添加自定义 ZRAM 算法: $EFFECTIVE_ZRAM_EXTRA_ALGOS"
             IFS=',' read -ra ALGOS <<< "$EFFECTIVE_ZRAM_EXTRA_ALGOS"
             for raw_algo in "${ALGOS[@]}"; do
               algo=$(echo "$raw_algo" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
-              case "$algo" in
-                "lzo")        echo "CONFIG_CRYPTO_LZO=y"        >> "$CONFIG_FILE" ;;
-                "lz4")        echo "CONFIG_CRYPTO_LZ4=y"        >> "$CONFIG_FILE" ;;
-                "lz4hc")      echo "CONFIG_CRYPTO_LZ4HC=y"      >> "$CONFIG_FILE" ;;
-                "lz4k")       echo "CONFIG_CRYPTO_LZ4K=y"       >> "$CONFIG_FILE" ;;
-                "lz4k_oplus") echo "CONFIG_CRYPTO_LZ4K_OPLUS=y" >> "$CONFIG_FILE" ;;
-                "lz4kd")      echo "CONFIG_CRYPTO_LZ4KD=y"      >> "$CONFIG_FILE" ;;
-                "deflate")    echo "CONFIG_CRYPTO_DEFLATE=y"    >> "$CONFIG_FILE" ;;
-                "842")        echo "CONFIG_CRYPTO_842=y"        >> "$CONFIG_FILE" ;;
-                "zstd")       echo "CONFIG_CRYPTO_ZSTD=y"       >> "$CONFIG_FILE" ;;
-                *) echo "::warning::未知的 ZRAM 算法: $raw_algo，跳过" ;;
-              esac
+              if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
+                enable_modern_algo "$algo"
+              else
+                enable_legacy_algo "$algo"
+              fi
             done
           fi
 
@@ -2873,6 +2997,15 @@ jobs:
             echo "::group::执行自定义外部模块 [$stage] $repo_url"
             (
               cd "$module_dir"
+              echo "external module execution context:"
+              echo "  repo_url: $repo_url"
+              echo "  module_dir: $module_dir"
+              echo "  entry_kind: ${entry_kind:-module}"
+              echo "  child_id: ${child_id:-}"
+              echo "  head_sha: $(git rev-parse HEAD)"
+              echo "  branch: $(git branch --show-current || true)"
+              echo "  origin: $(git remote get-url origin)"
+              echo "  head_log: $(git log -1 --oneline)"
               export ABK_MODULE_ENTRY_KIND="${entry_kind:-module}"
               export ABK_MODULE_GROUP_REPO_URL="${group_repo_url:-}"
               export ABK_MODULE_CHILD_ID="${child_id:-}"

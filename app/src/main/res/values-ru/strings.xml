@@ -200,9 +200,9 @@
     <string name="build_oneplus_proxy_short">Оптимизация прокси</string>
     <string name="build_oneplus_unicode_short">Обход Unicode</string>
     <string name="build_zram_options">Параметры ZRAM</string>
-    <string name="build_zram_full_algo">Полный набор алгоритмов (LZO/LZ4/ZSTD…)</string>
+    <string name="build_zram_full_algo">Полный набор алгоритмов (LZO/LZ4/ZSTD/ZSTDP…)</string>
     <string name="build_zram_custom_algo">Свои алгоритмы ZRAM</string>
-    <string name="build_zram_algo_placeholder">например, lzo,lz4,deflate,zstd</string>
+    <string name="build_zram_algo_placeholder">например, lzo,lz4,deflate,zstd,zstdp</string>
     <string name="build_kpm_options">Параметры KPM</string>
     <string name="build_kpm_password">Супер-ключ KPM (необязательно)</string>
     <string name="build_kpm_password_placeholder">Пусто = пароль по умолчанию</string>

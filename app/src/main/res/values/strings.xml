@@ -200,9 +200,9 @@
     <string name="build_oneplus_proxy_short">代理优化</string>
     <string name="build_oneplus_unicode_short">Unicode 绕过</string>
     <string name="build_zram_options">ZRAM 扩展选项</string>
-    <string name="build_zram_full_algo">启用完整算法支持 (LZO/LZ4/ZSTD 等)</string>
+    <string name="build_zram_full_algo">启用完整算法支持 (LZO/LZ4/ZSTD/ZSTDP 等)</string>
     <string name="build_zram_custom_algo">自定义 ZRAM 算法</string>
-    <string name="build_zram_algo_placeholder">如: lzo,lz4,deflate,zstd</string>
+    <string name="build_zram_algo_placeholder">如: lzo,lz4,deflate,zstd,zstdp</string>
     <string name="build_kpm_options">KPM 扩展选项</string>
     <string name="build_kpm_password">KPM 超级密码 (可选)</string>
     <string name="build_kpm_password_placeholder">留空使用默认密码</string>
