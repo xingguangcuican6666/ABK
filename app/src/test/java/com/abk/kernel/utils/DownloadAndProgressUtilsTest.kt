@@ -12,6 +12,7 @@ import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.WorkflowStep
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -142,6 +143,24 @@ class DownloadAndProgressUtilsTest {
     @Test
     fun normalizesDownloadDirectoryPaths() {
         assertTrue(DownloadDirectoryUtils.normalizeDirectoryPath("/sdcard/Download/ABK/").endsWith("/sdcard/Download/ABK"))
+    }
+
+    @Test
+    fun parsesForkSigningPublicKeyFromSupportedStoredFormats() {
+        val material = ForkSigningManager.generateSigningMaterial()
+        val jsonValue = """{"publicKeyBase64":"${material.publicKeyBase64}"}"""
+
+        assertEquals(material.publicKeyPem, ForkSigningManager.publicKeyPemFromStoredValue(material.publicKeyBase64))
+        assertEquals(material.publicKeyPem, ForkSigningManager.publicKeyPemFromStoredValue(material.publicKeyPem))
+        assertEquals(material.publicKeyPem, ForkSigningManager.publicKeyPemFromStoredValue(jsonValue))
+    }
+
+    @Test
+    fun returnsNullForInvalidStoredForkSigningPublicKeyValue() {
+        assertNull(ForkSigningManager.publicKeyPemFromStoredValue("{"))
+        assertNull(ForkSigningManager.publicKeyPemFromStoredValue("""{"unexpected":true}"""))
+        assertNull(ForkSigningManager.publicKeyPemFromStoredValue(""))
+        assertNull(ForkSigningManager.publicKeyPemFromStoredValue(null))
     }
 
     @Test

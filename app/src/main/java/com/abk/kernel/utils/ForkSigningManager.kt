@@ -1,6 +1,7 @@
 package com.abk.kernel.utils
 
 import com.abk.kernel.data.model.GitHubSecretPublicKey
+import org.json.JSONObject
 import java.security.KeyPairGenerator
 import java.util.Base64
 
@@ -31,6 +32,34 @@ object ForkSigningManager {
 
     fun publicKeyPemFromBase64(base64: String): String =
         pem("PUBLIC KEY", Base64.getDecoder().decode(base64))
+
+    fun publicKeyPemFromStoredValue(value: String?): String? {
+        val normalized = normalizeStoredPublicKeyValue(value) ?: return null
+        return if (normalized.contains("-----BEGIN")) {
+            normalized
+        } else {
+            runCatching { publicKeyPemFromBase64(normalized) }.getOrNull()
+        }
+    }
+
+    private fun normalizeStoredPublicKeyValue(value: String?): String? {
+        val trimmed = value?.trim().orEmpty()
+        if (trimmed.isBlank()) return null
+        if (trimmed.contains("-----BEGIN")) return trimmed
+        if (trimmed.startsWith("{")) {
+            val json = runCatching { JSONObject(trimmed) }.getOrNull() ?: return null
+            val extracted = sequenceOf(
+                "publicKeyBase64",
+                "public_key_base64",
+                "publicKey",
+                "public_key"
+            ).mapNotNull { key ->
+                json.optString(key).trim().takeIf { it.isNotBlank() }
+            }.firstOrNull()
+            if (!extracted.isNullOrBlank()) return extracted
+        }
+        return trimmed
+    }
 
     private fun pem(type: String, bytes: ByteArray): String {
         val encoded = Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(bytes)

@@ -149,11 +149,12 @@ jobs:
           effective_zram_full_algo="${{ inputs.zram_full_algo }}"
           effective_zram_extra_algos="${{ inputs.zram_extra_algos || '' }}"
           effective_zram_legacy_lz4k="true"
+          effective_zram_use_optional_algo="false"
 
           if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
             effective_zram_legacy_lz4k="false"
             if [ "$effective_zram_full_algo" = "true" ]; then
-              echo "::warning::Android16/6.12 会跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS 补丁栈，仅保留 zstdp 与内核原生支持的 ZRAM 算法。"
+              echo "::warning::Android16/6.12 会跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS 补丁栈，仅保留内核原生支持的 ZRAM 算法。"
             fi
             if [ -n "$effective_zram_extra_algos" ]; then
               filtered_algos="$(python3 -c 'import sys; blocked={\"lz4k\",\"lz4kd\",\"lz4k_oplus\"}; print(\",\".join(item.strip() for item in sys.argv[1].split(\",\") if item.strip() and item.strip().lower() not in blocked))' "$effective_zram_extra_algos")"
@@ -164,11 +165,18 @@ jobs:
             fi
           fi
 
+          if [ "$effective_use_zram" = "true" ] && [ "$effective_zram_full_algo" != "true" ] && [ -n "$effective_zram_extra_algos" ]; then
+            if python3 -c 'import sys; algos=[item.strip().lower() for item in sys.argv[1].split(",") if item.strip()]; raise SystemExit(0 if "zstdp" in algos else 1)' "$effective_zram_extra_algos"; then
+              effective_zram_use_optional_algo="true"
+            fi
+          fi
+
           {
             echo "EFFECTIVE_USE_ZRAM=$effective_use_zram"
             echo "EFFECTIVE_ZRAM_FULL_ALGO=$effective_zram_full_algo"
             echo "EFFECTIVE_ZRAM_EXTRA_ALGOS=$effective_zram_extra_algos"
             echo "EFFECTIVE_ZRAM_LEGACY_LZ4K=$effective_zram_legacy_lz4k"
+            echo "EFFECTIVE_ZRAM_USE_OPTIONAL_ALGO=$effective_zram_use_optional_algo"
           } >> "$GITHUB_ENV"
 
           effective_ksu_branch="${{ inputs.ksu_branch }}"
@@ -2511,9 +2519,13 @@ jobs:
             echo "6.12 检测到新式 zram backend，跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS 补丁栈。"
           fi
 
-          chmod +x "$ZZH_PATCHES/zram/setup_zstdp.sh"
-          ABK_ZSTDP_UPSTREAM_TAG="v6.15" \
-            bash "$ZZH_PATCHES/zram/setup_zstdp.sh" integrate "$PWD"
+          if [ "${EFFECTIVE_ZRAM_USE_OPTIONAL_ALGO:-false}" = "true" ]; then
+            chmod +x "$ZZH_PATCHES/zram/setup_zstdp.sh"
+            ABK_ZSTDP_UPSTREAM_TAG="v6.15" \
+              bash "$ZZH_PATCHES/zram/setup_zstdp.sh" integrate "$PWD"
+          else
+            echo "未请求额外可选 ZRAM 算法，跳过附加算法集成。"
+          fi
 
       - name: 修复 6.6 WiFi/蓝牙兼容性（三星 + 小米）
         if: inputs.kernel_version == '6.6'
@@ -2594,41 +2606,6 @@ jobs:
             set_config_value CONFIG_CRYPTO_ZSTDP y
           }
 
-          set_legacy_zstdp_default() {
-            if [ "${{ inputs.kernel_version }}" = "5.10" ]; then
-              return 0
-            fi
-            disable_config CONFIG_ZRAM_DEF_COMP_LZORLE
-            disable_config CONFIG_ZRAM_DEF_COMP_ZSTD
-            disable_config CONFIG_ZRAM_DEF_COMP_LZ4
-            disable_config CONFIG_ZRAM_DEF_COMP_LZO
-            disable_config CONFIG_ZRAM_DEF_COMP_LZ4HC
-            disable_config CONFIG_ZRAM_DEF_COMP_842
-            set_config_value CONFIG_ZRAM_DEF_COMP_ZSTDP y
-            set_config_value CONFIG_ZRAM_DEF_COMP '"zstdp"'
-          }
-
-          set_modern_zstdp_default() {
-            disable_config CONFIG_ZRAM_DEF_COMP_LZORLE
-            disable_config CONFIG_ZRAM_DEF_COMP_LZO
-            disable_config CONFIG_ZRAM_DEF_COMP_LZ4
-            disable_config CONFIG_ZRAM_DEF_COMP_LZ4HC
-            disable_config CONFIG_ZRAM_DEF_COMP_ZSTD
-            disable_config CONFIG_ZRAM_DEF_COMP_DEFLATE
-            disable_config CONFIG_ZRAM_DEF_COMP_842
-            set_config_value CONFIG_ZRAM_BACKEND_ZSTDP y
-            set_config_value CONFIG_ZRAM_DEF_COMP_ZSTDP y
-            set_config_value CONFIG_ZRAM_DEF_COMP '"zstdp"'
-          }
-
-          set_zstdp_default() {
-            if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
-              set_modern_zstdp_default
-            else
-              set_legacy_zstdp_default
-            fi
-          }
-
           enable_legacy_full_algos() {
             set_config_value CONFIG_CRYPTO_LZO y
             set_config_value CONFIG_CRYPTO_LZ4 y
@@ -2641,7 +2618,6 @@ jobs:
             set_config_value CONFIG_ZRAM_BACKEND_LZ4 y
             set_config_value CONFIG_ZRAM_BACKEND_LZ4HC y
             set_config_value CONFIG_ZRAM_BACKEND_ZSTD y
-            set_config_value CONFIG_ZRAM_BACKEND_ZSTDP y
             set_config_value CONFIG_ZRAM_BACKEND_DEFLATE y
             set_config_value CONFIG_ZRAM_BACKEND_842 y
           }
@@ -2706,9 +2682,6 @@ jobs:
             fi
           fi
 
-          enable_zstdp_base
-          set_zstdp_default
-
           # ---- ZRAM 完整算法支持 ----
           if [ "${EFFECTIVE_ZRAM_FULL_ALGO:-false}" = "true" ]; then
             echo "启用 ZRAM 完整算法支持..."
@@ -2717,7 +2690,6 @@ jobs:
             else
               enable_legacy_full_algos
             fi
-            set_zstdp_default
           elif [ -n "${EFFECTIVE_ZRAM_EXTRA_ALGOS:-}" ]; then
             # ---- 自定义单独算法 ----
             echo "添加自定义 ZRAM 算法: $EFFECTIVE_ZRAM_EXTRA_ALGOS"
@@ -3027,12 +2999,12 @@ jobs:
           kpm_kconfig_ready="${ABK_KPM_KCONFIG_READY:-false}"
           kpm_kconfig_path="${ABK_KPM_KCONFIG_PATH:-}"
 
-          if [ "${{ inputs.ksu_variant }}" != "None" ]; then
-            cat >> "$DEFCONFIG" << 'EOF'
-          CONFIG_KSU=y
+          cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
           EOF
+          if [ "${{ inputs.ksu_variant }}" != "None" ]; then
+            echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           fi
 
           kpm_config_supported="false"
@@ -3674,6 +3646,483 @@ jobs:
               print(f"已补齐 {path} 的 ksu_stop_input_hook_runtime 声明")
               return True
 
+          def official_sulog_argv_is_pointer(event_text, symbol):
+              pattern = re.compile(
+                  rf"{re.escape(symbol)}\s*\([^;]*?\bstruct\s+user_arg_ptr\s*\*\s*argv_user\b",
+                  re.S,
+              )
+              return pattern.search(event_text) is not None
+
+          def ensure_official_sulog_argv_compat(ksu_dir):
+              event_h = ksu_dir / "sulog/event.h"
+              if not event_h.exists():
+                  return False
+
+              event_text = event_h.read_text()
+
+              def patch_call_second_arg(path, symbol):
+                  if not path.exists():
+                      raise SystemExit(f"未找到 {path}，无法修复 {symbol} argv 参数类型")
+
+                  text = path.read_text()
+                  match = re.search(
+                      rf"{re.escape(symbol)}\s*\(\s*[^,\n]+,\s*([^,\n]+)\s*,",
+                      text,
+                  )
+                  if not match:
+                      return False
+
+                  current_arg = match.group(1).strip()
+                  if current_arg in (
+                      "(struct user_arg_ptr *)argv_user",
+                      "(struct user_arg_ptr*)argv_user",
+                      "&argv",
+                  ):
+                      return False
+
+                  if current_arg != "argv_user":
+                      raise SystemExit(f"{path} 的 {symbol} 第二参数为未知形态: {current_arg}")
+
+                  updated = (
+                      text[:match.start(1)]
+                      + "(struct user_arg_ptr *)argv_user"
+                      + text[match.end(1):]
+                  )
+                  path.write_text(updated)
+                  print(f"已修复 {path} 的 {symbol} argv 参数类型")
+                  return True
+
+              changed = False
+              if official_sulog_argv_is_pointer(event_text, "ksu_sulog_capture_sucompat"):
+                  changed = patch_call_second_arg(
+                      ksu_dir / "feature/sucompat.c",
+                      "ksu_sulog_capture_sucompat",
+                  ) or changed
+
+              if official_sulog_argv_is_pointer(event_text, "ksu_sulog_capture_root_execve"):
+                  changed = patch_call_second_arg(
+                      ksu_dir / "hook/syscall_event_bridge.c",
+                      "ksu_sulog_capture_root_execve",
+                  ) or changed
+
+              return changed
+
+          def ensure_official_app_profile_compat(ksu_dir):
+              changed = False
+
+              header = ksu_dir / "policy/app_profile.h"
+              if header.exists():
+                  header_text = header.read_text()
+                  updated_header = re.sub(
+                      r"(?m)^void\s+escape_to_root_for_init\s*\(\s*void\s*\)\s*;",
+                      "int escape_to_root_for_init(void);",
+                      header_text,
+                  )
+                  if updated_header != header_text:
+                      header.write_text(updated_header)
+                      changed = True
+                      print(f"已修复 {header} 的 escape_to_root_for_init 声明")
+
+              path = ksu_dir / "policy/app_profile.c"
+              if not path.exists():
+                  return changed
+
+              text = path.read_text()
+              original = text
+
+              text = text.replace('#include "hook/tp_marker.h"\n', "")
+              text = re.sub(
+                  r"(?m)^static\s+void\s+disable_seccomp\s*\(\s*void\s*\)",
+                  "void disable_seccomp(void)",
+                  text,
+                  count=1,
+              )
+              text = re.sub(
+                  r"(?m)^([ \t]*)disable_seccomp\(\);\n",
+                  r"\1if (likely(test_thread_flag(TIF_SECCOMP)))\n\1    disable_seccomp();\n",
+                  text,
+                  count=1,
+              )
+              text = re.sub(
+                  r"(?ms)\n[ \t]*for_each_thread\s*\(\s*p\s*,\s*t\s*\)\s*\{\n"
+                  r"[ \t]*ksu_set_task_tracepoint_flag\s*\(\s*t\s*\)\s*;\n"
+                  r"[ \t]*\}\n",
+                  "\n",
+                  text,
+                  count=1,
+              )
+              if "for_each_thread" not in text:
+                  text = re.sub(
+                      r"(?m)^[ \t]*struct\s+task_struct\s+\*p\s*=\s*current\s*;\n",
+                      "",
+                      text,
+                      count=1,
+                  )
+                  text = re.sub(
+                      r"(?m)^[ \t]*struct\s+task_struct\s+\*t\s*;\n",
+                      "",
+                      text,
+                      count=1,
+                  )
+              text = re.sub(
+                  r"(?m)^void\s+escape_to_root_for_init\s*\(\s*void\s*\)",
+                  "int escape_to_root_for_init(void)",
+                  text,
+                  count=1,
+              )
+              if "int escape_to_root_for_init(void)" in text:
+                  text = re.sub(
+                      r'(?m)^([ \t]*)pr_err\("Failed to prepare init\'s creds!\\n"\);\n([ \t]*)return;\n',
+                      r'\1pr_err("Failed to prepare init\'s creds!\\n");\n\1return -EINVAL;\n',
+                      text,
+                      count=1,
+                  )
+                  if re.search(r"(?ms)int\s+escape_to_root_for_init\s*\(\s*void\s*\)\s*\{.*?commit_creds\(cred\);\n\s*\}", text):
+                      text = re.sub(
+                          r"(?ms)(int\s+escape_to_root_for_init\s*\(\s*void\s*\)\s*\{.*?commit_creds\(cred\);\n)(\s*\})",
+                          r"\1\n    return 0;\n\2",
+                          text,
+                          count=1,
+                      )
+
+              if text != original:
+                  path.write_text(text)
+                  changed = True
+                  print(f"已修复 {path} 的 Official app_profile 兼容")
+
+              return changed
+
+          def ensure_official_sucompat_execveat_compat(ksu_dir):
+              changed = False
+
+              header = ksu_dir / "feature/sucompat.h"
+              desired_header = dedent("""\
+              #ifndef __KSU_H_SUCOMPAT
+              #define __KSU_H_SUCOMPAT
+              #include <asm/ptrace.h>
+              #include <linux/types.h>
+
+              struct filename;
+              struct user_arg_ptr;
+              struct static_key_true;
+
+              extern struct static_key_true ksu_su_compat_enabled;
+
+              void ksu_sucompat_init(void);
+              void ksu_sucompat_exit(void);
+
+              // Handler functions exported for hook_manager / SUSFS execveat path
+              int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags);
+              #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) && defined(CONFIG_KSU_SUSFS)
+              int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);
+              #else
+              int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
+              #endif
+              int ksu_handle_execveat_init(struct filename *filename, struct user_arg_ptr *argv_user, struct user_arg_ptr *envp_user);
+              int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr, void *argv_user,
+                                               void *envp_user, int *__never_use_flags);
+              int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
+                                      void *envp, int *flags);
+              long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr, const struct pt_regs *regs);
+
+              #endif
+              """)
+              if header.exists():
+                  header_text = header.read_text()
+                  if header_text != desired_header:
+                      header.write_text(desired_header)
+                      changed = True
+                      print(f"已重写 {header} 的 Official sucompat 声明")
+
+              path = ksu_dir / "feature/sucompat.c"
+              if not path.exists():
+                  return changed
+
+              text = path.read_text()
+              original = text
+
+              text = ensure_include(text, "#include <linux/jump_label.h>", "#include <linux/printk.h>\n")
+              text = ensure_include(text, "#include <linux/susfs_def.h>", "#include <linux/ptrace.h>\n")
+              text = ensure_include(text, "#include <linux/namei.h>", "#include <linux/susfs_def.h>\n")
+              text = ensure_include(text, "#include <linux/minmax.h>", "#include <linux/namei.h>\n")
+              text = ensure_include(text, "#include <linux/fs_struct.h>", "#include <linux/minmax.h>\n")
+              text = ensure_include(text, '#include "selinux/selinux.h"', "#include <linux/fs_struct.h>\n")
+              text = ensure_include(text, '#include "objsec.h"', '#include "selinux/selinux.h"\n')
+              text = ensure_include(text, '#include "feature/adb_root.h"', '#include "feature/sucompat.h"\n')
+              text = ensure_include(text, '#include "uapi/sulog.h"', '#include "sulog/event.h"\n')
+              text = text.replace('#include "ksu.h"\n', "")
+              text = text.replace('#include "util.h"\n', "")
+
+              replacement = dedent("""\
+              #define SU_PATH "/system/bin/su"
+              #define SH_PATH "/system/bin/sh"
+
+              static const char sh_path[] = SH_PATH;
+              static const char su_path[] = SU_PATH;
+              static const char ksud_path[] = KSUD_PATH;
+
+              DEFINE_STATIC_KEY_TRUE(ksu_su_compat_enabled);
+
+              static int su_compat_feature_get(u64 *value)
+              {
+                  if (static_key_enabled(&ksu_su_compat_enabled))
+                      *value = 1;
+                  else
+                      *value = 0;
+                  return 0;
+              }
+
+              static int su_compat_feature_set(u64 value)
+              {
+                  bool enable = value != 0;
+                  if (enable)
+                      static_branch_enable(&ksu_su_compat_enabled);
+                  else
+                      static_branch_disable(&ksu_su_compat_enabled);
+                  pr_info("su_compat: set to %d\\n", enable);
+                  return 0;
+              }
+
+              static const struct ksu_feature_handler su_compat_handler = {
+                  .feature_id = KSU_FEATURE_SU_COMPAT,
+                  .name = "su_compat",
+                  .get_handler = su_compat_feature_get,
+                  .set_handler = su_compat_feature_set,
+              };
+
+              static void __user *userspace_stack_buffer(const void *d, size_t len)
+              {
+                  char __user *p = (void __user *)current_user_stack_pointer() - len;
+
+                  return copy_to_user(p, d, len) ? NULL : p;
+              }
+
+              static char __user *sh_user_path(void)
+              {
+                  static const char sh_path_local[] = "/system/bin/sh";
+
+                  return userspace_stack_buffer(sh_path_local, sizeof(sh_path_local));
+              }
+
+              static char __user *ksud_user_path(void)
+              {
+                  static const char ksud_path_local[] = KSUD_PATH;
+
+                  return userspace_stack_buffer(ksud_path_local, sizeof(ksud_path_local));
+              }
+
+              static const char __user *get_user_arg_ptr(struct user_arg_ptr argv, int nr)
+              {
+                  const char __user *native;
+
+              #ifdef CONFIG_COMPAT
+                  if (unlikely(argv.is_compat)) {
+                      compat_uptr_t compat;
+
+                      if (get_user(compat, argv.ptr.compat + nr))
+                          return ERR_PTR(-EFAULT);
+
+                      return compat_ptr(compat);
+                  }
+              #endif
+
+                  if (get_user(native, argv.ptr.native + nr))
+                      return ERR_PTR(-EFAULT);
+
+                  return native;
+              }
+
+              /*
+               * return 0 -> No further checks should be required afterwards
+               * return non-zero -> Further checks should be continued afterwards
+               */
+              int ksu_handle_execveat_init(struct filename *filename, struct user_arg_ptr *argv_user, struct user_arg_ptr *envp_user)
+              {
+                  if (current->pid != 1 && is_init(get_current_cred())) {
+                      int ret;
+                      if (unlikely(strcmp(filename->name, KSUD_PATH) == 0)) {
+                          const char __user *argv_user_ptr = get_user_arg_ptr(*argv_user, 0);
+                          struct ksu_sulog_pending_event *pending_sucompat = NULL;
+
+                          pr_info("hook_manager: escape to root for init executing ksud: %d\\n", current->pid);
+                          pending_sucompat = ksu_sulog_capture_sucompat(filename->name, (struct user_arg_ptr *)argv_user, GFP_KERNEL);
+                          ret = escape_to_root_for_init();
+                          if (ret) {
+                              pr_err("escape_to_root_for_init() failed: %d\\n", ret);
+                              return ret;
+                          }
+                          if (!argv_user_ptr || IS_ERR(argv_user_ptr)) {
+                              pr_err("!argv_user_ptr || IS_ERR(argv_user_ptr)\\n");
+                              return -EFAULT;
+                          }
+                          ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
+                          return 0;
+                      } else if (likely(strstr(filename->name, "/app_process") == NULL &&
+                                         strstr(filename->name, "/adbd") == NULL) &&
+                                 !susfs_is_current_proc_umounted()) {
+                          pr_info("susfs: mark no sucompat checks for pid: '%d', exec: '%s'\\n", current->pid, filename->name);
+                          susfs_set_current_proc_umounted();
+                          return 0;
+                      }
+
+              #ifdef CONFIG_COMPAT
+                      if (unlikely(envp_user->is_compat))
+                          ret = ksu_adb_root_handle_execve(filename->name, (void ***)&envp_user->ptr.compat);
+                      else
+                          ret = ksu_adb_root_handle_execve(filename->name, (void ***)&envp_user->ptr.native);
+              #else
+                      ret = ksu_adb_root_handle_execve(filename->name, (void ***)&envp_user->ptr.native);
+              #endif
+
+                      if (ret) {
+                          pr_err("adb root failed: %d\\n", ret);
+                          return ret;
+                      }
+                  }
+
+                  return -EINVAL;
+              }
+
+              int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+                                               void *argv_user, void *envp_user,
+                                               int *__never_use_flags)
+              {
+                  struct filename *filename;
+                  const char __user *argv_user_ptr = get_user_arg_ptr(*((struct user_arg_ptr *)argv_user), 0);
+                  struct ksu_sulog_pending_event *pending_sucompat = NULL;
+                  int ret;
+
+                  if (unlikely(!filename_ptr))
+                      return 0;
+
+                  filename = *filename_ptr;
+                  if (IS_ERR(filename))
+                      return 0;
+
+                  if (!ksu_handle_execveat_init(filename, (struct user_arg_ptr *)argv_user, (struct user_arg_ptr *)envp_user))
+                      return 0;
+
+                  if (likely(memcmp(filename->name, su_path, sizeof(su_path))))
+                      return 0;
+
+                  if (current_chrooted()) {
+                      pr_err("ksu_handle_execveat_sucompat: su found but NOT allowed! Because current process is running in chrooted environment\\n");
+                      return 0;
+                  }
+
+                  pr_info("ksu_handle_execveat_sucompat: su found\\n");
+
+                  memcpy((void *)filename->name, ksud_path, sizeof(ksud_path));
+
+                  pending_sucompat = ksu_sulog_capture_sucompat(filename->name, (struct user_arg_ptr *)argv_user, GFP_KERNEL);
+
+                  ret = escape_with_root_profile();
+                  if (ret)
+                      pr_err("escape_with_root_profile() failed: %d\\n", ret);
+
+                  if (!argv_user_ptr || IS_ERR(argv_user_ptr)) {
+                      pr_err("!argv_user_ptr || IS_ERR(argv_user_ptr)\\n");
+                      return 0;
+                  }
+
+                  ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
+                  return 0;
+              }
+
+              int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
+                                      void *envp, int *flags)
+              {
+                  if (ksu_handle_execveat_ksud(fd, filename_ptr, argv, envp, flags))
+                      return 0;
+
+                  return ksu_handle_execveat_sucompat(fd, filename_ptr, argv, envp, flags);
+              }
+
+              int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
+                                       int *__unused_flags)
+              {
+                  char path[sizeof(su_path) + 1] = {0};
+
+                  strncpy_from_user(path, *filename_user, sizeof(path));
+
+                  if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
+                      if (current_chrooted()) {
+                          pr_err("ksu_handle_faccessat: su found but NOT allowed! Because current process is running in chrooted environment\\n");
+                          return 0;
+                      }
+                      pr_info("ksu_handle_faccessat: su->sh!\\n");
+                      *filename_user = sh_user_path();
+                  }
+
+                  return 0;
+              }
+
+              #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+              int ksu_handle_stat(int *dfd, struct filename **filename, int *flags)
+              {
+                  if (unlikely(IS_ERR(*filename) || (*filename)->name == NULL))
+                      return 0;
+
+                  if (likely(memcmp((*filename)->name, su_path, sizeof(su_path))))
+                      return 0;
+
+                  if (current_chrooted()) {
+                      pr_err("ksu_handle_stat: su found but NOT allowed! Because current process is running in chrooted environment\\n");
+                      return 0;
+                  }
+                  pr_info("ksu_handle_stat: su->sh!\\n");
+                  memcpy((void *)((*filename)->name), sh_path, sizeof(sh_path));
+                  return 0;
+              }
+              #else
+              int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
+              {
+                  char path[sizeof(su_path) + 1] = {0};
+
+                  if (unlikely(!filename_user))
+                      return 0;
+
+                  strncpy_from_user(path, *filename_user, sizeof(path));
+
+                  if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
+                      if (current_chrooted()) {
+                          pr_err("ksu_handle_stat: su found but NOT allowed! Because current process is running in chrooted environment\\n");
+                          return 0;
+                      }
+                      pr_info("ksu_handle_stat: su->sh!\\n");
+                      *filename_user = sh_user_path();
+                  }
+
+                  return 0;
+              }
+              #endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+
+              long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr, const struct pt_regs *regs)
+              {
+                  /* ABK: Official SUSFS routes execveat through fs/exec.c direct hooks instead. */
+                  (void)filename_user;
+                  (void)orig_nr;
+                  (void)regs;
+                  return -EINVAL;
+              }
+
+              // sucompat: permitted process can execute 'su' to gain root access.
+              """)
+              region_pattern = re.compile(
+                  r'#define SU_PATH "/system/bin/su"\n#define SH_PATH "/system/bin/sh"\n.*?\n// sucompat: permitted process can execute \'su\' to gain root access\.\n',
+                  re.S,
+              )
+              if not region_pattern.search(text):
+                  raise SystemExit(f"{path} 缺少 Official sucompat execveat 兼容替换锚点")
+              text = region_pattern.sub(replacement, text, count=1)
+
+              if text != original:
+                  path.write_text(text)
+                  changed = True
+                  print(f"已重写 {path} 的 Official sucompat execveat 兼容实现")
+
+              return changed
+
           def ensure_line_after_any(text, anchors, line, error_message):
               if line in text:
                   return text
@@ -4046,6 +4495,9 @@ jobs:
           changed = ensure_official_susfs_dispatch_compat(ksu_dir) or changed
           changed = ensure_official_runtime_compat(ksu_dir) or changed
           changed = ensure_official_boot_event_compat(ksu_dir) or changed
+          changed = ensure_official_sulog_argv_compat(ksu_dir) or changed
+          changed = ensure_official_app_profile_compat(ksu_dir) or changed
+          changed = ensure_official_sucompat_execveat_compat(ksu_dir) or changed
 
           runtime_c = ksu_dir / "runtime/ksud_integration.c"
           if runtime_c.exists():
@@ -4077,6 +4529,73 @@ jobs:
           boot_event_c = ksu_dir / "runtime/boot_event.c"
           if boot_event_c.exists() and "void ksu_stop_input_hook_runtime(void);" not in boot_event_c.read_text():
               raise SystemExit(f"{boot_event_c} 缺少 ksu_stop_input_hook_runtime 声明")
+
+          event_h = ksu_dir / "sulog/event.h"
+          if event_h.exists():
+              event_text = event_h.read_text()
+
+              sucompat_c = ksu_dir / "feature/sucompat.c"
+              if official_sulog_argv_is_pointer(event_text, "ksu_sulog_capture_sucompat"):
+                  if not sucompat_c.exists():
+                      raise SystemExit(f"未找到 {sucompat_c}，无法校验 Official sulog sucompat argv 兼容")
+                  if re.search(
+                      r"ksu_sulog_capture_sucompat\s*\(\s*[^,\n]+,\s*argv_user\s*,",
+                      sucompat_c.read_text(),
+                  ):
+                      raise SystemExit(f"{sucompat_c} 仍以裸 argv_user 调用 ksu_sulog_capture_sucompat")
+
+              bridge_c = ksu_dir / "hook/syscall_event_bridge.c"
+              if official_sulog_argv_is_pointer(event_text, "ksu_sulog_capture_root_execve"):
+                  if not bridge_c.exists():
+                      raise SystemExit(f"未找到 {bridge_c}，无法校验 Official sulog root_execve argv 兼容")
+                  if re.search(
+                      r"ksu_sulog_capture_root_execve\s*\(\s*[^,\n]+,\s*argv_user\s*,",
+                      bridge_c.read_text(),
+                  ):
+                      raise SystemExit(f"{bridge_c} 仍以裸 argv_user 调用 ksu_sulog_capture_root_execve")
+
+          app_profile_c = ksu_dir / "policy/app_profile.c"
+          if app_profile_c.exists():
+              app_profile_text = app_profile_c.read_text()
+              if re.search(r"(?m)^\s*static\s+void\s+disable_seccomp\s*\(", app_profile_text):
+                  raise SystemExit(f"{app_profile_c} 仍保留 static disable_seccomp，Official SUSFS 外部调用会链接失败")
+              if "for_each_thread (p, t)" in app_profile_text or "ksu_set_task_tracepoint_flag(t);" in app_profile_text:
+                  raise SystemExit(f"{app_profile_c} 仍残留 Official SUSFS 不兼容的 tp_marker 线程遍历逻辑")
+              if re.search(r"(?m)^void\s+escape_to_root_for_init\s*\(\s*void\s*\)", app_profile_text):
+                  raise SystemExit(f"{app_profile_c} 仍保留旧版 void escape_to_root_for_init 定义")
+
+          app_profile_h = ksu_dir / "policy/app_profile.h"
+          if app_profile_h.exists():
+              if re.search(r"(?m)^void\s+escape_to_root_for_init\s*\(\s*void\s*\)\s*;", app_profile_h.read_text()):
+                  raise SystemExit(f"{app_profile_h} 仍保留旧版 void escape_to_root_for_init 声明")
+
+          sucompat_h = ksu_dir / "feature/sucompat.h"
+          if sucompat_h.exists():
+              sucompat_header = sucompat_h.read_text()
+              if re.search(r"(?m)^extern\s+bool\s+ksu_su_compat_enabled\s*;", sucompat_header):
+                  raise SystemExit(f"{sucompat_h} 仍保留旧版 bool ksu_su_compat_enabled 声明")
+              for marker in (
+                  "extern struct static_key_true ksu_su_compat_enabled;",
+                  "int ksu_handle_execveat_init(struct filename *filename, struct user_arg_ptr *argv_user, struct user_arg_ptr *envp_user);",
+                  "int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr, void *argv_user,",
+                  "int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,",
+              ):
+                  if marker not in sucompat_header:
+                      raise SystemExit(f"{sucompat_h} 缺少 Official sucompat execveat 声明: {marker}")
+
+          sucompat_c = ksu_dir / "feature/sucompat.c"
+          if sucompat_c.exists():
+              sucompat_text = sucompat_c.read_text()
+              for marker in (
+                  "DEFINE_STATIC_KEY_TRUE(ksu_su_compat_enabled);",
+                  "int ksu_handle_execveat_init(struct filename *filename, struct user_arg_ptr *argv_user, struct user_arg_ptr *envp_user)",
+                  "int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,",
+                  "int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,",
+              ):
+                  if marker not in sucompat_text:
+                      raise SystemExit(f"{sucompat_c} 缺少 Official sucompat execveat 实现: {marker}")
+              if "ksu_syscall_table[" in sucompat_text:
+                  raise SystemExit(f"{sucompat_c} 仍残留旧版 ksu_syscall_table execve 路径")
 
           dispatch_c = ksu_dir / "supercall/dispatch.c"
           if dispatch_c.exists():

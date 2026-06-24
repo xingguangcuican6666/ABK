@@ -109,11 +109,11 @@ on:
 
       # ==================== ZRAM 扩展选项 ====================
       zram_full_algo:
-        description: "启用 ZRAM 完整算法支持（默认 zstdp；6.12 自动跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS）"
+        description: "启用 ZRAM 完整算法支持（6.12 自动跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS）"
         type: boolean
         default: false
       zram_extra_algos:
-        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd,zstdp；6.12 会忽略 lz4k/lz4kd/lz4k_oplus）"
+        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；6.12 会忽略 lz4k/lz4kd/lz4k_oplus）"
         type: string
         default: ""
         required: false

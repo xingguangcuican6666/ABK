@@ -296,7 +296,7 @@ object DownloadUtils {
                 val signingPublicKey = PreferencesRepository(context).readForkArtifactSigningPublicKeyBlocking()
                 val signingPublicKeyPem = signingPublicKey
                     ?.takeIf { it.isNotBlank() }
-                    ?.let(ForkSigningManager::publicKeyPemFromBase64)
+                    ?.let(ForkSigningManager::publicKeyPemFromStoredValue)
 
                 createBundledDownloadEntries(
                     context = context,
@@ -319,7 +319,11 @@ object DownloadUtils {
                 collectCandidateFiles(targetOutDir).map { candidate ->
                     val type = classifyDownloadedFile(candidate)
                     val verification = if (ArtifactVerification.requiresTrustedBundle(type)) {
-                        ArtifactVerification.verifyBundleFile(candidate, type, ForkSigningManager.publicKeyPemFromBase64(signingPublicKey.orEmpty()))
+                        ArtifactVerification.verifyBundleFile(
+                            candidate,
+                            type,
+                            ForkSigningManager.publicKeyPemFromStoredValue(signingPublicKey)
+                        )
                     } else {
                         null
                     }
@@ -453,7 +457,7 @@ object DownloadUtils {
                 val signingPublicKeyPem = PreferencesRepository(context)
                     .readForkArtifactSigningPublicKeyBlocking()
                     ?.takeIf { it.isNotBlank() }
-                    ?.let(ForkSigningManager::publicKeyPemFromBase64)
+                    ?.let(ForkSigningManager::publicKeyPemFromStoredValue)
                 if (looksLikeNoticeBundle(downloadedFile)) {
                     val entry = persistBundledDownloadEntry(
                         context = context,
@@ -530,7 +534,7 @@ object DownloadUtils {
                             ArtifactVerification.verifyBundleFile(
                                 candidate,
                                 type,
-                                ForkSigningManager.publicKeyPemFromBase64(signingPublicKey.orEmpty())
+                                ForkSigningManager.publicKeyPemFromStoredValue(signingPublicKey)
                             )
                         }
                     } else {
@@ -697,7 +701,7 @@ object DownloadUtils {
                 ArtifactVerification.verifyBundleFile(
                     source,
                     effectiveType,
-                    ForkSigningManager.publicKeyPemFromBase64(signingPublicKey.orEmpty())
+                    ForkSigningManager.publicKeyPemFromStoredValue(signingPublicKey)
                 )
             }
             if (!verification.success) {

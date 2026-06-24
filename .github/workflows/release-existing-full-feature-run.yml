@@ -229,7 +229,7 @@ jobs:
           | 自定义注入 | $use_custom_external_modules |
           | 自定义注入参数列表 | $custom_external_modules |
 
-          > Android 16 / 6.12 构建保留 zstdp 与内核原生 ZRAM 算法，但会跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS 补丁栈；虚拟化支持在 6.12 上使用开关模式。
+          > Android 16 / 6.12 构建会跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS 补丁栈；虚拟化支持在 6.12 上使用开关模式。
 
           ### 下载说明
 

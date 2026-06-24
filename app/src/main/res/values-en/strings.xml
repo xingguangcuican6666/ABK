@@ -200,9 +200,9 @@
     <string name="build_oneplus_proxy_short">Proxy optimization</string>
     <string name="build_oneplus_unicode_short">Unicode bypass</string>
     <string name="build_zram_options">ZRAM options</string>
-    <string name="build_zram_full_algo">Enable full algorithm support (LZO/LZ4/ZSTD/ZSTDP, etc.)</string>
+    <string name="build_zram_full_algo">Enable full algorithm support (LZO/LZ4/ZSTD, etc.)</string>
     <string name="build_zram_custom_algo">Custom ZRAM algorithms</string>
-    <string name="build_zram_algo_placeholder">e.g. lzo,lz4,deflate,zstd,zstdp</string>
+    <string name="build_zram_algo_placeholder">e.g. lzo,lz4,deflate,zstd</string>
     <string name="build_kpm_options">KPM options</string>
     <string name="build_kpm_password">KPM super key (optional)</string>
     <string name="build_kpm_password_placeholder">Empty uses the default password</string>
