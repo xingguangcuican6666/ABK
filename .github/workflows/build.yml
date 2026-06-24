@@ -2999,12 +2999,12 @@ jobs:
           kpm_kconfig_ready="${ABK_KPM_KCONFIG_READY:-false}"
           kpm_kconfig_path="${ABK_KPM_KCONFIG_PATH:-}"
 
-          if [ "${{ inputs.ksu_variant }}" != "None" ]; then
-            cat >> "$DEFCONFIG" << 'EOF'
-          CONFIG_KSU=y
+          cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
           EOF
+          if [ "${{ inputs.ksu_variant }}" != "None" ]; then
+            echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           fi
 
           kpm_config_supported="false"
