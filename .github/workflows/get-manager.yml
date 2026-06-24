@@ -106,15 +106,8 @@ jobs:
           VAR=$([[ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]] && echo 700 || echo 200)
 
           cd KernelSU
-          # 如果是 commit SHA，则直接 fetch 该 commit
-          if [[ "$BRANCH" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "Detected commit SHA, fetching it..."
-              git fetch origin "$BRANCH" --depth=1
-              git checkout "$BRANCH"
-          else
-              # 普通分支或 tag
-              git checkout "$BRANCH" || git checkout -b "$BRANCH" "origin/$BRANCH" 
-          fi
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
 
           # 计算KSU版本号
           KSU_GIT_VERSION=$(git rev-list --count HEAD)
