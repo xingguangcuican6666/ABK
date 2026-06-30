@@ -85,7 +85,7 @@ class PreferencesRepository(private val context: Context) {
         )
     }
     val lastRunId: Flow<Long> = context.dataStore.data.map { it[KEY_LAST_RUN_ID] ?: -1L }
-    val themeMode: Flow<String> = context.dataStore.data.map { it[KEY_THEME] ?: "dark" }
+    val themeMode: Flow<String> = context.dataStore.data.map { it[KEY_THEME] ?: "system" }
     val dynamicColorEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_DYNAMIC_COLOR_ENABLED] ?: true }
     val customThemeColorArgb: Flow<Int?> = context.dataStore.data.map { it[KEY_CUSTOM_THEME_COLOR] }
     val customAccentColorArgb: Flow<Int?> = context.dataStore.data.map { it[KEY_CUSTOM_ACCENT_COLOR] }
