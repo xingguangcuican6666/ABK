@@ -347,6 +347,7 @@ fun RootAuthorizationScreen(
                                 app = selectedDetailApp,
                                 padding = padding,
                                 saving = state.rootGrantSavingPackage == selectedDetailApp.packageName,
+                                warning = state.rootGrantDetailWarning,
                                 onSave = { profile ->
                                     vm.saveRootGrantProfile(profile)
                                 }
@@ -594,6 +595,7 @@ private fun RootGrantProfilePage(
     app: RootGrantApp,
     padding: androidx.compose.foundation.layout.PaddingValues,
     saving: Boolean,
+    warning: String?,
     onSave: (RootGrantProfile) -> Unit
 ) {
     val profile = app.profile
@@ -639,6 +641,14 @@ private fun RootGrantProfilePage(
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        if (!warning.isNullOrBlank()) {
+            ExpressiveSectionCard(
+                title = stringResource(R.string.root_auth_profile_read_disabled_title),
+                subtitle = warning,
+                icon = Icons.Default.AdminPanelSettings
+            ) {}
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically

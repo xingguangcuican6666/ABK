@@ -225,6 +225,7 @@ data class MainUiState(
     val rootGrantError: String? = null,
     val rootGrantDetailApp: RootGrantApp? = null,
     val rootGrantDetailLoading: Boolean = false,
+    val rootGrantDetailWarning: String? = null,
     val rootGrantRecoveryNotice: RootGrantRecoveryNotice? = null,
     val rootGrantSavingPackage: String? = null
 ) {

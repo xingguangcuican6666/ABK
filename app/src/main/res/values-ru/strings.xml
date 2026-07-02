@@ -876,6 +876,8 @@
     <string name="root_auth_recovery_title">Профиль суперпользователя сброшен</string>
     <string name="root_auth_recovery_reset_message">ABK обнаружил, что чтение профиля суперпользователя для “%1$s” в прошлый раз привело к сбою, поэтому профиль этого приложения был сброшен к безопасным значениям по умолчанию.</string>
     <string name="root_auth_recovery_reset_failed_message">ABK обнаружил, что чтение профиля суперпользователя для “%1$s” в прошлый раз привело к сбою, но на этом запуске не смог автоматически сбросить профиль. Проверьте доступ менеджера и повторите попытку.</string>
+    <string name="root_auth_profile_read_disabled_title">Нативное чтение профиля отключено</string>
+    <string name="root_auth_profile_read_disabled_message">Чтение нативного профиля этого приложения уже приводило к сбою ABK. Эта страница использует безопасные значения по умолчанию и больше не пытается читать профиль нативно.</string>
     <string name="save">Сохранить</string>
 
     <!-- Module repository -->

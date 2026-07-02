@@ -72,6 +72,7 @@ class PreferencesRepository(private val context: Context) {
         val KEY_PENDING_ROOT_GRANT_RECOVERY_PACKAGE = stringPreferencesKey("pending_root_grant_recovery_package")
         val KEY_PENDING_ROOT_GRANT_RECOVERY_UID = intPreferencesKey("pending_root_grant_recovery_uid")
         val KEY_PENDING_ROOT_GRANT_RECOVERY_LABEL = stringPreferencesKey("pending_root_grant_recovery_label")
+        val KEY_ROOT_GRANT_PROFILE_READ_BLOCKED_PACKAGES = stringSetPreferencesKey("root_grant_profile_read_blocked_packages")
     }
 
     val accessToken: Flow<String?> = context.dataStore.data.map { it[KEY_ACCESS_TOKEN] }
@@ -160,6 +161,13 @@ class PreferencesRepository(private val context: Context) {
                 label = preferences[KEY_PENDING_ROOT_GRANT_RECOVERY_LABEL].orEmpty()
             )
         }
+    }
+    val rootGrantProfileReadBlockedPackages: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        preferences[KEY_ROOT_GRANT_PROFILE_READ_BLOCKED_PACKAGES]
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            ?.toSet()
+            .orEmpty()
     }
 
     suspend fun saveToken(token: String) = context.dataStore.edit { it[KEY_ACCESS_TOKEN] = token }
@@ -288,6 +296,12 @@ class PreferencesRepository(private val context: Context) {
         preferences.remove(KEY_PENDING_ROOT_GRANT_RECOVERY_PACKAGE)
         preferences.remove(KEY_PENDING_ROOT_GRANT_RECOVERY_UID)
         preferences.remove(KEY_PENDING_ROOT_GRANT_RECOVERY_LABEL)
+    }
+    suspend fun addRootGrantProfileReadBlockedPackage(packageName: String) = context.dataStore.edit { preferences ->
+        val cleanPackage = packageName.trim()
+        if (cleanPackage.isBlank()) return@edit
+        val current = preferences[KEY_ROOT_GRANT_PROFILE_READ_BLOCKED_PACKAGES].orEmpty()
+        preferences[KEY_ROOT_GRANT_PROFILE_READ_BLOCKED_PACKAGES] = current + cleanPackage
     }
     suspend fun clearPendingAutoDownloadRunId() = context.dataStore.edit { it.remove(KEY_PENDING_AUTO_DOWNLOAD_RUN_ID) }
 

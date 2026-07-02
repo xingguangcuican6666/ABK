@@ -202,6 +202,7 @@ class RuntimeCoordinator(
                 it.copy(
                     rootGrantDetailApp = null,
                     rootGrantDetailLoading = true,
+                    rootGrantDetailWarning = null,
                     rootGrantError = null
                 )
             }
@@ -209,9 +210,10 @@ class RuntimeCoordinator(
             val result = withContext(Dispatchers.IO) {
                 val access = resolveManagerAccess(rootGranted)
                 if (!access.hasNativeManagerPermission) {
-                    return@withContext Pair(
+                    return@withContext Triple(
                         null as RootGrantApp?,
-                        managerAccessErrorMessage(access, rootGranted)
+                        managerAccessErrorMessage(access, rootGranted),
+                        null as String?
                     )
                 }
 
@@ -224,6 +226,18 @@ class RuntimeCoordinator(
                     name = cleanPackage,
                     currentUid = baseApp.uid,
                 )
+                val pendingRecovery = prefs.pendingRootGrantProfileRecovery.first()
+                val blockedPackages = prefs.rootGrantProfileReadBlockedPackages.first()
+                if (pendingRecovery?.packageName == cleanPackage || cleanPackage in blockedPackages) {
+                    return@withContext Triple(
+                        baseApp.copy(
+                            profile = fallbackProfile,
+                            profileLoaded = false
+                        ),
+                        null as String?,
+                        text(R.string.root_auth_profile_read_disabled_message)
+                    )
+                }
                 val loadedProfile = runCatching {
                     prefs.savePendingRootGrantProfileRecovery(recoveryRecord)
                     val profile = AbkKsuNative.readProfile(cleanPackage, baseApp.uid)
@@ -233,7 +247,7 @@ class RuntimeCoordinator(
                     runCatching { prefs.clearPendingRootGrantProfileRecovery() }
                     null
                 }
-                Pair(
+                Triple(
                     baseApp.copy(
                         profile = (loadedProfile ?: fallbackProfile).copy(
                             name = cleanPackage,
@@ -241,6 +255,7 @@ class RuntimeCoordinator(
                         ),
                         profileLoaded = loadedProfile != null
                     ),
+                    null as String?,
                     null as String?
                 )
             }
@@ -249,12 +264,14 @@ class RuntimeCoordinator(
                     state.copy(
                         rootGrantDetailApp = result.first,
                         rootGrantDetailLoading = false,
+                        rootGrantDetailWarning = result.third,
                         rootGrantError = null
                     )
                 } else {
                     state.copy(
                         rootGrantDetailApp = null,
                         rootGrantDetailLoading = false,
+                        rootGrantDetailWarning = null,
                         rootGrantError = result.second ?: text(R.string.runtime_manager_inactive)
                     )
                 }
@@ -266,7 +283,8 @@ class RuntimeCoordinator(
         updateState {
             it.copy(
                 rootGrantDetailApp = null,
-                rootGrantDetailLoading = false
+                rootGrantDetailLoading = false,
+                rootGrantDetailWarning = null
             )
         }
     }
@@ -276,6 +294,7 @@ class RuntimeCoordinator(
             val record = prefs.pendingRootGrantProfileRecovery.first() ?: return@launch
             val rootGranted = readState().rootGranted
             val outcome = withContext(Dispatchers.IO) {
+                prefs.addRootGrantProfileReadBlockedPackage(record.packageName)
                 val access = resolveManagerAccess(rootGranted)
                 if (!access.hasNativeManagerPermission) {
                     return@withContext false
