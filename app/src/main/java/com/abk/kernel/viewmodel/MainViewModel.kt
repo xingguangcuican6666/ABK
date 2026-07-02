@@ -2780,7 +2780,7 @@ class MainViewModel @JvmOverloads constructor(
         prefs.setDownloadDirectory(path)
     }
     fun setDownloadMirrorBaseUrl(url: String) = viewModelScope.launch {
-        prefs.setDownloadMirrorBaseUrl(url.trim())
+        prefs.setDownloadMirrorBaseUrl(url)
     }
     fun setPredictiveBackEnabled(v: Boolean) = viewModelScope.launch { prefs.setPredictiveBackEnabled(v) }
     fun setPrebuiltGkiEnabled(v: Boolean) = viewModelScope.launch {
@@ -5444,7 +5444,7 @@ private const val CANCEL_COMPLETION_POLL_INITIAL_DELAY_MS = 2_000L
 private const val CANCEL_COMPLETION_POLL_INTERVAL_MS = 5_000L
 private const val CANCEL_COMPLETION_POLL_MAX_ATTEMPTS = 24
 
-private fun normalizeMirrorBaseUrl(url: String): String {
+internal fun normalizeMirrorBaseUrl(url: String): String {
     val trimmed = url.trim()
     if (trimmed.isBlank()) return ""
     return if (trimmed.endsWith("/")) trimmed else "$trimmed/"
