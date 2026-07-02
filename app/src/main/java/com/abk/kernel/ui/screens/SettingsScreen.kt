@@ -20,6 +20,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -33,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
@@ -40,8 +43,10 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
@@ -2293,10 +2298,25 @@ private fun DownloadDirectorySettingsItem(
     onValueChange: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val defaultDirectory = remember { DownloadDirectoryUtils.defaultDirectoryPath() }
     val needsAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()
     val unsupportedTreeMessage = stringResource(R.string.settings_download_directory_tree_unsupported)
     val restoredMessage = stringResource(R.string.settings_download_directory_default_restored)
+    var draft by rememberSaveable { mutableStateOf(value) }
+    var isEditing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(value, isEditing) {
+        if (shouldSyncSettingsTextDraft(isEditing = isEditing, persistedValue = value, draftValue = draft)) {
+            draft = value
+        }
+    }
+
+    fun commitDraft(newValue: String = draft) {
+        draft = newValue
+        pendingSettingsTextCommit(persistedValue = value, draftValue = newValue)?.let(onValueChange)
+    }
+
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -2311,7 +2331,7 @@ private fun DownloadDirectorySettingsItem(
             if (selectedPath == null) {
                 Toast.makeText(context, unsupportedTreeMessage, Toast.LENGTH_SHORT).show()
             } else {
-                onValueChange(selectedPath)
+                commitDraft(selectedPath)
             }
         }
     }
@@ -2326,11 +2346,21 @@ private fun DownloadDirectorySettingsItem(
             leadingIcon = Icons.Default.FolderOpen
         )
         OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
+            value = draft,
+            onValueChange = { draft = it },
             singleLine = true,
             placeholder = { Text(defaultDirectory) },
-            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focusState ->
+                    val wasEditing = isEditing
+                    isEditing = focusState.isFocused
+                    if (wasEditing && !focusState.isFocused) {
+                        commitDraft()
+                    }
+                },
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -2346,7 +2376,7 @@ private fun DownloadDirectorySettingsItem(
             }
             TextButton(
                 onClick = {
-                    onValueChange(defaultDirectory)
+                    commitDraft(defaultDirectory)
                     Toast.makeText(context, restoredMessage, Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.weight(1f)
@@ -2384,6 +2414,21 @@ private fun MirrorSettingsItem(
     value: String,
     onValueChange: (String) -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
+    var draft by rememberSaveable { mutableStateOf(value) }
+    var isEditing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(value, isEditing) {
+        if (shouldSyncSettingsTextDraft(isEditing = isEditing, persistedValue = value, draftValue = draft)) {
+            draft = value
+        }
+    }
+
+    fun commitDraft(newValue: String = draft) {
+        draft = newValue
+        pendingSettingsTextCommit(persistedValue = value, draftValue = newValue)?.let(onValueChange)
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -2394,14 +2439,35 @@ private fun MirrorSettingsItem(
             leadingIcon = Icons.Default.Public
         )
         OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
+            value = draft,
+            onValueChange = { draft = it },
             singleLine = true,
             placeholder = { Text("https://hk.gh-proxy.org/") },
-            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focusState ->
+                    val wasEditing = isEditing
+                    isEditing = focusState.isFocused
+                    if (wasEditing && !focusState.isFocused) {
+                        commitDraft()
+                    }
+                },
         )
     }
 }
+
+internal fun shouldSyncSettingsTextDraft(
+    isEditing: Boolean,
+    persistedValue: String,
+    draftValue: String
+): Boolean = !isEditing && persistedValue != draftValue
+
+internal fun pendingSettingsTextCommit(
+    persistedValue: String,
+    draftValue: String
+): String? = draftValue.takeIf { it != persistedValue }
 
 @Composable
 private fun LanguageSettingsItem(
