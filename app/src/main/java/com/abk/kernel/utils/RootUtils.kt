@@ -725,14 +725,16 @@ object RootUtils {
         if (!isNativeManagerActive()) return emptyList()
         val packageManager = context.packageManager
         val apps = installedApplications(packageManager)
+        val grantedUids = AbkKsuNative.grantedUids()
         return apps
             .asSequence()
             .filter { it.packageName.isNotBlank() }
             .mapNotNull { appInfo ->
                 val packageName = appInfo.packageName ?: return@mapNotNull null
                 val uid = appInfo.uid
-                val profile = AbkKsuNative.readProfile(packageName, uid)
-                    ?: RootGrantProfile(name = packageName, currentUid = uid)
+                val profile = resolveRootGrantProfile(packageName, uid, grantedUids) { name, profileUid ->
+                    AbkKsuNative.readProfile(name, profileUid)
+                }
                 RootGrantApp(
                     packageName = packageName,
                     label = runCatching {
@@ -759,6 +761,22 @@ object RootUtils {
             if (!setProfileSepolicy(profile.name, profile.rules)) return false
         }
         return AbkKsuNative.writeProfile(profile)
+    }
+
+    internal fun shouldReadRootGrantProfile(uid: Int, grantedUids: Set<Int>): Boolean =
+        uid in grantedUids
+
+    internal fun resolveRootGrantProfile(
+        packageName: String,
+        uid: Int,
+        grantedUids: Set<Int>,
+        readProfile: (String, Int) -> RootGrantProfile?
+    ): RootGrantProfile {
+        val defaultProfile = RootGrantProfile(name = packageName, currentUid = uid)
+        if (!shouldReadRootGrantProfile(uid, grantedUids)) {
+            return defaultProfile
+        }
+        return readProfile(packageName, uid) ?: defaultProfile
     }
 
     fun readKsuFeature(featureName: String): KsuFeatureState {
