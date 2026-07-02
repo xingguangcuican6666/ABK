@@ -872,6 +872,10 @@
     <string name="root_auth_use_default_non_root">Use default non-root profile</string>
     <string name="root_auth_building_list">Building authorization list</string>
     <string name="root_auth_refreshing_list">Refreshing authorization list</string>
+    <string name="root_auth_loading_profile">Loading app profile</string>
+    <string name="root_auth_recovery_title">Superuser profile reset</string>
+    <string name="root_auth_recovery_reset_message">ABK detected that reading the superuser profile for “%1$s” crashed the app last time, so its profile has been reset to safe defaults.</string>
+    <string name="root_auth_recovery_reset_failed_message">ABK detected that reading the superuser profile for “%1$s” crashed the app last time, but it could not reset that profile automatically on this launch. Check manager access and try again.</string>
     <string name="save">Save</string>
 
     <!-- Module repository -->

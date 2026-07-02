@@ -113,7 +113,7 @@ fun RootAuthorizationScreen(
     val state by vm.uiState.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
     var showSystemApps by rememberSaveable { mutableStateOf(false) }
-    var selectedPackage by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedPackage by remember { mutableStateOf<String?>(null) }
     val motionScheme = MaterialTheme.motionScheme
     val apps = remember(state.rootGrantApps, query, showSystemApps) {
         state.rootGrantApps
@@ -126,17 +126,20 @@ fun RootAuthorizationScreen(
                     app.uid.toString().contains(needle)
             }
     }
-    val selectedApp = remember(state.rootGrantApps, selectedPackage) {
+    val selectedListApp = remember(state.rootGrantApps, selectedPackage) {
         selectedPackage?.let { packageName ->
             state.rootGrantApps.firstOrNull { it.packageName == packageName }
         }
     }
-    val detailPageVisible = selectedApp != null
+    val selectedDetailApp = remember(state.rootGrantDetailApp, selectedPackage) {
+        state.rootGrantDetailApp?.takeIf { it.packageName == selectedPackage }
+    }
+    val detailPageVisible = selectedPackage != null
     val detailPageTransition = rememberChildPageOverlayTransition(
         visible = detailPageVisible,
         label = "root-auth-detail"
     )
-    val canLeaveDetail = state.rootGrantSavingPackage == null
+    val canLeaveDetail = state.rootGrantSavingPackage == null && !state.rootGrantDetailLoading
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     LaunchedEffect(state.runtimeNavigationEnabled, state.abkRuntimeStatus?.runtimeBackend?.backend) {
@@ -144,11 +147,14 @@ fun RootAuthorizationScreen(
     }
 
     fun closeDetailPage() {
-        if (canLeaveDetail) selectedPackage = null
+        if (canLeaveDetail) {
+            selectedPackage = null
+            vm.clearRootGrantDetail()
+        }
     }
 
     val childPageBack = rememberChildPageBackController(
-        enabled = selectedApp != null && canLeaveDetail,
+        enabled = detailPageVisible && canLeaveDetail,
         predictiveBackEnabled = state.predictiveBackEnabled,
         onBack = ::closeDetailPage,
     )
@@ -282,6 +288,7 @@ fun RootAuthorizationScreen(
                         onOpen = {
                             childPageBack.resetProgress()
                             selectedPackage = app.packageName
+                            vm.openRootGrantProfile(app.packageName)
                         }
                     )
                 }
@@ -307,7 +314,8 @@ fun RootAuthorizationScreen(
             exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
-            selectedApp?.let { app ->
+            selectedPackage?.let { packageName ->
+                val headerApp = selectedDetailApp ?: selectedListApp
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -321,7 +329,7 @@ fun RootAuthorizationScreen(
                         containerColor = Color.Transparent,
                         topBar = {
                             ExpressiveTopBar(
-                                title = app.label.ifBlank { app.packageName },
+                                title = headerApp?.label?.ifBlank { packageName } ?: packageName,
                                 navigationIcon = {
                                     IconButton(
                                         enabled = canLeaveDetail,
@@ -333,14 +341,21 @@ fun RootAuthorizationScreen(
                             )
                         }
                     ) { padding ->
-                        RootGrantProfilePage(
-                            app = app,
-                            padding = padding,
-                            saving = state.rootGrantSavingPackage == app.packageName,
-                            onSave = { profile ->
-                                vm.saveRootGrantProfile(profile)
-                            }
-                        )
+                        when {
+                            state.rootGrantDetailLoading -> RootGrantDetailLoadingPage(padding = padding)
+                            selectedDetailApp != null -> RootGrantProfilePage(
+                                app = selectedDetailApp,
+                                padding = padding,
+                                saving = state.rootGrantSavingPackage == selectedDetailApp.packageName,
+                                onSave = { profile ->
+                                    vm.saveRootGrantProfile(profile)
+                                }
+                            )
+                            else -> RootGrantDetailMessagePage(
+                                padding = padding,
+                                message = state.rootGrantError ?: stringResource(R.string.runtime_manager_inactive)
+                            )
+                        }
                     }
                 }
             }
@@ -382,6 +397,51 @@ private fun RootGrantRefreshingRow() {
         LoadingIndicator(Modifier.size(24.dp))
         Text(
             text = stringResource(R.string.root_auth_refreshing_list),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun RootGrantDetailLoadingPage(
+    padding: PaddingValues
+) {
+    Box(
+        modifier = Modifier
+            .padding(padding)
+            .fillMaxSize()
+            .padding(horizontal = AbkScreenHorizontalPadding),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            LoadingIndicator(Modifier.size(42.dp))
+            Text(
+                text = stringResource(R.string.root_auth_loading_profile),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun RootGrantDetailMessagePage(
+    padding: PaddingValues,
+    message: String
+) {
+    Box(
+        modifier = Modifier
+            .padding(padding)
+            .fillMaxSize()
+            .padding(horizontal = AbkScreenHorizontalPadding),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = message,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -474,15 +534,19 @@ private fun RootGrantAppCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 RootGrantChip(if (app.profile.allowSu) stringResource(R.string.root_auth_allow) else stringResource(R.string.root_auth_deny))
-                RootGrantChip(
-                    if (app.profile.rootUseDefault) {
-                        stringResource(R.string.root_auth_default_profile)
-                    } else {
-                        stringResource(R.string.root_auth_custom_profile)
-                    }
-                )
                 if (app.isSystemApp) RootGrantChip(stringResource(R.string.root_auth_system_app))
-                if (app.profile.umountModules) RootGrantChip(stringResource(R.string.root_auth_umount_modules))
+                if (app.profileLoaded) {
+                    RootGrantChip(
+                        if (app.profile.rootUseDefault) {
+                            stringResource(R.string.root_auth_default_profile)
+                        } else {
+                            stringResource(R.string.root_auth_custom_profile)
+                        }
+                    )
+                    if (app.profile.umountModules) {
+                        RootGrantChip(stringResource(R.string.root_auth_umount_modules))
+                    }
+                }
             }
         }
     }

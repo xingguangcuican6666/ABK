@@ -172,7 +172,13 @@ class MainActivity : ComponentActivity() {
                                 pendingModuleInstallUri = pendingModuleInstallUri,
                                 onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
                             )
-                            if (state.showSyncPrompt && !state.showOobe) {
+                            if (state.rootGrantRecoveryNotice != null && !state.showOobe) {
+                                RootGrantRecoveryDialog(
+                                    title = state.rootGrantRecoveryNotice.title,
+                                    message = state.rootGrantRecoveryNotice.message,
+                                    onDismiss = vm::dismissRootGrantRecoveryNotice
+                                )
+                            } else if (state.showSyncPrompt && !state.showOobe) {
                                 SyncPromptDialog(
                                     behindBy = state.behindBy,
                                     onSync = vm::syncFork,
@@ -203,6 +209,24 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         pendingModuleInstallUri = extractModuleInstallUri(intent)?.toString()
     }
+}
+
+@Composable
+private fun RootGrantRecoveryDialog(
+    title: String,
+    message: String,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text(text = stringResource(android.R.string.ok))
+            }
+        }
+    )
 }
 
 @Composable

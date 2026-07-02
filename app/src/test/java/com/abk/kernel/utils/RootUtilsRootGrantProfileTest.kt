@@ -1,6 +1,5 @@
 package com.abk.kernel.utils
 
-import com.abk.kernel.data.model.RootGrantProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -9,70 +8,52 @@ import org.junit.Test
 class RootUtilsRootGrantProfileTest {
 
     @Test
-    fun skipsNativeProfileReadWhenUidIsNotGranted() {
-        var readCalls = 0
+    fun buildRootGrantListProfileMarksGrantedUidAsAllowed() {
+        val profile = RootUtils.buildRootGrantListProfile(
+            packageName = "com.example.app",
+            uid = 10123,
+            grantedUids = setOf(10123)
+        )
 
-        val profile = RootUtils.resolveRootGrantProfile(
+        assertTrue(profile.allowSu)
+        assertEquals("com.example.app", profile.name)
+        assertEquals(10123, profile.currentUid)
+        assertTrue(profile.rootUseDefault)
+    }
+
+    @Test
+    fun buildRootGrantListProfileLeavesUngrantUidOnSafeDefaults() {
+        val profile = RootUtils.buildRootGrantListProfile(
             packageName = "com.example.app",
             uid = 10123,
             grantedUids = emptySet()
-        ) { _, _ ->
-            readCalls += 1
-            RootGrantProfile(name = "com.example.app", currentUid = 10123, allowSu = true)
-        }
-
-        assertEquals(0, readCalls)
-        assertFalse(profile.allowSu)
-        assertEquals("com.example.app", profile.name)
-        assertEquals(10123, profile.currentUid)
-    }
-
-    @Test
-    fun readsNativeProfileWhenUidIsGranted() {
-        var readCalls = 0
-
-        val profile = RootUtils.resolveRootGrantProfile(
-            packageName = "com.example.app",
-            uid = 10123,
-            grantedUids = setOf(10123)
-        ) { _, _ ->
-            readCalls += 1
-            RootGrantProfile(name = "com.example.app", currentUid = 10123, allowSu = true)
-        }
-
-        assertEquals(1, readCalls)
-        assertTrue(profile.allowSu)
-    }
-
-    @Test
-    fun fallsBackToDefaultProfileWhenGrantedUidHasNoNativeRecord() {
-        val profile = RootUtils.resolveRootGrantProfile(
-            packageName = "com.example.app",
-            uid = 10123,
-            grantedUids = setOf(10123)
-        ) { _, _ -> null }
+        )
 
         assertFalse(profile.allowSu)
         assertEquals("com.example.app", profile.name)
         assertEquals(10123, profile.currentUid)
+        assertTrue(profile.nonRootUseDefault)
+        assertTrue(profile.umountModules)
     }
 
     @Test
-    fun sharedUidPackagesRemainEligibleForNativeRead() {
-        var readCalls = 0
+    fun buildRootGrantListProfileTreatsSharedUidPackagesConsistently() {
         val grantedUids = setOf(10123)
 
-        assertTrue(RootUtils.shouldReadRootGrantProfile(10123, grantedUids))
+        val first = RootUtils.buildRootGrantListProfile(
+            packageName = "com.example.first",
+            uid = 10123,
+            grantedUids = grantedUids
+        )
+        val second = RootUtils.buildRootGrantListProfile(
+            packageName = "com.example.second",
+            uid = 10123,
+            grantedUids = grantedUids
+        )
 
-        RootUtils.resolveRootGrantProfile("com.example.first", 10123, grantedUids) { _, _ ->
-            readCalls += 1
-            RootGrantProfile(name = "com.example.first", currentUid = 10123, allowSu = true)
-        }
-        RootUtils.resolveRootGrantProfile("com.example.second", 10123, grantedUids) { _, _ ->
-            readCalls += 1
-            RootGrantProfile(name = "com.example.second", currentUid = 10123, allowSu = true)
-        }
-
-        assertEquals(2, readCalls)
+        assertTrue(first.allowSu)
+        assertTrue(second.allowSu)
+        assertEquals(10123, first.currentUid)
+        assertEquals(10123, second.currentUid)
     }
 }

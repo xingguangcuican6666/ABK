@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.abk.kernel.data.model.APP_UPDATE_LINE_NORMAL
 import com.abk.kernel.data.model.APP_UPDATE_STABILITY_STABLE
+import com.abk.kernel.data.model.RootGrantProfileRecoveryRecord
 import com.abk.kernel.data.model.normalizeAppUpdateLine
 import com.abk.kernel.data.model.normalizeAppUpdateStability
 import com.abk.kernel.utils.DownloadDirectoryUtils
@@ -68,6 +69,9 @@ class PreferencesRepository(private val context: Context) {
         val KEY_GHOST_FAILED_RUNS = stringPreferencesKey("ghost_failed_runs_json")
         val KEY_DISMISSED_GHOST_RUN_IDS = stringPreferencesKey("dismissed_ghost_run_ids_json")
         val KEY_OOBE_COMPLETED = booleanPreferencesKey("oobe_completed")
+        val KEY_PENDING_ROOT_GRANT_RECOVERY_PACKAGE = stringPreferencesKey("pending_root_grant_recovery_package")
+        val KEY_PENDING_ROOT_GRANT_RECOVERY_UID = intPreferencesKey("pending_root_grant_recovery_uid")
+        val KEY_PENDING_ROOT_GRANT_RECOVERY_LABEL = stringPreferencesKey("pending_root_grant_recovery_label")
     }
 
     val accessToken: Flow<String?> = context.dataStore.data.map { it[KEY_ACCESS_TOKEN] }
@@ -145,6 +149,18 @@ class PreferencesRepository(private val context: Context) {
     val ghostFailedRunsJson: Flow<String?> = context.dataStore.data.map { it[KEY_GHOST_FAILED_RUNS] }
     val dismissedGhostRunIdsJson: Flow<String?> = context.dataStore.data.map { it[KEY_DISMISSED_GHOST_RUN_IDS] }
     val oobeCompleted: Flow<Boolean> = context.dataStore.data.map { it[KEY_OOBE_COMPLETED] ?: false }
+    val pendingRootGrantProfileRecovery: Flow<RootGrantProfileRecoveryRecord?> = context.dataStore.data.map { preferences ->
+        val packageName = preferences[KEY_PENDING_ROOT_GRANT_RECOVERY_PACKAGE]?.trim().orEmpty()
+        if (packageName.isBlank()) {
+            null
+        } else {
+            RootGrantProfileRecoveryRecord(
+                packageName = packageName,
+                uid = preferences[KEY_PENDING_ROOT_GRANT_RECOVERY_UID] ?: 0,
+                label = preferences[KEY_PENDING_ROOT_GRANT_RECOVERY_LABEL].orEmpty()
+            )
+        }
+    }
 
     suspend fun saveToken(token: String) = context.dataStore.edit { it[KEY_ACCESS_TOKEN] = token }
     suspend fun saveUsername(name: String) = context.dataStore.edit { it[KEY_USERNAME] = name }
@@ -257,6 +273,21 @@ class PreferencesRepository(private val context: Context) {
     }
     suspend fun setOobeCompleted(v: Boolean) = context.dataStore.edit {
         it[KEY_OOBE_COMPLETED] = v
+    }
+    suspend fun savePendingRootGrantProfileRecovery(record: RootGrantProfileRecoveryRecord) = context.dataStore.edit { preferences ->
+        preferences[KEY_PENDING_ROOT_GRANT_RECOVERY_PACKAGE] = record.packageName.trim()
+        preferences[KEY_PENDING_ROOT_GRANT_RECOVERY_UID] = record.uid.coerceAtLeast(0)
+        val label = record.label.trim()
+        if (label.isBlank()) {
+            preferences.remove(KEY_PENDING_ROOT_GRANT_RECOVERY_LABEL)
+        } else {
+            preferences[KEY_PENDING_ROOT_GRANT_RECOVERY_LABEL] = label
+        }
+    }
+    suspend fun clearPendingRootGrantProfileRecovery() = context.dataStore.edit { preferences ->
+        preferences.remove(KEY_PENDING_ROOT_GRANT_RECOVERY_PACKAGE)
+        preferences.remove(KEY_PENDING_ROOT_GRANT_RECOVERY_UID)
+        preferences.remove(KEY_PENDING_ROOT_GRANT_RECOVERY_LABEL)
     }
     suspend fun clearPendingAutoDownloadRunId() = context.dataStore.edit { it.remove(KEY_PENDING_AUTO_DOWNLOAD_RUN_ID) }
 

@@ -872,6 +872,10 @@
     <string name="root_auth_use_default_non_root">Использовать профиль non-root по умолчанию</string>
     <string name="root_auth_building_list">Построение списка авторизации</string>
     <string name="root_auth_refreshing_list">Обновление списка авторизации</string>
+    <string name="root_auth_loading_profile">Загрузка профиля приложения</string>
+    <string name="root_auth_recovery_title">Профиль суперпользователя сброшен</string>
+    <string name="root_auth_recovery_reset_message">ABK обнаружил, что чтение профиля суперпользователя для “%1$s” в прошлый раз привело к сбою, поэтому профиль этого приложения был сброшен к безопасным значениям по умолчанию.</string>
+    <string name="root_auth_recovery_reset_failed_message">ABK обнаружил, что чтение профиля суперпользователя для “%1$s” в прошлый раз привело к сбою, но на этом запуске не смог автоматически сбросить профиль. Проверьте доступ менеджера и повторите попытку.</string>
     <string name="save">Сохранить</string>
 
     <!-- Module repository -->

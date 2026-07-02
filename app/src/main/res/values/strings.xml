@@ -872,6 +872,10 @@
     <string name="root_auth_use_default_non_root">使用默认非 Root 配置</string>
     <string name="root_auth_building_list">正在构建授权列表</string>
     <string name="root_auth_refreshing_list">正在刷新授权列表</string>
+    <string name="root_auth_loading_profile">正在读取应用配置</string>
+    <string name="root_auth_recovery_title">超级用户配置已重置</string>
+    <string name="root_auth_recovery_reset_message">检测到上次读取“%1$s”的超级用户配置时导致 ABK 崩溃，现已将该应用的 profile 重置为安全默认值。</string>
+    <string name="root_auth_recovery_reset_failed_message">检测到上次读取“%1$s”的超级用户配置时导致 ABK 崩溃，但这次未能自动重置该应用的 profile。请确认管理器权限后重试。</string>
     <string name="save">保存</string>
 
     <!-- Module repository -->

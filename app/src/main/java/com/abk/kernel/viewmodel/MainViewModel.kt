@@ -223,6 +223,9 @@ data class MainUiState(
     val rootGrantRuntimeBackend: String? = null,
     val rootGrantLoading: Boolean = false,
     val rootGrantError: String? = null,
+    val rootGrantDetailApp: RootGrantApp? = null,
+    val rootGrantDetailLoading: Boolean = false,
+    val rootGrantRecoveryNotice: RootGrantRecoveryNotice? = null,
     val rootGrantSavingPackage: String? = null
 ) {
     val isDownloading: Boolean
@@ -719,6 +722,7 @@ class MainViewModel @JvmOverloads constructor(
                     buildConfig = initialConfig ?: it.buildConfig
                 )
             }
+            runtime.handlePendingRootGrantProfileRecovery()
         }
     }
 
@@ -736,6 +740,7 @@ class MainViewModel @JvmOverloads constructor(
                     buildConfig = initialConfig ?: it.buildConfig
                 )
             }
+            runtime.handlePendingRootGrantProfileRecovery()
         }
     }
 
@@ -753,7 +758,13 @@ class MainViewModel @JvmOverloads constructor(
     fun setRootGrantAllowed(packageName: String, allowed: Boolean) =
         runtime.setRootGrantAllowed(packageName, allowed)
 
+    fun openRootGrantProfile(packageName: String) = runtime.openRootGrantProfile(packageName)
+
+    fun clearRootGrantDetail() = runtime.clearRootGrantDetail()
+
     fun saveRootGrantProfile(profile: RootGrantProfile) = runtime.saveRootGrantProfile(profile)
+
+    fun dismissRootGrantRecoveryNotice() = runtime.dismissRootGrantRecoveryNotice()
 
     fun setAbkRuntimeModuleEnabled(moduleId: String, enabled: Boolean) =
         runtime.setAbkRuntimeModuleEnabled(moduleId, enabled)

@@ -719,7 +719,8 @@ data class RootGrantApp(
     val uid: Int = 0,
     val userName: String = "",
     val isSystemApp: Boolean = false,
-    val profile: RootGrantProfile = RootGrantProfile()
+    val profile: RootGrantProfile = RootGrantProfile(),
+    val profileLoaded: Boolean = false
 )
 
 data class RootGrantProfile(
@@ -737,6 +738,17 @@ data class RootGrantProfile(
     val nonRootUseDefault: Boolean = true,
     val umountModules: Boolean = true,
     val rules: String = ""
+)
+
+data class RootGrantProfileRecoveryRecord(
+    val packageName: String = "",
+    val uid: Int = 0,
+    val label: String = ""
+)
+
+data class RootGrantRecoveryNotice(
+    val title: String = "",
+    val message: String = ""
 )
 
 data class BuildPlan(
