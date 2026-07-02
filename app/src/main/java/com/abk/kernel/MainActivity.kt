@@ -172,10 +172,11 @@ class MainActivity : ComponentActivity() {
                                 pendingModuleInstallUri = pendingModuleInstallUri,
                                 onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
                             )
-                            if (state.rootGrantRecoveryNotice != null && !state.showOobe) {
+                            val rootGrantRecoveryNotice = state.rootGrantRecoveryNotice
+                            if (rootGrantRecoveryNotice != null && !state.showOobe) {
                                 RootGrantRecoveryDialog(
-                                    title = state.rootGrantRecoveryNotice.title,
-                                    message = state.rootGrantRecoveryNotice.message,
+                                    title = rootGrantRecoveryNotice.title,
+                                    message = rootGrantRecoveryNotice.message,
                                     onDismiss = vm::dismissRootGrantRecoveryNotice
                                 )
                             } else if (state.showSyncPrompt && !state.showOobe) {
