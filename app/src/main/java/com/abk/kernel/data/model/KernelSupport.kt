@@ -312,6 +312,11 @@ object KernelSupport {
             },
             kpmPassword = if (isOnePlus || ksuVariant == KSU_VARIANT_NONE || !gkiKpmSupported) "" else config.kpmPassword,
             virtualizationSupport = if (isOnePlus) "off" else normalizeVirtualizationSupport(line.kernelVersion, config.virtualizationSupport),
+            customKernelOptions = if (isOnePlus) {
+                emptyList()
+            } else {
+                normalizeCustomKernelOptions(config.customKernelOptions)
+            },
             useCustomExternalModules = if (isOnePlus) false else config.useCustomExternalModules,
             customExternalModules = if (isOnePlus) {
                 emptyList()
@@ -374,6 +379,37 @@ object KernelSupport {
     fun onePlusDeviceLabel(manifest: String): String {
         val profile = onePlusDeviceProfile(manifest) ?: return manifest
         return "${profile.displayName} · ${profile.systemVersion} · ${profile.androidVersion}/${profile.kernelVersion} · ${profile.cpu}"
+    }
+
+    fun normalizeCustomKernelSymbol(value: String?): String {
+        val compact = value.orEmpty().trim().replace(Regex("\\s+"), "")
+        if (compact.isBlank()) return ""
+        val withPrefix = if (compact.startsWith("CONFIG_", ignoreCase = true)) {
+            compact
+        } else {
+            "CONFIG_$compact"
+        }
+        val upper = withPrefix.uppercase()
+        return if (Regex("^CONFIG_[A-Z0-9_]+$").matches(upper)) upper else ""
+    }
+
+    fun normalizeCustomKernelOptions(options: List<CustomKernelOption>?): List<CustomKernelOption> {
+        if (options.isNullOrEmpty()) return emptyList()
+        val ordered = linkedMapOf<String, CustomKernelOption>()
+        options.forEach { option ->
+            val symbol = normalizeCustomKernelSymbol(option.symbol)
+            if (symbol.isBlank()) return@forEach
+            val mode = CustomKernelOptionMode.normalize(option.mode)
+            val normalized = CustomKernelOption(
+                symbol = symbol,
+                mode = mode,
+                rawValue = if (mode == CustomKernelOptionMode.RAW) option.rawValue.trim() else "",
+                source = option.source.trim()
+            )
+            ordered.remove(symbol)
+            ordered[symbol] = normalized
+        }
+        return ordered.values.toList()
     }
 
     fun normalizeKsuVariant(value: String?): String = normalizeKsuVariant(value, BUILD_TARGET_GKI)

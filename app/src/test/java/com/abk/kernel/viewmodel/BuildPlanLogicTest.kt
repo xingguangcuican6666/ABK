@@ -3,6 +3,8 @@ package com.abk.kernel.viewmodel
 import com.abk.kernel.data.model.CustomExternalModule
 import com.abk.kernel.data.model.CustomExternalModuleEntryKind
 import com.abk.kernel.data.model.CustomExternalModuleStage
+import com.abk.kernel.data.model.CustomKernelOption
+import com.abk.kernel.data.model.CustomKernelOptionMode
 import com.abk.kernel.data.model.BUILD_TARGET_GKI
 import com.abk.kernel.data.model.BUILD_TARGET_ONEPLUS
 import com.abk.kernel.data.model.KSU_BRANCH_CUSTOM
@@ -43,6 +45,10 @@ class BuildPlanLogicTest {
                 zramExtraAlgos = "lz4,zstd",
                 kpmPassword = "super-secret",
                 virtualizationSupport = "678",
+                customKernelOptions = listOf(
+                    CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
+                    CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534")
+                ),
                 useCustomExternalModules = true,
                 customExternalModules = listOf(
                     CustomExternalModule(" https://github.com/example/module.git ", "before-build")
@@ -67,6 +73,7 @@ class BuildPlanLogicTest {
         assertEquals(config.zramExtraAlgos, decoded.config.zramExtraAlgos)
         assertEquals(config.kpmPassword, decoded.config.kpmPassword)
         assertEquals(config.virtualizationSupport, decoded.config.virtualizationSupport)
+        assertEquals(config.customKernelOptions, decoded.config.customKernelOptions)
         assertEquals(
             listOf(CustomExternalModule("https://github.com/example/module.git", CustomExternalModuleStage.BEFORE_BUILD)),
             decoded.config.customExternalModules
@@ -91,7 +98,10 @@ class BuildPlanLogicTest {
                 osPatchLevel = "2026-03",
                 useZram = true,
                 useNetworking = true,
-                virtualizationSupport = "678"
+                virtualizationSupport = "678",
+                customKernelOptions = listOf(
+                    CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y)
+                )
             )
         )
 
@@ -105,6 +115,7 @@ class BuildPlanLogicTest {
         assertEquals(baseConfig.osPatchLevel, decoded.config.osPatchLevel)
         assertEquals(sharedFeatures.useZram, decoded.config.useZram)
         assertEquals(sharedFeatures.useNetworking, decoded.config.useNetworking)
+        assertEquals(sharedFeatures.customKernelOptions, decoded.config.customKernelOptions)
     }
 
     @Test
@@ -132,7 +143,7 @@ class BuildPlanLogicTest {
         assertEquals("true", inputs["use_ddk"])
         assertEquals(KSU_BRANCH_CUSTOM, inputs["kernelsu_branch"])
         assertEquals("main:5", inputs["custom_ref"])
-        assertEquals("true", inputs["use_custom_external_modules"])
+        assertEquals("", inputs["custom_kernel_options"])
         assertEquals(
             "module:https://github.com/example/a.git;after_patch|module:https://github.com/example/b.git;before_build",
             inputs["custom_external_modules"]
@@ -160,6 +171,24 @@ class BuildPlanLogicTest {
         assertEquals(
             "set:https://github.com/example/security-suite.git#fix_cleanup;before_build",
             inputs["custom_external_modules"]
+        )
+    }
+
+    @Test
+    fun workflowInputMapSerializesCustomKernelOptionsWithoutIgnoreEntries() {
+        val inputs = KernelBuildConfig(
+            customKernelOptions = listOf(
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
+                CustomKernelOption("CONFIG_NETFILTER", CustomKernelOptionMode.ENABLED_M),
+                CustomKernelOption("CONFIG_UNUSED", CustomKernelOptionMode.IGNORE),
+                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534"),
+                CustomKernelOption("CONFIG_FOO", CustomKernelOptionMode.DISABLED)
+            )
+        ).toInputMap()
+
+        assertEquals(
+            "CONFIG_TMPFS=y\nCONFIG_NETFILTER=m\nCONFIG_IP_SET_MAX=65534\n# CONFIG_FOO is not set",
+            inputs["custom_kernel_options"]
         )
     }
 
@@ -260,5 +289,32 @@ class BuildPlanLogicTest {
         assertEquals(baseConfig.onePlusDeviceManifest, decoded.config.onePlusDeviceManifest)
         assertEquals(false, decoded.config.onePlusUseLz4kd)
         assertEquals(false, decoded.config.onePlusUseBbr)
+    }
+
+    @Test
+    fun parseCustomKernelOptionsTextSupportsCommonKconfigFormats() {
+        val result = parseCustomKernelOptionsText(
+            """
+            CONFIG_TMPFS=y
+            CONFIG_NETFILTER=m
+            # CONFIG_FOO is not set
+            CONFIG_IP_SET_MAX=65534
+            CONFIG_LOCALVERSION=\"-abk\"
+            CONFIG_KEEP
+            CONFIG_TMPFS=m
+            # comment only
+
+            """.trimIndent()
+        )
+
+        assertEquals(6, result.importedCount)
+        assertEquals(1, result.duplicateCount)
+        assertEquals(2, result.skippedCount)
+        assertEquals(CustomKernelOptionMode.ENABLED_M, result.options.first { it.symbol == "CONFIG_TMPFS" }.mode)
+        assertEquals(CustomKernelOptionMode.ENABLED_M, result.options.first { it.symbol == "CONFIG_NETFILTER" }.mode)
+        assertEquals(CustomKernelOptionMode.DISABLED, result.options.first { it.symbol == "CONFIG_FOO" }.mode)
+        assertEquals("65534", result.options.first { it.symbol == "CONFIG_IP_SET_MAX" }.rawValue)
+        assertEquals("\"-abk\"", result.options.first { it.symbol == "CONFIG_LOCALVERSION" }.rawValue)
+        assertEquals(CustomKernelOptionMode.IGNORE, result.options.first { it.symbol == "CONFIG_KEEP" }.mode)
     }
 }

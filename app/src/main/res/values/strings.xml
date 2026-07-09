@@ -133,7 +133,9 @@
     <string name="build_sync_network_line">NTsync: %1$s · 网络增强: %2$s</string>
     <string name="build_virtualization_line">虚拟化支持: %1$s</string>
     <string name="build_external_modules_line">外部模块: %1$s</string>
+    <string name="build_kernel_options_line">内核选项: %1$s</string>
     <string name="build_external_modules_count">%1$d 个</string>
+    <string name="build_kernel_options_count">%1$d 条</string>
     <string name="build_oneplus_device_line">OnePlus 机型: %1$s</string>
     <string name="build_oneplus_kernel_line">OnePlus KMI: %1$s · 内核 %2$s</string>
     <string name="build_oneplus_feature_line">SUSFS: %1$s · lz4kd: %2$s · KPM: %3$s</string>
@@ -190,6 +192,30 @@
     <string name="build_enable_kpm">启用 KPM 功能</string>
     <string name="build_enable_rekernel">启用 Re-Kernel 驱动 (测试)</string>
     <string name="build_virtualization_support">虚拟化支持</string>
+    <string name="build_kernel_options_title">自定义内核选项</string>
+    <string name="build_kernel_option_add">添加条目</string>
+    <string name="build_kernel_option_edit">编辑条目</string>
+    <string name="build_kernel_option_empty">暂无自定义内核选项。可手动添加，或导入 Kconfig / defconfig 片段。</string>
+    <string name="build_kernel_option_symbol">配置符号</string>
+    <string name="build_kernel_option_symbol_invalid">配置符号必须是有效的 CONFIG_* 名称</string>
+    <string name="build_kernel_option_mode">条目模式</string>
+    <string name="build_kernel_option_mode_y">开启 (=y)</string>
+    <string name="build_kernel_option_mode_m">模块 (=m)</string>
+    <string name="build_kernel_option_mode_disabled">关闭 (is not set)</string>
+    <string name="build_kernel_option_mode_ignore">忽略 (不修改)</string>
+    <string name="build_kernel_option_mode_raw">原始值</string>
+    <string name="build_kernel_option_raw_value">原始值</string>
+    <string name="build_kernel_option_raw_placeholder">例如: 65534 或 "bbr"</string>
+    <string name="build_kernel_option_raw_required">原始值模式下必须填写值</string>
+    <string name="build_kernel_option_raw_summary">原始值: %1$s</string>
+    <string name="build_kernel_option_import_title">导入自定义内核选项</string>
+    <string name="build_kernel_option_import_desc">支持 `CONFIG_FOO=y`、`CONFIG_FOO=m`、`# CONFIG_FOO is not set`、`CONFIG_FOO=123`、`CONFIG_BAR="x"` 和裸 `CONFIG_FOO`。</string>
+    <string name="build_kernel_option_import_text">内核选项文本</string>
+    <string name="build_kernel_option_pick_file">选择文件</string>
+    <string name="build_kernel_option_import_summary">已导入 %1$d 条，覆盖重复 %2$d 条，跳过 %3$d 行</string>
+    <string name="build_kernel_option_import_failed">导入自定义内核选项失败</string>
+    <string name="build_kernel_option_import_read_failed">读取导入文件失败</string>
+    <string name="build_kernel_option_save_failed">保存自定义内核选项失败</string>
     <string name="build_enable_oneplus_8e">启用一加 8E 支持</string>
     <string name="build_oneplus_lz4kd">启用 lz4kd</string>
     <string name="build_oneplus_bbr">启用 BBR</string>
@@ -309,6 +335,7 @@
     <string name="build_feature_virtualization">虚拟化 %1$s</string>
     <string name="build_base_config">基础配置</string>
     <string name="build_summary_external_modules">外部模块 %1$d</string>
+    <string name="build_summary_kernel_options">内核选项 %1$d</string>
     <string name="build_hero_desc">触发 GitHub Actions 并自动整理 img、AK3、管理器和 SUSFS 模块。</string>
     <string name="build_oneplus_hero_desc">使用 OnePlus/Oplus manifest 构建机型专用 AnyKernel3 包。</string>
     <string name="build_susfs_on">SUSFS 开启</string>
@@ -340,6 +367,7 @@
     <string name="build_section_kernel_desc">选择与当前系统匹配的 Android、KMI 和安全补丁日期；不确定时使用设备推荐。</string>
     <string name="build_section_ksu_desc">选择内核权限方案和对应分支。</string>
     <string name="build_section_features_desc">按需开启模块能力，越少改动越利于排查问题。</string>
+    <string name="build_section_kernel_options_desc">逐条覆盖 defconfig。支持 y / m / 关闭 / 忽略 / 原始值，最终优先级高于页面内置开关。</string>
     <string name="build_section_zram_desc">为内存压缩算法加入额外内核支持。</string>
     <string name="build_section_kpm_desc">用于 KPM 功能的可选安全参数。</string>
     <string name="build_section_custom_modules_desc">按阶段执行外部仓库根目录的 setup.sh。</string>
@@ -1117,6 +1145,7 @@
     <string name="build_status_run_id">运行 %1$d</string>
     <string name="vm_plan_bad_version">不支持的方案码版本</string>
     <string name="vm_plan_too_many_modules">外部模块数量超出限制</string>
+    <string name="vm_plan_too_many_kernel_options">自定义内核选项数量超出限制</string>
     <string name="vm_plan_negative_number">负数无法写入方案码</string>
     <string name="vm_plan_field_too_long">方案字段过长</string>
     <string name="vm_plan_incomplete">方案码内容不完整</string>

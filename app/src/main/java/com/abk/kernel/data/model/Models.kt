@@ -409,6 +409,32 @@ object CustomExternalModuleStage {
     }
 }
 
+object CustomKernelOptionMode {
+    const val ENABLED_Y = "enabled_y"
+    const val ENABLED_M = "enabled_m"
+    const val DISABLED = "disabled"
+    const val IGNORE = "ignore"
+    const val RAW = "raw"
+
+    val options = listOf(ENABLED_Y, ENABLED_M, DISABLED, IGNORE, RAW)
+
+    fun normalize(value: String?): String = when (value?.trim()?.lowercase()) {
+        ENABLED_Y, "y", "yes", "on", "enable", "enabled" -> ENABLED_Y
+        ENABLED_M, "m", "module", "mod" -> ENABLED_M
+        DISABLED, "n", "no", "off", "disable", "disabled", "not_set", "not-set" -> DISABLED
+        IGNORE, "skip", "unchanged", "keep" -> IGNORE
+        RAW, "value", "raw_value", "raw-value" -> RAW
+        else -> IGNORE
+    }
+}
+
+data class CustomKernelOption(
+    val symbol: String = "",
+    val mode: String = CustomKernelOptionMode.IGNORE,
+    val rawValue: String = "",
+    val source: String = ""
+)
+
 data class CustomExternalModule(
     val url: String = "",
     val stage: String = CustomExternalModuleStage.AFTER_PATCH,
@@ -597,6 +623,7 @@ data class KernelBuildConfig(
     val zramExtraAlgos: String = "",
     val kpmPassword: String = "",
     val virtualizationSupport: String = "off",
+    val customKernelOptions: List<CustomKernelOption> = emptyList(),
     val useCustomExternalModules: Boolean = false,
     val customExternalModules: List<CustomExternalModule> = emptyList(),
     val onePlusCpu: String = "sm8650",

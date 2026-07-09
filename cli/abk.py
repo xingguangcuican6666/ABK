@@ -1139,7 +1139,6 @@ def cmd_build(args):
                 if args.build_time:
                     inputs["build_time"] = args.build_time
                 if args.custom_modules:
-                    inputs["use_custom_external_modules"] = "true"
                     inputs["custom_external_modules"] = args.custom_modules
             
             ref = args.ref or client.get_default_branch()

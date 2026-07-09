@@ -56,9 +56,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.UUID
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
 // ── UI State ─────────────────────────────────────────────────────────────────
 
@@ -87,6 +90,13 @@ enum class BuildPlanShareScope { FULL, FEATURES_ONLY }
 data class BuildPlanImportPreview(
     val plan: BuildPlan,
     val scope: BuildPlanShareScope
+)
+
+data class CustomKernelOptionsImportResult(
+    val options: List<CustomKernelOption>,
+    val importedCount: Int,
+    val skippedCount: Int,
+    val duplicateCount: Int
 )
 
 data class MainUiState(
@@ -3818,14 +3828,13 @@ class MainViewModel @JvmOverloads constructor(
         scope: BuildPlanShareScope
     ): String {
         val normalized = KernelSupport.normalize(config)
-        val payload = Base64.getUrlEncoder().withoutPadding().encodeToString(
-            encodeBuildPlanPayload(
-                config = normalized,
-                name = sanitizeBuildPlanName(name, normalized),
-                scope = scope,
-                messages = buildPlanCodecMessages()
-            )
+        val encodedPayload = encodeBuildPlanPayload(
+            config = normalized,
+            name = sanitizeBuildPlanName(name, normalized),
+            scope = scope,
+            messages = buildPlanCodecMessages()
         )
+        val payload = Base64.getUrlEncoder().withoutPadding().encodeToString(compressPlanPayload(encodedPayload))
         return "$BUILD_PLAN_CODE_PREFIX$payload"
     }
 
@@ -3873,6 +3882,55 @@ class MainViewModel @JvmOverloads constructor(
 
     fun importBuildPlanToCurrentConfig(preview: BuildPlanImportPreview) {
         updateBuildConfig(preview.plan.config)
+    }
+
+    fun upsertCustomKernelOption(option: CustomKernelOption, editingIndex: Int? = null) {
+        val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
+        if (currentConfig.buildTarget == BUILD_TARGET_ONEPLUS) return
+        val symbol = KernelSupport.normalizeCustomKernelSymbol(option.symbol)
+        require(symbol.isNotBlank()) { text(R.string.build_kernel_option_symbol_invalid) }
+        val normalizedOption = CustomKernelOption(
+            symbol = symbol,
+            mode = CustomKernelOptionMode.normalize(option.mode),
+            rawValue = option.rawValue.trim(),
+            source = option.source.trim()
+        )
+        require(
+            normalizedOption.mode != CustomKernelOptionMode.RAW || normalizedOption.rawValue.isNotBlank()
+        ) { text(R.string.build_kernel_option_raw_required) }
+
+        val updated = currentConfig.customKernelOptions.toMutableList().apply {
+            if (editingIndex != null && editingIndex in indices) {
+                removeAt(editingIndex)
+            }
+            val duplicateIndex = indexOfFirst { it.symbol.equals(symbol, ignoreCase = true) }
+            if (duplicateIndex >= 0) {
+                removeAt(duplicateIndex)
+            }
+            add(normalizedOption)
+        }
+        updateBuildConfig(currentConfig.copy(customKernelOptions = updated))
+    }
+
+    fun removeCustomKernelOption(index: Int) {
+        val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
+        if (index !in currentConfig.customKernelOptions.indices) return
+        val updated = currentConfig.customKernelOptions.toMutableList().apply { removeAt(index) }
+        updateBuildConfig(currentConfig.copy(customKernelOptions = updated))
+    }
+
+    fun importCustomKernelOptions(text: String): CustomKernelOptionsImportResult {
+        val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
+        val imported = parseCustomKernelOptionsText(text)
+        val merged = currentConfig.customKernelOptions + imported.options
+        updateBuildConfig(currentConfig.copy(customKernelOptions = merged))
+        return imported
+    }
+
+    fun loadCustomKernelOptionsFromUri(uri: Uri): String {
+        return getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+            input.bufferedReader(StandardCharsets.UTF_8).readText()
+        } ?: error(text(R.string.build_kernel_option_import_read_failed))
     }
 
     fun addBuildModuleRepository(url: String) {
@@ -4598,6 +4656,7 @@ class MainViewModel @JvmOverloads constructor(
     private fun buildPlanCodecMessages(): BuildPlanCodecMessages = BuildPlanCodecMessages(
         unsupportedVersion = text(R.string.vm_plan_bad_version),
         tooManyModules = text(R.string.vm_plan_too_many_modules),
+        tooManyKernelOptions = text(R.string.vm_plan_too_many_kernel_options),
         negativeNumber = text(R.string.vm_plan_negative_number),
         fieldTooLong = text(R.string.vm_plan_field_too_long),
         incomplete = text(R.string.vm_plan_incomplete),
@@ -4657,6 +4716,17 @@ private fun MainViewModel.localizedBuildModuleRepoTitle(): String =
 private fun padBase64Url(value: String): String =
     value + "=".repeat((4 - value.length % 4) % 4)
 
+private fun compressPlanPayload(bytes: ByteArray): ByteArray {
+    val output = ByteArrayOutputStream()
+    GZIPOutputStream(output).use { gzip -> gzip.write(bytes) }
+    return output.toByteArray()
+}
+
+private fun decompressPlanPayload(bytes: ByteArray): ByteArray {
+    val input = GZIPInputStream(ByteArrayInputStream(bytes))
+    return input.use { it.readBytes() }
+}
+
 internal data class DecodedBuildPlanCode(
     val name: String,
     val config: KernelBuildConfig,
@@ -4666,6 +4736,7 @@ internal data class DecodedBuildPlanCode(
 internal data class BuildPlanCodecMessages(
     val unsupportedVersion: String = "Unsupported plan code version",
     val tooManyModules: String = "External module count exceeds the limit",
+    val tooManyKernelOptions: String = "Kernel option count exceeds the limit",
     val negativeNumber: String = "Negative numbers can not be written to a plan code",
     val fieldTooLong: String = "Plan field is too long",
     val incomplete: String = "Plan code content is incomplete",
@@ -4703,6 +4774,27 @@ internal fun encodeBuildPlanPayload(
     writer.writeString(config.zramExtraAlgos)
     writer.writeString(config.kpmPassword)
     writer.writeString(config.customRef)
+    val kernelOptions = config.customKernelOptions
+        .mapNotNull { option ->
+            val symbol = KernelSupport.normalizeCustomKernelSymbol(option.symbol)
+            if (symbol.isBlank()) {
+                null
+            } else {
+                CustomKernelOption(
+                    symbol = symbol,
+                    mode = CustomKernelOptionMode.normalize(option.mode),
+                    rawValue = option.rawValue.trim(),
+                    source = option.source.trim()
+                )
+            }
+        }
+        .take(BUILD_PLAN_MAX_KERNEL_OPTIONS)
+    writer.writeVarInt(kernelOptions.size)
+    kernelOptions.forEach { option ->
+        writer.writeString(option.symbol)
+        writer.writeByte(BUILD_PLAN_KERNEL_OPTION_MODES.indexOrZero(option.mode))
+        writer.writeString(option.rawValue)
+    }
     val modules = if (config.useCustomExternalModules) {
         config.customExternalModules
             .mapNotNull { module ->
@@ -4749,7 +4841,12 @@ internal fun decodeBuildPlanPayload(
     baseConfig: KernelBuildConfig,
     messages: BuildPlanCodecMessages = BuildPlanCodecMessages()
 ): DecodedBuildPlanCode {
-    val reader = BuildPlanBinaryReader(bytes, messages)
+    val payloadBytes = if (bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
+        decompressPlanPayload(bytes)
+    } else {
+        bytes
+    }
+    val reader = BuildPlanBinaryReader(payloadBytes, messages)
     val version = reader.readByte()
     require(version in BUILD_PLAN_MIN_SUPPORTED_VERSION..BUILD_PLAN_CODE_VERSION) { messages.unsupportedVersion }
     val scope = buildPlanShareScopeFromWireValue(reader.readByte(), messages)
@@ -4805,6 +4902,22 @@ internal fun decodeBuildPlanPayload(
     } else {
         ""
     }
+    val kernelOptions = if (version >= BUILD_PLAN_KERNEL_OPTIONS_VERSION) {
+        val count = reader.readVarInt()
+        require(count in 0..BUILD_PLAN_MAX_KERNEL_OPTIONS) { messages.tooManyKernelOptions }
+        List(count) {
+            CustomKernelOption(
+                symbol = reader.readString().trim(),
+                mode = BUILD_PLAN_KERNEL_OPTION_MODES.valueOrDefault(
+                    reader.readByte(),
+                    CustomKernelOptionMode.IGNORE
+                ),
+                rawValue = reader.readString().trim()
+            )
+        }
+    } else {
+        emptyList()
+    }
     val moduleCount = reader.readVarInt()
     require(moduleCount in 0..BUILD_PLAN_MAX_MODULES) { messages.tooManyModules }
     val modules = List(moduleCount) {
@@ -4853,6 +4966,7 @@ internal fun decodeBuildPlanPayload(
         kpmPassword = kpmPassword,
         customRef = customRef,
         virtualizationSupport = virtualizationSupport,
+        customKernelOptions = kernelOptions,
         useCustomExternalModules = featureMask.hasBuildPlanFlag(10),
         customExternalModules = modules,
         onePlusUseLz4kd = featureMask.hasBuildPlanFlag(11),
@@ -4979,20 +5093,122 @@ private fun buildPlanShareScopeFromWireValue(
     else -> throw IllegalArgumentException(messages.unsupportedShareType)
 }
 
+private val CUSTOM_KERNEL_OPTION_DISABLED_LINE =
+    Regex("^#\\s*CONFIG_([A-Za-z0-9_]+)\\s+is\\s+not\\s+set$", RegexOption.IGNORE_CASE)
+
+private val CUSTOM_KERNEL_OPTION_ASSIGNED_LINE =
+    Regex("^(CONFIG_[A-Za-z0-9_]+)=(.+)$")
+
+private val CUSTOM_KERNEL_OPTION_BARE_LINE =
+    Regex("^(CONFIG_[A-Za-z0-9_]+|[A-Za-z0-9_]+)$")
+
+private data class ParsedCustomKernelOptionLine(
+    val option: CustomKernelOption?,
+    val skipped: Boolean
+)
+
+private fun parseCustomKernelOptionLine(line: String): ParsedCustomKernelOptionLine {
+    val clean = line.trim().replace("\r", "")
+    if (clean.isBlank()) return ParsedCustomKernelOptionLine(option = null, skipped = true)
+    if (clean.startsWith("#") && !clean.startsWith("# CONFIG_", ignoreCase = true)) {
+        return ParsedCustomKernelOptionLine(option = null, skipped = true)
+    }
+
+    CUSTOM_KERNEL_OPTION_DISABLED_LINE.matchEntire(clean)?.let { match ->
+        val symbol = KernelSupport.normalizeCustomKernelSymbol("CONFIG_${match.groupValues[1]}")
+        require(symbol.isNotBlank()) { "Invalid kernel option symbol: $clean" }
+        return ParsedCustomKernelOptionLine(
+            option = CustomKernelOption(symbol = symbol, mode = CustomKernelOptionMode.DISABLED),
+            skipped = false
+        )
+    }
+
+    CUSTOM_KERNEL_OPTION_ASSIGNED_LINE.matchEntire(clean)?.let { match ->
+        val symbol = KernelSupport.normalizeCustomKernelSymbol(match.groupValues[1])
+        require(symbol.isNotBlank()) { "Invalid kernel option symbol: $clean" }
+        val value = match.groupValues[2].trim()
+        val mode = when (value.lowercase()) {
+            "y" -> CustomKernelOptionMode.ENABLED_Y
+            "m" -> CustomKernelOptionMode.ENABLED_M
+            "n" -> CustomKernelOptionMode.DISABLED
+            else -> CustomKernelOptionMode.RAW
+        }
+        return ParsedCustomKernelOptionLine(
+            option = CustomKernelOption(
+                symbol = symbol,
+                mode = mode,
+                rawValue = if (mode == CustomKernelOptionMode.RAW) value else ""
+            ),
+            skipped = false
+        )
+    }
+
+    CUSTOM_KERNEL_OPTION_BARE_LINE.matchEntire(clean)?.let { match ->
+        val symbol = KernelSupport.normalizeCustomKernelSymbol(match.groupValues[1])
+        require(symbol.isNotBlank()) { "Invalid kernel option symbol: $clean" }
+        return ParsedCustomKernelOptionLine(
+            option = CustomKernelOption(symbol = symbol, mode = CustomKernelOptionMode.IGNORE),
+            skipped = false
+        )
+    }
+
+    throw IllegalArgumentException("Unsupported kernel option line: $clean")
+}
+
+internal fun parseCustomKernelOptionsText(text: String): CustomKernelOptionsImportResult {
+    val merged = linkedMapOf<String, CustomKernelOption>()
+    var skippedCount = 0
+    var duplicateCount = 0
+
+    text.lineSequence().forEach { rawLine ->
+        val parsed = parseCustomKernelOptionLine(rawLine)
+        if (parsed.skipped) {
+            skippedCount += 1
+            return@forEach
+        }
+        val option = parsed.option ?: return@forEach
+        if (merged.containsKey(option.symbol)) duplicateCount += 1
+        merged.remove(option.symbol)
+        merged[option.symbol] = option
+    }
+
+    val options = KernelSupport.normalizeCustomKernelOptions(merged.values.toList())
+    return CustomKernelOptionsImportResult(
+        options = options,
+        importedCount = options.size,
+        skippedCount = skippedCount,
+        duplicateCount = duplicateCount
+    )
+}
+
+internal fun CustomKernelOption.toWorkflowLine(): String? {
+    val symbol = KernelSupport.normalizeCustomKernelSymbol(symbol)
+    if (symbol.isBlank()) return null
+    return when (CustomKernelOptionMode.normalize(mode)) {
+        CustomKernelOptionMode.ENABLED_Y -> "$symbol=y"
+        CustomKernelOptionMode.ENABLED_M -> "$symbol=m"
+        CustomKernelOptionMode.DISABLED -> "# $symbol is not set"
+        CustomKernelOptionMode.RAW -> rawValue.trim().takeIf { it.isNotBlank() }?.let { "$symbol=$it" }
+        else -> null
+    }
+}
+
 private const val LATE_FAILED_ARTIFACT_POLL_ATTEMPTS = 6
 private const val LATE_FAILED_ARTIFACT_POLL_INTERVAL_MS = 5_000L
 
 private const val BUILD_PLAN_CODE_PREFIX = "ABKP2:"
 private const val BUILD_PLAN_LEGACY_CODE_PREFIX = "ABKP1:"
-private const val BUILD_PLAN_CODE_VERSION = 6
+private const val BUILD_PLAN_CODE_VERSION = 7
 private const val BUILD_PLAN_MIN_SUPPORTED_VERSION = 2
 private const val BUILD_PLAN_CUSTOM_REF_VERSION = 3
 private const val BUILD_PLAN_ONEPLUS_FIELDS_VERSION = 4
 private const val BUILD_PLAN_KSU_BRANCH_V5_VERSION = 5
 private const val BUILD_PLAN_MODULE_METADATA_VERSION = 6
+private const val BUILD_PLAN_KERNEL_OPTIONS_VERSION = 7
 private const val BUILD_PLAN_NAME_LIMIT = 80
 private const val BUILD_PLAN_MAX_STRING_BYTES = 4096
 private const val BUILD_PLAN_MAX_MODULES = 32
+private const val BUILD_PLAN_MAX_KERNEL_OPTIONS = 256
 private const val OFFICIAL_BUILD_MODULE_CATALOG_ID = "official-abk-module-catalog"
 private const val OFFICIAL_BUILD_MODULE_CATALOG_URL = "https://github.com/xingguangcuican6666/ABK_repo"
 
@@ -5003,6 +5219,7 @@ private val BUILD_PLAN_MODULE_STAGES = listOf(
     CustomExternalModuleStage.AFTER_PATCH,
     CustomExternalModuleStage.BEFORE_BUILD
 )
+private val BUILD_PLAN_KERNEL_OPTION_MODES = CustomKernelOptionMode.options
 
 private const val BUILD_SUMMARY_STEP_NAME = "\u6784\u5efa\u4fe1\u606f\u6458\u8981"
 private const val BUILD_SUMMARY_HEADER = "\u5185\u6838\u6784\u5efa\u914d\u7f6e\u6458\u8981"
@@ -5330,7 +5547,9 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
         "zram_extra_algos" to config.zramExtraAlgos,
         "kpm_password" to config.kpmPassword,
         "virtualization_support" to config.virtualizationSupport,
-        "use_custom_external_modules" to config.useCustomExternalModules.toString(),
+        "custom_kernel_options" to config.customKernelOptions
+            .mapNotNull { it.toWorkflowLine() }
+            .joinToString("\n"),
         "custom_ref" to if (config.kernelsuBranch == KSU_BRANCH_CUSTOM) {
             config.customRef.trim()
         } else {

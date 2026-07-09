@@ -103,11 +103,11 @@ on:
         default: ""
 
       # ==================== 自定义外部模块 ====================
-      use_custom_external_modules:
-        required: false
-        type: boolean
-        default: false
       custom_external_modules:
+        required: false
+        type: string
+        default: ""
+      custom_kernel_options:
         required: false
         type: string
         default: ""
@@ -210,7 +210,8 @@ jobs:
           echo "KPM 密码      : ${{ inputs.kpm_password && '已自定义' || '默认' }}"
           echo "Re-Kernel     : ${{ inputs.use_rekernel }}"
           echo "虚拟化支持   : ${{ inputs.virtualization_support }}"
-          echo "自定义注入    : ${{ inputs.use_custom_external_modules }}"
+          echo "自定义注入    : ${{ inputs.custom_external_modules != '' }}"
+          echo "内核选项覆盖  : ${{ inputs.custom_kernel_options != '' }}"
           echo "Stock Config  : 自动检测 config/stock_defconfig"
           echo "========================================"
 
@@ -654,7 +655,7 @@ jobs:
           git clone https://github.com/Numbersf/Action-Build.git --depth=1
 
       - name: 克隆自定义外部模块
-        if: inputs.use_custom_external_modules
+        if: inputs.custom_external_modules != ''
         env:
           CUSTOM_EXTERNAL_MODULES: ${{ inputs.custom_external_modules }}
         run: |
@@ -783,7 +784,7 @@ jobs:
           fi
 
       - name: 生成刷写外层 Magisk 依赖清单
-        if: inputs.use_custom_external_modules
+        if: inputs.custom_external_modules != ''
         env:
           ABK_FLASH_DEPENDENCY_MANIFEST: ${{ github.workspace }}/ABK_FLASH_DEPENDENCIES.json
         run: |
@@ -2921,7 +2922,7 @@ jobs:
           grep -q '^CONFIG_REKERNEL_NETWORK=y$' "$DEFCONFIG" || echo "CONFIG_REKERNEL_NETWORK=y" >> "$DEFCONFIG"
 
       - name: 执行自定义外部模块 (after_patch)
-        if: inputs.use_custom_external_modules
+        if: inputs.custom_external_modules != ''
         env:
           CUSTOM_EXTERNAL_MODULE_STAGE: after_patch
           ABK_BUILD_ANDROID_VERSION: ${{ inputs.android_version }}
@@ -3185,7 +3186,7 @@ jobs:
           fi
 
       - name: 执行自定义外部模块 (before_build)
-        if: inputs.use_custom_external_modules
+        if: inputs.custom_external_modules != ''
         env:
           CUSTOM_EXTERNAL_MODULE_STAGE: before_build
           ABK_BUILD_ANDROID_VERSION: ${{ inputs.android_version }}
@@ -3245,6 +3246,126 @@ jobs:
           if [ "$executed" -eq 0 ]; then
             echo "没有配置 $CUSTOM_EXTERNAL_MODULE_STAGE 阶段的自定义外部模块。"
           fi
+
+      - name: 应用自定义内核选项
+        if: inputs.custom_kernel_options != ''
+        working-directory: ${{ env.KERNEL_ROOT }}
+        env:
+          CUSTOM_KERNEL_OPTIONS: ${{ inputs.custom_kernel_options }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          defconfig = Path(os.environ["DEFCONFIG"])
+          text = defconfig.read_text()
+          lines = os.environ["CUSTOM_KERNEL_OPTIONS"].replace("\r", "").splitlines()
+
+          parsed = []
+          disabled_re = re.compile(r"^#\s*(CONFIG_[A-Za-z0-9_]+)\s+is\s+not\s+set$", re.I)
+          assigned_re = re.compile(r"^(CONFIG_[A-Za-z0-9_]+)=(.+)$")
+
+          def normalize_symbol(raw: str) -> str:
+              candidate = raw.strip().replace(" ", "")
+              if not candidate:
+                  return ""
+              if not candidate.upper().startswith("CONFIG_"):
+                  candidate = f"CONFIG_{candidate}"
+              candidate = candidate.upper()
+              if not re.fullmatch(r"CONFIG_[A-Z0-9_]+", candidate):
+                  return ""
+              return candidate
+
+          def config_defined(symbol: str) -> bool:
+              name = symbol.removeprefix("CONFIG_")
+              result = subprocess.run(
+                  [
+                      "bash",
+                      "-lc",
+                      "find . -type f -name 'Kconfig*' -print0 | xargs -0 grep -El \"^[[:space:]]*(menuconfig|config)[[:space:]]+" + name + "([[:space:]]|$)\" >/dev/null"
+                  ],
+                  cwd=os.getcwd(),
+              )
+              return result.returncode == 0
+
+          def set_config_value(symbol: str, mode: str, value: str = ""):
+              clean = symbol.removeprefix("CONFIG_")
+              filtered = []
+              for line in text_lines:
+                  if re.match(rf"^(CONFIG_{re.escape(clean)}=|# CONFIG_{re.escape(clean)} is not set$)", line):
+                      continue
+                  filtered.append(line)
+              if mode == "disabled":
+                  filtered.append(f"# CONFIG_{clean} is not set")
+              elif mode == "raw":
+                  filtered.append(f"CONFIG_{clean}={value}")
+              else:
+                  filtered.append(f"CONFIG_{clean}={mode}")
+              return filtered
+
+          for raw in lines:
+              clean = raw.strip()
+              if not clean:
+                  continue
+              if clean.startswith("#") and not clean.startswith("# CONFIG_"):
+                  continue
+              disabled = disabled_re.match(clean)
+              assigned = assigned_re.match(clean)
+              if disabled:
+                  symbol = normalize_symbol(disabled.group(1))
+                  if symbol:
+                      parsed.append((symbol, "disabled", ""))
+                  continue
+              if assigned:
+                  symbol = normalize_symbol(assigned.group(1))
+                  value = assigned.group(2).strip()
+                  if not symbol:
+                      print(f"::warning::无效自定义内核选项，已跳过: {clean}")
+                      continue
+                  if value.lower() == "y":
+                      parsed.append((symbol, "y", ""))
+                  elif value.lower() == "m":
+                      parsed.append((symbol, "m", ""))
+                  elif value.lower() == "n":
+                      parsed.append((symbol, "disabled", ""))
+                  else:
+                      parsed.append((symbol, "raw", value))
+                  continue
+              print(f"::warning::无法识别的自定义内核选项行，已跳过: {clean}")
+
+          deduped = []
+          seen = set()
+          for symbol, mode, value in reversed(parsed):
+              if symbol in seen:
+                  continue
+              seen.add(symbol)
+              deduped.append((symbol, mode, value))
+          deduped.reverse()
+
+          text_lines = text.splitlines()
+          applied = 0
+          skipped = 0
+          for symbol, mode, value in deduped:
+              if not config_defined(symbol):
+                  print(f"::warning::{symbol} 未在 Kconfig 中定义，已跳过")
+                  skipped += 1
+                  continue
+              text_lines = set_config_value(symbol, mode, value)
+              applied += 1
+              if mode == "raw":
+                  print(f"Applied custom kernel option: {symbol}={value}")
+              elif mode == "disabled":
+                  print(f"Applied custom kernel option: # {symbol} is not set")
+              else:
+                  print(f"Applied custom kernel option: {symbol}={mode}")
+
+          defconfig.write_text("\n".join(text_lines) + "\n")
+          print(f"自定义内核选项: 应用 {applied} 条，跳过 {skipped} 条")
+          PY
 
       - name: 修复 Official SUSFS 源码兼容
         if: inputs.ksu_variant == 'Official' && inputs.enable_susfs
@@ -5044,7 +5165,7 @@ jobs:
           PY
 
       - name: 校验 ABK 管理器桥接
-        if: inputs.use_custom_external_modules && inputs.ksu_variant != 'None'
+        if: inputs.custom_external_modules != '' && inputs.ksu_variant != 'None'
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
