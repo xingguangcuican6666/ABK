@@ -85,6 +85,10 @@ on:
         required: false
         type: string
         default: "off"
+      custom_kernel_config:
+        required: false
+        type: string
+        default: ""
 
       # ==================== ZRAM 扩展选项 ====================
       zram_full_algo:
@@ -141,6 +145,8 @@ jobs:
 
     steps:
       - name: 构建信息摘要
+        env:
+          CUSTOM_KERNEL_CONFIG_INPUT: ${{ inputs.custom_kernel_config || '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -169,6 +175,19 @@ jobs:
             if python3 -c 'import sys; algos=[item.strip().lower() for item in sys.argv[1].split(",") if item.strip()]; raise SystemExit(0 if "zstdp" in algos else 1)' "$effective_zram_extra_algos"; then
               effective_zram_use_optional_algo="true"
             fi
+          fi
+
+          custom_kernel_config_count="$(python3 - <<'PY'
+          import os
+          raw = os.environ.get("CUSTOM_KERNEL_CONFIG_INPUT", "")
+          normalized = raw.replace("\r\n", "\n").replace("\r", "\n").replace("|", "\n")
+          count = sum(1 for line in normalized.splitlines() if line.strip())
+          print(count)
+          PY
+          )"
+          custom_kernel_config_label="无"
+          if [ "$custom_kernel_config_count" -gt 0 ]; then
+            custom_kernel_config_label="${custom_kernel_config_count} 项"
           fi
 
           {
@@ -210,6 +229,7 @@ jobs:
           echo "KPM 密码      : ${{ inputs.kpm_password && '已自定义' || '默认' }}"
           echo "Re-Kernel     : ${{ inputs.use_rekernel }}"
           echo "虚拟化支持   : ${{ inputs.virtualization_support }}"
+          echo "自定义内核选项: $custom_kernel_config_label"
           echo "自定义注入    : ${{ inputs.use_custom_external_modules }}"
           echo "Stock Config  : 自动检测 config/stock_defconfig"
           echo "========================================"
@@ -2455,7 +2475,6 @@ jobs:
           enable_required_config CONFIG_IPC_NS
           enable_required_config CONFIG_PID_NS
           enable_required_config CONFIG_DEVTMPFS
-          enable_required_config CONFIG_USER_NS
 
           # 可选: 网络相关配置 (Docker/NAT 模式)
           enable_config_if_defined CONFIG_NETFILTER_XT_MATCH_ADDRTYPE
@@ -5158,6 +5177,58 @@ jobs:
           fi
 
           echo "ABK Control 管理器桥接校验通过。"
+
+      - name: 应用自定义内核选项
+        if: inputs.custom_kernel_config != ''
+        working-directory: ${{ env.KERNEL_ROOT }}
+        env:
+          CUSTOM_KERNEL_CONFIG_INPUT: ${{ inputs.custom_kernel_config }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          defconfig = Path(os.environ["DEFCONFIG"])
+          raw = os.environ.get("CUSTOM_KERNEL_CONFIG_INPUT", "")
+          normalized = raw.replace("\r\n", "\n").replace("\r", "\n").replace("|", "\n")
+          entries = []
+
+          for raw_line in normalized.splitlines():
+              line = raw_line.strip()
+              if not line:
+                  continue
+              if re.fullmatch(r"# CONFIG_[A-Za-z0-9_]+ is not set", line):
+                  key = line[len("# "):].split(" ", 1)[0]
+                  normalized_line = line
+              elif re.fullmatch(r"CONFIG_[A-Za-z0-9_]+=(y|m|n)", line, re.IGNORECASE):
+                  key, state = line.split("=", 1)
+                  normalized_line = f"# {key} is not set" if state.lower() == "n" else f"{key}={state.lower()}"
+              elif re.fullmatch(r"CONFIG_[A-Za-z0-9_]+=.+", line):
+                  key = line.split("=", 1)[0]
+                  normalized_line = line
+              else:
+                  raise SystemExit(f"::error::非法自定义内核选项: {line}（仅支持 CONFIG_FOO=y/m/n 或 # CONFIG_BAR is not set）")
+              entries.append((key, normalized_line))
+
+          if not entries:
+              print("未解析到有效的自定义内核选项，跳过。")
+              raise SystemExit(0)
+
+          lines = defconfig.read_text().splitlines()
+          for key, line in entries:
+              lines = [
+                  current for current in lines
+                  if current != f"# {key} is not set" and not current.startswith(f"{key}=")
+              ]
+              lines.append(line)
+
+          defconfig.write_text("\n".join(lines) + "\n")
+          print(f"已应用 {len(entries)} 项自定义内核选项到 {defconfig}")
+          for _, line in entries:
+              print(f"  {line}")
+          PY
 
       - name: 编译内核
         uses: nick-fields/retry@v4

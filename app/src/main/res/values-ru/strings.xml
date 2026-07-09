@@ -105,6 +105,29 @@
 
     <!-- Build -->
     <string name="build_title">Сборка ядра</string>
+    <string name="build_open_simple_flow">Открыть пошаговую сборку</string>
+    <string name="build_page_style_dialog_title">Выберите стиль страницы сборки</string>
+    <string name="build_page_style_dialog_desc">Выберите, как открывать сборку. Позже это можно изменить в настройках.</string>
+    <string name="build_page_style_dialog_classic_desc">Классика: отдельная вкладка Build и текущая полная страница сборки.</string>
+    <string name="build_page_style_dialog_simple_desc">Простой режим: вкладка Build убирается, а пошаговый мастер открывается по кнопке “+” на главной странице.</string>
+    <string name="build_guided_title">Пошаговая сборка</string>
+    <string name="build_guided_close">Закрыть мастер сборки</string>
+    <string name="build_guided_progress">Шаг %1$d / %2$d</string>
+    <string name="build_guided_previous">Назад</string>
+    <string name="build_guided_next">Далее</string>
+    <string name="build_guided_step_overview">Обзор</string>
+    <string name="build_guided_step_kernel">Версия ядра</string>
+    <string name="build_guided_step_ksu">KernelSU</string>
+    <string name="build_guided_step_features">Функции</string>
+    <string name="build_guided_step_finish">Завершение</string>
+    <string name="build_guided_step_overview_desc">Сначала проверьте цель сборки, текущий пресет и активные задачи.</string>
+    <string name="build_guided_step_kernel_desc">Выберите Android, подуровень ядра и уровень патча под устройство и KMI.</string>
+    <string name="build_guided_step_ksu_desc">Выберите вариант KernelSU, ветку и при необходимости свой ref.</string>
+    <string name="build_guided_step_features_desc">Настройте виртуализацию, ZRAM, KPM, внешние модули и остальные переключатели.</string>
+    <string name="build_guided_step_finish_desc">Заполните версию, время сборки и дополнительные опции, затем отправьте сборку.</string>
+    <string name="build_guided_overview_title">Сводка текущей сборки</string>
+    <string name="build_guided_overview_desc">Сначала подтвердите направление текущего пресета, затем переходите к детальной настройке по шагам.</string>
+    <string name="build_guided_overview_hint">Дальше шаги отдельно уточнят версию, KernelSU и функциональные переключатели.</string>
     <string name="build_login_required_title">Войдите в GitHub перед сборкой</string>
     <string name="build_login_required_desc">ABK больше не требует вход в GitHub при запуске. Откройте мастер настройки здесь, когда будете готовы собирать.</string>
     <string name="build_fork_required_title">Нужна настройка fork</string>
@@ -190,6 +213,7 @@
     <string name="build_enable_kpm">Включить KPM</string>
     <string name="build_enable_rekernel">Включить драйвер Re-Kernel (тест)</string>
     <string name="build_virtualization_support">Поддержка виртуализации</string>
+    <string name="build_virtualization_userns_hint">Виртуализация больше не включает USER_NS автоматически. Если он нужен DroidSpaces/Wayland, добавьте CONFIG_USER_NS=y в пользовательские параметры ядра ниже.</string>
     <string name="build_enable_oneplus_8e">Включить поддержку OnePlus 8E</string>
     <string name="build_oneplus_lz4kd">Включить lz4kd</string>
     <string name="build_oneplus_bbr">Включить BBR</string>
@@ -252,6 +276,27 @@
     <string name="build_custom_version_optional">Своё название версии (необязательно)</string>
     <string name="build_custom_time_optional">Своё время сборки (необязательно)</string>
     <string name="build_time_placeholder">Пусто/N = текущее UTC</string>
+    <string name="build_custom_kernel_config">Пользовательские параметры ядра</string>
+    <string name="build_custom_kernel_config_placeholder">По одному на строку, например CONFIG_USER_NS=y или # CONFIG_IPV6 is not set</string>
+    <string name="build_custom_kernel_config_single_placeholder">Введите USER_NS или CONFIG_USER_NS</string>
+    <string name="build_custom_kernel_config_hint">После добавления запись можно переключать между built-in, module, disabled и ignore. При массовом импорте используйте по одной записи на строку: CONFIG_FOO=y/m/n или # CONFIG_BAR is not set.</string>
+    <string name="build_custom_kernel_config_count">Настроено %1$d пользовательских параметров ядра</string>
+    <string name="build_custom_kernel_config_invalid_key">Некорректный параметр ядра: %1$s</string>
+    <string name="build_custom_kernel_config_invalid_line">Не удалось импортировать запись: %1$s</string>
+    <string name="build_custom_kernel_config_import_title">Массовый импорт параметров ядра</string>
+    <string name="build_custom_kernel_config_import_hint">По одной записи на строку. Поддерживаются CONFIG_FOO=y, CONFIG_FOO=m, CONFIG_FOO=n и # CONFIG_FOO is not set.</string>
+    <string name="build_custom_kernel_config_import_label">Содержимое импорта</string>
+    <string name="build_custom_kernel_config_import_placeholder">CONFIG_USER_NS=y
+CONFIG_IPV6=n
+# CONFIG_WERROR is not set</string>
+    <string name="build_custom_kernel_config_state_builtin">Built-in</string>
+    <string name="build_custom_kernel_config_state_module">Module</string>
+    <string name="build_custom_kernel_config_state_disabled">Disabled</string>
+    <string name="build_custom_kernel_config_state_ignore">Ignore</string>
+    <string name="build_custom_kernel_config_state_builtin_desc">Передаётся в workflow как =y</string>
+    <string name="build_custom_kernel_config_state_module_desc">Передаётся в workflow как =m</string>
+    <string name="build_custom_kernel_config_state_disabled_desc">Передаётся в workflow как =n</string>
+    <string name="build_custom_kernel_config_state_ignore_desc">Не передаётся в workflow и не меняет этот параметр</string>
     <string name="build_add_queue">Добавить в очередь</string>
     <string name="build_queue_title">Очередь сборок</string>
     <string name="build_plan_library">Библиотека пресетов</string>
@@ -307,6 +352,7 @@
     <string name="build_config_preview">Предпросмотр конфигурации</string>
     <string name="build_feature_networking">Сетевые улучшения</string>
     <string name="build_feature_virtualization">Виртуализация %1$s</string>
+    <string name="build_feature_custom_kernel_config">Пользовательская конфигурация %1$d</string>
     <string name="build_base_config">Базовая конфигурация</string>
     <string name="build_summary_external_modules">Внешние модули: %1$d</string>
     <string name="build_hero_desc">Запускает GitHub Actions и автоматически упорядочивает img, AK3, менеджер и модули SUSFS.</string>
@@ -589,6 +635,12 @@
     <string name="settings_title">Настройки</string>
     <string name="settings_account">Аккаунт</string>
     <string name="settings_build">Сборка</string>
+    <string name="settings_build_page_style">Стиль страницы сборки</string>
+    <string name="settings_build_page_style_desc">Можно оставить отдельную вкладку сборки или перейти к кнопке “+” на главной странице с пошаговой настройкой.</string>
+    <string name="settings_build_page_style_classic">Классика</string>
+    <string name="settings_build_page_style_simple">Простой</string>
+    <string name="settings_build_page_style_classic_desc">Сохраняет отдельную вкладку Build и текущую полную страницу сборки.</string>
+    <string name="settings_build_page_style_simple_desc">Убирает вкладку Build и открывает сегментированный пошаговый режим по кнопке “+” на главной странице.</string>
     <string name="settings_notification">Уведомления</string>
     <string name="settings_about">О приложении</string>
     <string name="settings_extensions_title">Расширения</string>

@@ -7,11 +7,14 @@ import com.abk.kernel.data.model.BUILD_TARGET_GKI
 import com.abk.kernel.data.model.BUILD_TARGET_ONEPLUS
 import com.abk.kernel.data.model.KSU_BRANCH_CUSTOM
 import com.abk.kernel.data.model.KSU_BRANCH_STABLE
+import com.abk.kernel.data.model.CustomKernelConfigState
 import com.abk.kernel.data.model.KSU_VARIANT_NONE
 import com.abk.kernel.data.model.KSU_VARIANT_RESUKISU
 import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
 import com.abk.kernel.data.model.KernelBuildConfig
 import com.abk.kernel.data.model.KernelSupport
+import com.abk.kernel.data.model.serializeCustomKernelConfigEntries
+import com.abk.kernel.data.model.CustomKernelConfigEntry
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -43,6 +46,7 @@ class BuildPlanLogicTest {
                 zramExtraAlgos = "lz4,zstd",
                 kpmPassword = "super-secret",
                 virtualizationSupport = "678",
+                customKernelConfig = "CONFIG_USER_NS=y\nCONFIG_EXAMPLE=n",
                 useCustomExternalModules = true,
                 customExternalModules = listOf(
                     CustomExternalModule(" https://github.com/example/module.git ", "before-build")
@@ -67,6 +71,7 @@ class BuildPlanLogicTest {
         assertEquals(config.zramExtraAlgos, decoded.config.zramExtraAlgos)
         assertEquals(config.kpmPassword, decoded.config.kpmPassword)
         assertEquals(config.virtualizationSupport, decoded.config.virtualizationSupport)
+        assertEquals(config.customKernelConfig, decoded.config.customKernelConfig)
         assertEquals(
             listOf(CustomExternalModule("https://github.com/example/module.git", CustomExternalModuleStage.BEFORE_BUILD)),
             decoded.config.customExternalModules
@@ -118,6 +123,7 @@ class BuildPlanLogicTest {
             useDdk = true,
             kernelsuBranch = KSU_BRANCH_CUSTOM,
             customRef = "  main:5  ",
+            customKernelConfig = " CONFIG_USER_NS=y\r\nCONFIG_IPV6=n ",
             useCustomExternalModules = true,
             customExternalModules = listOf(
                 CustomExternalModule(" https://github.com/example/a.git ", "after-patch"),
@@ -132,10 +138,30 @@ class BuildPlanLogicTest {
         assertEquals("true", inputs["use_ddk"])
         assertEquals(KSU_BRANCH_CUSTOM, inputs["kernelsu_branch"])
         assertEquals("main:5", inputs["custom_ref"])
+        assertEquals("CONFIG_USER_NS=y\nCONFIG_IPV6=n", inputs["custom_kernel_config"])
         assertEquals("true", inputs["use_custom_external_modules"])
         assertEquals(
             "module:https://github.com/example/a.git;after_patch|module:https://github.com/example/b.git;before_build",
             inputs["custom_external_modules"]
+        )
+    }
+
+    @Test
+    fun workflowInputMapOmitsIgnoredCustomKernelConfigEntries() {
+        val inputs = KernelBuildConfig(
+            customKernelConfig = serializeCustomKernelConfigEntries(
+                listOf(
+                    CustomKernelConfigEntry("CONFIG_USER_NS", CustomKernelConfigState.BUILT_IN),
+                    CustomKernelConfigEntry("CONFIG_KVM", CustomKernelConfigState.IGNORE),
+                    CustomKernelConfigEntry("CONFIG_TUN", CustomKernelConfigState.MODULE),
+                    CustomKernelConfigEntry("CONFIG_IPV6", CustomKernelConfigState.DISABLED)
+                )
+            )
+        ).toInputMap()
+
+        assertEquals(
+            "CONFIG_USER_NS=y\nCONFIG_TUN=m\nCONFIG_IPV6=n",
+            inputs["custom_kernel_config"]
         )
     }
 

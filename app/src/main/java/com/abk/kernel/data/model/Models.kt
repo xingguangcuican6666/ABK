@@ -129,6 +129,7 @@ data class BuildParameterSummary(
     val kpmPassword: String = "",
     val reKernelEnabled: String = "",
     val virtualizationSupport: String = "",
+    val customKernelConfig: String = "",
     val customInjection: String = "",
     val stockConfig: String = "",
     val source: String = "workflow_log",
@@ -422,6 +423,115 @@ data class CustomExternalModule(
     val groupDescription: String = ""
 )
 
+private const val CUSTOM_KERNEL_CONFIG_IGNORE_PREFIX = "# ABK_IGNORE "
+private const val CUSTOM_KERNEL_CONFIG_DISABLED_PREFIX = "# ABK_DISABLED "
+private val CUSTOM_KERNEL_CONFIG_KEY_PATTERN = Regex("""^CONFIG_[A-Z0-9_]+$""")
+private val CUSTOM_KERNEL_CONFIG_ASSIGNMENT_PATTERN = Regex("""^(CONFIG_[A-Z0-9_]+)=(.+)$""")
+private val CUSTOM_KERNEL_CONFIG_NOT_SET_PATTERN = Regex("""^# (CONFIG_[A-Z0-9_]+) is not set$""")
+
+enum class CustomKernelConfigState(val wireValue: String) {
+    BUILT_IN("y"),
+    MODULE("m"),
+    DISABLED("n"),
+    IGNORE("ignore");
+
+    companion object {
+        fun fromWireValue(value: String?): CustomKernelConfigState = when (value?.trim()?.lowercase()) {
+            "y" -> BUILT_IN
+            "m" -> MODULE
+            "n" -> DISABLED
+            else -> IGNORE
+        }
+    }
+}
+
+data class CustomKernelConfigEntry(
+    val key: String = "",
+    val state: CustomKernelConfigState = CustomKernelConfigState.BUILT_IN
+)
+
+fun normalizeCustomKernelConfigKey(value: String): String {
+    val normalized = value.trim().uppercase()
+    if (normalized.isBlank()) return ""
+    return if (normalized.startsWith("CONFIG_")) normalized else "CONFIG_$normalized"
+}
+
+fun isSupportedCustomKernelConfigKey(value: String): Boolean =
+    CUSTOM_KERNEL_CONFIG_KEY_PATTERN.matches(normalizeCustomKernelConfigKey(value))
+
+fun parseCustomKernelConfigEntry(value: String): CustomKernelConfigEntry? {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return null
+
+    if (trimmed.startsWith(CUSTOM_KERNEL_CONFIG_IGNORE_PREFIX)) {
+        val key = normalizeCustomKernelConfigKey(trimmed.removePrefix(CUSTOM_KERNEL_CONFIG_IGNORE_PREFIX))
+        return key.takeIf { CUSTOM_KERNEL_CONFIG_KEY_PATTERN.matches(it) }
+            ?.let { CustomKernelConfigEntry(it, CustomKernelConfigState.IGNORE) }
+    }
+    if (trimmed.startsWith(CUSTOM_KERNEL_CONFIG_DISABLED_PREFIX)) {
+        return parseCustomKernelConfigEntry(trimmed.removePrefix(CUSTOM_KERNEL_CONFIG_DISABLED_PREFIX))
+            ?.copy(state = CustomKernelConfigState.IGNORE)
+    }
+
+    val assignment = CUSTOM_KERNEL_CONFIG_ASSIGNMENT_PATTERN.matchEntire(trimmed)
+    if (assignment != null) {
+        val key = assignment.groupValues[1]
+        val rawState = assignment.groupValues[2]
+        if (!CUSTOM_KERNEL_CONFIG_KEY_PATTERN.matches(key)) return null
+        return when (rawState.lowercase()) {
+            "y" -> CustomKernelConfigEntry(key, CustomKernelConfigState.BUILT_IN)
+            "m" -> CustomKernelConfigEntry(key, CustomKernelConfigState.MODULE)
+            "n" -> CustomKernelConfigEntry(key, CustomKernelConfigState.DISABLED)
+            else -> null
+        }
+    }
+
+    val notSet = CUSTOM_KERNEL_CONFIG_NOT_SET_PATTERN.matchEntire(trimmed)
+    if (notSet != null) {
+        val key = notSet.groupValues[1]
+        return CustomKernelConfigEntry(key, CustomKernelConfigState.DISABLED)
+    }
+
+    val key = normalizeCustomKernelConfigKey(trimmed)
+    return key.takeIf { CUSTOM_KERNEL_CONFIG_KEY_PATTERN.matches(it) }
+        ?.let { CustomKernelConfigEntry(it, CustomKernelConfigState.BUILT_IN) }
+}
+
+fun parseCustomKernelConfigEntries(value: String): List<CustomKernelConfigEntry> =
+    value
+        .replace("\r\n", "\n")
+        .replace('\r', '\n')
+        .replace('|', '\n')
+        .lineSequence()
+        .mapNotNull(::parseCustomKernelConfigEntry)
+        .toList()
+
+fun serializeCustomKernelConfigEntries(entries: List<CustomKernelConfigEntry>): String =
+    entries.mapNotNull { entry ->
+        val key = normalizeCustomKernelConfigKey(entry.key)
+        if (!CUSTOM_KERNEL_CONFIG_KEY_PATTERN.matches(key)) {
+            null
+        } else {
+            when (entry.state) {
+                CustomKernelConfigState.BUILT_IN -> "$key=y"
+                CustomKernelConfigState.MODULE -> "$key=m"
+                CustomKernelConfigState.DISABLED -> "$key=n"
+                CustomKernelConfigState.IGNORE -> "$CUSTOM_KERNEL_CONFIG_IGNORE_PREFIX$key"
+            }
+        }
+    }.joinToString("\n")
+
+fun exportWorkflowCustomKernelConfig(value: String): String =
+    parseCustomKernelConfigEntries(value)
+        .filter { it.state != CustomKernelConfigState.IGNORE }
+        .joinToString("\n") { entry ->
+            val key = normalizeCustomKernelConfigKey(entry.key)
+            "$key=${entry.state.wireValue}"
+        }
+
+fun enabledCustomKernelConfigEntryCount(value: String): Int =
+    parseCustomKernelConfigEntries(value).count { it.state != CustomKernelConfigState.IGNORE }
+
 object CustomExternalModuleEntryKind {
     const val MODULE = "module"
     const val MODULE_SET_CHILD = "module_set_child"
@@ -550,6 +660,8 @@ const val KSU_VARIANT_SUKISU = "SukiSU"
 const val KSU_VARIANT_RESUKISU = "ReSukiSU"
 const val BUILD_TARGET_GKI = "gki"
 const val BUILD_TARGET_ONEPLUS = "oneplus"
+const val BUILD_PAGE_STYLE_CLASSIC = "classic"
+const val BUILD_PAGE_STYLE_SIMPLE = "simple"
 
 val KSU_BRANCH_STANDARD_OPTIONS = listOf(
     KSU_BRANCH_STABLE,
@@ -570,6 +682,13 @@ val ONEPLUS_KSU_VARIANT_OPTIONS = listOf(
     KSU_VARIANT_RESUKISU,
     KSU_VARIANT_NONE
 )
+val BUILD_PAGE_STYLE_OPTIONS = listOf(
+    BUILD_PAGE_STYLE_CLASSIC,
+    BUILD_PAGE_STYLE_SIMPLE
+)
+
+fun normalizeBuildPageStyle(value: String?): String? =
+    value?.trim()?.lowercase()?.takeIf { it in BUILD_PAGE_STYLE_OPTIONS }
 
 // App-level build config model (mirrors kernel-custom.yml inputs)
 data class KernelBuildConfig(
@@ -597,6 +716,7 @@ data class KernelBuildConfig(
     val zramExtraAlgos: String = "",
     val kpmPassword: String = "",
     val virtualizationSupport: String = "off",
+    val customKernelConfig: String = "",
     val useCustomExternalModules: Boolean = false,
     val customExternalModules: List<CustomExternalModule> = emptyList(),
     val onePlusCpu: String = "sm8650",

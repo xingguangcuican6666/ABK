@@ -312,6 +312,7 @@ object KernelSupport {
             },
             kpmPassword = if (isOnePlus || ksuVariant == KSU_VARIANT_NONE || !gkiKpmSupported) "" else config.kpmPassword,
             virtualizationSupport = if (isOnePlus) "off" else normalizeVirtualizationSupport(line.kernelVersion, config.virtualizationSupport),
+            customKernelConfig = if (isOnePlus) "" else normalizeCustomKernelConfig(config.customKernelConfig),
             useCustomExternalModules = if (isOnePlus) false else config.useCustomExternalModules,
             customExternalModules = if (isOnePlus) {
                 emptyList()
@@ -424,6 +425,9 @@ object KernelSupport {
             else -> "off"
         }
     }
+
+    private fun normalizeCustomKernelConfig(value: String): String =
+        serializeCustomKernelConfigEntries(parseCustomKernelConfigEntries(value))
 
     fun subLevelOptions(androidVersion: String, kernelVersion: String): List<String> =
         subLevels(lineFor(androidVersion, kernelVersion)) + "X"

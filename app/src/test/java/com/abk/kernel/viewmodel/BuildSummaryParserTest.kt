@@ -44,6 +44,7 @@ class BuildSummaryParserTest {
             KPM 密码: my-secret
             Re-Kernel: false
             虚拟化支持: 678
+            自定义内核选项: 2 项
             自定义注入: 无
             Stock Config: 启用
         """.trimIndent()
@@ -65,6 +66,7 @@ class BuildSummaryParserTest {
         assertEquals("true", summary.networkingEnabled)
         assertEquals("已设置", summary.kpmPassword)
         assertEquals("678", summary.virtualizationSupport)
+        assertEquals("2 项", summary.customKernelConfig)
         assertEquals("启用", summary.stockConfig)
     }
 

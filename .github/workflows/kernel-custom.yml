@@ -95,6 +95,11 @@ on:
           - "123"
           - "345"
         default: "off"
+      custom_kernel_config:
+        description: "自定义内核选项（支持多行或 | 分隔；推荐 CONFIG_FOO=y/m/n，也支持 # CONFIG_BAR is not set）"
+        required: false
+        type: string
+        default: ""
 
       # ==================== 功能开关 ====================
       use_zram:
@@ -162,12 +167,6 @@ on:
         type: string
         default: ""
 
-      # ==================== 自定义外部模块 ====================
-      use_custom_external_modules:
-        description: "启用自定义外部模块注入"
-        required: false
-        type: boolean
-        default: false
       custom_external_modules:
         description: "自定义外部模块（兼容旧 repo;stage，也支持 module:repo;stage 与 set:repo#child;stage，用 | 分隔）"
         required: false
@@ -200,10 +199,11 @@ jobs:
       supp_op: ${{ inputs.supp_op || false }}
       enable_susfs: ${{ !inputs.cancel_susfs }}
       virtualization_support: ${{ inputs.virtualization_support || 'off' }}
+      custom_kernel_config: ${{ inputs.custom_kernel_config || '' }}
       zram_full_algo: ${{ inputs.zram_full_algo || false }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
-      use_custom_external_modules: ${{ inputs.use_custom_external_modules || false }}
+      use_custom_external_modules: ${{ inputs.custom_external_modules != '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
 
   get-ksu-manager:

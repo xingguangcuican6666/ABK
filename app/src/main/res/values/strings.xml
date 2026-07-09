@@ -105,6 +105,29 @@
 
     <!-- Build -->
     <string name="build_title">构建内核</string>
+    <string name="build_open_simple_flow">打开分段构建向导</string>
+    <string name="build_page_style_dialog_title">选择构建页风格</string>
+    <string name="build_page_style_dialog_desc">首次进入后请选择你想使用的构建方式，之后可以随时在设置里切换。</string>
+    <string name="build_page_style_dialog_classic_desc">经典：保留独立构建 Tab，适合直接整页配置所有选项。</string>
+    <string name="build_page_style_dialog_simple_desc">简单：移除构建 Tab，在主页右下角通过“+”打开分段引导配置页。</string>
+    <string name="build_guided_title">分段构建向导</string>
+    <string name="build_guided_close">关闭构建向导</string>
+    <string name="build_guided_progress">第 %1$d / %2$d 步</string>
+    <string name="build_guided_previous">上一步</string>
+    <string name="build_guided_next">下一步</string>
+    <string name="build_guided_step_overview">概览</string>
+    <string name="build_guided_step_kernel">内核版本</string>
+    <string name="build_guided_step_ksu">KernelSU</string>
+    <string name="build_guided_step_features">功能开关</string>
+    <string name="build_guided_step_finish">完成提交</string>
+    <string name="build_guided_step_overview_desc">先确认构建目标、当前方案和正在运行的任务。</string>
+    <string name="build_guided_step_kernel_desc">按设备和 KMI 选择 Android、内核子版本与补丁级别。</string>
+    <string name="build_guided_step_ksu_desc">选择 KernelSU 变体、分支以及自定义引用。</string>
+    <string name="build_guided_step_features_desc">配置虚拟化、ZRAM、KPM、自定义模块和其他功能开关。</string>
+    <string name="build_guided_step_finish_desc">补充版本、时间与高级选项，确认后提交构建。</string>
+    <string name="build_guided_overview_title">当前构建摘要</string>
+    <string name="build_guided_overview_desc">先确认当前方案方向，再开始逐步填写详细配置。</string>
+    <string name="build_guided_overview_hint">下面会按步骤继续细化版本、KernelSU 和功能开关。</string>
     <string name="build_login_required_title">登录 GitHub 后才能构建</string>
     <string name="build_login_required_desc">ABK 现在不会在启动时强制登录。需要构建内核时，再进入 OOBE 完成 GitHub 授权即可。</string>
     <string name="build_fork_required_title">还需要完成 fork 配置</string>
@@ -190,6 +213,7 @@
     <string name="build_enable_kpm">启用 KPM 功能</string>
     <string name="build_enable_rekernel">启用 Re-Kernel 驱动 (测试)</string>
     <string name="build_virtualization_support">虚拟化支持</string>
+    <string name="build_virtualization_userns_hint">虚拟化支持不再自动启用 USER_NS；如果 DroidSpaces/Wayland 需要，请在下方自定义内核选项里显式加入 CONFIG_USER_NS=y。</string>
     <string name="build_enable_oneplus_8e">启用一加 8E 支持</string>
     <string name="build_oneplus_lz4kd">启用 lz4kd</string>
     <string name="build_oneplus_bbr">启用 BBR</string>
@@ -252,6 +276,27 @@
     <string name="build_custom_version_optional">自定义版本名 (可选)</string>
     <string name="build_custom_time_optional">自定义构建时间 (可选)</string>
     <string name="build_time_placeholder">留空/N=当前 UTC 时间</string>
+    <string name="build_custom_kernel_config">自定义内核选项</string>
+    <string name="build_custom_kernel_config_placeholder">每行一项，例如 CONFIG_USER_NS=y 或 # CONFIG_IPV6 is not set</string>
+    <string name="build_custom_kernel_config_single_placeholder">输入 USER_NS 或 CONFIG_USER_NS</string>
+    <string name="build_custom_kernel_config_hint">添加条目后可切换为内建、模块、关闭或忽略；批量导入时每行一个，支持 CONFIG_FOO=y/m/n 或 # CONFIG_BAR is not set。</string>
+    <string name="build_custom_kernel_config_count">已配置 %1$d 项自定义内核选项</string>
+    <string name="build_custom_kernel_config_invalid_key">内核选项格式不正确：%1$s</string>
+    <string name="build_custom_kernel_config_invalid_line">无法导入该条目：%1$s</string>
+    <string name="build_custom_kernel_config_import_title">批量导入内核选项</string>
+    <string name="build_custom_kernel_config_import_hint">每行一个条目。支持 CONFIG_FOO=y、CONFIG_FOO=m、CONFIG_FOO=n 和 # CONFIG_FOO is not set。</string>
+    <string name="build_custom_kernel_config_import_label">导入内容</string>
+    <string name="build_custom_kernel_config_import_placeholder">CONFIG_USER_NS=y
+CONFIG_IPV6=n
+# CONFIG_WERROR is not set</string>
+    <string name="build_custom_kernel_config_state_builtin">内建</string>
+    <string name="build_custom_kernel_config_state_module">模块</string>
+    <string name="build_custom_kernel_config_state_disabled">关闭</string>
+    <string name="build_custom_kernel_config_state_ignore">忽略</string>
+    <string name="build_custom_kernel_config_state_builtin_desc">传递给工作流为 =y</string>
+    <string name="build_custom_kernel_config_state_module_desc">传递给工作流为 =m</string>
+    <string name="build_custom_kernel_config_state_disabled_desc">传递给工作流为 =n</string>
+    <string name="build_custom_kernel_config_state_ignore_desc">不传递给工作流，不修改该选项</string>
     <string name="build_add_queue">加入队列</string>
     <string name="build_queue_title">构建队列</string>
     <string name="build_plan_library">方案库</string>
@@ -307,6 +352,7 @@
     <string name="build_config_preview">配置预览</string>
     <string name="build_feature_networking">网络增强</string>
     <string name="build_feature_virtualization">虚拟化 %1$s</string>
+    <string name="build_feature_custom_kernel_config">自定义配置 %1$d 项</string>
     <string name="build_base_config">基础配置</string>
     <string name="build_summary_external_modules">外部模块 %1$d</string>
     <string name="build_hero_desc">触发 GitHub Actions 并自动整理 img、AK3、管理器和 SUSFS 模块。</string>
@@ -589,6 +635,12 @@
     <string name="settings_title">设置</string>
     <string name="settings_account">账户</string>
     <string name="settings_build">构建</string>
+    <string name="settings_build_page_style">构建页风格</string>
+    <string name="settings_build_page_style_desc">选择保留独立构建页，或改用主页右下角按钮进入分段引导式构建。</string>
+    <string name="settings_build_page_style_classic">经典</string>
+    <string name="settings_build_page_style_simple">简单</string>
+    <string name="settings_build_page_style_classic_desc">保留单独的构建 Tab，沿用当前完整构建页。</string>
+    <string name="settings_build_page_style_simple_desc">从 Tab 移除构建页，在主页右下角通过“+”进入分段引导配置。</string>
     <string name="settings_notification">通知</string>
     <string name="settings_about">关于</string>
     <string name="settings_extensions_title">扩展</string>

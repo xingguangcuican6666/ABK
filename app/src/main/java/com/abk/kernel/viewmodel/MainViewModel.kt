@@ -190,6 +190,7 @@ data class MainUiState(
     val appUpdateError: String? = null,
     val appUpdatePendingInstallPath: String? = null,
     val predictiveBackEnabled: Boolean = true,
+    val buildPageStyle: String? = null,
     val runtimeNavigationEnabled: Boolean = false,
     val webViewDebugEnabled: Boolean = false,
     val managerAccessState: ManagerAccessState = ManagerAccessState.UNKNOWN,
@@ -585,6 +586,11 @@ class MainViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             prefs.predictiveBackEnabled.collect { enabled ->
                 _uiState.update { it.copy(predictiveBackEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            prefs.buildPageStyle.collect { style ->
+                _uiState.update { it.copy(buildPageStyle = style) }
             }
         }
         viewModelScope.launch {
@@ -3875,6 +3881,10 @@ class MainViewModel @JvmOverloads constructor(
         updateBuildConfig(preview.plan.config)
     }
 
+    fun setBuildPageStyle(style: String?) = viewModelScope.launch {
+        prefs.setBuildPageStyle(style)
+    }
+
     fun addBuildModuleRepository(url: String) {
         val cleanUrl = normalizeModuleCatalogUrl(url)
         if (cleanUrl.isBlank()) {
@@ -4703,6 +4713,7 @@ internal fun encodeBuildPlanPayload(
     writer.writeString(config.zramExtraAlgos)
     writer.writeString(config.kpmPassword)
     writer.writeString(config.customRef)
+    writer.writeString(config.customKernelConfig)
     val modules = if (config.useCustomExternalModules) {
         config.customExternalModules
             .mapNotNull { module ->
@@ -4805,6 +4816,11 @@ internal fun decodeBuildPlanPayload(
     } else {
         ""
     }
+    val customKernelConfig = if (version >= BUILD_PLAN_CUSTOM_KERNEL_CONFIG_VERSION) {
+        reader.readString()
+    } else {
+        ""
+    }
     val moduleCount = reader.readVarInt()
     require(moduleCount in 0..BUILD_PLAN_MAX_MODULES) { messages.tooManyModules }
     val modules = List(moduleCount) {
@@ -4852,6 +4868,7 @@ internal fun decodeBuildPlanPayload(
         zramExtraAlgos = zramExtraAlgos,
         kpmPassword = kpmPassword,
         customRef = customRef,
+        customKernelConfig = customKernelConfig,
         virtualizationSupport = virtualizationSupport,
         useCustomExternalModules = featureMask.hasBuildPlanFlag(10),
         customExternalModules = modules,
@@ -4984,12 +5001,13 @@ private const val LATE_FAILED_ARTIFACT_POLL_INTERVAL_MS = 5_000L
 
 private const val BUILD_PLAN_CODE_PREFIX = "ABKP2:"
 private const val BUILD_PLAN_LEGACY_CODE_PREFIX = "ABKP1:"
-private const val BUILD_PLAN_CODE_VERSION = 6
+private const val BUILD_PLAN_CODE_VERSION = 7
 private const val BUILD_PLAN_MIN_SUPPORTED_VERSION = 2
 private const val BUILD_PLAN_CUSTOM_REF_VERSION = 3
 private const val BUILD_PLAN_ONEPLUS_FIELDS_VERSION = 4
 private const val BUILD_PLAN_KSU_BRANCH_V5_VERSION = 5
 private const val BUILD_PLAN_MODULE_METADATA_VERSION = 6
+private const val BUILD_PLAN_CUSTOM_KERNEL_CONFIG_VERSION = 7
 private const val BUILD_PLAN_NAME_LIMIT = 80
 private const val BUILD_PLAN_MAX_STRING_BYTES = 4096
 private const val BUILD_PLAN_MAX_MODULES = 32
@@ -5025,6 +5043,7 @@ private const val SUMMARY_LABEL_NETWORKING_TYPO = "networing\u589e\u5f3a"
 private const val SUMMARY_LABEL_KPM = "kpm\u529f\u80fd"
 private const val SUMMARY_LABEL_KPM_PASSWORD = "kpm\u5bc6\u7801"
 private const val SUMMARY_LABEL_VIRTUALIZATION = "\u865a\u62df\u5316\u652f\u6301"
+private const val SUMMARY_LABEL_CUSTOM_KERNEL_CONFIG = "\u81ea\u5b9a\u4e49\u5185\u6838\u9009\u9879"
 private const val SUMMARY_LABEL_CUSTOM_INJECTION = "\u81ea\u5b9a\u4e49\u6ce8\u5165"
 private const val SUMMARY_VALUE_DEFAULT_ZH = "\u9ed8\u8ba4"
 private const val SUMMARY_VALUE_NONE_ZH = "\u65e0"
@@ -5095,6 +5114,7 @@ internal fun parseBuildParameterSummary(
         kpmPassword = values["kpmPassword"].orEmpty(),
         reKernelEnabled = values["reKernelEnabled"].orEmpty(),
         virtualizationSupport = values["virtualizationSupport"].orEmpty(),
+        customKernelConfig = values["customKernelConfig"].orEmpty(),
         customInjection = values["customInjection"].orEmpty(),
         stockConfig = values["stockConfig"].orEmpty(),
         extraRows = extraRows
@@ -5130,6 +5150,7 @@ private fun normalizeBuildSummaryLabel(label: String): String? {
         compact.contains(SUMMARY_LABEL_KPM_PASSWORD) -> "kpmPassword"
         compact.contains("re-kernel") || compact.contains("rekernel") -> "reKernelEnabled"
         compact.contains(SUMMARY_LABEL_VIRTUALIZATION) -> "virtualizationSupport"
+        compact.contains(SUMMARY_LABEL_CUSTOM_KERNEL_CONFIG) -> "customKernelConfig"
         compact.contains(SUMMARY_LABEL_CUSTOM_INJECTION) -> "customInjection"
         compact.contains("stockconfig") -> "stockConfig"
         else -> null
@@ -5330,6 +5351,7 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
         "zram_extra_algos" to config.zramExtraAlgos,
         "kpm_password" to config.kpmPassword,
         "virtualization_support" to config.virtualizationSupport,
+        "custom_kernel_config" to exportWorkflowCustomKernelConfig(config.customKernelConfig),
         "use_custom_external_modules" to config.useCustomExternalModules.toString(),
         "custom_ref" to if (config.kernelsuBranch == KSU_BRANCH_CUSTOM) {
             config.customRef.trim()

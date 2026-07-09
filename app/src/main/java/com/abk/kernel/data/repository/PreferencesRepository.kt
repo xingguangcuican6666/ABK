@@ -7,6 +7,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.abk.kernel.data.model.APP_UPDATE_LINE_NORMAL
 import com.abk.kernel.data.model.APP_UPDATE_STABILITY_STABLE
 import com.abk.kernel.data.model.RootGrantProfileRecoveryRecord
+import com.abk.kernel.data.model.normalizeBuildPageStyle
 import com.abk.kernel.data.model.normalizeAppUpdateLine
 import com.abk.kernel.data.model.normalizeAppUpdateStability
 import com.abk.kernel.utils.DownloadDirectoryUtils
@@ -62,6 +63,7 @@ class PreferencesRepository(private val context: Context) {
         val KEY_APP_UPDATE_STABILITY = stringPreferencesKey("app_update_stability")
         val KEY_APP_UPDATE_LINE = stringPreferencesKey("app_update_line")
         val KEY_PREDICTIVE_BACK_ENABLED = booleanPreferencesKey("predictive_back_enabled")
+        val KEY_BUILD_PAGE_STYLE = stringPreferencesKey("build_page_style")
         val KEY_RUNTIME_NAVIGATION_ENABLED = booleanPreferencesKey("runtime_navigation_enabled")
         val KEY_WEBVIEW_DEBUG_ENABLED = booleanPreferencesKey("webview_debug_enabled")
         val KEY_TERMS_ACCEPTED_VERSION = intPreferencesKey("terms_accepted_version")
@@ -125,6 +127,9 @@ class PreferencesRepository(private val context: Context) {
         normalizeAppUpdateLine(it[KEY_APP_UPDATE_LINE] ?: APP_UPDATE_LINE_NORMAL)
     }
     val predictiveBackEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_PREDICTIVE_BACK_ENABLED] ?: true }
+    val buildPageStyle: Flow<String?> = context.dataStore.data.map {
+        normalizeBuildPageStyle(it[KEY_BUILD_PAGE_STYLE])
+    }
     val runtimeNavigationEnabled: Flow<Boolean> = context.dataStore.data.map {
         it[KEY_RUNTIME_NAVIGATION_ENABLED] ?: false
     }
@@ -265,6 +270,14 @@ class PreferencesRepository(private val context: Context) {
         it[KEY_APP_UPDATE_LINE] = normalizeAppUpdateLine(value)
     }
     suspend fun setPredictiveBackEnabled(v: Boolean) = context.dataStore.edit { it[KEY_PREDICTIVE_BACK_ENABLED] = v }
+    suspend fun setBuildPageStyle(value: String?) = context.dataStore.edit { preferences ->
+        val normalized = normalizeBuildPageStyle(value)
+        if (normalized == null) {
+            preferences.remove(KEY_BUILD_PAGE_STYLE)
+        } else {
+            preferences[KEY_BUILD_PAGE_STYLE] = normalized
+        }
+    }
     suspend fun setRuntimeNavigationEnabled(v: Boolean) = context.dataStore.edit {
         it[KEY_RUNTIME_NAVIGATION_ENABLED] = v
     }

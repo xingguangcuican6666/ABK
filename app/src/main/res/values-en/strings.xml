@@ -105,6 +105,29 @@
 
     <!-- Build -->
     <string name="build_title">Build Kernel</string>
+    <string name="build_open_simple_flow">Open guided build flow</string>
+    <string name="build_page_style_dialog_title">Choose your build page style</string>
+    <string name="build_page_style_dialog_desc">Pick how you want to enter the build flow. You can change this later in Settings.</string>
+    <string name="build_page_style_dialog_classic_desc">Classic: keeps the standalone Build tab for the current all-in-one page.</string>
+    <string name="build_page_style_dialog_simple_desc">Simple: removes the Build tab and uses the home-page “+” button to open a segmented guide.</string>
+    <string name="build_guided_title">Guided build flow</string>
+    <string name="build_guided_close">Close guided build flow</string>
+    <string name="build_guided_progress">Step %1$d / %2$d</string>
+    <string name="build_guided_previous">Previous</string>
+    <string name="build_guided_next">Next</string>
+    <string name="build_guided_step_overview">Overview</string>
+    <string name="build_guided_step_kernel">Kernel version</string>
+    <string name="build_guided_step_ksu">KernelSU</string>
+    <string name="build_guided_step_features">Features</string>
+    <string name="build_guided_step_finish">Finish</string>
+    <string name="build_guided_step_overview_desc">Confirm the build target, current plan, and any running jobs first.</string>
+    <string name="build_guided_step_kernel_desc">Choose Android, kernel sublevel, and patch level for the device and KMI.</string>
+    <string name="build_guided_step_ksu_desc">Pick the KernelSU variant, branch, and any custom ref.</string>
+    <string name="build_guided_step_features_desc">Configure virtualization, ZRAM, KPM, custom modules, and other feature toggles.</string>
+    <string name="build_guided_step_finish_desc">Fill in version, build time, and advanced options, then submit the build.</string>
+    <string name="build_guided_overview_title">Current build summary</string>
+    <string name="build_guided_overview_desc">Confirm the direction of the current plan before filling in the detailed steps.</string>
+    <string name="build_guided_overview_hint">The next steps will refine version, KernelSU, and feature toggles.</string>
     <string name="build_login_required_title">Sign in to GitHub before building</string>
     <string name="build_login_required_desc">ABK no longer forces GitHub sign-in at startup. Enter OOBE here when you are ready to build.</string>
     <string name="build_fork_required_title">Fork setup is still required</string>
@@ -190,6 +213,7 @@
     <string name="build_enable_kpm">Enable KPM</string>
     <string name="build_enable_rekernel">Enable Re-Kernel driver (test)</string>
     <string name="build_virtualization_support">Virtualization support</string>
+    <string name="build_virtualization_userns_hint">Virtualization no longer enables USER_NS automatically. If DroidSpaces/Wayland needs it, add CONFIG_USER_NS=y in custom kernel options below.</string>
     <string name="build_enable_oneplus_8e">Enable OnePlus 8E support</string>
     <string name="build_oneplus_lz4kd">Enable lz4kd</string>
     <string name="build_oneplus_bbr">Enable BBR</string>
@@ -252,6 +276,27 @@
     <string name="build_custom_version_optional">Custom version name (optional)</string>
     <string name="build_custom_time_optional">Custom build time (optional)</string>
     <string name="build_time_placeholder">Empty/N = current UTC time</string>
+    <string name="build_custom_kernel_config">Custom kernel options</string>
+    <string name="build_custom_kernel_config_placeholder">One entry per line, for example CONFIG_USER_NS=y or # CONFIG_IPV6 is not set</string>
+    <string name="build_custom_kernel_config_single_placeholder">Enter USER_NS or CONFIG_USER_NS</string>
+    <string name="build_custom_kernel_config_hint">After adding an entry you can switch it between built-in, module, disabled, and ignore. Bulk import accepts one item per line using CONFIG_FOO=y/m/n or # CONFIG_BAR is not set.</string>
+    <string name="build_custom_kernel_config_count">%1$d custom kernel options configured</string>
+    <string name="build_custom_kernel_config_invalid_key">Invalid kernel option: %1$s</string>
+    <string name="build_custom_kernel_config_invalid_line">Cannot import this entry: %1$s</string>
+    <string name="build_custom_kernel_config_import_title">Bulk import kernel options</string>
+    <string name="build_custom_kernel_config_import_hint">One entry per line. Supported forms: CONFIG_FOO=y, CONFIG_FOO=m, CONFIG_FOO=n, and # CONFIG_FOO is not set.</string>
+    <string name="build_custom_kernel_config_import_label">Import content</string>
+    <string name="build_custom_kernel_config_import_placeholder">CONFIG_USER_NS=y
+CONFIG_IPV6=n
+# CONFIG_WERROR is not set</string>
+    <string name="build_custom_kernel_config_state_builtin">Built-in</string>
+    <string name="build_custom_kernel_config_state_module">Module</string>
+    <string name="build_custom_kernel_config_state_disabled">Disabled</string>
+    <string name="build_custom_kernel_config_state_ignore">Ignore</string>
+    <string name="build_custom_kernel_config_state_builtin_desc">Sent to the workflow as =y</string>
+    <string name="build_custom_kernel_config_state_module_desc">Sent to the workflow as =m</string>
+    <string name="build_custom_kernel_config_state_disabled_desc">Sent to the workflow as =n</string>
+    <string name="build_custom_kernel_config_state_ignore_desc">Not sent to the workflow; leaves this option unchanged</string>
     <string name="build_add_queue">Add to queue</string>
     <string name="build_queue_title">Build queue</string>
     <string name="build_plan_library">Plan library</string>
@@ -307,6 +352,7 @@
     <string name="build_config_preview">Config preview</string>
     <string name="build_feature_networking">Networking</string>
     <string name="build_feature_virtualization">Virtualization %1$s</string>
+    <string name="build_feature_custom_kernel_config">%1$d custom config</string>
     <string name="build_base_config">Base config</string>
     <string name="build_summary_external_modules">External modules %1$d</string>
     <string name="build_hero_desc">Triggers GitHub Actions and automatically organizes img, AK3, manager, and SUSFS modules.</string>
@@ -589,6 +635,12 @@
     <string name="settings_title">Settings</string>
     <string name="settings_account">Account</string>
     <string name="settings_build">Build</string>
+    <string name="settings_build_page_style">Build page style</string>
+    <string name="settings_build_page_style_desc">Choose between the dedicated build tab and a home-page “+” button that opens a guided build flow.</string>
+    <string name="settings_build_page_style_classic">Classic</string>
+    <string name="settings_build_page_style_simple">Simple</string>
+    <string name="settings_build_page_style_classic_desc">Keeps the standalone Build tab and the current full build page.</string>
+    <string name="settings_build_page_style_simple_desc">Removes the Build tab and opens a segmented guided flow from the home-page “+” button.</string>
     <string name="settings_notification">Notifications</string>
     <string name="settings_about">About</string>
     <string name="settings_extensions_title">Extensions</string>

@@ -15,6 +15,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.fadeIn
@@ -36,6 +37,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FlashOn
@@ -47,6 +49,7 @@ import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
@@ -73,6 +76,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
@@ -85,8 +89,14 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.abk.kernel.ui.components.AppBackgroundHost
+import com.abk.kernel.ui.components.AppPageBackground
 import com.abk.kernel.ui.components.AbkSnackbarHost
 import com.abk.kernel.ui.components.animateBottomNavForChildPage
+import com.abk.kernel.ui.components.childPageOverlayEnterTransition
+import com.abk.kernel.ui.components.childPageOverlayExitTransition
+import com.abk.kernel.ui.components.childPageScrimExitTransition
+import com.abk.kernel.ui.components.rememberChildPageBackController
+import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
 import com.abk.kernel.ui.components.showAbkSnackbar
 import com.abk.kernel.extensions.AbkExtensionBootstrapActivity
 import com.abk.kernel.ui.screens.BuildScreen
@@ -102,6 +112,8 @@ import com.abk.kernel.ui.theme.AbkTheme
 import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
 import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
+import com.abk.kernel.data.model.BUILD_PAGE_STYLE_CLASSIC
+import com.abk.kernel.data.model.BUILD_PAGE_STYLE_SIMPLE
 import com.abk.kernel.viewmodel.MainViewModel
 
 class MainActivity : ComponentActivity() {
@@ -397,12 +409,14 @@ private fun AbkMainScaffold(
 ) {
     val state by vm.uiState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val buildPageStyle = state.buildPageStyle ?: BUILD_PAGE_STYLE_CLASSIC
 
     LaunchedEffect(Unit) {
         vm.markMainUiEntered()
     }
 
     var selectedTab by rememberSaveable { mutableStateOf(AbkTab.Status) }
+    var showSimpleBuildFlow by rememberSaveable { mutableStateOf(false) }
     var flashDetailPageVisible by rememberSaveable { mutableStateOf(false) }
     var settingsChildPageVisible by rememberSaveable { mutableStateOf(false) }
     var buildPlanPageVisible by rememberSaveable { mutableStateOf(false) }
@@ -411,7 +425,7 @@ private fun AbkMainScaffold(
     var managerPatchPageVisible by rememberSaveable { mutableStateOf(false) }
     var lastBackAt by remember { mutableStateOf(0L) }
     val runtimeNativeManagerActive = state.hasNativeManagerPermission
-    val visibleTabs = remember(state.runtimeNavigationEnabled, state.rootGranted, runtimeNativeManagerActive) {
+    val visibleTabs = remember(state.runtimeNavigationEnabled, state.rootGranted, runtimeNativeManagerActive, buildPageStyle) {
         if (state.runtimeNavigationEnabled) {
             buildList {
                 add(AbkTab.RuntimeHome)
@@ -421,7 +435,13 @@ private fun AbkMainScaffold(
                 add(AbkTab.Settings)
             }
         } else {
-            listOf(AbkTab.Status, AbkTab.Build, AbkTab.Modules, AbkTab.Flash, AbkTab.Settings)
+            buildList {
+                add(AbkTab.Status)
+                if (buildPageStyle == BUILD_PAGE_STYLE_CLASSIC) add(AbkTab.Build)
+                add(AbkTab.Modules)
+                add(AbkTab.Flash)
+                add(AbkTab.Settings)
+            }
         }
     }
     val activeTab = if (selectedTab in visibleTabs) selectedTab else visibleTabs.first()
@@ -446,7 +466,16 @@ private fun AbkMainScaffold(
         AbkTab.RootAuth -> rootAuthDetailPageVisible
         AbkTab.RuntimeHome -> managerPatchPageVisible
         else -> false
-    }
+    } || showSimpleBuildFlow
+    val simpleBuildPageTransition = rememberChildPageOverlayTransition(
+        visible = showSimpleBuildFlow,
+        label = "main-simple-build"
+    )
+    val simpleBuildBack = rememberChildPageBackController(
+        enabled = showSimpleBuildFlow,
+        predictiveBackEnabled = state.predictiveBackEnabled,
+        onBack = { showSimpleBuildFlow = false }
+    )
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(state.snackbarMessage, state.snackbarLongDuration, state.error) {
@@ -538,6 +567,12 @@ private fun AbkMainScaffold(
         }
     }
 
+    LaunchedEffect(buildPageStyle) {
+        if (buildPageStyle == BUILD_PAGE_STYLE_CLASSIC) {
+            showSimpleBuildFlow = false
+        }
+    }
+
     fun handleTopLevelBack() {
         val now = System.currentTimeMillis()
         if (now - lastBackAt <= EXIT_BACK_INTERVAL_MS) {
@@ -560,6 +595,11 @@ private fun AbkMainScaffold(
         )
     }
     val navProgress = navProgressAnim.value
+    val shouldShowSimpleBuildFab = buildPageStyle == BUILD_PAGE_STYLE_SIMPLE &&
+        !childPageVisible &&
+        !showSimpleBuildFlow &&
+        !state.showOobe &&
+        activeTab in setOf(AbkTab.Status, AbkTab.RuntimeHome)
 
     Box(
         modifier = Modifier
@@ -756,6 +796,29 @@ private fun AbkMainScaffold(
                 }
             }
         }
+        if (shouldShowSimpleBuildFab) {
+            FloatingActionButton(
+                onClick = {
+                    simpleBuildBack.resetProgress()
+                    showSimpleBuildFlow = true
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(
+                        end = 20.dp,
+                        bottom = if (isTabletLayout) {
+                            20.dp
+                        } else {
+                            with(density) { bottomBarHeightPx.toDp() } + 20.dp
+                        }
+                    )
+                    .zIndex(3f),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.build_open_simple_flow))
+            }
+        }
         AbkSnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
@@ -766,7 +829,94 @@ private fun AbkMainScaffold(
                 )
                 .zIndex(4f)
         )
+        simpleBuildPageTransition.AnimatedVisibility(
+            visible = { it },
+            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
+            exit = childPageScrimExitTransition(state.predictiveBackEnabled, motionScheme),
+            modifier = Modifier.fillMaxSize().zIndex(5f)
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = simpleBuildBack.scrimAlpha))
+            )
+        }
+        simpleBuildPageTransition.AnimatedVisibility(
+            visible = { it },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
+            modifier = Modifier.fillMaxSize().zIndex(6f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(simpleBuildBack.backTransformModifier())
+            ) {
+                AppPageBackground(
+                    backgroundUri = state.customBackgroundUri,
+                    backgroundImageEnabled = state.backgroundImageEnabled
+                )
+                BuildScreen(
+                    vm = vm,
+                    outerPadding = PaddingValues(0.dp),
+                    guidedMode = true,
+                    onPlanPageVisibleChange = {},
+                    onNavigateToStatus = {
+                        selectedTab = if (state.runtimeNavigationEnabled) AbkTab.RuntimeHome else AbkTab.Status
+                        showSimpleBuildFlow = false
+                    },
+                    onDismissGuidedMode = { simpleBuildBack.requestDismiss() }
+                )
+            }
+        }
+        if (
+            state.termsAccepted &&
+            state.oobeCompleted &&
+            !state.showOobe &&
+            state.buildPageStyle == null
+        ) {
+            BuildPageStyleSelectionDialog(onSelect = vm::setBuildPageStyle)
+        }
     }
+}
+
+@Composable
+private fun BuildPageStyleSelectionDialog(
+    onSelect: (String) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text(stringResource(R.string.build_page_style_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = stringResource(R.string.build_page_style_dialog_desc),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = stringResource(R.string.build_page_style_dialog_classic_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = stringResource(R.string.build_page_style_dialog_simple_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSelect(BUILD_PAGE_STYLE_CLASSIC) }) {
+                Text(stringResource(R.string.settings_build_page_style_classic))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { onSelect(BUILD_PAGE_STYLE_SIMPLE) }) {
+                Text(stringResource(R.string.settings_build_page_style_simple))
+            }
+        }
+    )
 }
 
 @Composable

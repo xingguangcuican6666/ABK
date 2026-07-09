@@ -80,6 +80,8 @@ import com.abk.kernel.data.model.APP_UPDATE_LINE_DEV
 import com.abk.kernel.data.model.APP_UPDATE_LINE_NORMAL
 import com.abk.kernel.data.model.APP_UPDATE_STABILITY_STABLE
 import com.abk.kernel.data.model.APP_UPDATE_STABILITY_UNSTABLE
+import com.abk.kernel.data.model.BUILD_PAGE_STYLE_CLASSIC
+import com.abk.kernel.data.model.BUILD_PAGE_STYLE_SIMPLE
 import com.abk.kernel.data.model.AppUpdateCheckResult
 import com.abk.kernel.data.repository.PreferencesRepository
 import com.abk.kernel.data.model.ManagerSettingItem
@@ -642,6 +644,10 @@ private fun SettingsMainContent(
         }
 
         SettingsGroup(title = stringResource(R.string.settings_build)) {
+            BuildPageStylePicker(
+                selected = state.buildPageStyle ?: BUILD_PAGE_STYLE_CLASSIC,
+                onSelect = vm::setBuildPageStyle
+            )
             SwitchSettingsItem(
                 icon = Icons.Default.Sync,
                 title = stringResource(R.string.settings_workflow_foreground_refresh),
@@ -1625,6 +1631,44 @@ private fun dynamicColorLabel(enabled: Boolean): String = when {
     !isDynamicColorAvailable() -> stringResource(R.string.settings_monet_unavailable)
     enabled -> stringResource(R.string.settings_monet)
     else -> stringResource(R.string.settings_custom_palette)
+}
+
+@Composable
+private fun BuildPageStylePicker(
+    selected: String,
+    onSelect: (String) -> Unit
+) {
+    val options = listOf(
+        AbkSegmentedButtonOption(
+            value = BUILD_PAGE_STYLE_CLASSIC,
+            label = stringResource(R.string.settings_build_page_style_classic)
+        ),
+        AbkSegmentedButtonOption(
+            value = BUILD_PAGE_STYLE_SIMPLE,
+            label = stringResource(R.string.settings_build_page_style_simple)
+        )
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ExpressiveListItem(
+            title = stringResource(R.string.settings_build_page_style),
+            subtitle = stringResource(R.string.settings_build_page_style_desc),
+            leadingIcon = Icons.Default.ViewCarousel
+        )
+        AbkSingleChoiceSegmentedButtonRow(
+            options = options,
+            selectedValue = selected,
+            onSelect = onSelect,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Text(
+            text = when (selected) {
+                BUILD_PAGE_STYLE_SIMPLE -> stringResource(R.string.settings_build_page_style_simple_desc)
+                else -> stringResource(R.string.settings_build_page_style_classic_desc)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 private fun isDynamicColorAvailable(): Boolean =

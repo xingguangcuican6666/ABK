@@ -21,6 +21,7 @@ class KernelSupportTest {
                 cancelSusfs = false,
                 kpmPassword = "secret",
                 virtualizationSupport = "678",
+                customKernelConfig = "  \r\nCONFIG_USER_NS=y\r\n# CONFIG_EXAMPLE is not set\r\n  ",
                 customExternalModules = listOf(
                     CustomExternalModule("  ", "before_build"),
                     CustomExternalModule(" https://github.com/example/module.git ", "before-build"),
@@ -39,10 +40,42 @@ class KernelSupportTest {
         assertTrue(normalized.cancelSusfs)
         assertEquals("", normalized.kpmPassword)
         assertEquals("on", normalized.virtualizationSupport)
+        assertEquals("CONFIG_USER_NS=y\nCONFIG_EXAMPLE=n", normalized.customKernelConfig)
         assertEquals(
             listOf(CustomExternalModule("https://github.com/example/module.git", CustomExternalModuleStage.BEFORE_BUILD)),
             normalized.customExternalModules
         )
+    }
+
+    @Test
+    fun customKernelConfigHelpersNormalizeStatesAndSkipIgnoredEntriesForWorkflow() {
+        val parsed = parseCustomKernelConfigEntries(
+            """
+            CONFIG_USER_NS=y
+            # CONFIG_IPV6 is not set
+            CONFIG_TUN=m
+            # ABK_IGNORE CONFIG_KVM
+            """.trimIndent()
+        )
+
+        assertEquals(
+            listOf(
+                CustomKernelConfigEntry("CONFIG_USER_NS", CustomKernelConfigState.BUILT_IN),
+                CustomKernelConfigEntry("CONFIG_IPV6", CustomKernelConfigState.DISABLED),
+                CustomKernelConfigEntry("CONFIG_TUN", CustomKernelConfigState.MODULE),
+                CustomKernelConfigEntry("CONFIG_KVM", CustomKernelConfigState.IGNORE)
+            ),
+            parsed
+        )
+        assertEquals(
+            "CONFIG_USER_NS=y\nCONFIG_IPV6=n\nCONFIG_TUN=m\n# ABK_IGNORE CONFIG_KVM",
+            serializeCustomKernelConfigEntries(parsed)
+        )
+        assertEquals(
+            "CONFIG_USER_NS=y\nCONFIG_IPV6=n\nCONFIG_TUN=m",
+            exportWorkflowCustomKernelConfig(serializeCustomKernelConfigEntries(parsed))
+        )
+        assertEquals(3, enabledCustomKernelConfigEntryCount(serializeCustomKernelConfigEntries(parsed)))
     }
 
     @Test

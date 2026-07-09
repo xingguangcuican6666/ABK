@@ -366,6 +366,7 @@ internal fun ParameterSummarySections(summary: BuildParameterSummary) {
         ParameterRow(stringResource(R.string.flash_kpm_password), summary.kpmPassword)
         ParameterRow("Re-Kernel", summary.reKernelEnabled)
         ParameterRow(stringResource(R.string.runtime_virtualization), summary.virtualizationSupport)
+        ParameterRow(stringResource(R.string.build_custom_kernel_config), summary.customKernelConfig)
         ParameterRow(stringResource(R.string.flash_custom_injection), summary.customInjection)
         ParameterRow("Stock Config", summary.stockConfig)
     }
@@ -487,6 +488,7 @@ internal fun parsePrebuiltGkiParameterSummary(release: PrebuiltGkiRelease): Buil
         kpmPassword = values["kpmPassword"].orEmpty(),
         reKernelEnabled = values["reKernelEnabled"].orEmpty(),
         virtualizationSupport = values["virtualizationSupport"].orEmpty(),
+        customKernelConfig = values["customKernelConfig"].orEmpty(),
         customInjection = values["customInjection"].orEmpty(),
         stockConfig = values["stockConfig"].orEmpty(),
         source = "release_body",
@@ -552,6 +554,7 @@ internal fun normalizeReleaseParameterLabel(label: String): String? {
         compact.contains("kpm密码") -> "kpmPassword"
         compact.contains("re-kernel") || compact.contains("rekernel") -> "reKernelEnabled"
         compact.contains("虚拟化支持") -> "virtualizationSupport"
+        compact.contains("自定义内核选项") -> "customKernelConfig"
         compact == "自定义注入" -> "customInjection"
         compact.contains("stockconfig") -> "stockConfig"
         else -> null
