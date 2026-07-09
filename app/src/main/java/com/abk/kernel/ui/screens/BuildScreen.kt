@@ -2008,13 +2008,6 @@ private fun SaveBuildPlanDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    val modeLabels = mapOf(
-        CustomKernelOptionMode.ENABLED_Y to stringResource(R.string.build_kernel_option_mode_y),
-        CustomKernelOptionMode.ENABLED_M to stringResource(R.string.build_kernel_option_mode_m),
-        CustomKernelOptionMode.DISABLED to stringResource(R.string.build_kernel_option_mode_disabled),
-        CustomKernelOptionMode.IGNORE to stringResource(R.string.build_kernel_option_mode_ignore),
-        CustomKernelOptionMode.RAW to stringResource(R.string.build_kernel_option_mode_raw)
-    )
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Default.Add, null) },
@@ -2521,6 +2514,13 @@ private fun EditCustomKernelOptionDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
+    val modeLabels = mapOf(
+        CustomKernelOptionMode.ENABLED_Y to stringResource(R.string.build_kernel_option_mode_y),
+        CustomKernelOptionMode.ENABLED_M to stringResource(R.string.build_kernel_option_mode_m),
+        CustomKernelOptionMode.DISABLED to stringResource(R.string.build_kernel_option_mode_disabled),
+        CustomKernelOptionMode.IGNORE to stringResource(R.string.build_kernel_option_mode_ignore),
+        CustomKernelOptionMode.RAW to stringResource(R.string.build_kernel_option_mode_raw)
+    )
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Default.Tune, null) },
