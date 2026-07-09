@@ -406,6 +406,7 @@
     <string name="flash_delete_workflow_msg">将删除此工作流在 ABK 中缓存的产物记录，并删除本地已下载文件。\n\n工作流 %1$s</string>
     <string name="flash_delete_remote_workflow">同时删除远程 GitHub Actions 工作流记录</string>
     <string name="flash_refresh_artifacts">联网刷新构建产物</string>
+    <string name="flash_refreshing_artifacts">正在刷新构建产物</string>
     <string name="flash_filter_title">筛选</string>
     <string name="flash_chip_building">正在构建</string>
     <string name="flash_build_failed_chip">构建失败</string>
@@ -786,8 +787,10 @@
 
     <!-- Runtime / modules -->
     <string name="runtime_refresh">刷新运行态信息</string>
+    <string name="runtime_refreshing_status">正在刷新运行态信息</string>
     <string name="runtime_installed_modules_title">已安装模块</string>
     <string name="runtime_refresh_installed_modules">刷新已安装模块</string>
+    <string name="runtime_refreshing_modules">正在刷新已安装模块</string>
     <string name="runtime_install_module">安装模块</string>
     <string name="runtime_copying_module">正在复制模块文件...</string>
     <string name="runtime_wait_root_shell">等待 root shell 返回，请不要退出应用...</string>
@@ -929,6 +932,7 @@
     <string name="module_repo_no_matching">没有匹配的模块</string>
     <string name="module_repo_no_central">还没有中央仓库</string>
     <string name="module_repo_building_list">正在构建模块列表</string>
+    <string name="module_repo_refreshing_repository">正在刷新仓库</string>
     <string name="module_repo_refresh_hint">刷新中央仓库后会显示模块</string>
     <string name="module_repo_no_display">没有可显示的模块</string>
     <string name="module_repo_manage_central">管理中央仓库</string>
@@ -983,6 +987,7 @@
     <string name="settings_local_templates">本地模板</string>
     <string name="settings_templates_loading">正在读取模板</string>
     <string name="settings_templates_loading_desc">从 ReSukiSU profile 存储加载</string>
+    <string name="settings_tools_refreshing">正在刷新工具状态</string>
     <string name="settings_templates_empty">暂无模板</string>
     <string name="settings_templates_empty_desc">保存后会出现在这里</string>
     <string name="settings_template_editing">正在编辑</string>

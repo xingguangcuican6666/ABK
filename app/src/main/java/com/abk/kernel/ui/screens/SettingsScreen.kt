@@ -14,6 +14,7 @@ import androidx.core.content.FileProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
@@ -61,6 +62,7 @@ import com.abk.kernel.utils.LocaleHelper
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AbkSegmentedButtonOption
 import com.abk.kernel.ui.components.AbkSingleChoiceSegmentedButtonRow
+import com.abk.kernel.ui.components.AbkInlineLoadingPill
 import com.abk.kernel.ui.components.AppPageBackground
 import com.abk.kernel.ui.components.ObserveChildPageVisibility
 import com.abk.kernel.ui.components.childPageOverlayEnterTransition
@@ -74,6 +76,7 @@ import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveSwitchItem
 import com.abk.kernel.ui.components.ExpressiveTopBar
+import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
 import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.data.model.APP_UPDATE_LINE_DEV
@@ -377,6 +380,7 @@ fun SettingsScreen(
             exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
+            val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = state.appProfileTemplatesLoading)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -397,7 +401,10 @@ fun SettingsScreen(
                                 }
                             },
                             actions = {
-                                IconButton(onClick = { vm.refreshAppProfileTemplates() }) {
+                                IconButton(onClick = {
+                                    refreshPresentation.beginRefresh()
+                                    vm.refreshAppProfileTemplates()
+                                }) {
                                     Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
                                 }
                             }
@@ -407,7 +414,11 @@ fun SettingsScreen(
                     AppProfileTemplateSettingsScreen(
                         padding = it,
                         state = state,
-                        onRefresh = vm::refreshAppProfileTemplates,
+                        showRefreshLoading = refreshPresentation.showLoading && state.appProfileTemplates.isNotEmpty(),
+                        onRefresh = {
+                            refreshPresentation.beginRefresh()
+                            vm.refreshAppProfileTemplates()
+                        },
                         onSelect = vm::selectAppProfileTemplate,
                         onSave = vm::saveAppProfileTemplate,
                         onDelete = vm::deleteAppProfileTemplate
@@ -447,6 +458,7 @@ fun SettingsScreen(
             exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
+            val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = state.managerToolsLoading)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -467,7 +479,10 @@ fun SettingsScreen(
                                 }
                             },
                             actions = {
-                                IconButton(onClick = { vm.refreshManagerTools(force = true) }) {
+                                IconButton(onClick = {
+                                    refreshPresentation.beginRefresh()
+                                    vm.refreshManagerTools(force = true)
+                                }) {
                                     Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
                                 }
                             }
@@ -477,6 +492,7 @@ fun SettingsScreen(
                     ManagerToolsSettingsScreen(
                         padding = it,
                         state = state,
+                        showRefreshLoading = refreshPresentation.showLoading,
                         onSelinuxChange = vm::setSelinuxEnforcing,
                         onBackupAllowlist = vm::backupRootGrantAllowlist,
                         onRestoreAllowlist = vm::restoreRootGrantAllowlist
@@ -917,15 +933,17 @@ private fun ManagerInjectedSettingsGroup(
 ) {
     if (!state.hasNativeManagerPermission) return
     val hasInjectedSettings = state.managerSettingsItems.isNotEmpty()
+    val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = state.managerSettingsLoading)
+    val showRefreshLoading = refreshPresentation.showLoading
     if (!hasInjectedSettings && !state.managerSettingsLoading && state.managerSettingsError == null) return
 
     SettingsGroup(title = state.managerSettingsTitle.ifBlank { stringResource(R.string.settings_manager_settings) }) {
         when {
             state.managerSettingsLoading && !hasInjectedSettings -> {
-                ExpressiveListItem(
-                    title = stringResource(R.string.settings_manager_loading_title),
-                    subtitle = stringResource(R.string.settings_manager_loading_desc),
-                    leadingContent = { LoadingIndicator(Modifier.size(24.dp)) }
+                AbkInlineLoadingPill(
+                    text = stringResource(R.string.settings_manager_loading_title),
+                    modifier = Modifier.fillMaxWidth(),
+                    compact = false
                 )
             }
             state.managerSettingsError != null -> {
@@ -934,7 +952,10 @@ private fun ManagerInjectedSettingsGroup(
                     subtitle = state.managerSettingsError,
                     leadingIcon = Icons.Default.Error,
                     trailingContent = {
-                        IconButton(onClick = { vm.refreshManagerSettings(force = true) }) {
+                        IconButton(onClick = {
+                            refreshPresentation.beginRefresh()
+                            vm.refreshManagerSettings(force = true)
+                        }) {
                             Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.retry))
                         }
                     }
@@ -942,36 +963,44 @@ private fun ManagerInjectedSettingsGroup(
             }
         }
 
-        state.managerSettingsItems.forEach { item ->
-            val actionInFlight = state.managerSettingActionId == item.id
-            when (item.kind) {
-                ManagerSettingKind.NAVIGATION -> ExpressiveListItem(
-                    title = item.title,
-                    subtitle = item.subtitle,
-                    leadingIcon = managerSettingIcon(item.id),
-                    enabled = item.enabled && !actionInFlight,
-                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_enter)) },
-                    onClick = {
-                        when (item.id) {
-                            "app_profile_templates" -> onOpenAppProfileTemplates()
-                            "manager_tools" -> onOpenManagerTools()
-                            "kpm" -> onOpenInstalledModules()
+        if (showRefreshLoading) {
+            AbkInlineLoadingPill(
+                text = stringResource(R.string.settings_manager_loading_title),
+                modifier = Modifier.fillMaxWidth(),
+                compact = false
+            )
+        } else {
+            state.managerSettingsItems.forEach { item ->
+                val actionInFlight = state.managerSettingActionId == item.id
+                when (item.kind) {
+                    ManagerSettingKind.NAVIGATION -> ExpressiveListItem(
+                        title = item.title,
+                        subtitle = item.subtitle,
+                        leadingIcon = managerSettingIcon(item.id),
+                        enabled = item.enabled && !actionInFlight,
+                        trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_enter)) },
+                        onClick = {
+                            when (item.id) {
+                                "app_profile_templates" -> onOpenAppProfileTemplates()
+                                "manager_tools" -> onOpenManagerTools()
+                                "kpm" -> onOpenInstalledModules()
+                            }
                         }
-                    }
-                )
-                ManagerSettingKind.MODE -> ManagerModeSettingItem(
-                    item = item,
-                    actionInFlight = actionInFlight,
-                    onSelected = { index -> vm.setManagerSettingMode(item.id, index) }
-                )
-                ManagerSettingKind.SWITCH -> SwitchSettingsItem(
-                    icon = managerSettingIcon(item.id),
-                    title = item.title,
-                    subtitle = item.subtitle,
-                    checked = item.checked,
-                    enabled = item.enabled && !actionInFlight,
-                    onCheckedChange = { checked -> vm.setManagerSettingChecked(item.id, checked) }
-                )
+                    )
+                    ManagerSettingKind.MODE -> ManagerModeSettingItem(
+                        item = item,
+                        actionInFlight = actionInFlight,
+                        onSelected = { index -> vm.setManagerSettingMode(item.id, index) }
+                    )
+                    ManagerSettingKind.SWITCH -> SwitchSettingsItem(
+                        icon = managerSettingIcon(item.id),
+                        title = item.title,
+                        subtitle = item.subtitle,
+                        checked = item.checked,
+                        enabled = item.enabled && !actionInFlight,
+                        onCheckedChange = { checked -> vm.setManagerSettingChecked(item.id, checked) }
+                    )
+                }
             }
         }
     }
@@ -1041,6 +1070,7 @@ private fun ManagerModeSettingItem(
 private fun ManagerToolsSettingsScreen(
     padding: PaddingValues,
     state: MainUiState,
+    showRefreshLoading: Boolean,
     onSelinuxChange: (Boolean) -> Unit,
     onBackupAllowlist: (Uri) -> Unit,
     onRestoreAllowlist: (Uri) -> Unit
@@ -1058,6 +1088,7 @@ private fun ManagerToolsSettingsScreen(
     val selinuxBusy = state.managerToolActionId == "selinux_mode"
     val backupBusy = state.managerToolActionId == "backup_allowlist"
     val restoreBusy = state.managerToolActionId == "restore_allowlist"
+    val showInitialLoading = state.managerToolsLoading && state.umountPaths.isEmpty() && state.managerToolsError == null
 
     Column(
         modifier = Modifier
@@ -1067,67 +1098,82 @@ private fun ManagerToolsSettingsScreen(
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SettingsGroup(title = stringResource(R.string.settings_system_tools)) {
-            SwitchSettingsItem(
-                icon = Icons.Default.Security,
-                title = stringResource(R.string.settings_selinux_mode),
-                subtitle = stringResource(R.string.settings_current_value, selinuxModeLabel(state.selinuxModeText)),
-                checked = state.selinuxEnforcing,
-                enabled = !state.managerToolsLoading && !selinuxBusy,
-                onCheckedChange = onSelinuxChange
-            )
-            ExpressiveListItem(
-                title = stringResource(R.string.settings_umount_paths),
-                subtitle = if (state.umountPaths.isEmpty()) {
-                    stringResource(R.string.settings_umount_no_paths)
-                } else {
-                    stringResource(R.string.settings_umount_path_count, state.umountPaths.size)
-                },
-                leadingIcon = Icons.Default.FolderDelete,
-                trailingContent = {
-                    if (state.managerToolsLoading) LoadingIndicator(Modifier.size(22.dp))
-                }
-            )
-        }
-
-        SettingsGroup(title = stringResource(R.string.settings_allowlist)) {
-            ExpressiveListItem(
-                title = stringResource(R.string.settings_backup_allowlist),
-                subtitle = stringResource(R.string.settings_backup_allowlist_desc),
-                leadingIcon = Icons.Default.CloudUpload,
-                enabled = !backupBusy,
-                trailingContent = {
-                    if (backupBusy) {
-                        LoadingIndicator(Modifier.size(22.dp))
-                    } else {
-                        Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_export))
-                    }
-                },
-                onClick = { backupLauncher.launch("abk-root-allowlist.json") }
-            )
-            ExpressiveListItem(
-                title = stringResource(R.string.settings_restore_allowlist),
-                subtitle = stringResource(R.string.settings_restore_allowlist_desc),
-                leadingIcon = Icons.Default.History,
-                enabled = !restoreBusy,
-                trailingContent = {
-                    if (restoreBusy) {
-                        LoadingIndicator(Modifier.size(22.dp))
-                    } else {
-                        Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_import))
-                    }
-                },
-                onClick = { restoreLauncher.launch(arrayOf("application/json", "text/*", "*/*")) }
-            )
-        }
-
-        if (state.managerToolsError != null) {
-            SettingsGroup(title = stringResource(R.string.settings_tool_status)) {
-                ExpressiveListItem(
-                    title = stringResource(R.string.settings_operation_incomplete),
-                    subtitle = state.managerToolsError,
-                    leadingIcon = Icons.Default.Error
+        Crossfade(targetState = showRefreshLoading || showInitialLoading, label = "manager-tools-refresh") { refreshing ->
+            if (refreshing) {
+                AbkInlineLoadingPill(
+                    text = stringResource(
+                        if (showRefreshLoading) {
+                            R.string.settings_tools_refreshing
+                        } else {
+                            R.string.loading
+                        }
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    compact = false
                 )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SettingsGroup(title = stringResource(R.string.settings_system_tools)) {
+                        SwitchSettingsItem(
+                            icon = Icons.Default.Security,
+                            title = stringResource(R.string.settings_selinux_mode),
+                            subtitle = stringResource(R.string.settings_current_value, selinuxModeLabel(state.selinuxModeText)),
+                            checked = state.selinuxEnforcing,
+                            enabled = !state.managerToolsLoading && !selinuxBusy,
+                            onCheckedChange = onSelinuxChange
+                        )
+                        ExpressiveListItem(
+                            title = stringResource(R.string.settings_umount_paths),
+                            subtitle = if (state.umountPaths.isEmpty()) {
+                                stringResource(R.string.settings_umount_no_paths)
+                            } else {
+                                stringResource(R.string.settings_umount_path_count, state.umountPaths.size)
+                            },
+                            leadingIcon = Icons.Default.FolderDelete,
+                        )
+                    }
+
+                    SettingsGroup(title = stringResource(R.string.settings_allowlist)) {
+                        ExpressiveListItem(
+                            title = stringResource(R.string.settings_backup_allowlist),
+                            subtitle = stringResource(R.string.settings_backup_allowlist_desc),
+                            leadingIcon = Icons.Default.CloudUpload,
+                            enabled = !backupBusy,
+                            trailingContent = {
+                                if (backupBusy) {
+                                    LoadingIndicator(Modifier.size(22.dp))
+                                } else {
+                                    Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_export))
+                                }
+                            },
+                            onClick = { backupLauncher.launch("abk-root-allowlist.json") }
+                        )
+                        ExpressiveListItem(
+                            title = stringResource(R.string.settings_restore_allowlist),
+                            subtitle = stringResource(R.string.settings_restore_allowlist_desc),
+                            leadingIcon = Icons.Default.History,
+                            enabled = !restoreBusy,
+                            trailingContent = {
+                                if (restoreBusy) {
+                                    LoadingIndicator(Modifier.size(22.dp))
+                                } else {
+                                    Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_import))
+                                }
+                            },
+                            onClick = { restoreLauncher.launch(arrayOf("application/json", "text/*", "*/*")) }
+                        )
+                    }
+
+                    if (state.managerToolsError != null) {
+                        SettingsGroup(title = stringResource(R.string.settings_tool_status)) {
+                            ExpressiveListItem(
+                                title = stringResource(R.string.settings_operation_incomplete),
+                                subtitle = state.managerToolsError,
+                                leadingIcon = Icons.Default.Error
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -1148,6 +1194,7 @@ private fun selinuxModeLabel(mode: String): String =
 private fun AppProfileTemplateSettingsScreen(
     padding: PaddingValues,
     state: MainUiState,
+    showRefreshLoading: Boolean,
     onRefresh: () -> Unit,
     onSelect: (String?) -> Unit,
     onSave: (String, String) -> Unit,
@@ -1173,103 +1220,115 @@ private fun AppProfileTemplateSettingsScreen(
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SettingsGroup(title = stringResource(R.string.settings_local_templates)) {
-            when {
-                state.appProfileTemplatesLoading -> ExpressiveListItem(
-                    title = stringResource(R.string.settings_templates_loading),
-                    subtitle = stringResource(R.string.settings_templates_loading_desc),
-                    leadingContent = { LoadingIndicator(Modifier.size(24.dp)) }
+        Crossfade(targetState = showRefreshLoading, label = "template-refresh") { refreshing ->
+            if (refreshing) {
+                AbkInlineLoadingPill(
+                    text = stringResource(R.string.settings_templates_loading),
+                    modifier = Modifier.fillMaxWidth(),
+                    compact = false
                 )
-                state.appProfileTemplates.isEmpty() -> ExpressiveListItem(
-                    title = stringResource(R.string.settings_templates_empty),
-                    subtitle = stringResource(R.string.settings_templates_empty_desc),
-                    leadingIcon = Icons.Default.Description
-                )
-            }
-            state.appProfileTemplates.forEach { template ->
-                ExpressiveListItem(
-                    title = template.id,
-                    subtitle = if (state.selectedAppProfileTemplateId == template.id) {
-                        stringResource(R.string.settings_template_editing)
-                    } else {
-                        stringResource(R.string.settings_app_profile_templates)
-                    },
-                    leadingIcon = Icons.Default.Description,
-                    selected = state.selectedAppProfileTemplateId == template.id,
-                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_edit)) },
-                    onClick = { onSelect(template.id) }
-                )
-            }
-            ExpressiveListItem(
-                title = stringResource(R.string.settings_new_template),
-                subtitle = stringResource(R.string.settings_new_template_desc),
-                leadingIcon = Icons.Default.Add,
-                onClick = {
-                    creating = true
-                    editingId = ""
-                    editingContent = defaultAppProfileTemplateJson()
-                    onSelect(null)
-                }
-            )
-        }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SettingsGroup(title = stringResource(R.string.settings_local_templates)) {
+                        when {
+                            state.appProfileTemplatesLoading -> AbkInlineLoadingPill(
+                                text = stringResource(R.string.settings_templates_loading),
+                                modifier = Modifier.fillMaxWidth(),
+                                compact = false
+                            )
+                            state.appProfileTemplates.isEmpty() -> ExpressiveListItem(
+                                title = stringResource(R.string.settings_templates_empty),
+                                subtitle = stringResource(R.string.settings_templates_empty_desc),
+                                leadingIcon = Icons.Default.Description
+                            )
+                        }
+                        state.appProfileTemplates.forEach { template ->
+                            ExpressiveListItem(
+                                title = template.id,
+                                subtitle = if (state.selectedAppProfileTemplateId == template.id) {
+                                    stringResource(R.string.settings_template_editing)
+                                } else {
+                                    stringResource(R.string.settings_app_profile_templates)
+                                },
+                                leadingIcon = Icons.Default.Description,
+                                selected = state.selectedAppProfileTemplateId == template.id,
+                                trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_edit)) },
+                                onClick = { onSelect(template.id) }
+                            )
+                        }
+                        ExpressiveListItem(
+                            title = stringResource(R.string.settings_new_template),
+                            subtitle = stringResource(R.string.settings_new_template_desc),
+                            leadingIcon = Icons.Default.Add,
+                            onClick = {
+                                creating = true
+                                editingId = ""
+                                editingContent = defaultAppProfileTemplateJson()
+                                onSelect(null)
+                            }
+                        )
+                    }
 
-        if (state.appProfileTemplatesError != null) {
-            SettingsGroup(title = stringResource(R.string.settings_status)) {
-                ExpressiveListItem(
-                    title = stringResource(R.string.settings_operation_incomplete),
-                    subtitle = state.appProfileTemplatesError,
-                    leadingIcon = Icons.Default.Error,
-                    trailingContent = {
-                        IconButton(onClick = onRefresh) {
-                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                    if (state.appProfileTemplatesError != null) {
+                        SettingsGroup(title = stringResource(R.string.settings_status)) {
+                            ExpressiveListItem(
+                                title = stringResource(R.string.settings_operation_incomplete),
+                                subtitle = state.appProfileTemplatesError,
+                                leadingIcon = Icons.Default.Error,
+                                trailingContent = {
+                                    IconButton(onClick = onRefresh) {
+                                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                                    }
+                                }
+                            )
                         }
                     }
-                )
-            }
-        }
 
-        val hasEditor = creating || !state.selectedAppProfileTemplateId.isNullOrBlank()
-        if (hasEditor) {
-            SettingsGroup(title = stringResource(R.string.settings_edit_template)) {
-                OutlinedTextField(
-                    value = editingId,
-                    onValueChange = { editingId = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.settings_template_name)) },
-                    singleLine = true,
-                    enabled = state.selectedAppProfileTemplateId.isNullOrBlank()
-                )
-                OutlinedTextField(
-                    value = editingContent,
-                    onValueChange = { editingContent = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 220.dp),
-                    label = { Text(stringResource(R.string.settings_template_json)) },
-                    minLines = 10
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (state.appProfileTemplateSaving) {
-                        LoadingIndicator(Modifier.size(22.dp))
-                    }
-                    if (!state.selectedAppProfileTemplateId.isNullOrBlank()) {
-                        TextButton(
-                            onClick = { onDelete(state.selectedAppProfileTemplateId.orEmpty()) },
-                            enabled = !state.appProfileTemplateSaving,
-                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            Text(stringResource(R.string.delete))
+                    val hasEditor = creating || !state.selectedAppProfileTemplateId.isNullOrBlank()
+                    if (hasEditor) {
+                        SettingsGroup(title = stringResource(R.string.settings_edit_template)) {
+                            OutlinedTextField(
+                                value = editingId,
+                                onValueChange = { editingId = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(stringResource(R.string.settings_template_name)) },
+                                singleLine = true,
+                                enabled = state.selectedAppProfileTemplateId.isNullOrBlank()
+                            )
+                            OutlinedTextField(
+                                value = editingContent,
+                                onValueChange = { editingContent = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 220.dp),
+                                label = { Text(stringResource(R.string.settings_template_json)) },
+                                minLines = 10
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (state.appProfileTemplateSaving) {
+                                    LoadingIndicator(Modifier.size(22.dp))
+                                }
+                                if (!state.selectedAppProfileTemplateId.isNullOrBlank()) {
+                                    TextButton(
+                                        onClick = { onDelete(state.selectedAppProfileTemplateId.orEmpty()) },
+                                        enabled = !state.appProfileTemplateSaving,
+                                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                                    ) {
+                                        Text(stringResource(R.string.delete))
+                                    }
+                                }
+                                Button(
+                                    onClick = { onSave(editingId, editingContent) },
+                                    enabled = !state.appProfileTemplateSaving && editingId.isNotBlank()
+                                ) {
+                                    Text(stringResource(R.string.save))
+                                }
+                            }
                         }
-                    }
-                    Button(
-                        onClick = { onSave(editingId, editingContent) },
-                        enabled = !state.appProfileTemplateSaving && editingId.isNotBlank()
-                    ) {
-                        Text(stringResource(R.string.save))
                     }
                 }
             }

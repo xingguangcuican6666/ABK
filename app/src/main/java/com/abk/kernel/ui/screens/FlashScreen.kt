@@ -189,6 +189,7 @@ import com.abk.kernel.utils.FlashFilterWorkflowState
 import com.abk.kernel.utils.FlashWorkflowFilter
 import com.abk.kernel.utils.WorkflowPrimary
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
 import com.abk.kernel.ui.components.ObserveChildPageVisibility
 import com.abk.kernel.ui.components.childPageOverlayEnterTransition
 import com.abk.kernel.ui.components.childPageOverlayExitTransition
@@ -1111,6 +1112,15 @@ fun FlashScreen(
 
     @Composable
     fun FlashListContent(listScrollState: LazyListState) {
+        val workflowRefreshPresentation = rememberAbkInteractiveRefreshPresentation(
+            loading = state.isRefreshingRecentRuns
+        )
+        val showWorkflowRefreshLoading = workflowRefreshPresentation.showLoading
+        val prebuiltReleaseRefreshPresentation = rememberAbkInteractiveRefreshPresentation(
+            loading = state.isLoadingPrebuiltGkiReleases
+        )
+        val showPrebuiltReleaseRefreshLoading =
+            prebuiltReleaseRefreshPresentation.showLoading && state.prebuiltGkiReleases.isNotEmpty()
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
@@ -1157,7 +1167,10 @@ fun FlashScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 OutlinedButton(
-                                    onClick = { vm.loadRecentRuns() },
+                                    onClick = {
+                                        workflowRefreshPresentation.beginRefresh()
+                                        vm.loadRecentRuns()
+                                    },
                                     modifier = Modifier.weight(1f),
                                     enabled = !state.isRefreshingRecentRuns
                                 ) {
@@ -1190,6 +1203,11 @@ fun FlashScreen(
                         }
 
                         when {
+                            showWorkflowRefreshLoading -> {
+                                item {
+                                    LoadingRow(stringResource(R.string.flash_refreshing_artifacts))
+                                }
+                            }
                             visibleWorkflowGroups.isNotEmpty() -> {
                                 items(visibleWorkflowGroups, key = { "workflow-${it.runId}" }) { group ->
                                     val run = recentRunById[group.runId]
@@ -1291,12 +1309,15 @@ fun FlashScreen(
                                 PrebuiltReleaseListHeader(
                                     releaseCount = state.prebuiltGkiReleases.size,
                                     isLoading = state.isLoadingPrebuiltGkiReleases,
-                                    onRefresh = { vm.loadPrebuiltGkiReleases(force = true) }
+                                    onRefresh = {
+                                        prebuiltReleaseRefreshPresentation.beginRefresh()
+                                        vm.loadPrebuiltGkiReleases(force = true)
+                                    }
                                 )
                             }
 
                             when {
-                                state.isLoadingPrebuiltGkiReleases -> {
+                                showPrebuiltReleaseRefreshLoading || state.isLoadingPrebuiltGkiReleases -> {
                                     item {
                                         LoadingRow(stringResource(R.string.flash_loading_release))
                                     }
@@ -1640,6 +1661,11 @@ fun FlashScreen(
                 }.orEmpty()
                 val selectedPrebuiltAssetsLoading = release?.id
                     ?.let { it in state.loadingPrebuiltGkiAssetReleaseIds } == true
+                val prebuiltAssetRefreshPresentation = rememberAbkInteractiveRefreshPresentation(
+                    loading = selectedPrebuiltAssetsLoading
+                )
+                val showPrebuiltAssetRefreshLoading =
+                    prebuiltAssetRefreshPresentation.showLoading && selectedPrebuiltAssets.isNotEmpty()
                 var prebuiltFilter by remember(release?.id) {
                     mutableStateOf(defaultPrebuiltFilter())
                 }
@@ -1687,7 +1713,10 @@ fun FlashScreen(
                                     visibleCount = filteredPrebuiltAssets.size,
                                     onBack = dismiss,
                                     onShowParameters = { prebuiltParameterTarget = release },
-                                    onRefresh = { vm.loadPrebuiltGkiAssets(release, force = true) }
+                                    onRefresh = {
+                                        prebuiltAssetRefreshPresentation.beginRefresh()
+                                        vm.loadPrebuiltGkiAssets(release, force = true)
+                                    }
                                 )
                             }
 
@@ -1699,7 +1728,7 @@ fun FlashScreen(
                             }
 
                             when {
-                                selectedPrebuiltAssetsLoading -> {
+                                showPrebuiltAssetRefreshLoading || selectedPrebuiltAssetsLoading -> {
                                     item {
                                         LoadingRow(stringResource(R.string.flash_loading_prebuilt, release.name))
                                     }

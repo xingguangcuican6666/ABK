@@ -1,5 +1,6 @@
 package com.abk.kernel.ui.components
 
+import android.os.SystemClock
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -8,6 +9,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -20,7 +22,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -30,6 +36,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -104,6 +112,69 @@ fun AbkCenteredLoadingTransition(
         contentAlignment = Alignment.Center
     ) {
         AbkLoadingPill(text = text)
+    }
+}
+
+data class AbkInteractiveRefreshPresentation(
+    val showLoading: Boolean,
+    val beginRefresh: () -> Unit
+)
+
+@Composable
+fun rememberAbkInteractiveRefreshPresentation(
+    loading: Boolean,
+    minVisibleMillis: Long = 1_000L
+): AbkInteractiveRefreshPresentation {
+    var refreshGeneration by remember { mutableIntStateOf(0) }
+    var visibleSinceMs by remember { mutableLongStateOf(0L) }
+    var waitingForLoadStart by remember { mutableStateOf(false) }
+    var showLoading by remember { mutableStateOf(false) }
+
+    val beginRefresh = remember(loading) {
+        {
+            refreshGeneration += 1
+            visibleSinceMs = SystemClock.elapsedRealtime()
+            waitingForLoadStart = !loading
+            showLoading = true
+        }
+    }
+
+    LaunchedEffect(refreshGeneration, loading) {
+        if (!showLoading) return@LaunchedEffect
+        if (waitingForLoadStart) {
+            if (!loading) return@LaunchedEffect
+            waitingForLoadStart = false
+        }
+        if (loading) return@LaunchedEffect
+
+        val elapsed = SystemClock.elapsedRealtime() - visibleSinceMs
+        val remaining = (minVisibleMillis - elapsed).coerceAtLeast(0L)
+        if (remaining > 0L) delay(remaining)
+        showLoading = false
+    }
+
+    return AbkInteractiveRefreshPresentation(
+        showLoading = showLoading,
+        beginRefresh = beginRefresh
+    )
+}
+
+@Composable
+fun AbkInlineLoadingPill(
+    text: String,
+    modifier: Modifier = Modifier,
+    compact: Boolean = true,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = if (compact) 4.dp else 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        AbkLoadingPill(
+            text = text,
+            compact = compact
+        )
     }
 }
 
