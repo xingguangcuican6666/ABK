@@ -85,6 +85,7 @@ import com.abk.kernel.data.model.APP_UPDATE_STABILITY_STABLE
 import com.abk.kernel.data.model.APP_UPDATE_STABILITY_UNSTABLE
 import com.abk.kernel.data.model.AppUpdateCheckResult
 import com.abk.kernel.data.repository.PreferencesRepository
+import com.abk.kernel.data.repository.Result
 import com.abk.kernel.data.model.ManagerSettingItem
 import com.abk.kernel.data.model.ManagerSettingKind
 import com.abk.kernel.data.model.normalizeAppUpdateLine
@@ -93,8 +94,10 @@ import com.abk.kernel.viewmodel.MainUiState
 import com.abk.kernel.viewmodel.MainViewModel
 import com.abk.kernel.viewmodel.exportDiagnosticBundle
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsScreen(
@@ -1017,10 +1020,35 @@ private fun SecuritySettingsGroup(
     state: MainUiState,
     vm: MainViewModel,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val canManageKeys = state.isLoggedIn && state.forkRepo != null
+    var showImportDialog by remember { mutableStateOf(false) }
     var showDisableConfirm1 by remember { mutableStateOf(false) }
     var showDisableConfirm2 by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
+    var importPublicKeyText by remember { mutableStateOf("") }
+    var importPrivateKeyText by remember { mutableStateOf("") }
+    var importError by remember { mutableStateOf<String?>(null) }
+    var importPickerTarget by remember { mutableStateOf<SecurityKeyImportTarget?>(null) }
+    val importKeyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val target = importPickerTarget ?: return@rememberLauncherForActivityResult
+        importPickerTarget = null
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = try {
+                readTextFromUri(context, uri)
+            } catch (_: Throwable) {
+                importError = context.getString(R.string.settings_security_import_read_failed)
+                return@launch
+            }
+            when (target) {
+                SecurityKeyImportTarget.PUBLIC -> importPublicKeyText = text
+                SecurityKeyImportTarget.PRIVATE -> importPrivateKeyText = text
+            }
+            importError = null
+        }
+    }
     SettingsGroup(title = stringResource(R.string.settings_security)) {
         SwitchSettingsItem(
             icon = Icons.Default.VerifiedUser,
@@ -1044,6 +1072,22 @@ private fun SecuritySettingsGroup(
             }
         )
         ExpressiveListItem(
+            title = stringResource(R.string.settings_security_import_keys),
+            subtitle = when {
+                !canManageKeys -> stringResource(R.string.settings_security_requires_fork)
+                !state.artifactSigningVerificationEnabled -> stringResource(R.string.settings_security_import_requires_enabled)
+                else -> stringResource(R.string.settings_security_import_keys_desc)
+            },
+            leadingIcon = Icons.Default.UploadFile,
+            enabled = !state.artifactSigningOperationInFlight && canManageKeys && state.artifactSigningVerificationEnabled,
+            onClick = {
+                importPublicKeyText = ""
+                importPrivateKeyText = ""
+                importError = null
+                showImportDialog = true
+            }
+        )
+        ExpressiveListItem(
             title = stringResource(R.string.settings_security_reset_keys),
             subtitle = stringResource(R.string.settings_security_reset_keys_desc),
             leadingIcon = Icons.Default.Key,
@@ -1057,6 +1101,50 @@ private fun SecuritySettingsGroup(
                 compact = false
             )
         }
+    }
+
+    if (showImportDialog) {
+        ImportArtifactSigningKeysDialog(
+            publicKeyText = importPublicKeyText,
+            privateKeyText = importPrivateKeyText,
+            error = importError,
+            importing = state.artifactSigningOperationInFlight,
+            onPublicKeyTextChange = {
+                importPublicKeyText = it
+                importError = null
+            },
+            onPrivateKeyTextChange = {
+                importPrivateKeyText = it
+                importError = null
+            },
+            onPickPublicKey = {
+                importPickerTarget = SecurityKeyImportTarget.PUBLIC
+                importKeyPicker.launch(arrayOf("text/*", "*/*"))
+            },
+            onPickPrivateKey = {
+                importPickerTarget = SecurityKeyImportTarget.PRIVATE
+                importKeyPicker.launch(arrayOf("text/*", "*/*"))
+            },
+            onImport = {
+                scope.launch {
+                    importError = null
+                    when (val result = vm.importArtifactSigningKeys(importPublicKeyText, importPrivateKeyText)) {
+                        is Result.Success -> {
+                            showImportDialog = false
+                            importPublicKeyText = ""
+                            importPrivateKeyText = ""
+                        }
+                        is Result.Error -> importError = result.message
+                        Result.Loading -> Unit
+                    }
+                }
+            },
+            onDismiss = {
+                if (!state.artifactSigningOperationInFlight) {
+                    showImportDialog = false
+                }
+            }
+        )
     }
 
     if (showDisableConfirm1) {
@@ -1141,6 +1229,106 @@ private fun TimedConfirmationDialog(
             }
         }
     )
+}
+
+private enum class SecurityKeyImportTarget {
+    PUBLIC,
+    PRIVATE,
+}
+
+@Composable
+private fun ImportArtifactSigningKeysDialog(
+    publicKeyText: String,
+    privateKeyText: String,
+    error: String?,
+    importing: Boolean,
+    onPublicKeyTextChange: (String) -> Unit,
+    onPrivateKeyTextChange: (String) -> Unit,
+    onPickPublicKey: () -> Unit,
+    onPickPrivateKey: () -> Unit,
+    onImport: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Key, null) },
+        title = { Text(stringResource(R.string.settings_security_import_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.settings_security_import_keys_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = publicKeyText,
+                    onValueChange = onPublicKeyTextChange,
+                    label = { Text(stringResource(R.string.settings_security_import_public_key)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 8,
+                    enabled = !importing
+                )
+                OutlinedButton(
+                    onClick = onPickPublicKey,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !importing
+                ) {
+                    Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.settings_security_import_pick_public_key))
+                }
+                OutlinedTextField(
+                    value = privateKeyText,
+                    onValueChange = onPrivateKeyTextChange,
+                    label = { Text(stringResource(R.string.settings_security_import_private_key)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 8,
+                    enabled = !importing
+                )
+                OutlinedButton(
+                    onClick = onPickPrivateKey,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !importing
+                ) {
+                    Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.settings_security_import_pick_private_key))
+                }
+                error?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onImport,
+                enabled = !importing && publicKeyText.isNotBlank() && privateKeyText.isNotBlank()
+            ) {
+                if (importing) {
+                    LoadingIndicator(Modifier.size(18.dp))
+                } else {
+                    Text(stringResource(R.string.settings_import))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !importing) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+private suspend fun readTextFromUri(context: Context, uri: Uri): String = withContext(Dispatchers.IO) {
+    context.contentResolver.openInputStream(uri)?.use { input ->
+        input.bufferedReader(Charsets.UTF_8).readText()
+    } ?: error(context.getString(R.string.settings_security_import_read_failed))
 }
 
 @Composable

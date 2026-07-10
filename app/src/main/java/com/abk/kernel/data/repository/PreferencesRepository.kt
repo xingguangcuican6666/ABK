@@ -262,6 +262,15 @@ class PreferencesRepository(private val context: Context) {
     suspend fun setArtifactSigningVerificationEnabled(v: Boolean) = context.dataStore.edit {
         it[KEY_ARTIFACT_SIGNING_VERIFICATION_ENABLED] = v
     }
+    suspend fun saveForkArtifactSigningState(
+        publicKey: String,
+        secretName: String,
+        releaseTag: String,
+    ) = context.dataStore.edit {
+        it[KEY_FORK_ARTIFACT_SIGNING_PUBLIC_KEY] = publicKey
+        it[KEY_FORK_ARTIFACT_SIGNING_SECRET_NAME] = secretName
+        it[KEY_FORK_ARTIFACT_SIGNING_RELEASE_TAG] = releaseTag
+    }
     suspend fun saveForkArtifactSigningPublicKey(value: String) = context.dataStore.edit {
         it[KEY_FORK_ARTIFACT_SIGNING_PUBLIC_KEY] = value
     }

@@ -886,26 +886,26 @@ fun FlashScreen(
                     Text(prompt.message)
                 },
                 confirmButton = {
-                    Button(
-                        onClick = {
-                            flashSecurityPrompt = null
-                            allowLegacyBundleFallback = true
-                            showFlashConfirm = true
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) { Text(stringResource(R.string.flash_confirm)) }
-                },
-                dismissButton = {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = {
-                            flashSecurityPrompt = null
-                            onOpenSecuritySettings()
-                        }) {
-                            Text(stringResource(R.string.flash_open_security_settings))
-                        }
                         TextButton(onClick = { flashSecurityPrompt = null }) {
                             Text(stringResource(R.string.cancel))
                         }
+                        Button(
+                            onClick = {
+                                flashSecurityPrompt = null
+                                allowLegacyBundleFallback = true
+                                showFlashConfirm = true
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) { Text(stringResource(R.string.flash_confirm)) }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        flashSecurityPrompt = null
+                        onOpenSecuritySettings()
+                    }) {
+                        Text(stringResource(R.string.flash_open_security_settings))
                     }
                 }
             )
