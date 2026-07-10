@@ -191,6 +191,9 @@ data class MainUiState(
     val downloadDirectory: String = DownloadDirectoryUtils.defaultDirectoryPath(),
     val downloadMirrorBaseUrl: String = "",
     val prebuiltGkiEnabled: Boolean = true,
+    val artifactSigningVerificationEnabled: Boolean = true,
+    val artifactSigningConfigured: Boolean = false,
+    val artifactSigningOperationInFlight: Boolean = false,
     val appUpdateStability: String = APP_UPDATE_STABILITY_STABLE,
     val appUpdateLine: String = APP_UPDATE_LINE_NORMAL,
     val appUpdateChecking: Boolean = false,
@@ -576,6 +579,26 @@ class MainViewModel @JvmOverloads constructor(
         }
         viewModelScope.launch {
             combine(
+                prefs.artifactSigningVerificationEnabled,
+                prefs.forkArtifactSigningPublicKey,
+                prefs.forkArtifactSigningSecretName,
+                prefs.forkArtifactSigningReleaseTag
+            ) { enabled, publicKey, secretName, releaseTag ->
+                SecuritySigningPreferences(
+                    enabled = enabled,
+                    configured = !publicKey.isNullOrBlank() && !secretName.isNullOrBlank() && !releaseTag.isNullOrBlank()
+                )
+            }.collect { securityPrefs ->
+                _uiState.update {
+                    it.copy(
+                        artifactSigningVerificationEnabled = securityPrefs.enabled,
+                        artifactSigningConfigured = securityPrefs.configured
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            combine(
                 prefs.appUpdateStability,
                 prefs.appUpdateLine
             ) { stability, line ->
@@ -872,6 +895,9 @@ class MainViewModel @JvmOverloads constructor(
                     downloadDirectory = it.downloadDirectory,
                     downloadMirrorBaseUrl = it.downloadMirrorBaseUrl,
                     prebuiltGkiEnabled = it.prebuiltGkiEnabled,
+                    artifactSigningVerificationEnabled = it.artifactSigningVerificationEnabled,
+                    artifactSigningConfigured = it.artifactSigningConfigured,
+                    artifactSigningOperationInFlight = it.artifactSigningOperationInFlight,
                     predictiveBackEnabled = it.predictiveBackEnabled,
                     runtimeNavigationEnabled = it.runtimeNavigationEnabled,
                     webViewDebugEnabled = it.webViewDebugEnabled,
@@ -1095,8 +1121,134 @@ class MainViewModel @JvmOverloads constructor(
 
     private fun readStateUserLogin(): String? = _uiState.value.user?.login
 
+    private fun setArtifactSigningOperationInFlight(inFlight: Boolean) {
+        _uiState.update { it.copy(artifactSigningOperationInFlight = inFlight) }
+    }
+
+    private fun requireForkSigningContext(): Pair<String, GitHubRepo>? {
+        val state = _uiState.value
+        val owner = state.user?.login
+        val fork = state.forkRepo
+        return if (owner != null && fork != null) {
+            owner to fork
+        } else {
+            null
+        }
+    }
+
+    private suspend fun getOrCreateForkArtifactSigningRelease(
+        owner: String,
+        fork: GitHubRepo,
+        releaseTag: String,
+    ): Result<GitHubRelease> {
+        val remoteRelease = when (val release = github.getReleaseByTag(owner, fork.name, releaseTag)) {
+            is Result.Success -> release.data
+            is Result.Error -> return Result.Error("Fork signing init failed: ${release.message}")
+            Result.Loading -> return Result.Loading
+        }
+        return when {
+            remoteRelease != null -> Result.Success(remoteRelease)
+            else -> when (val created = github.createRelease(
+                owner,
+                fork.name,
+                CreateReleaseRequest(
+                    tagName = releaseTag,
+                    targetCommitish = fork.defaultBranch,
+                    name = "ABK Artifact Signing Key",
+                    body = "ABK fork-scoped artifact signing public key.",
+                    prerelease = true
+                )
+            )) {
+                is Result.Success -> Result.Success(created.data)
+                is Result.Error -> Result.Error("Fork signing release init failed: ${created.message}")
+                Result.Loading -> Result.Loading
+            }
+        }
+    }
+
+    private suspend fun regenerateForkArtifactSigningMaterial(
+        owner: String,
+        fork: GitHubRepo,
+        secretName: String = FORK_ARTIFACT_SIGNING_SECRET_NAME,
+        releaseTag: String = FORK_ARTIFACT_SIGNING_RELEASE_TAG,
+    ): Result<Unit> {
+        val release = when (val result = getOrCreateForkArtifactSigningRelease(owner, fork, releaseTag)) {
+            is Result.Success -> result.data
+            is Result.Error -> return result
+            Result.Loading -> return Result.Loading
+        }
+        val releaseAssets = when (val assets = github.listReleaseAssets(owner, fork.name, release.id)) {
+            is Result.Success -> assets.data
+            is Result.Error -> return Result.Error("Fork signing asset query failed: ${assets.message}")
+            Result.Loading -> return Result.Loading
+        }
+        val material = ForkSigningManager.generateSigningMaterial()
+        when (val secret = github.createOrUpdateRepositorySecret(owner, fork.name, secretName, material.privateKeyBase64)) {
+            is Result.Success -> Unit
+            is Result.Error -> return Result.Error("Fork signing secret init failed: ${secret.message}")
+            Result.Loading -> return Result.Loading
+        }
+        releaseAssets.filter { it.name == FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME }.forEach { asset ->
+            when (val deleted = github.deleteReleaseAsset(owner, fork.name, asset.id)) {
+                is Result.Success -> Unit
+                is Result.Error -> return Result.Error("Fork signing public key delete failed: ${deleted.message}")
+                Result.Loading -> return Result.Loading
+            }
+        }
+        return when (val uploaded = github.uploadReleaseAsset(
+            uploadUrlTemplate = release.uploadUrl ?: "",
+            fileName = FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME,
+            contentType = "application/x-pem-file",
+            content = material.publicKeyPem.toByteArray(StandardCharsets.UTF_8)
+        )) {
+            is Result.Success -> {
+                prefs.saveForkArtifactSigningPublicKey(material.publicKeyBase64)
+                prefs.saveForkArtifactSigningSecretName(secretName)
+                prefs.saveForkArtifactSigningReleaseTag(releaseTag)
+                Result.Success(Unit)
+            }
+            is Result.Error -> Result.Error("Fork signing public key publish failed: ${uploaded.message}")
+            Result.Loading -> Result.Loading
+        }
+    }
+
+    private suspend fun deleteForkArtifactSigningMaterial(
+        owner: String,
+        fork: GitHubRepo,
+        secretName: String,
+        releaseTag: String,
+    ): Result<Unit> {
+        when (val release = github.getReleaseByTag(owner, fork.name, releaseTag)) {
+            is Result.Success -> {
+                release.data?.let { foundRelease ->
+                    when (val assets = github.listReleaseAssets(owner, fork.name, foundRelease.id)) {
+                        is Result.Success -> {
+                            assets.data.filter { it.name == FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME }.forEach { asset ->
+                                when (val deleted = github.deleteReleaseAsset(owner, fork.name, asset.id)) {
+                                    is Result.Success -> Unit
+                                    is Result.Error -> return Result.Error("Fork signing public key delete failed: ${deleted.message}")
+                                    Result.Loading -> return Result.Loading
+                                }
+                            }
+                        }
+                        is Result.Error -> return Result.Error("Fork signing asset query failed: ${assets.message}")
+                        Result.Loading -> return Result.Loading
+                    }
+                }
+            }
+            is Result.Error -> return Result.Error("Fork signing release query failed: ${release.message}")
+            Result.Loading -> return Result.Loading
+        }
+        return when (val deleted = github.deleteRepositorySecret(owner, fork.name, secretName)) {
+            is Result.Success -> Result.Success(Unit)
+            is Result.Error -> Result.Error("Fork signing secret delete failed: ${deleted.message}")
+            Result.Loading -> Result.Loading
+        }
+    }
+
     private suspend fun ensureForkArtifactSigningReady(owner: String, fork: GitHubRepo) {
         forkSigningInitMutex.withLock {
+            if (!prefs.artifactSigningVerificationEnabled.first()) return
             val secretName = FORK_ARTIFACT_SIGNING_SECRET_NAME
             val releaseTag = FORK_ARTIFACT_SIGNING_RELEASE_TAG
 
@@ -1173,34 +1325,91 @@ class MainViewModel @JvmOverloads constructor(
                 }
             }
 
-            val material = ForkSigningManager.generateSigningMaterial()
-            when (val secret = github.createOrUpdateRepositorySecret(owner, fork.name, secretName, material.privateKeyBase64)) {
+            when (val regenerated = regenerateForkArtifactSigningMaterial(owner, fork, secretName, releaseTag)) {
                 is Result.Success -> Unit
-                is Result.Error -> {
-                    showSnackbar("Fork signing secret init failed: ${secret.message}", longDuration = true)
-                    return
-                }
-                Result.Loading -> return
-            }
-
-            releaseAssets.filter { it.name == FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME }.forEach { asset ->
-                github.deleteReleaseAsset(owner, fork.name, asset.id)
-            }
-            when (val uploaded = github.uploadReleaseAsset(
-                uploadUrlTemplate = release.uploadUrl ?: "",
-                fileName = FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME,
-                contentType = "application/x-pem-file",
-                content = material.publicKeyPem.toByteArray(StandardCharsets.UTF_8)
-            )) {
-                is Result.Success -> {
-                    prefs.saveForkArtifactSigningPublicKey(material.publicKeyBase64)
-                    prefs.saveForkArtifactSigningSecretName(secretName)
-                    prefs.saveForkArtifactSigningReleaseTag(releaseTag)
-                }
-                is Result.Error -> {
-                    showSnackbar("Fork signing public key publish failed: ${uploaded.message}", longDuration = true)
-                }
+                is Result.Error -> showSnackbar(regenerated.message, longDuration = true)
                 Result.Loading -> {}
+            }
+        }
+    }
+
+    fun disableArtifactSigningVerification() {
+        val context = requireForkSigningContext()
+        if (context == null) {
+            showSnackbar(text(R.string.settings_security_requires_fork), longDuration = true)
+            return
+        }
+        if (_uiState.value.artifactSigningOperationInFlight) return
+        val (owner, fork) = context
+        viewModelScope.launch {
+            setArtifactSigningOperationInFlight(true)
+            try {
+                forkSigningInitMutex.withLock {
+                    val secretName = prefs.forkArtifactSigningSecretName.first() ?: FORK_ARTIFACT_SIGNING_SECRET_NAME
+                    val releaseTag = prefs.forkArtifactSigningReleaseTag.first() ?: FORK_ARTIFACT_SIGNING_RELEASE_TAG
+                    when (val result = deleteForkArtifactSigningMaterial(owner, fork, secretName, releaseTag)) {
+                        is Result.Success -> {
+                            prefs.clearForkArtifactSigningState()
+                            prefs.setArtifactSigningVerificationEnabled(false)
+                            showSnackbar(text(R.string.settings_security_signing_disabled))
+                        }
+                        is Result.Error -> showSnackbar(result.message, longDuration = true)
+                        Result.Loading -> Unit
+                    }
+                }
+            } finally {
+                setArtifactSigningOperationInFlight(false)
+            }
+        }
+    }
+
+    fun enableArtifactSigningVerification() {
+        val context = requireForkSigningContext()
+        if (context == null) {
+            showSnackbar(text(R.string.settings_security_requires_fork), longDuration = true)
+            return
+        }
+        if (_uiState.value.artifactSigningOperationInFlight) return
+        val (owner, fork) = context
+        viewModelScope.launch {
+            setArtifactSigningOperationInFlight(true)
+            try {
+                forkSigningInitMutex.withLock {
+                    when (val result = regenerateForkArtifactSigningMaterial(owner, fork)) {
+                        is Result.Success -> {
+                            prefs.setArtifactSigningVerificationEnabled(true)
+                            showSnackbar(text(R.string.settings_security_signing_enabled))
+                        }
+                        is Result.Error -> showSnackbar(result.message, longDuration = true)
+                        Result.Loading -> Unit
+                    }
+                }
+            } finally {
+                setArtifactSigningOperationInFlight(false)
+            }
+        }
+    }
+
+    fun resetArtifactSigningKeys() {
+        val context = requireForkSigningContext()
+        if (context == null) {
+            showSnackbar(text(R.string.settings_security_requires_fork), longDuration = true)
+            return
+        }
+        if (_uiState.value.artifactSigningOperationInFlight) return
+        val (owner, fork) = context
+        viewModelScope.launch {
+            setArtifactSigningOperationInFlight(true)
+            try {
+                forkSigningInitMutex.withLock {
+                    when (val result = regenerateForkArtifactSigningMaterial(owner, fork)) {
+                        is Result.Success -> showSnackbar(text(R.string.settings_security_keys_reset_done))
+                        is Result.Error -> showSnackbar(result.message, longDuration = true)
+                        Result.Loading -> Unit
+                    }
+                }
+            } finally {
+                setArtifactSigningOperationInFlight(false)
             }
         }
     }
@@ -5758,6 +5967,11 @@ private data class ThemePreferences(
     val dynamicColorEnabled: Boolean,
     val customThemeColorArgb: Int?,
     val customAccentColorArgb: Int?
+)
+
+private data class SecuritySigningPreferences(
+    val enabled: Boolean,
+    val configured: Boolean,
 )
 
 private data class BackgroundPreferences(

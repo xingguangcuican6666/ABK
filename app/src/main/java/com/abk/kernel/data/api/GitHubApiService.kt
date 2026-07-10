@@ -39,6 +39,13 @@ interface GitHubApiService {
         @Body body: CreateOrUpdateRepositorySecretRequest
     ): Response<Unit>
 
+    @DELETE("repos/{owner}/{repo}/actions/secrets/{secret_name}")
+    suspend fun deleteRepositorySecret(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("secret_name") secretName: String,
+    ): Response<Unit>
+
     @POST("repos/{owner}/{repo}/forks")
     suspend fun forkRepo(
         @Path("owner") owner: String,

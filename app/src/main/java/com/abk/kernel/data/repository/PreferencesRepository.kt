@@ -56,6 +56,7 @@ class PreferencesRepository(private val context: Context) {
         val KEY_DOWNLOAD_MIRROR_BASE_URL = stringPreferencesKey("download_mirror_base_url")
         val KEY_DOWNLOAD_DIRECTORY = stringPreferencesKey("download_directory")
         val KEY_PREBUILT_GKI_ENABLED = booleanPreferencesKey("prebuilt_gki_enabled")
+        val KEY_ARTIFACT_SIGNING_VERIFICATION_ENABLED = booleanPreferencesKey("artifact_signing_verification_enabled")
         val KEY_FORK_ARTIFACT_SIGNING_PUBLIC_KEY = stringPreferencesKey("fork_artifact_signing_public_key")
         val KEY_FORK_ARTIFACT_SIGNING_RELEASE_TAG = stringPreferencesKey("fork_artifact_signing_release_tag")
         val KEY_FORK_ARTIFACT_SIGNING_SECRET_NAME = stringPreferencesKey("fork_artifact_signing_secret_name")
@@ -115,6 +116,9 @@ class PreferencesRepository(private val context: Context) {
         DownloadDirectoryUtils.normalizeDirectoryPath(it[KEY_DOWNLOAD_DIRECTORY])
     }
     val prebuiltGkiEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_PREBUILT_GKI_ENABLED] ?: true }
+    val artifactSigningVerificationEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_ARTIFACT_SIGNING_VERIFICATION_ENABLED] ?: true
+    }
     val forkArtifactSigningPublicKey: Flow<String?> = context.dataStore.data.map { it[KEY_FORK_ARTIFACT_SIGNING_PUBLIC_KEY] }
     val forkArtifactSigningReleaseTag: Flow<String?> = context.dataStore.data.map { it[KEY_FORK_ARTIFACT_SIGNING_RELEASE_TAG] }
     val forkArtifactSigningSecretName: Flow<String?> = context.dataStore.data.map { it[KEY_FORK_ARTIFACT_SIGNING_SECRET_NAME] }
@@ -144,6 +148,12 @@ class PreferencesRepository(private val context: Context) {
             context.dataStore.data.first()[KEY_FORK_ARTIFACT_SIGNING_PUBLIC_KEY]
         }
     }.getOrNull()
+
+    fun readArtifactSigningVerificationEnabledBlocking(): Boolean = runCatching {
+        runBlocking(Dispatchers.IO) {
+            context.dataStore.data.first()[KEY_ARTIFACT_SIGNING_VERIFICATION_ENABLED] ?: true
+        }
+    }.getOrDefault(true)
 
     val termsAcceptedVersion: Flow<Int> = context.dataStore.data.map { it[KEY_TERMS_ACCEPTED_VERSION] ?: 0 }
     val flashFilterJson: Flow<String?> = context.dataStore.data.map { it[KEY_FLASH_FILTER] }
@@ -249,6 +259,9 @@ class PreferencesRepository(private val context: Context) {
         }
     }
     suspend fun setPrebuiltGkiEnabled(v: Boolean) = context.dataStore.edit { it[KEY_PREBUILT_GKI_ENABLED] = v }
+    suspend fun setArtifactSigningVerificationEnabled(v: Boolean) = context.dataStore.edit {
+        it[KEY_ARTIFACT_SIGNING_VERIFICATION_ENABLED] = v
+    }
     suspend fun saveForkArtifactSigningPublicKey(value: String) = context.dataStore.edit {
         it[KEY_FORK_ARTIFACT_SIGNING_PUBLIC_KEY] = value
     }
@@ -257,6 +270,11 @@ class PreferencesRepository(private val context: Context) {
     }
     suspend fun saveForkArtifactSigningSecretName(value: String) = context.dataStore.edit {
         it[KEY_FORK_ARTIFACT_SIGNING_SECRET_NAME] = value
+    }
+    suspend fun clearForkArtifactSigningState() = context.dataStore.edit {
+        it.remove(KEY_FORK_ARTIFACT_SIGNING_PUBLIC_KEY)
+        it.remove(KEY_FORK_ARTIFACT_SIGNING_RELEASE_TAG)
+        it.remove(KEY_FORK_ARTIFACT_SIGNING_SECRET_NAME)
     }
     suspend fun setAppUpdateStability(value: String) = context.dataStore.edit {
         it[KEY_APP_UPDATE_STABILITY] = normalizeAppUpdateStability(value)

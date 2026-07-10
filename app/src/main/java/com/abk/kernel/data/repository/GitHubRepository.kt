@@ -312,6 +312,21 @@ open class GitHubRepository(
         }.getOrElse { Result.Error(it.message ?: "Unknown error") }
     }
 
+    suspend fun deleteRepositorySecret(
+        owner: String,
+        repo: String,
+        secretName: String,
+    ): Result<Unit> {
+        val api = apiService
+        return runCatching {
+            val resp = api.deleteRepositorySecret(owner, repo, secretName)
+            when {
+                resp.isSuccessful || resp.code() == 404 -> Result.Success(Unit)
+                else -> Result.Error("Delete repo secret failed: ${resp.code()}", resp.code())
+            }
+        }.getOrElse { Result.Error(it.message ?: "Unknown error") }
+    }
+
     open suspend fun checkBehind(
         sourceOwner: String,
         sourceRepo: String,

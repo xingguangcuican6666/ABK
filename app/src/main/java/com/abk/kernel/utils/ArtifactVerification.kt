@@ -25,8 +25,17 @@ data class SignedBundleManifest(
 data class BundleVerificationResult(
     val manifest: SignedBundleManifest,
     val success: Boolean,
-    val message: String
+    val message: String,
+    val failureReason: BundleVerificationFailureReason = BundleVerificationFailureReason.OTHER,
 )
+
+enum class BundleVerificationFailureReason {
+    NONE,
+    MISSING_PUBLIC_KEY,
+    MISSING_SIGNATURE,
+    SIGNATURE_MISMATCH,
+    OTHER,
+}
 
 object ArtifactVerification {
     const val MANIFEST_FILE_NAME: String = "ABK_BUNDLE_MANIFEST.json"
@@ -57,21 +66,46 @@ object ArtifactVerification {
         publicKeyPem: String? = null
     ): BundleVerificationResult {
         if (!bundleFile.isFile || !bundleFile.name.lowercase(Locale.ROOT).endsWith(".bundle.zip")) {
-            return failureFor(bundleFile.name, expectedType, "Trusted artifact must be a signed .bundle.zip")
+            return failureFor(
+                bundleFile.name,
+                expectedType,
+                "Trusted artifact must be a signed .bundle.zip",
+                BundleVerificationFailureReason.MISSING_SIGNATURE
+            )
         }
         val publicKey = parsePublicKey(publicKeyPem)
-            ?: return failureFor(bundleFile.name, expectedType, "Missing fork signing public key")
+            ?: return failureFor(
+                bundleFile.name,
+                expectedType,
+                "Missing fork signing public key",
+                BundleVerificationFailureReason.MISSING_PUBLIC_KEY
+            )
         return runCatching {
             ZipFile(bundleFile).use { zip ->
                 val manifestEntry = zip.getEntry(MANIFEST_FILE_NAME)
-                    ?: return failureFor(bundleFile.name, expectedType, "Missing $MANIFEST_FILE_NAME")
+                    ?: return failureFor(
+                        bundleFile.name,
+                        expectedType,
+                        "Missing $MANIFEST_FILE_NAME",
+                        BundleVerificationFailureReason.MISSING_SIGNATURE
+                    )
                 val signatureEntry = zip.getEntry(SIGNATURE_FILE_NAME)
-                    ?: return failureFor(bundleFile.name, expectedType, "Missing $SIGNATURE_FILE_NAME")
+                    ?: return failureFor(
+                        bundleFile.name,
+                        expectedType,
+                        "Missing $SIGNATURE_FILE_NAME",
+                        BundleVerificationFailureReason.MISSING_SIGNATURE
+                    )
                 val manifestBytes = zip.getInputStream(manifestEntry).use { it.readBytes() }
                 val signatureBytes = zip.getInputStream(signatureEntry).use { it.readBytes() }
                 val manifest = gson.fromJson(String(manifestBytes, Charsets.UTF_8), SignedBundleManifest::class.java)
                 if (!verifyManifestSignature(publicKey, manifestBytes, signatureBytes)) {
-                    return BundleVerificationResult(manifest, false, "Artifact signature verification failed")
+                    return BundleVerificationResult(
+                        manifest,
+                        false,
+                        "Artifact signature verification failed",
+                        BundleVerificationFailureReason.SIGNATURE_MISMATCH
+                    )
                 }
                 val manifestType = runCatching { ArtifactType.valueOf(manifest.artifactType) }.getOrNull()
                 if (expectedType != null && manifestType != expectedType) {
@@ -89,10 +123,20 @@ object ArtifactVerification {
                 if (sha256(payloadBytes) != normalizeDigest(manifest.payloadSha256)) {
                     return BundleVerificationResult(manifest, false, "Payload digest mismatch")
                 }
-                BundleVerificationResult(manifest, true, "Verified ${bundleFile.name}")
+                BundleVerificationResult(
+                    manifest,
+                    true,
+                    "Verified ${bundleFile.name}",
+                    BundleVerificationFailureReason.NONE
+                )
             }
         }.getOrElse { error ->
-            failureFor(bundleFile.name, expectedType, error.message ?: error::class.java.simpleName)
+            failureFor(
+                bundleFile.name,
+                expectedType,
+                error.message ?: error::class.java.simpleName,
+                BundleVerificationFailureReason.OTHER
+            )
         }
     }
 
@@ -121,7 +165,8 @@ object ArtifactVerification {
     private fun failureFor(
         bundleName: String,
         expectedType: ArtifactType?,
-        message: String
+        message: String,
+        failureReason: BundleVerificationFailureReason,
     ): BundleVerificationResult = BundleVerificationResult(
         manifest = SignedBundleManifest(
             bundleName = bundleName,
@@ -132,7 +177,8 @@ object ArtifactVerification {
             payloadSizeBytes = 0L
         ),
         success = false,
-        message = message
+        message = message,
+        failureReason = failureReason,
     )
 }
 

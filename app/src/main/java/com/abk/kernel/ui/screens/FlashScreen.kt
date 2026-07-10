@@ -225,7 +225,8 @@ import kotlinx.coroutines.withContext
 fun FlashScreen(
     vm: MainViewModel,
     outerPadding: PaddingValues = PaddingValues(0.dp),
-    onDetailPageVisibleChange: (Boolean) -> Unit = {}
+    onDetailPageVisibleChange: (Boolean) -> Unit = {},
+    onOpenSecuritySettings: () -> Unit = {},
 ) {
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
@@ -246,7 +247,7 @@ fun FlashScreen(
     var prebuiltParameterTarget by remember { mutableStateOf<PrebuiltGkiRelease?>(null) }
     var deleteRemoteWorkflowRun by remember { mutableStateOf(false) }
     var showFlashConfirm by remember { mutableStateOf(false) }
-    var showUnverifiedFlashConfirm by remember { mutableStateOf(false) }
+    var flashSecurityPrompt by remember { mutableStateOf<DownloadUtils.FlashSecurityPrompt?>(null) }
     var allowLegacyBundleFallback by remember { mutableStateOf(false) }
     var showInstallManagerConfirm by remember { mutableStateOf(false) }
     var cancelConfirmRunId by remember { mutableStateOf<Long?>(null) }
@@ -628,7 +629,8 @@ fun FlashScreen(
         val prepared = DownloadUtils.prepareDownloadedArtifact(
             context = context,
             artifact = item,
-            allowHighRiskFallback = allowHighRiskFallback
+            allowHighRiskFallback = allowHighRiskFallback,
+            signingVerificationEnabled = state.artifactSigningVerificationEnabled
         )
         try {
             if (prepared.cleanupDir != null) {
@@ -798,11 +800,12 @@ fun FlashScreen(
     fun requestFlash(item: DownloadedArtifact) {
         selectedItem = item
         allowLegacyBundleFallback = false
-        if ((item.type == ArtifactType.KERNEL_PACKAGE || item.type == ArtifactType.KERNEL_IMG || item.type == ArtifactType.ANYKERNEL3) && !item.verified) {
-            showUnverifiedFlashConfirm = true
-        } else {
-            showFlashConfirm = true
-        }
+        flashSecurityPrompt = DownloadUtils.precheckFlashSecurity(
+            context = context,
+            artifact = item,
+            signingVerificationEnabled = state.artifactSigningVerificationEnabled,
+        )
+        if (flashSecurityPrompt == null) showFlashConfirm = true
     }
 
     if (showFlashConfirm) {
@@ -872,23 +875,20 @@ fun FlashScreen(
         }
     }
 
-    if (showUnverifiedFlashConfirm) {
+    flashSecurityPrompt?.let { prompt ->
         val item = selectedItem
         if (item != null) {
             AlertDialog(
-                onDismissRequest = { showUnverifiedFlashConfirm = false },
+                onDismissRequest = { flashSecurityPrompt = null },
                 icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
                 title = { Text(stringResource(R.string.flash_confirm)) },
                 text = {
-                    Text(
-                        item.verificationSummary
-                            ?: context.getString(R.string.flash_bundle_unverified_requires_confirmation)
-                    )
+                    Text(prompt.message)
                 },
                 confirmButton = {
                     Button(
                         onClick = {
-                            showUnverifiedFlashConfirm = false
+                            flashSecurityPrompt = null
                             allowLegacyBundleFallback = true
                             showFlashConfirm = true
                         },
@@ -896,8 +896,16 @@ fun FlashScreen(
                     ) { Text(stringResource(R.string.flash_confirm)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showUnverifiedFlashConfirm = false }) {
-                        Text(stringResource(R.string.cancel))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = {
+                            flashSecurityPrompt = null
+                            onOpenSecuritySettings()
+                        }) {
+                            Text(stringResource(R.string.flash_open_security_settings))
+                        }
+                        TextButton(onClick = { flashSecurityPrompt = null }) {
+                            Text(stringResource(R.string.cancel))
+                        }
                     }
                 }
             )

@@ -618,6 +618,7 @@
     <string name="settings_title">设置</string>
     <string name="settings_account">账户</string>
     <string name="settings_build">构建</string>
+    <string name="settings_security">安全</string>
     <string name="settings_notification">通知</string>
     <string name="settings_about">关于</string>
     <string name="settings_extensions_title">扩展</string>
@@ -657,6 +658,7 @@
     <string name="settings_color_appearance">颜色与外观</string>
     <string name="settings_enter_color_appearance">进入颜色与外观</string>
     <string name="settings_about_desc">本仓库入口、版本信息与贡献者</string>
+    <string name="settings_security_requires_fork">需要先登录 GitHub 并完成 fork 准备，才能管理签名校验和密钥。</string>
     <string name="settings_enter_about">进入关于</string>
     <string name="settings_export_diagnostics">导出诊断包</string>
     <string name="settings_export_diagnostics_desc">打包本次启动中的 ABK 日志、内核日志、模块状态与模块日志并分享 zip</string>
@@ -728,6 +730,7 @@
     <string name="settings_waiting_fork">等待 Fork</string>
     <string name="settings_group_account_desc">GitHub 账户、fork 仓库和退出登录。</string>
     <string name="settings_group_build_desc">控制构建成功后的自动化行为。</string>
+    <string name="settings_group_security_desc">管理刷写包签名校验，以及当前 fork 的签名密钥对。</string>
     <string name="settings_group_notification_desc">同步工作流状态到系统通知。</string>
     <string name="settings_group_navigation_desc">控制返回手势和页面切换体验。</string>
     <string name="settings_group_theme_desc">Material 3 Expressive 主题显示模式。</string>
@@ -782,6 +785,11 @@
     <string name="download_unknown_error">下载失败</string>
     <string name="flash_bundle_legacy_requires_confirmation">这是旧版刷写包，继续将进入高风险流程。</string>
     <string name="flash_bundle_unverified_requires_confirmation">该刷写包尚未通过签名验证，继续将进入高风险流程。</string>
+    <string name="flash_bundle_verification_disabled">签名校验已在安全设置中关闭。</string>
+    <string name="flash_bundle_missing_signature_message">该刷写包缺少签名文件，继续刷写将进入高风险流程。</string>
+    <string name="flash_bundle_signature_mismatch_message">该刷写包的签名与当前公钥不匹配，继续刷写将进入高风险流程。</string>
+    <string name="flash_bundle_missing_public_key_message">当前缺少用于校验刷写包的公钥，继续刷写将进入高风险流程。</string>
+    <string name="flash_open_security_settings">打开安全设置</string>
     <string name="settings_download_mirror">下载镜像站</string>
     <string name="settings_download_mirror_desc">留空直连 GitHub；填写后会先镜像到 Release 再下载</string>
 
@@ -984,6 +992,23 @@
     <string name="settings_selinux_permissive">宽容</string>
     <string name="settings_selinux_disabled">已禁用</string>
     <string name="settings_unknown">未知</string>
+    <string name="settings_security_signing_title">签名校验</string>
+    <string name="settings_security_signing_status">密钥状态</string>
+    <string name="settings_security_status_enabled_configured">签名校验已开启，当前密钥对已配置。</string>
+    <string name="settings_security_status_enabled_pending">签名校验已开启，等待初始化新的签名密钥对。</string>
+    <string name="settings_security_status_disabled">签名校验已关闭，当前密钥对已删除。</string>
+    <string name="settings_security_reset_keys">重置远程私钥和本地公钥</string>
+    <string name="settings_security_reset_keys_desc">重新生成新的密钥对并覆盖远程 Secret、公钥资产和本地缓存。旧 bundle 会全部失效。</string>
+    <string name="settings_security_disable_dialog_title_1">关闭签名校验？</string>
+    <string name="settings_security_disable_dialog_message_1">关闭后将跳过下载与刷写阶段的签名校验。为了保证安全，当前远程私钥和本地公钥会被删除。</string>
+    <string name="settings_security_disable_dialog_title_2">最终确认删除密钥对</string>
+    <string name="settings_security_disable_dialog_message_2">确认后会删除本地公钥、远程私钥 Secret 和远程公钥资产。旧签名 bundle 将立即失效。</string>
+    <string name="settings_security_reset_dialog_title">重置签名密钥对</string>
+    <string name="settings_security_reset_dialog_message">将重新生成并发布新的远程私钥和本地公钥。已有旧签名 bundle 会全部失效。</string>
+    <string name="settings_security_signing_disabled">签名校验已关闭，当前密钥对已删除。</string>
+    <string name="settings_security_signing_enabled">签名校验已重新开启，并已生成新的密钥对。</string>
+    <string name="settings_security_keys_reset_done">新的签名密钥对已生成并发布。</string>
+    <string name="settings_security_operation_running">正在处理安全设置…</string>
     <string name="settings_local_templates">本地模板</string>
     <string name="settings_templates_loading">正在读取模板</string>
     <string name="settings_templates_loading_desc">从 ReSukiSU profile 存储加载</string>
