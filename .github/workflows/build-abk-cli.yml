@@ -155,6 +155,21 @@ jobs:
           if (-not $?) { Write-Warning "cryptography unavailable, using pycryptodome instead" }
           python -m pip install pyinstaller certifi
 
+      - name: Run CLI regression tests
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s cli/tests -v
+
+      - name: Run CLI regression tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:PYTHONDONTWRITEBYTECODE = "1"
+          python -m unittest discover -s cli/tests -v
+          if (-not $?) { exit 1 }
+
       - name: Build native one-dir bundle
         if: ${{ matrix.target_id == 'linux-arm64' || matrix.target_id == 'linux-x64' || matrix.target_id == 'macos-arm64' || matrix.target_id == 'macos-x64' }}
         shell: bash

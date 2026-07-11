@@ -6,16 +6,32 @@ A command-line tool to trigger ABK kernel builds from non-Android devices.
 
 ## 安装 / Installation
 
-确保已安装Python 3.6+，然后将 `cli/` 目录添加到PATH：
+确保已安装 Python 3.10+，然后直接运行脚本：
 
 ```bash
-export PATH="$HOME/ABK/cli:$PATH"
+python3 ~/ABK/cli/abk.py --help
 ```
 
-或创建符号链接：
+如需使用 `abk` 命令，可将可执行脚本链接到 `PATH` 中的目录：
 
 ```bash
-sudo ln -s ~/ABK/cli/abk /usr/local/bin/abk
+mkdir -p "$HOME/.local/bin"
+ln -sfn "$HOME/ABK/cli/abk.py" "$HOME/.local/bin/abk"
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+也可以创建系统级符号链接：
+
+```bash
+sudo ln -sfn "$HOME/ABK/cli/abk.py" /usr/local/bin/abk
+```
+
+产物签名与验证需要 `PyNaCl` 和一个 RSA 后端。推荐安装 `cryptography`；
+CLI 也兼容 `pycryptodome` / `pycryptodomex`：
+
+```bash
+python3 -m pip install -r ~/ABK/cli/requirements.txt
+# 或：python3 -m pip install pycryptodome PyNaCl
 ```
 
 ## 配置 / Configuration
@@ -28,7 +44,11 @@ sudo ln -s ~/ABK/cli/abk /usr/local/bin/abk
 abk login
 ```
 
-会自动打开浏览器进行授权，授权完成后 Token 会保存到 `~/.config/abk/config.json`。
+会自动打开浏览器进行授权。Linux 默认保存到 `~/.config/abk/config.json`
+（遵循 `XDG_CONFIG_HOME`），Windows 保存到 `%APPDATA%\abk\config.json`。
+
+首次构建会复用或初始化与 Android App 相同的 fork 签名 Secret、Release tag
+和公钥资产；CLI 本地只按仓库保存公钥，不保存 RSA 私钥。
 
 其他认证方式：
 
@@ -121,10 +141,10 @@ abk build --oneplus --device oneplus_12_b
 
 | 选项 | 描述 |
 |------|------|
-| `--lz4kd` | 启用 LZ4KD 压缩 |
-| `--bbr` | 启用 BBR 拥塞控制 |
-| `--proxy-optimization` | 启用代理优化 (MTK CPU 不支持) |
-| `--unicode-bypass` | 启用 Unicode 零宽字符绕过修复 |
+| `--lz4kd` / `--no-lz4kd` | LZ4KD 压缩 |
+| `--bbr` / `--no-bbr` | BBR 拥塞控制 |
+| `--proxy-optimization` / `--no-proxy-optimization` | 代理优化 (MTK CPU 不支持) |
+| `--unicode-bypass` / `--no-unicode-bypass` | Unicode 零宽字符绕过修复 |
 
 **OnePlus 构建限制：**
 - ZRAM / DDK / NTsync / 网络增强 / Re-Kernel / 虚拟化 / 自定义外部模块 → 自动禁用
@@ -153,8 +173,9 @@ abk status --status in_progress          # 按状态过滤
 
 ```bash
 abk artifacts --run-id 12345             # 列出产物
-abk artifacts --run-id 12345 --download  # 下载
+abk artifacts --run-id 12345 --download  # 下载到 ~/Downloads
 abk artifacts --run-id 12345 -o ./out    # 指定目录
+abk artifacts --set-download-dir ./out   # 持久化默认目录
 ```
 
 ### 列出可用选项 / List Options
@@ -185,6 +206,10 @@ abk list
 | `--os-patch-level` | 安全补丁级别，如 2022-01, 2026-03 |
 | `--revision` | 修订版本，如 r11 (仅 5.10) |
 
+为避免自由文本进入现有 Actions Shell，CLI 会在本地拒绝不安全参数：
+`--sub-level` 必须为数字，补丁级别必须为 `YYYY-MM`，自定义 ref 必须符合
+Git ref 规则；版本、构建时间、ZRAM 算法及自定义模块参数也会做长度和字符校验。
+
 ## 功能开关 / Feature Flags
 
 | 选项 / Option | 默认值 / Default | 描述 / Description |
@@ -195,10 +220,13 @@ abk list
 | `--kpm` / `--no-kpm` | 禁用 | KPM 功能 |
 | `--susfs` / `--no-susfs` | 启用 | SUSFS |
 | `--rekernel` / `--no-rekernel` | 禁用 | Re-Kernel 驱动 |
-| `--oneplus-8e` | 禁用 | 一加 8E 支持 |
+| `--oneplus-8e` / `--no-oneplus-8e` | 禁用 | 一加 8E 支持 |
 | `--ntsync` | 禁用 | NTsync |
 | `--networking` | 禁用 | 网络增强 |
-| `--zram-full-algo` | 禁用 | ZRAM 完整算法支持 |
+| `--zram-full-algo` / `--no-zram-full-algo` | 禁用 | ZRAM 完整算法支持 |
+
+以上默认值适用于普通、自定义和单目标矩阵构建。`--matrix full` 与
+`--matrix all-managers` 默认启用完整功能集，可用对应的 `--no-*` 选项关闭。
 
 ## KernelSU 选项 / KernelSU Options
 
@@ -245,7 +273,7 @@ abk build --matrix full
 abk build --matrix all-managers
 
 # OnePlus 构建
-abk build --oneplus --device oneplus12 --ksu SukiSU
+abk build --oneplus --device oneplus_12_b --ksu SukiSU
 
 # 全 KSU 变体
 abk build --matrix both --ksu all
@@ -267,7 +295,7 @@ abk sync
 ```bash
 abk --lang en-us --help    # English
 abk --lang ja-jp --help    # 日本語
-abk --lang neko --help     # 🐱
+abk --lang zh-neko --help  # 中文猫娘 🐱
 ```
 
 | Code | Language |
@@ -292,9 +320,7 @@ abk --lang neko --help     # 🐱
 1. 在 `cli/i18n/` 目录下创建新的 JSON 文件，文件名使用语言代码（如 `fr-fr.json`）
 2. 复制 `zh-cn.json` 的内容，将所有值翻译为目标语言
 3. 更新 `cli/i18n/__init__.py`，将新语言代码添加到 `detect_language()` 函数的白名单
-4. 更新 `cli/abk.py` 中以下位置：
-   - `parser.add_argument("--lang", choices=[...])` 的 choices 列表
-   - `main()` 函数中早期语言检测的 `sys.argv` 检查列表
+4. 更新 `cli/abk.py` 中的 `SUPPORTED_LANGUAGES`
 5. 更新本 README 的语言支持表格
 
 **注意：** KernelSU 分支名作为 API 参数时**不能翻译**，CLI 会自动将 `Stable`/`Dev`/`Custom` 映射为 `Stable(标准)`/`Dev(开发)`/`Custom(自定义)`。语言文件只需展示短名。其他 API 值同理（如设备名、KSU 变体名）。
@@ -308,6 +334,14 @@ abk --lang neko --help     # 🐱
    ```bash
    for lang in cli/i18n/*.json; do python3 -c "import json; json.loads(open('$lang').read()); print('$lang: valid')"; done
    ```
+
+## 测试 / Tests
+
+从仓库根目录运行离线回归测试：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s cli/tests -v
+```
 
 ## 许可证 / License
 

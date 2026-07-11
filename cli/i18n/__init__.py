@@ -6,7 +6,10 @@ import os
 from pathlib import Path
 
 I18N_DIR = Path(__file__).parent
-CONFIG_DIR = Path.home() / ".config" / "abk"
+if os.name == "nt" and os.environ.get("APPDATA"):
+    CONFIG_DIR = Path(os.environ["APPDATA"]) / "abk"
+else:
+    CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "abk"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 _translations = {}
@@ -19,8 +22,9 @@ def detect_language():
         config = {}
         if CONFIG_FILE.exists():
             try:
-                config = json.loads(CONFIG_FILE.read_text())
-            except json.JSONDecodeError:
+                loaded = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+                config = loaded if isinstance(loaded, dict) else {}
+            except (OSError, UnicodeError, json.JSONDecodeError):
                 pass
         lang = config.get("lang", "")
     if not lang:
