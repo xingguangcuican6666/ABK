@@ -720,8 +720,7 @@ private fun AbkMainScaffold(
                         AbkTab.Flash -> FlashScreen(
                             vm = vm,
                             outerPadding = contentPadding,
-                            onDetailPageVisibleChange = { flashDetailPageVisible = it },
-                            onOpenSecuritySettings = { selectedTab = AbkTab.Settings }
+                            onDetailPageVisibleChange = { flashDetailPageVisible = it }
                         )
                         AbkTab.RuntimeHome -> RuntimeHomeScreen(
                             vm = vm,

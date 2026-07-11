@@ -789,7 +789,6 @@
     <string name="flash_bundle_missing_signature_message">该刷写包缺少签名文件，继续刷写将进入高风险流程。</string>
     <string name="flash_bundle_signature_mismatch_message">该刷写包的签名与当前公钥不匹配，继续刷写将进入高风险流程。</string>
     <string name="flash_bundle_missing_public_key_message">当前缺少用于校验刷写包的公钥，继续刷写将进入高风险流程。</string>
-    <string name="flash_open_security_settings">打开安全设置</string>
     <string name="settings_download_mirror">下载镜像站</string>
     <string name="settings_download_mirror_desc">留空直连 GitHub；填写后会先镜像到 Release 再下载</string>
 

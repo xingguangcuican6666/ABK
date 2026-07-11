@@ -226,7 +226,6 @@ fun FlashScreen(
     vm: MainViewModel,
     outerPadding: PaddingValues = PaddingValues(0.dp),
     onDetailPageVisibleChange: (Boolean) -> Unit = {},
-    onOpenSecuritySettings: () -> Unit = {},
 ) {
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
@@ -898,14 +897,6 @@ fun FlashScreen(
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) { Text(stringResource(R.string.flash_confirm)) }
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = {
-                        flashSecurityPrompt = null
-                        onOpenSecuritySettings()
-                    }) {
-                        Text(stringResource(R.string.flash_open_security_settings))
                     }
                 }
             )
