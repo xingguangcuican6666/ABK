@@ -11,6 +11,7 @@
 #include <sys/prctl.h>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "uapi/abk_control.h"
 #include "uapi/ksu.h"
@@ -64,6 +65,8 @@ int set_selinux_hide_enabled(bool enabled);
 bool is_selinux_hide_enabled();
 
 bool get_allow_list(struct ksu_new_get_allow_list_cmd *);
+
+std::vector<uint32_t> get_allow_list_uids();
 
 bool abk_control_get_status(std::string *out);
 

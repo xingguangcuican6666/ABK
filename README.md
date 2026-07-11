@@ -246,7 +246,7 @@ App 编译工作流（`Build ABK App` / `Build ABK App (dev)`）通过仓库变�
 
 以下列表按当前 git 历史归一化到可识别的 GitHub 用户名/链接，并按用户名排序；自动化账号与无法可靠映射的身份已过滤：
 
-[@Akuma-Noko](https://github.com/Akuma-Noko)、[@DebugBoard](https://github.com/DebugBoard)、[@DreamFerry](https://github.com/DreamFerry)、[@elysias123](https://github.com/elysias123)、[@Fede2782](https://github.com/Fede2782)、[@FixeQyt](https://github.com/FixeQyt)、[@FunLay123](https://github.com/FunLay123)、[@gsf114](https://github.com/gsf114)、[@guruji-byte](https://github.com/guruji-byte)、[@huime180](https://github.com/huime180)、[@liqideqq](https://github.com/liqideqq)、[@LX200944](https://github.com/LX200944)、[@Mazha0309](https://github.com/Mazha0309)、[@MiRinChan](https://github.com/MiRinChan)、[@prpjzz](https://github.com/prpjzz)、[@ReeViiS69](https://github.com/ReeViiS69)、[@ShirkNeko](https://github.com/ShirkNeko)、[@Starsun](https://github.com/Starsun)、[@TheSillyOk](https://github.com/TheSillyOk)、[@TheWildJames](https://github.com/TheWildJames)、[@Tools-cx-app](https://github.com/Tools-cx-app)、[@ukriu](https://github.com/ukriu)、[@wrnxr233](https://github.com/wrnxr233)、[@Xiaomichael](https://github.com/Xiaomichael)、[@xingguangcuican6666](https://github.com/xingguangcuican6666)、[@yx1234587](https://github.com/yx1234587)、[@zzh20188](https://github.com/zzh20188)。
+[@Akuma-Noko](https://github.com/Akuma-Noko)、[@DebugBoard](https://github.com/DebugBoard)、[@DreamFerry](https://github.com/DreamFerry)、[@elysias123](https://github.com/elysias123)、[@fanziyun](https://github.com/fanziyun)、[@Fede2782](https://github.com/Fede2782)、[@FixeQyt](https://github.com/FixeQyt)、[@FunLay123](https://github.com/FunLay123)、[@gsf114](https://github.com/gsf114)、[@guruji-byte](https://github.com/guruji-byte)、[@huime180](https://github.com/huime180)、[@liqideqq](https://github.com/liqideqq)、[@LX200944](https://github.com/LX200944)、[@Mazha0309](https://github.com/Mazha0309)、[@MiRinChan](https://github.com/MiRinChan)、[@prpjzz](https://github.com/prpjzz)、[@ReeViiS69](https://github.com/ReeViiS69)、[@ShirkNeko](https://github.com/ShirkNeko)、[@Starsun](https://github.com/Starsun)、[@TheSillyOk](https://github.com/TheSillyOk)、[@TheWildJames](https://github.com/TheWildJames)、[@Tools-cx-app](https://github.com/Tools-cx-app)、[@ukriu](https://github.com/ukriu)、[@wrnxr233](https://github.com/wrnxr233)、[@Xiaomichael](https://github.com/Xiaomichael)、[@xingguangcuican6666](https://github.com/xingguangcuican6666)、[@yx1234587](https://github.com/yx1234587)、[@zzh20188](https://github.com/zzh20188)。
 
 ## 开放源代码许可
 
@@ -267,8 +267,8 @@ App 编译工作流（`Build ABK App` / `Build ABK App (dev)`）通过仓库变�
 
 | 项目 | 地址 | 许可证 |
 | --- | --- | --- |
-| zzh20188/GKI_KernelSU_SUSFS | <https://github.com/zzh20188/GKI_KernelSU_SUSFS> | 上游仓库许可证 |
-| WildKernels/GKI_KernelSU_SUSFS | <https://github.com/WildKernels/GKI_KernelSU_SUSFS> | 上游仓库许可证 |
+| zzh20188/GKI_KernelSU_SUSFS | <https://github.com/zzh20188/GKI_KernelSU_SUSFS> | GPL-2.0 |
+| WildKernels/GKI_KernelSU_SUSFS | <https://github.com/WildKernels/GKI_KernelSU_SUSFS> | 上游仓库许可证 / 未检测到 SPDX |
 | CodeLinaro CLO LA | <https://git.codelinaro.org/clo/la> | 顶层上游各项目许可证 |
 | OnePlusOSS/kernel_manifest | <https://github.com/OnePlusOSS/kernel_manifest> | 上游仓库许可证 / 未检测到 SPDX |
 | Xiaomichael/kernel_manifest | <https://github.com/Xiaomichael/kernel_manifest> | 上游仓库许可证 / 未检测到 SPDX |
@@ -281,17 +281,17 @@ App 编译工作流（`Build ABK App` / `Build ABK App (dev)`）通过仓库变�
 | ShirkNeko/susfs4ksu | <https://github.com/ShirkNeko/susfs4ksu> | GPL-2.0 |
 | SukiSU_patch | <https://github.com/ShirkNeko/SukiSU_patch> | GPL-2.0 |
 | AnyKernel3 | <https://github.com/WildKernels/AnyKernel3> | GPL-2.0 |
-| Xiaomichael/AnyKernel3 | <https://github.com/Xiaomichael/AnyKernel3> | 上游仓库许可证 / NOASSERTION |
+| Xiaomichael/AnyKernel3 | <https://github.com/Xiaomichael/AnyKernel3> | [Custom License](https://github.com/Xiaomichael/AnyKernel3/blob/master/LICENSE) |
 | WildKernels/kernel_patches | <https://github.com/WildKernels/kernel_patches> | GPL-2.0 |
 | cctv18/susfs4oki | <https://github.com/cctv18/susfs4oki> | GPL-3.0 |
-| SukiSU_KernelPatch_patch | <https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch> | 上游仓库许可证 |
-| Action-Build | <https://github.com/Numbersf/Action-Build> | 上游仓库许可证 |
-| SUSFS 模块构建来源 | <https://github.com/sidex15/susfs4ksu-module> | 上游仓库许可证 |
+| SukiSU_KernelPatch_patch | <https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch> | GPL-2.0 |
+| Action-Build | <https://github.com/Numbersf/Action-Build> | [Custom License](https://github.com/Numbersf/Action-Build/blob/SukiSU-Ultra/LICENSE) |
+| SUSFS 模块构建来源 | <https://github.com/sidex15/susfs4ksu-module> | AGPL-3.0 |
 | GCC prebuilts | <https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1> | GPL-family toolchain notices |
-| Baseband Guard | <https://github.com/vc-teahouse/Baseband-guard> | 上游仓库许可证 |
-| Re-Kernel | <https://github.com/Sakion-Team/Re-Kernel> | 上游仓库许可证 |
-| Droidspaces / 虚拟化支持补丁来源 | <https://github.com/ravindu644/Droidspaces-OSS> | 上游仓库许可证 |
-| ABK_repo 模块仓库 | <https://github.com/xingguangcuican6666/ABK_repo> | 上游仓库许可证 |
+| Baseband Guard | <https://github.com/vc-teahouse/Baseband-guard> | GPL-2.0 |
+| Re-Kernel | <https://github.com/Sakion-Team/Re-Kernel> | GPL-2.0 |
+| Droidspaces / 虚拟化支持补丁来源 | <https://github.com/ravindu644/Droidspaces-OSS> | GPL-3.0 |
+| ABK_repo 模块仓库 | <https://github.com/xingguangcuican6666/ABK_repo> | GPL-3.0 |
 | AOSP kernel/common、manifest、mkbootimg、build-tools | <https://android.googlesource.com/> | GPL-2.0 / Apache-2.0 / AOSP notices |
 | Android GKI certified boot images / command line tools | <https://dl.google.com/android/> | Android 分发条款 / Android SDK License |
 

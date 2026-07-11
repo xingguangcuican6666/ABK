@@ -629,6 +629,11 @@
     <string name="settings_enter_color_appearance">Открыть «Цвет и внешний вид»</string>
     <string name="settings_about_desc">Ссылки репозитория, версия и участники</string>
     <string name="settings_enter_about">Открыть «О приложении»</string>
+    <string name="settings_export_diagnostics">Экспорт диагностического пакета</string>
+    <string name="settings_export_diagnostics_desc">Упаковать логи ABK за текущий запуск, журнал ядра, состояние модулей и их логи в zip и поделиться им</string>
+    <string name="settings_export_diagnostics_share">Поделиться диагностическим пакетом</string>
+    <string name="settings_export_diagnostics_partial">Диагностический пакет создан, но %1$d элементов не удалось собрать</string>
+    <string name="settings_export_diagnostics_failed">Не удалось экспортировать диагностический пакет: %1$s</string>
     <string name="settings_open_source_licenses">Лицензии открытого ПО</string>
     <string name="settings_open_source_licenses_desc">Лицензии ссылок репозитория, встроенного кода и зависимостей</string>
     <string name="settings_enter_open_source_licenses">Открыть лицензии открытого ПО</string>
@@ -872,6 +877,12 @@
     <string name="root_auth_use_default_non_root">Использовать профиль non-root по умолчанию</string>
     <string name="root_auth_building_list">Построение списка авторизации</string>
     <string name="root_auth_refreshing_list">Обновление списка авторизации</string>
+    <string name="root_auth_loading_profile">Загрузка профиля приложения</string>
+    <string name="root_auth_recovery_title">Профиль суперпользователя сброшен</string>
+    <string name="root_auth_recovery_reset_message">ABK обнаружил, что чтение профиля суперпользователя для “%1$s” в прошлый раз привело к сбою, поэтому профиль этого приложения был сброшен к безопасным значениям по умолчанию.</string>
+    <string name="root_auth_recovery_reset_failed_message">ABK обнаружил, что чтение профиля суперпользователя для “%1$s” в прошлый раз привело к сбою, но на этом запуске не смог автоматически сбросить профиль. Проверьте доступ менеджера и повторите попытку.</string>
+    <string name="root_auth_profile_read_disabled_title">Нативное чтение профиля отключено</string>
+    <string name="root_auth_profile_read_disabled_message">Чтение нативного профиля этого приложения уже приводило к сбою ABK. Эта страница использует безопасные значения по умолчанию и больше не пытается читать профиль нативно.</string>
     <string name="save">Сохранить</string>
 
     <!-- Module repository -->

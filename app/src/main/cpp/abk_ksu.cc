@@ -139,6 +139,29 @@ bool get_allow_list(struct ksu_new_get_allow_list_cmd *cmd) {
     return ksuctl(KSU_IOCTL_NEW_GET_ALLOW_LIST, cmd) == 0;
 }
 
+std::vector<uint32_t> get_allow_list_uids() {
+    struct ksu_new_get_allow_list_cmd probe = {
+            .count = 0
+    };
+    if (!get_allow_list(&probe) || probe.total_count == 0) {
+        return {};
+    }
+
+    const size_t total_count = probe.total_count;
+    std::vector<uint8_t> storage(
+            sizeof(struct ksu_new_get_allow_list_cmd) + total_count * sizeof(uint32_t),
+            0
+    );
+    auto *cmd = reinterpret_cast<struct ksu_new_get_allow_list_cmd *>(storage.data());
+    cmd->count = static_cast<__u16>(total_count);
+    if (!get_allow_list(cmd)) {
+        return {};
+    }
+
+    const size_t actual_count = cmd->count < cmd->total_count ? cmd->count : cmd->total_count;
+    return std::vector<uint32_t>(cmd->uids, cmd->uids + actual_count);
+}
+
 bool is_safe_mode() {
     struct ksu_check_safemode_cmd cmd = {};
     ksuctl(KSU_IOCTL_CHECK_SAFEMODE, &cmd);

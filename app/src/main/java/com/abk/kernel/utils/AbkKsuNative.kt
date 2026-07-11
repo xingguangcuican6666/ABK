@@ -27,6 +27,7 @@ object AbkKsuNative {
     external fun getFullVersion(): String
     external fun getHookType(): String
     external fun getSuperuserCount(): Int
+    external fun getGrantedUids(): IntArray?
     external fun uidShouldUmount(uid: Int): Boolean
     external fun getAppProfile(key: String?, uid: Int): Profile?
     external fun setAppProfile(profile: Profile?): Boolean
@@ -83,6 +84,18 @@ object AbkKsuNative {
     }
 
     fun isUsableManager(): Boolean = status()?.isManager == true
+
+    fun grantedUids(): Set<Int> =
+        if (!hasNativeBridge()) {
+            emptySet()
+        } else {
+            runCatching {
+                getGrantedUids()
+                    ?.filter { it >= 0 }
+                    ?.toSet()
+                    .orEmpty()
+            }.getOrDefault(emptySet())
+        }
 
     fun readProfile(packageName: String, uid: Int): RootGrantProfile? {
         if (!hasNativeBridge() || packageName.isBlank()) return null

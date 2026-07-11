@@ -97,6 +97,18 @@ object DownloadUtils {
         val summary: String?
     )
 
+    enum class FlashSecurityIssueKind {
+        MISSING_SIGNATURE,
+        SIGNATURE_MISMATCH,
+        MISSING_PUBLIC_KEY,
+        OTHER
+    }
+
+    data class FlashSecurityPrompt(
+        val kind: FlashSecurityIssueKind,
+        val message: String,
+    )
+
     private data class AuxiliaryArtifacts(
         val moduleFiles: List<File> = emptyList(),
         val appFiles: List<File> = emptyList()
@@ -297,12 +309,15 @@ object DownloadUtils {
                 val signingPublicKeyPem = signingPublicKey
                     ?.takeIf { it.isNotBlank() }
                     ?.let(ForkSigningManager::publicKeyPemFromStoredValue)
+                val signingVerificationEnabled = PreferencesRepository(context)
+                    .readArtifactSigningVerificationEnabledBlocking()
 
                 createBundledDownloadEntries(
                     context = context,
                     bundleRootDir = requireNotNull(outDir),
                     candidates = candidates,
                     notices = notices,
+                    signingVerificationEnabled = signingVerificationEnabled,
                     signingPublicKeyPem = signingPublicKeyPem,
                     bundledDependencies = bundledDependencies,
                     bundledCompanionApps = bundledCompanionApps
@@ -316,9 +331,11 @@ object DownloadUtils {
                 downloadedZip.delete()
                 zipFile = null
                 val signingPublicKey = PreferencesRepository(context).readForkArtifactSigningPublicKeyBlocking()
+                val signingVerificationEnabled = PreferencesRepository(context)
+                    .readArtifactSigningVerificationEnabledBlocking()
                 collectCandidateFiles(targetOutDir).map { candidate ->
                     val type = classifyDownloadedFile(candidate)
-                    val verification = if (ArtifactVerification.requiresTrustedBundle(type)) {
+                    val verification = if (signingVerificationEnabled && ArtifactVerification.requiresTrustedBundle(type)) {
                         ArtifactVerification.verifyBundleFile(
                             candidate,
                             type,
@@ -332,7 +349,13 @@ object DownloadUtils {
                         file = candidate,
                         type = type,
                         verified = verification?.success == true,
-                        verificationSummary = verification?.message
+                        verificationSummary = verification?.message ?: if (
+                            !signingVerificationEnabled && ArtifactVerification.requiresTrustedBundle(type)
+                        ) {
+                            context.getString(R.string.flash_bundle_verification_disabled)
+                        } else {
+                            null
+                        }
                     )
                 }
             }
@@ -501,11 +524,14 @@ object DownloadUtils {
                         }
                     val bundledDependencies = resolveBundledMagiskModules(requireNotNull(stageDir), token)
                     val bundledCompanionApps = resolveBundledCompanionApps(requireNotNull(stageDir), token)
+                    val signingVerificationEnabled = PreferencesRepository(context)
+                        .readArtifactSigningVerificationEnabledBlocking()
                     createBundledDownloadEntries(
                         context = context,
                         bundleRootDir = requireNotNull(assetDir),
                         candidates = candidateFiles,
                         notices = notices,
+                        signingVerificationEnabled = signingVerificationEnabled,
                         signingPublicKeyPem = signingPublicKeyPem,
                         bundledDependencies = bundledDependencies,
                         bundledCompanionApps = bundledCompanionApps
@@ -524,9 +550,11 @@ object DownloadUtils {
                 } else {
                     listOf(downloadedFile)
                 }
+                val signingVerificationEnabled = PreferencesRepository(context)
+                    .readArtifactSigningVerificationEnabledBlocking()
                 files.map { candidate ->
                     val type = classifyDownloadedFile(candidate)
-                    val verification = if (ArtifactVerification.requiresTrustedBundle(type)) {
+                    val verification = if (signingVerificationEnabled && ArtifactVerification.requiresTrustedBundle(type)) {
                         if (runId == PREBUILT_GKI_RUN_ID) {
                             null
                         } else {
@@ -545,7 +573,13 @@ object DownloadUtils {
                         file = candidate,
                         type = type,
                         verified = verification?.success == true,
-                        verificationSummary = verification?.message
+                        verificationSummary = verification?.message ?: if (
+                            !signingVerificationEnabled && ArtifactVerification.requiresTrustedBundle(type)
+                        ) {
+                            context.getString(R.string.flash_bundle_verification_disabled)
+                        } else {
+                            null
+                        }
                     )
                 }
             }
@@ -672,7 +706,8 @@ object DownloadUtils {
     fun prepareDownloadedArtifact(
         context: Context,
         artifact: DownloadedArtifact,
-        allowHighRiskFallback: Boolean = false
+        allowHighRiskFallback: Boolean = false,
+        signingVerificationEnabled: Boolean = PreferencesRepository(context).readArtifactSigningVerificationEnabledBlocking()
     ): PreparedDownloadedArtifact {
         val source = File(artifact.filePath)
         if (!source.exists()) {
@@ -683,6 +718,23 @@ object DownloadUtils {
         val effectiveType = manifestType ?: artifact.type
         if (ArtifactVerification.requiresTrustedBundle(effectiveType) || looksLikeSignedBundle(source)) {
             val auxiliaryArtifacts = resolveAuxiliaryArtifacts(source)
+            if (!signingVerificationEnabled) {
+                val extractDir = createStageDir(context, "prepared-${safeFileName(artifact.name)}")
+                unzip(source, extractDir)
+                val signedPayloadName = ArtifactVerification.readBundleManifest(source)?.payloadName
+                val legacyManifest = File(extractDir, BUNDLE_MANIFEST_FILE_NAME).takeIf { it.isFile }?.readText()
+                val payloadName = signedPayloadName ?: parseBundledPayloadName(legacyManifest)
+                val payload = payloadName?.let { File(extractDir, it).takeIf(File::isFile) }
+                    ?: throw IllegalStateException("Bundled artifact missing payload: ${artifact.name}")
+                return PreparedDownloadedArtifact(
+                    file = payload,
+                    cleanupDir = extractDir,
+                    dependencyModules = auxiliaryArtifacts.moduleFiles,
+                    dependencyApps = auxiliaryArtifacts.appFiles,
+                    legacyBundleManifest = legacyManifest,
+                    resolvedType = classifyDownloadedFile(payload)
+                )
+            }
             val verification = if (artifact.runId == PREBUILT_GKI_RUN_ID) {
                 BundleVerificationResult(
                     manifest = SignedBundleManifest(
@@ -694,7 +746,12 @@ object DownloadUtils {
                         payloadSizeBytes = 0L
                     ),
                     success = artifact.verified,
-                    message = artifact.verificationSummary ?: "Prebuilt bundle requires confirmation"
+                    message = artifact.verificationSummary ?: "Prebuilt bundle requires confirmation",
+                    failureReason = if (artifact.verified) {
+                        BundleVerificationFailureReason.NONE
+                    } else {
+                        BundleVerificationFailureReason.OTHER
+                    }
                 )
             } else {
                 val signingPublicKey = PreferencesRepository(context).readForkArtifactSigningPublicKeyBlocking()
@@ -705,12 +762,13 @@ object DownloadUtils {
                 )
             }
             if (!verification.success) {
-                if (allowHighRiskFallback && looksLikeLegacyNoticeBundle(source)) {
+                if (allowHighRiskFallback) {
                     val extractDir = createStageDir(context, "prepared-${safeFileName(artifact.name)}")
                     unzip(source, extractDir)
-                    val manifest = File(extractDir, BUNDLE_MANIFEST_FILE_NAME)
-                    val manifestText = manifest.takeIf { it.isFile }?.readText()
-                    val payloadName = parseBundledPayloadName(manifestText)
+                    val legacyManifest = File(extractDir, BUNDLE_MANIFEST_FILE_NAME).takeIf { it.isFile }?.readText()
+                    val payloadName = verification.manifest.payloadName.takeIf { it.isNotBlank() }
+                        ?: ArtifactVerification.readBundleManifest(source)?.payloadName
+                        ?: parseBundledPayloadName(legacyManifest)
                     val payload = payloadName?.let { File(extractDir, it).takeIf(File::isFile) }
                         ?: throw IllegalStateException("Bundled artifact missing payload: ${artifact.name}")
                     val resolvedType = classifyDownloadedFile(payload)
@@ -719,7 +777,7 @@ object DownloadUtils {
                         extractDir,
                         dependencyModules = auxiliaryArtifacts.moduleFiles,
                         dependencyApps = auxiliaryArtifacts.appFiles,
-                        legacyBundleManifest = manifestText,
+                        legacyBundleManifest = legacyManifest,
                         resolvedType = resolvedType
                     )
                 }
@@ -922,6 +980,7 @@ object DownloadUtils {
         bundleRootDir: File,
         candidates: List<File>,
         notices: NoticeFiles,
+        signingVerificationEnabled: Boolean = true,
         signingPublicKeyPem: String? = null,
         bundledDependencies: List<File> = emptyList(),
         bundledCompanionApps: List<File> = emptyList()
@@ -932,6 +991,7 @@ object DownloadUtils {
                     context = context,
                     bundleRootDir = bundleRootDir,
                     downloadedFile = candidate,
+                    signingVerificationEnabled = signingVerificationEnabled,
                     signingPublicKeyPem = signingPublicKeyPem
                 )
                 val resolvedType = resolveBundlePayloadType(entry.file, entry.type)
@@ -976,7 +1036,11 @@ object DownloadUtils {
                 type = type,
                 verified = false,
                 verificationSummary = if (ArtifactVerification.requiresTrustedBundle(type)) {
-                    context.getString(R.string.flash_bundle_legacy_requires_confirmation)
+                    if (signingVerificationEnabled) {
+                        context.getString(R.string.flash_bundle_legacy_requires_confirmation)
+                    } else {
+                        context.getString(R.string.flash_bundle_verification_disabled)
+                    }
                 } else {
                     null
                 }
@@ -988,6 +1052,7 @@ object DownloadUtils {
         context: Context,
         bundleRootDir: File,
         downloadedFile: File,
+        signingVerificationEnabled: Boolean = true,
         signingPublicKeyPem: String? = null
     ): LocalDownloadEntry {
         val displayName = normalizedArtifactName(downloadedFile.name)
@@ -1003,6 +1068,7 @@ object DownloadUtils {
             context = context,
             bundleFile = persistedBundle,
             type = type,
+            signingVerificationEnabled = signingVerificationEnabled,
             signingPublicKeyPem = signingPublicKeyPem
         )
         return LocalDownloadEntry(
@@ -1151,12 +1217,19 @@ object DownloadUtils {
         context: Context,
         bundleFile: File,
         type: ArtifactType,
+        signingVerificationEnabled: Boolean,
         signingPublicKeyPem: String?
     ): BundleVerificationState? {
         val manifestType = ArtifactVerification.readBundleManifest(bundleFile)?.artifactType
             ?.let { runCatching { ArtifactType.valueOf(it) }.getOrNull() }
         val effectiveType = manifestType ?: type
         if (!ArtifactVerification.requiresTrustedBundle(effectiveType) && !looksLikeSignedBundle(bundleFile)) return null
+        if (!signingVerificationEnabled) {
+            return BundleVerificationState(
+                verified = false,
+                summary = context.getString(R.string.flash_bundle_verification_disabled)
+            )
+        }
         if (looksLikeLegacyNoticeBundle(bundleFile)) {
             return BundleVerificationState(
                 verified = false,
@@ -1188,6 +1261,51 @@ object DownloadUtils {
             ?.substringAfter('=')
             ?.trim()
             ?.ifBlank { null }
+
+    fun precheckFlashSecurity(
+        context: Context,
+        artifact: DownloadedArtifact,
+        signingVerificationEnabled: Boolean,
+    ): FlashSecurityPrompt? {
+        if (!signingVerificationEnabled) return null
+        val source = File(artifact.filePath)
+        if (!source.isFile) return null
+        val manifestType = ArtifactVerification.readBundleManifest(source)?.artifactType
+            ?.let { runCatching { ArtifactType.valueOf(it) }.getOrNull() }
+        val effectiveType = manifestType ?: artifact.type
+        if (!ArtifactVerification.requiresTrustedBundle(effectiveType) &&
+            !looksLikeSignedBundle(source) &&
+            !looksLikeLegacyNoticeBundle(source)
+        ) {
+            return null
+        }
+        if (looksLikeLegacyNoticeBundle(source)) {
+            return FlashSecurityPrompt(
+                kind = FlashSecurityIssueKind.MISSING_SIGNATURE,
+                message = context.getString(R.string.flash_bundle_missing_signature_message)
+            )
+        }
+        val signingPublicKey = PreferencesRepository(context).readForkArtifactSigningPublicKeyBlocking()
+        val verification = ArtifactVerification.verifyBundleFile(
+            source,
+            effectiveType,
+            ForkSigningManager.publicKeyPemFromStoredValue(signingPublicKey)
+        )
+        if (verification.success) return null
+        val kind = when (verification.failureReason) {
+            BundleVerificationFailureReason.MISSING_SIGNATURE -> FlashSecurityIssueKind.MISSING_SIGNATURE
+            BundleVerificationFailureReason.SIGNATURE_MISMATCH -> FlashSecurityIssueKind.SIGNATURE_MISMATCH
+            BundleVerificationFailureReason.MISSING_PUBLIC_KEY -> FlashSecurityIssueKind.MISSING_PUBLIC_KEY
+            else -> FlashSecurityIssueKind.OTHER
+        }
+        val message = when (kind) {
+            FlashSecurityIssueKind.MISSING_SIGNATURE -> context.getString(R.string.flash_bundle_missing_signature_message)
+            FlashSecurityIssueKind.SIGNATURE_MISMATCH -> context.getString(R.string.flash_bundle_signature_mismatch_message)
+            FlashSecurityIssueKind.MISSING_PUBLIC_KEY -> context.getString(R.string.flash_bundle_missing_public_key_message)
+            FlashSecurityIssueKind.OTHER -> verification.message
+        }
+        return FlashSecurityPrompt(kind = kind, message = message)
+    }
 
     private fun parseBundledDependencyNames(manifest: String?): List<String> =
         manifest

@@ -15,6 +15,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -61,6 +62,7 @@ import com.abk.kernel.data.model.AbkRuntimeBuildInfo
 import com.abk.kernel.data.model.AbkRuntimeModule
 import com.abk.kernel.data.model.AbkRuntimeStatus
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.components.AbkInlineLoadingPill
 import com.abk.kernel.ui.components.ObserveChildPageVisibility
 import com.abk.kernel.ui.components.childPageOverlayEnterTransition
 import com.abk.kernel.ui.components.childPageOverlayExitTransition
@@ -73,6 +75,7 @@ import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.ui.components.ShimmerLinearProgress
+import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
 import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.ui.webui.ModuleWebUiActivity
@@ -91,6 +94,8 @@ fun RuntimeHomeScreen(
     onManagerPatchPageVisibleChange: (Boolean) -> Unit = {}
 ) {
     val state by vm.uiState.collectAsState()
+    val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = state.abkRuntimeLoading)
+    val showRefreshLoading = refreshPresentation.showLoading
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     var showManagerPatchPage by rememberSaveable { mutableStateOf(false) }
     val managerPatchPageTransition = rememberChildPageOverlayTransition(
@@ -145,7 +150,10 @@ fun RuntimeHomeScreen(
                     compactTitle = true,
                     scrollBehavior = scrollBehavior,
                     actions = {
-                        IconButton(onClick = { vm.refreshAbkRuntimeStatus() }) {
+                        IconButton(onClick = {
+                            refreshPresentation.beginRefresh()
+                            vm.refreshAbkRuntimeStatus()
+                        }) {
                             Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.runtime_refresh))
                         }
                         IconButton(onClick = onSwitchToClassic) {
@@ -169,7 +177,10 @@ fun RuntimeHomeScreen(
                     hasNativeManagerPermission = state.hasNativeManagerPermission,
                     loading = state.abkRuntimeLoading,
                     error = state.abkRuntimeError,
-                    onRefresh = vm::refreshAbkRuntimeStatus,
+                    onRefresh = {
+                        refreshPresentation.beginRefresh()
+                        vm.refreshAbkRuntimeStatus()
+                    },
                     onOpenManagerPatch = {
                         childPageBack.resetProgress()
                         managerPatchBackEnabled = true
@@ -177,9 +188,21 @@ fun RuntimeHomeScreen(
                     }
                 )
 
-                state.abkRuntimeStatus?.let { runtimeStatus ->
-                    RuntimeManagerCard(runtimeStatus)
-                    RuntimeBuildParametersCard(runtimeStatus)
+                Crossfade(targetState = showRefreshLoading, label = "runtime-home-refresh") { refreshing ->
+                    if (refreshing) {
+                        AbkInlineLoadingPill(
+                            text = stringResource(R.string.runtime_refreshing_status),
+                            modifier = Modifier.fillMaxWidth(),
+                            compact = false
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            state.abkRuntimeStatus?.let { runtimeStatus ->
+                                RuntimeManagerCard(runtimeStatus)
+                                RuntimeBuildParametersCard(runtimeStatus)
+                            }
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(80.dp + outerPadding.calculateBottomPadding()))
@@ -234,6 +257,9 @@ fun InstalledModulesScreen(
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = state.abkRuntimeLoading)
+    val showRefreshLoading = refreshPresentation.showLoading
+    val showInitialLoading = state.abkRuntimeLoading && state.abkRuntimeStatus == null && state.abkRuntimeError == null
     var query by rememberSaveable { mutableStateOf("") }
     var pendingInstallUri by remember { mutableStateOf<Uri?>(null) }
     var installDialogVisible by remember { mutableStateOf(false) }
@@ -382,7 +408,10 @@ fun InstalledModulesScreen(
                 title = stringResource(R.string.runtime_installed_modules_title),
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    IconButton(onClick = { vm.refreshAbkRuntimeStatus() }) {
+                    IconButton(onClick = {
+                        refreshPresentation.beginRefresh()
+                        vm.refreshAbkRuntimeStatus()
+                    }) {
                         Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.runtime_refresh_installed_modules))
                     }
                 }
@@ -412,68 +441,87 @@ fun InstalledModulesScreen(
         ) {
             RuntimeModuleSearchField(query, onValueChange = { query = it })
 
-            if (state.abkRuntimeLoading) {
-                ShimmerLinearProgress(
-                    progress = { null },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            state.abkRuntimeError?.let {
-                RuntimeErrorCard(
-                    message = if (state.abkRuntimeStatus == null || !state.hasNativeManagerPermission) {
-                        it
-                    } else {
-                        stringResource(R.string.runtime_operation_incomplete_retry)
-                    },
-                    onRefresh = vm::refreshAbkRuntimeStatus
-                )
-            }
-
-            if (state.abkRuntimeStatus != null && modules.isEmpty()) {
-                Text(
-                    text = if (query.isBlank()) {
-                        stringResource(R.string.runtime_no_reported_modules)
-                    } else {
-                        stringResource(R.string.runtime_no_matching_modules)
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 24.dp)
-                )
-            } else {
-                groupedModules.forEach { grouped ->
-                    grouped.groupName?.let { groupName ->
-                        Text(
-                            text = groupName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                        grouped.groupDescription?.takeIf { it.isNotBlank() }?.let { description ->
-                            Text(
-                                text = description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+            when {
+                showInitialLoading -> {
+                    AbkInlineLoadingPill(
+                        text = stringResource(R.string.loading),
+                        modifier = Modifier.fillMaxWidth(),
+                        compact = false
+                    )
+                }
+                else -> {
+                    Crossfade(targetState = showRefreshLoading, label = "installed-modules-refresh") { refreshing ->
+                        if (refreshing) {
+                            AbkInlineLoadingPill(
+                                text = stringResource(R.string.runtime_refreshing_modules),
+                                modifier = Modifier.fillMaxWidth(),
+                                compact = false
                             )
-                        }
-                    }
-                    grouped.modules.forEach { module ->
-                        InstalledRuntimeModuleCard(
-                            module = module,
-                            actionInFlight = state.abkRuntimeModuleActionId == module.id,
-                            onSetEnabled = { enabled -> vm.setAbkRuntimeModuleEnabled(module.id, enabled) },
-                            onRequestUninstall = { uninstallTarget = module },
-                            onRunAction = { vm.runRuntimeModuleAction(module.id) },
-                            onOpenWebUi = {
-                                context.startActivity(
-                                    Intent(context, ModuleWebUiActivity::class.java)
-                                        .putExtra(ModuleWebUiActivity.EXTRA_MODULE_ID, module.id)
-                                        .putExtra(ModuleWebUiActivity.EXTRA_MODULE_NAME, module.displayName())
-                                )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                state.abkRuntimeError?.let {
+                                    RuntimeErrorCard(
+                                        message = if (state.abkRuntimeStatus == null || !state.hasNativeManagerPermission) {
+                                            it
+                                        } else {
+                                            stringResource(R.string.runtime_operation_incomplete_retry)
+                                        },
+                                        onRefresh = {
+                                            refreshPresentation.beginRefresh()
+                                            vm.refreshAbkRuntimeStatus()
+                                        }
+                                    )
+                                }
+
+                                if (state.abkRuntimeStatus != null && modules.isEmpty()) {
+                                    Text(
+                                        text = if (query.isBlank()) {
+                                            stringResource(R.string.runtime_no_reported_modules)
+                                        } else {
+                                            stringResource(R.string.runtime_no_matching_modules)
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(vertical = 24.dp)
+                                    )
+                                } else {
+                                    groupedModules.forEach { grouped ->
+                                        grouped.groupName?.let { groupName ->
+                                            Text(
+                                                text = groupName,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.padding(top = 4.dp)
+                                            )
+                                            grouped.groupDescription?.takeIf { it.isNotBlank() }?.let { description ->
+                                                Text(
+                                                    text = description,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                        grouped.modules.forEach { module ->
+                                            InstalledRuntimeModuleCard(
+                                                module = module,
+                                                actionInFlight = state.abkRuntimeModuleActionId == module.id,
+                                                onSetEnabled = { enabled -> vm.setAbkRuntimeModuleEnabled(module.id, enabled) },
+                                                onRequestUninstall = { uninstallTarget = module },
+                                                onRunAction = { vm.runRuntimeModuleAction(module.id) },
+                                                onOpenWebUi = {
+                                                    context.startActivity(
+                                                        Intent(context, ModuleWebUiActivity::class.java)
+                                                            .putExtra(ModuleWebUiActivity.EXTRA_MODULE_ID, module.id)
+                                                            .putExtra(ModuleWebUiActivity.EXTRA_MODULE_NAME, module.displayName())
+                                                    )
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
                             }
-                        )
+                        }
                     }
                 }
             }

@@ -28,6 +28,9 @@ import com.abk.kernel.utils.BuildProgressUtils
 import com.abk.kernel.utils.buildDisplaySnapshot
 import com.abk.kernel.utils.computeKindBuildProgress
 import com.abk.kernel.utils.DownloadDirectoryUtils
+import com.abk.kernel.utils.ForkSigningImportError
+import com.abk.kernel.utils.ForkSigningImportException
+import com.abk.kernel.utils.ForkSigningMaterial
 import com.abk.kernel.utils.ForkSigningManager
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.FailureLogExtractor
@@ -56,9 +59,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.UUID
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
 // ── UI State ─────────────────────────────────────────────────────────────────
 
@@ -87,6 +93,13 @@ enum class BuildPlanShareScope { FULL, FEATURES_ONLY }
 data class BuildPlanImportPreview(
     val plan: BuildPlan,
     val scope: BuildPlanShareScope
+)
+
+data class CustomKernelOptionsImportResult(
+    val options: List<CustomKernelOption>,
+    val importedCount: Int,
+    val skippedCount: Int,
+    val duplicateCount: Int
 )
 
 data class MainUiState(
@@ -181,6 +194,9 @@ data class MainUiState(
     val downloadDirectory: String = DownloadDirectoryUtils.defaultDirectoryPath(),
     val downloadMirrorBaseUrl: String = "",
     val prebuiltGkiEnabled: Boolean = true,
+    val artifactSigningVerificationEnabled: Boolean = true,
+    val artifactSigningConfigured: Boolean = false,
+    val artifactSigningOperationInFlight: Boolean = false,
     val appUpdateStability: String = APP_UPDATE_STABILITY_STABLE,
     val appUpdateLine: String = APP_UPDATE_LINE_NORMAL,
     val appUpdateChecking: Boolean = false,
@@ -223,6 +239,10 @@ data class MainUiState(
     val rootGrantRuntimeBackend: String? = null,
     val rootGrantLoading: Boolean = false,
     val rootGrantError: String? = null,
+    val rootGrantDetailApp: RootGrantApp? = null,
+    val rootGrantDetailLoading: Boolean = false,
+    val rootGrantDetailWarning: String? = null,
+    val rootGrantRecoveryNotice: RootGrantRecoveryNotice? = null,
     val rootGrantSavingPackage: String? = null
 ) {
     val isDownloading: Boolean
@@ -276,6 +296,15 @@ class MainViewModel @JvmOverloads constructor(
 
     private fun text(@StringRes resId: Int, vararg args: Any): String =
         LocaleHelper.str(resId, *args)
+
+    @StringRes
+    private fun importSigningErrorMessage(reason: ForkSigningImportError): Int = when (reason) {
+        ForkSigningImportError.EMPTY_PUBLIC_KEY -> R.string.settings_security_import_public_key_required
+        ForkSigningImportError.EMPTY_PRIVATE_KEY -> R.string.settings_security_import_private_key_required
+        ForkSigningImportError.INVALID_PUBLIC_KEY -> R.string.settings_security_import_invalid_public_key
+        ForkSigningImportError.INVALID_PRIVATE_KEY -> R.string.settings_security_import_invalid_private_key
+        ForkSigningImportError.KEY_MISMATCH -> R.string.settings_security_import_key_pair_mismatch
+    }
 
     private fun managerAccessErrorMessage(
         access: RootUtils.ManagerAccessInfo,
@@ -562,6 +591,26 @@ class MainViewModel @JvmOverloads constructor(
         }
         viewModelScope.launch {
             combine(
+                prefs.artifactSigningVerificationEnabled,
+                prefs.forkArtifactSigningPublicKey,
+                prefs.forkArtifactSigningSecretName,
+                prefs.forkArtifactSigningReleaseTag
+            ) { enabled, publicKey, secretName, releaseTag ->
+                SecuritySigningPreferences(
+                    enabled = enabled,
+                    configured = !publicKey.isNullOrBlank() && !secretName.isNullOrBlank() && !releaseTag.isNullOrBlank()
+                )
+            }.collect { securityPrefs ->
+                _uiState.update {
+                    it.copy(
+                        artifactSigningVerificationEnabled = securityPrefs.enabled,
+                        artifactSigningConfigured = securityPrefs.configured
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            combine(
                 prefs.appUpdateStability,
                 prefs.appUpdateLine
             ) { stability, line ->
@@ -719,6 +768,7 @@ class MainViewModel @JvmOverloads constructor(
                     buildConfig = initialConfig ?: it.buildConfig
                 )
             }
+            runtime.handlePendingRootGrantProfileRecovery()
         }
     }
 
@@ -736,6 +786,7 @@ class MainViewModel @JvmOverloads constructor(
                     buildConfig = initialConfig ?: it.buildConfig
                 )
             }
+            runtime.handlePendingRootGrantProfileRecovery()
         }
     }
 
@@ -753,7 +804,13 @@ class MainViewModel @JvmOverloads constructor(
     fun setRootGrantAllowed(packageName: String, allowed: Boolean) =
         runtime.setRootGrantAllowed(packageName, allowed)
 
+    fun openRootGrantProfile(packageName: String) = runtime.openRootGrantProfile(packageName)
+
+    fun clearRootGrantDetail() = runtime.clearRootGrantDetail()
+
     fun saveRootGrantProfile(profile: RootGrantProfile) = runtime.saveRootGrantProfile(profile)
+
+    fun dismissRootGrantRecoveryNotice() = runtime.dismissRootGrantRecoveryNotice()
 
     fun setAbkRuntimeModuleEnabled(moduleId: String, enabled: Boolean) =
         runtime.setAbkRuntimeModuleEnabled(moduleId, enabled)
@@ -850,6 +907,9 @@ class MainViewModel @JvmOverloads constructor(
                     downloadDirectory = it.downloadDirectory,
                     downloadMirrorBaseUrl = it.downloadMirrorBaseUrl,
                     prebuiltGkiEnabled = it.prebuiltGkiEnabled,
+                    artifactSigningVerificationEnabled = it.artifactSigningVerificationEnabled,
+                    artifactSigningConfigured = it.artifactSigningConfigured,
+                    artifactSigningOperationInFlight = it.artifactSigningOperationInFlight,
                     predictiveBackEnabled = it.predictiveBackEnabled,
                     runtimeNavigationEnabled = it.runtimeNavigationEnabled,
                     webViewDebugEnabled = it.webViewDebugEnabled,
@@ -1073,8 +1133,250 @@ class MainViewModel @JvmOverloads constructor(
 
     private fun readStateUserLogin(): String? = _uiState.value.user?.login
 
+    private fun setArtifactSigningOperationInFlight(inFlight: Boolean) {
+        _uiState.update { it.copy(artifactSigningOperationInFlight = inFlight) }
+    }
+
+    private fun requireForkSigningContext(): Pair<String, GitHubRepo>? {
+        val state = _uiState.value
+        val owner = state.user?.login
+        val fork = state.forkRepo
+        return if (owner != null && fork != null) {
+            owner to fork
+        } else {
+            null
+        }
+    }
+
+    private suspend fun getOrCreateForkArtifactSigningRelease(
+        owner: String,
+        fork: GitHubRepo,
+        releaseTag: String,
+    ): Result<GitHubRelease> {
+        val remoteRelease = when (val release = github.getReleaseByTag(owner, fork.name, releaseTag)) {
+            is Result.Success -> release.data
+            is Result.Error -> return Result.Error("Fork signing init failed: ${release.message}")
+            Result.Loading -> return Result.Loading
+        }
+        return when {
+            remoteRelease != null -> Result.Success(remoteRelease)
+            else -> when (val created = github.createRelease(
+                owner,
+                fork.name,
+                CreateReleaseRequest(
+                    tagName = releaseTag,
+                    targetCommitish = fork.defaultBranch,
+                    name = "ABK Artifact Signing Key",
+                    body = "ABK fork-scoped artifact signing public key.",
+                    prerelease = true
+                )
+            )) {
+                is Result.Success -> Result.Success(created.data)
+                is Result.Error -> Result.Error("Fork signing release init failed: ${created.message}")
+                Result.Loading -> Result.Loading
+            }
+        }
+    }
+
+    private data class ForkArtifactSigningStateSnapshot(
+        val publicKeyBase64: String?,
+        val secretName: String?,
+        val releaseTag: String?,
+    )
+
+    private suspend fun readForkArtifactSigningStateSnapshot(): ForkArtifactSigningStateSnapshot =
+        ForkArtifactSigningStateSnapshot(
+            publicKeyBase64 = prefs.forkArtifactSigningPublicKey.first(),
+            secretName = prefs.forkArtifactSigningSecretName.first(),
+            releaseTag = prefs.forkArtifactSigningReleaseTag.first()
+        )
+
+    private suspend fun restoreForkArtifactSigningState(snapshot: ForkArtifactSigningStateSnapshot) {
+        if (
+            snapshot.publicKeyBase64 != null &&
+            snapshot.secretName != null &&
+            snapshot.releaseTag != null
+        ) {
+            prefs.saveForkArtifactSigningState(
+                snapshot.publicKeyBase64,
+                snapshot.secretName,
+                snapshot.releaseTag
+            )
+            return
+        }
+        prefs.clearForkArtifactSigningState()
+        snapshot.publicKeyBase64?.let { prefs.saveForkArtifactSigningPublicKey(it) }
+        snapshot.secretName?.let { prefs.saveForkArtifactSigningSecretName(it) }
+        snapshot.releaseTag?.let { prefs.saveForkArtifactSigningReleaseTag(it) }
+    }
+
+    private suspend fun resolveForkArtifactSigningPublicKeyPem(
+        owner: String,
+        fork: GitHubRepo,
+        release: GitHubRelease,
+    ): String? {
+        ForkSigningManager.publicKeyPemFromStoredValue(prefs.forkArtifactSigningPublicKey.first())
+            ?.let { return it }
+        return when (val downloaded = github.downloadReleaseAssetText(owner, fork.name, release.id, FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME)) {
+            is Result.Success -> downloaded.data.trim().takeIf { it.isNotBlank() }
+            else -> null
+        }
+    }
+
+    private suspend fun replaceForkArtifactSigningPublicKeyAsset(
+        owner: String,
+        fork: GitHubRepo,
+        release: GitHubRelease,
+        publicKeyPem: String?,
+    ): Result<Unit> {
+        val releaseAssets = when (val assets = github.listReleaseAssets(owner, fork.name, release.id)) {
+            is Result.Success -> assets.data
+            is Result.Error -> return Result.Error("Fork signing asset query failed: ${assets.message}")
+            Result.Loading -> return Result.Loading
+        }
+        releaseAssets.filter { it.name == FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME }.forEach { asset ->
+            when (val deleted = github.deleteReleaseAsset(owner, fork.name, asset.id)) {
+                is Result.Success -> Unit
+                is Result.Error -> return Result.Error("Fork signing public key delete failed: ${deleted.message}")
+                Result.Loading -> return Result.Loading
+            }
+        }
+        val normalizedPem = publicKeyPem?.trim().orEmpty()
+        if (normalizedPem.isBlank()) {
+            return Result.Success(Unit)
+        }
+        return when (val uploaded = github.uploadReleaseAsset(
+            uploadUrlTemplate = release.uploadUrl ?: "",
+            fileName = FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME,
+            contentType = "application/x-pem-file",
+            content = normalizedPem.toByteArray(StandardCharsets.UTF_8)
+        )) {
+            is Result.Success -> Result.Success(Unit)
+            is Result.Error -> Result.Error("Fork signing public key publish failed: ${uploaded.message}")
+            Result.Loading -> Result.Loading
+        }
+    }
+
+    private suspend fun publishForkArtifactSigningMaterial(
+        owner: String,
+        fork: GitHubRepo,
+        material: ForkSigningMaterial,
+        secretName: String = FORK_ARTIFACT_SIGNING_SECRET_NAME,
+        releaseTag: String = FORK_ARTIFACT_SIGNING_RELEASE_TAG,
+    ): Result<Unit> {
+        val release = when (val result = getOrCreateForkArtifactSigningRelease(owner, fork, releaseTag)) {
+            is Result.Success -> result.data
+            is Result.Error -> return result
+            Result.Loading -> return Result.Loading
+        }
+        val previousState = readForkArtifactSigningStateSnapshot()
+        val previousPublicKeyPem = resolveForkArtifactSigningPublicKeyPem(owner, fork, release)
+
+        when (val replaced = replaceForkArtifactSigningPublicKeyAsset(owner, fork, release, material.publicKeyPem)) {
+            is Result.Success -> Unit
+            is Result.Error -> {
+                val rollbackErrors = mutableListOf<String>()
+                when (val rollbackAsset = replaceForkArtifactSigningPublicKeyAsset(owner, fork, release, previousPublicKeyPem)) {
+                    is Result.Success -> Unit
+                    is Result.Error -> rollbackErrors += rollbackAsset.message
+                    Result.Loading -> rollbackErrors += "Rollback asset restore is still loading"
+                }
+                val suffix = rollbackErrors.takeIf { it.isNotEmpty() }?.joinToString("; ", prefix = " Rollback: ") ?: ""
+                return Result.Error("${replaced.message}$suffix")
+            }
+            Result.Loading -> return Result.Loading
+        }
+
+        val saveError = try {
+            prefs.saveForkArtifactSigningState(material.publicKeyBase64, secretName, releaseTag)
+            null
+        } catch (error: Throwable) {
+            error
+        }
+        if (saveError != null) {
+            val rollbackErrors = mutableListOf<String>()
+            when (val rollbackAsset = replaceForkArtifactSigningPublicKeyAsset(owner, fork, release, previousPublicKeyPem)) {
+                is Result.Success -> Unit
+                is Result.Error -> rollbackErrors += rollbackAsset.message
+                Result.Loading -> rollbackErrors += "Rollback asset restore is still loading"
+            }
+            try {
+                restoreForkArtifactSigningState(previousState)
+            } catch (error: Throwable) {
+                rollbackErrors += "Fork signing local state restore failed: ${error.message ?: "Unknown error"}"
+            }
+            val suffix = rollbackErrors.takeIf { it.isNotEmpty() }?.joinToString("; ", prefix = " Rollback: ") ?: ""
+            return Result.Error("Fork signing local state save failed: ${saveError.message ?: "Unknown error"}$suffix")
+        }
+
+        return when (val secret = github.createOrUpdateRepositorySecret(owner, fork.name, secretName, material.privateKeyBase64)) {
+            is Result.Success -> Result.Success(Unit)
+            is Result.Error -> {
+                val rollbackErrors = mutableListOf<String>()
+                when (val rollbackAsset = replaceForkArtifactSigningPublicKeyAsset(owner, fork, release, previousPublicKeyPem)) {
+                    is Result.Success -> Unit
+                    is Result.Error -> rollbackErrors += rollbackAsset.message
+                    Result.Loading -> rollbackErrors += "Rollback asset restore is still loading"
+                }
+                try {
+                    restoreForkArtifactSigningState(previousState)
+                } catch (error: Throwable) {
+                    rollbackErrors += "Fork signing local state restore failed: ${error.message ?: "Unknown error"}"
+                }
+                val suffix = rollbackErrors.takeIf { it.isNotEmpty() }?.joinToString("; ", prefix = " Rollback: ") ?: ""
+                Result.Error("Fork signing secret init failed: ${secret.message}$suffix")
+            }
+            Result.Loading -> Result.Loading
+        }
+    }
+
+    private suspend fun regenerateForkArtifactSigningMaterial(
+        owner: String,
+        fork: GitHubRepo,
+        secretName: String = FORK_ARTIFACT_SIGNING_SECRET_NAME,
+        releaseTag: String = FORK_ARTIFACT_SIGNING_RELEASE_TAG,
+    ): Result<Unit> {
+        val material = ForkSigningManager.generateSigningMaterial()
+        return publishForkArtifactSigningMaterial(owner, fork, material, secretName, releaseTag)
+    }
+
+    private suspend fun deleteForkArtifactSigningMaterial(
+        owner: String,
+        fork: GitHubRepo,
+        secretName: String,
+        releaseTag: String,
+    ): Result<Unit> {
+        when (val release = github.getReleaseByTag(owner, fork.name, releaseTag)) {
+            is Result.Success -> {
+                release.data?.let { foundRelease ->
+                    when (val assets = github.listReleaseAssets(owner, fork.name, foundRelease.id)) {
+                        is Result.Success -> {
+                            assets.data.filter { it.name == FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME }.forEach { asset ->
+                                when (val deleted = github.deleteReleaseAsset(owner, fork.name, asset.id)) {
+                                    is Result.Success -> Unit
+                                    is Result.Error -> return Result.Error("Fork signing public key delete failed: ${deleted.message}")
+                                    Result.Loading -> return Result.Loading
+                                }
+                            }
+                        }
+                        is Result.Error -> return Result.Error("Fork signing asset query failed: ${assets.message}")
+                        Result.Loading -> return Result.Loading
+                    }
+                }
+            }
+            is Result.Error -> return Result.Error("Fork signing release query failed: ${release.message}")
+            Result.Loading -> return Result.Loading
+        }
+        return when (val deleted = github.deleteRepositorySecret(owner, fork.name, secretName)) {
+            is Result.Success -> Result.Success(Unit)
+            is Result.Error -> Result.Error("Fork signing secret delete failed: ${deleted.message}")
+            Result.Loading -> Result.Loading
+        }
+    }
+
     private suspend fun ensureForkArtifactSigningReady(owner: String, fork: GitHubRepo) {
         forkSigningInitMutex.withLock {
+            if (!prefs.artifactSigningVerificationEnabled.first()) return
             val secretName = FORK_ARTIFACT_SIGNING_SECRET_NAME
             val releaseTag = FORK_ARTIFACT_SIGNING_RELEASE_TAG
 
@@ -1128,8 +1430,7 @@ class MainViewModel @JvmOverloads constructor(
             val existingPublicKeyAsset = releaseAssets.firstOrNull { it.name == FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME }
             val existingPublicKey = prefs.forkArtifactSigningPublicKey.first()
             if (secretExists && !existingPublicKey.isNullOrBlank()) {
-                prefs.saveForkArtifactSigningSecretName(secretName)
-                prefs.saveForkArtifactSigningReleaseTag(releaseTag)
+                prefs.saveForkArtifactSigningState(existingPublicKey, secretName, releaseTag)
                 return
             }
             if (secretExists && existingPublicKeyAsset != null) {
@@ -1143,42 +1444,134 @@ class MainViewModel @JvmOverloads constructor(
                         .joinToString("")
                         .trim()
                     if (base64.isNotBlank()) {
-                        prefs.saveForkArtifactSigningPublicKey(base64)
-                        prefs.saveForkArtifactSigningSecretName(secretName)
-                        prefs.saveForkArtifactSigningReleaseTag(releaseTag)
+                        prefs.saveForkArtifactSigningState(base64, secretName, releaseTag)
                         return
                     }
                 }
             }
 
-            val material = ForkSigningManager.generateSigningMaterial()
-            when (val secret = github.createOrUpdateRepositorySecret(owner, fork.name, secretName, material.privateKeyBase64)) {
+            when (val regenerated = regenerateForkArtifactSigningMaterial(owner, fork, secretName, releaseTag)) {
                 is Result.Success -> Unit
-                is Result.Error -> {
-                    showSnackbar("Fork signing secret init failed: ${secret.message}", longDuration = true)
-                    return
-                }
-                Result.Loading -> return
-            }
-
-            releaseAssets.filter { it.name == FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME }.forEach { asset ->
-                github.deleteReleaseAsset(owner, fork.name, asset.id)
-            }
-            when (val uploaded = github.uploadReleaseAsset(
-                uploadUrlTemplate = release.uploadUrl ?: "",
-                fileName = FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME,
-                contentType = "application/x-pem-file",
-                content = material.publicKeyPem.toByteArray(StandardCharsets.UTF_8)
-            )) {
-                is Result.Success -> {
-                    prefs.saveForkArtifactSigningPublicKey(material.publicKeyBase64)
-                    prefs.saveForkArtifactSigningSecretName(secretName)
-                    prefs.saveForkArtifactSigningReleaseTag(releaseTag)
-                }
-                is Result.Error -> {
-                    showSnackbar("Fork signing public key publish failed: ${uploaded.message}", longDuration = true)
-                }
+                is Result.Error -> showSnackbar(regenerated.message, longDuration = true)
                 Result.Loading -> {}
+            }
+        }
+    }
+
+    suspend fun importArtifactSigningKeys(
+        publicKeyPem: String,
+        privateKeyPem: String,
+    ): Result<Unit> {
+        val context = requireForkSigningContext()
+        if (context == null) {
+            return Result.Error(text(R.string.settings_security_requires_fork))
+        }
+        if (!prefs.artifactSigningVerificationEnabled.first()) {
+            return Result.Error(text(R.string.settings_security_import_requires_enabled))
+        }
+        if (_uiState.value.artifactSigningOperationInFlight) {
+            return Result.Error(text(R.string.settings_security_operation_running))
+        }
+        val (owner, fork) = context
+        setArtifactSigningOperationInFlight(true)
+        return try {
+            forkSigningInitMutex.withLock {
+                val material = try {
+                    ForkSigningManager.importSigningMaterial(publicKeyPem, privateKeyPem)
+                } catch (error: ForkSigningImportException) {
+                    return@withLock Result.Error(text(importSigningErrorMessage(error.reason)))
+                }
+                when (val published = publishForkArtifactSigningMaterial(owner, fork, material)) {
+                    is Result.Success -> {
+                        showSnackbar(text(R.string.settings_security_import_done))
+                        Result.Success(Unit)
+                    }
+                    is Result.Error -> Result.Error(published.message)
+                    Result.Loading -> Result.Loading
+                }
+            }
+        } finally {
+            setArtifactSigningOperationInFlight(false)
+        }
+    }
+
+    fun disableArtifactSigningVerification() {
+        val context = requireForkSigningContext()
+        if (context == null) {
+            showSnackbar(text(R.string.settings_security_requires_fork), longDuration = true)
+            return
+        }
+        if (_uiState.value.artifactSigningOperationInFlight) return
+        val (owner, fork) = context
+        viewModelScope.launch {
+            setArtifactSigningOperationInFlight(true)
+            try {
+                forkSigningInitMutex.withLock {
+                    val secretName = prefs.forkArtifactSigningSecretName.first() ?: FORK_ARTIFACT_SIGNING_SECRET_NAME
+                    val releaseTag = prefs.forkArtifactSigningReleaseTag.first() ?: FORK_ARTIFACT_SIGNING_RELEASE_TAG
+                    when (val result = deleteForkArtifactSigningMaterial(owner, fork, secretName, releaseTag)) {
+                        is Result.Success -> {
+                            prefs.clearForkArtifactSigningState()
+                            prefs.setArtifactSigningVerificationEnabled(false)
+                            showSnackbar(text(R.string.settings_security_signing_disabled))
+                        }
+                        is Result.Error -> showSnackbar(result.message, longDuration = true)
+                        Result.Loading -> Unit
+                    }
+                }
+            } finally {
+                setArtifactSigningOperationInFlight(false)
+            }
+        }
+    }
+
+    fun enableArtifactSigningVerification() {
+        val context = requireForkSigningContext()
+        if (context == null) {
+            showSnackbar(text(R.string.settings_security_requires_fork), longDuration = true)
+            return
+        }
+        if (_uiState.value.artifactSigningOperationInFlight) return
+        val (owner, fork) = context
+        viewModelScope.launch {
+            setArtifactSigningOperationInFlight(true)
+            try {
+                forkSigningInitMutex.withLock {
+                    when (val result = regenerateForkArtifactSigningMaterial(owner, fork)) {
+                        is Result.Success -> {
+                            prefs.setArtifactSigningVerificationEnabled(true)
+                            showSnackbar(text(R.string.settings_security_signing_enabled))
+                        }
+                        is Result.Error -> showSnackbar(result.message, longDuration = true)
+                        Result.Loading -> Unit
+                    }
+                }
+            } finally {
+                setArtifactSigningOperationInFlight(false)
+            }
+        }
+    }
+
+    fun resetArtifactSigningKeys() {
+        val context = requireForkSigningContext()
+        if (context == null) {
+            showSnackbar(text(R.string.settings_security_requires_fork), longDuration = true)
+            return
+        }
+        if (_uiState.value.artifactSigningOperationInFlight) return
+        val (owner, fork) = context
+        viewModelScope.launch {
+            setArtifactSigningOperationInFlight(true)
+            try {
+                forkSigningInitMutex.withLock {
+                    when (val result = regenerateForkArtifactSigningMaterial(owner, fork)) {
+                        is Result.Success -> showSnackbar(text(R.string.settings_security_keys_reset_done))
+                        is Result.Error -> showSnackbar(result.message, longDuration = true)
+                        Result.Loading -> Unit
+                    }
+                }
+            } finally {
+                setArtifactSigningOperationInFlight(false)
             }
         }
     }
@@ -2768,7 +3161,7 @@ class MainViewModel @JvmOverloads constructor(
         prefs.setDownloadDirectory(path)
     }
     fun setDownloadMirrorBaseUrl(url: String) = viewModelScope.launch {
-        prefs.setDownloadMirrorBaseUrl(url.trim())
+        prefs.setDownloadMirrorBaseUrl(url)
     }
     fun setPredictiveBackEnabled(v: Boolean) = viewModelScope.launch { prefs.setPredictiveBackEnabled(v) }
     fun setPrebuiltGkiEnabled(v: Boolean) = viewModelScope.launch {
@@ -3806,14 +4199,13 @@ class MainViewModel @JvmOverloads constructor(
         scope: BuildPlanShareScope
     ): String {
         val normalized = KernelSupport.normalize(config)
-        val payload = Base64.getUrlEncoder().withoutPadding().encodeToString(
-            encodeBuildPlanPayload(
-                config = normalized,
-                name = sanitizeBuildPlanName(name, normalized),
-                scope = scope,
-                messages = buildPlanCodecMessages()
-            )
+        val encodedPayload = encodeBuildPlanPayload(
+            config = normalized,
+            name = sanitizeBuildPlanName(name, normalized),
+            scope = scope,
+            messages = buildPlanCodecMessages()
         )
+        val payload = Base64.getUrlEncoder().withoutPadding().encodeToString(compressPlanPayload(encodedPayload))
         return "$BUILD_PLAN_CODE_PREFIX$payload"
     }
 
@@ -3861,6 +4253,55 @@ class MainViewModel @JvmOverloads constructor(
 
     fun importBuildPlanToCurrentConfig(preview: BuildPlanImportPreview) {
         updateBuildConfig(preview.plan.config)
+    }
+
+    fun upsertCustomKernelOption(option: CustomKernelOption, editingIndex: Int? = null) {
+        val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
+        if (currentConfig.buildTarget == BUILD_TARGET_ONEPLUS) return
+        val symbol = KernelSupport.normalizeCustomKernelSymbol(option.symbol)
+        require(symbol.isNotBlank()) { text(R.string.build_kernel_option_symbol_invalid) }
+        val normalizedOption = CustomKernelOption(
+            symbol = symbol,
+            mode = CustomKernelOptionMode.normalize(option.mode),
+            rawValue = option.rawValue.trim(),
+            source = option.source.trim()
+        )
+        require(
+            normalizedOption.mode != CustomKernelOptionMode.RAW || normalizedOption.rawValue.isNotBlank()
+        ) { text(R.string.build_kernel_option_raw_required) }
+
+        val updated = currentConfig.customKernelOptions.toMutableList().apply {
+            if (editingIndex != null && editingIndex in indices) {
+                removeAt(editingIndex)
+            }
+            val duplicateIndex = indexOfFirst { it.symbol.equals(symbol, ignoreCase = true) }
+            if (duplicateIndex >= 0) {
+                removeAt(duplicateIndex)
+            }
+            add(normalizedOption)
+        }
+        updateBuildConfig(currentConfig.copy(customKernelOptions = updated))
+    }
+
+    fun removeCustomKernelOption(index: Int) {
+        val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
+        if (index !in currentConfig.customKernelOptions.indices) return
+        val updated = currentConfig.customKernelOptions.toMutableList().apply { removeAt(index) }
+        updateBuildConfig(currentConfig.copy(customKernelOptions = updated))
+    }
+
+    fun importCustomKernelOptions(text: String): CustomKernelOptionsImportResult {
+        val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
+        val imported = parseCustomKernelOptionsText(text)
+        val merged = currentConfig.customKernelOptions + imported.options
+        updateBuildConfig(currentConfig.copy(customKernelOptions = merged))
+        return imported
+    }
+
+    fun loadCustomKernelOptionsFromUri(uri: Uri): String {
+        return getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+            input.bufferedReader(StandardCharsets.UTF_8).readText()
+        } ?: error(text(R.string.build_kernel_option_import_read_failed))
     }
 
     fun addBuildModuleRepository(url: String) {
@@ -4586,6 +5027,7 @@ class MainViewModel @JvmOverloads constructor(
     private fun buildPlanCodecMessages(): BuildPlanCodecMessages = BuildPlanCodecMessages(
         unsupportedVersion = text(R.string.vm_plan_bad_version),
         tooManyModules = text(R.string.vm_plan_too_many_modules),
+        tooManyKernelOptions = text(R.string.vm_plan_too_many_kernel_options),
         negativeNumber = text(R.string.vm_plan_negative_number),
         fieldTooLong = text(R.string.vm_plan_field_too_long),
         incomplete = text(R.string.vm_plan_incomplete),
@@ -4645,6 +5087,17 @@ private fun MainViewModel.localizedBuildModuleRepoTitle(): String =
 private fun padBase64Url(value: String): String =
     value + "=".repeat((4 - value.length % 4) % 4)
 
+private fun compressPlanPayload(bytes: ByteArray): ByteArray {
+    val output = ByteArrayOutputStream()
+    GZIPOutputStream(output).use { gzip -> gzip.write(bytes) }
+    return output.toByteArray()
+}
+
+private fun decompressPlanPayload(bytes: ByteArray): ByteArray {
+    val input = GZIPInputStream(ByteArrayInputStream(bytes))
+    return input.use { it.readBytes() }
+}
+
 internal data class DecodedBuildPlanCode(
     val name: String,
     val config: KernelBuildConfig,
@@ -4654,6 +5107,7 @@ internal data class DecodedBuildPlanCode(
 internal data class BuildPlanCodecMessages(
     val unsupportedVersion: String = "Unsupported plan code version",
     val tooManyModules: String = "External module count exceeds the limit",
+    val tooManyKernelOptions: String = "Kernel option count exceeds the limit",
     val negativeNumber: String = "Negative numbers can not be written to a plan code",
     val fieldTooLong: String = "Plan field is too long",
     val incomplete: String = "Plan code content is incomplete",
@@ -4691,6 +5145,27 @@ internal fun encodeBuildPlanPayload(
     writer.writeString(config.zramExtraAlgos)
     writer.writeString(config.kpmPassword)
     writer.writeString(config.customRef)
+    val kernelOptions = config.customKernelOptions
+        .mapNotNull { option ->
+            val symbol = KernelSupport.normalizeCustomKernelSymbol(option.symbol)
+            if (symbol.isBlank()) {
+                null
+            } else {
+                CustomKernelOption(
+                    symbol = symbol,
+                    mode = CustomKernelOptionMode.normalize(option.mode),
+                    rawValue = option.rawValue.trim(),
+                    source = option.source.trim()
+                )
+            }
+        }
+        .take(BUILD_PLAN_MAX_KERNEL_OPTIONS)
+    writer.writeVarInt(kernelOptions.size)
+    kernelOptions.forEach { option ->
+        writer.writeString(option.symbol)
+        writer.writeByte(BUILD_PLAN_KERNEL_OPTION_MODES.indexOrZero(option.mode))
+        writer.writeString(option.rawValue)
+    }
     val modules = if (config.useCustomExternalModules) {
         config.customExternalModules
             .mapNotNull { module ->
@@ -4737,7 +5212,12 @@ internal fun decodeBuildPlanPayload(
     baseConfig: KernelBuildConfig,
     messages: BuildPlanCodecMessages = BuildPlanCodecMessages()
 ): DecodedBuildPlanCode {
-    val reader = BuildPlanBinaryReader(bytes, messages)
+    val payloadBytes = if (bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
+        decompressPlanPayload(bytes)
+    } else {
+        bytes
+    }
+    val reader = BuildPlanBinaryReader(payloadBytes, messages)
     val version = reader.readByte()
     require(version in BUILD_PLAN_MIN_SUPPORTED_VERSION..BUILD_PLAN_CODE_VERSION) { messages.unsupportedVersion }
     val scope = buildPlanShareScopeFromWireValue(reader.readByte(), messages)
@@ -4793,6 +5273,22 @@ internal fun decodeBuildPlanPayload(
     } else {
         ""
     }
+    val kernelOptions = if (version >= BUILD_PLAN_KERNEL_OPTIONS_VERSION) {
+        val count = reader.readVarInt()
+        require(count in 0..BUILD_PLAN_MAX_KERNEL_OPTIONS) { messages.tooManyKernelOptions }
+        List(count) {
+            CustomKernelOption(
+                symbol = reader.readString().trim(),
+                mode = BUILD_PLAN_KERNEL_OPTION_MODES.valueOrDefault(
+                    reader.readByte(),
+                    CustomKernelOptionMode.IGNORE
+                ),
+                rawValue = reader.readString().trim()
+            )
+        }
+    } else {
+        emptyList()
+    }
     val moduleCount = reader.readVarInt()
     require(moduleCount in 0..BUILD_PLAN_MAX_MODULES) { messages.tooManyModules }
     val modules = List(moduleCount) {
@@ -4841,6 +5337,7 @@ internal fun decodeBuildPlanPayload(
         kpmPassword = kpmPassword,
         customRef = customRef,
         virtualizationSupport = virtualizationSupport,
+        customKernelOptions = kernelOptions,
         useCustomExternalModules = featureMask.hasBuildPlanFlag(10),
         customExternalModules = modules,
         onePlusUseLz4kd = featureMask.hasBuildPlanFlag(11),
@@ -4967,20 +5464,122 @@ private fun buildPlanShareScopeFromWireValue(
     else -> throw IllegalArgumentException(messages.unsupportedShareType)
 }
 
+private val CUSTOM_KERNEL_OPTION_DISABLED_LINE =
+    Regex("^#\\s*CONFIG_([A-Za-z0-9_]+)\\s+is\\s+not\\s+set$", RegexOption.IGNORE_CASE)
+
+private val CUSTOM_KERNEL_OPTION_ASSIGNED_LINE =
+    Regex("^(CONFIG_[A-Za-z0-9_]+)=(.+)$")
+
+private val CUSTOM_KERNEL_OPTION_BARE_LINE =
+    Regex("^(CONFIG_[A-Za-z0-9_]+|[A-Za-z0-9_]+)$")
+
+private data class ParsedCustomKernelOptionLine(
+    val option: CustomKernelOption?,
+    val skipped: Boolean
+)
+
+private fun parseCustomKernelOptionLine(line: String): ParsedCustomKernelOptionLine {
+    val clean = line.trim().replace("\r", "")
+    if (clean.isBlank()) return ParsedCustomKernelOptionLine(option = null, skipped = true)
+    if (clean.startsWith("#") && !clean.startsWith("# CONFIG_", ignoreCase = true)) {
+        return ParsedCustomKernelOptionLine(option = null, skipped = true)
+    }
+
+    CUSTOM_KERNEL_OPTION_DISABLED_LINE.matchEntire(clean)?.let { match ->
+        val symbol = KernelSupport.normalizeCustomKernelSymbol("CONFIG_${match.groupValues[1]}")
+        require(symbol.isNotBlank()) { "Invalid kernel option symbol: $clean" }
+        return ParsedCustomKernelOptionLine(
+            option = CustomKernelOption(symbol = symbol, mode = CustomKernelOptionMode.DISABLED),
+            skipped = false
+        )
+    }
+
+    CUSTOM_KERNEL_OPTION_ASSIGNED_LINE.matchEntire(clean)?.let { match ->
+        val symbol = KernelSupport.normalizeCustomKernelSymbol(match.groupValues[1])
+        require(symbol.isNotBlank()) { "Invalid kernel option symbol: $clean" }
+        val value = match.groupValues[2].trim()
+        val mode = when (value.lowercase()) {
+            "y" -> CustomKernelOptionMode.ENABLED_Y
+            "m" -> CustomKernelOptionMode.ENABLED_M
+            "n" -> CustomKernelOptionMode.DISABLED
+            else -> CustomKernelOptionMode.RAW
+        }
+        return ParsedCustomKernelOptionLine(
+            option = CustomKernelOption(
+                symbol = symbol,
+                mode = mode,
+                rawValue = if (mode == CustomKernelOptionMode.RAW) value else ""
+            ),
+            skipped = false
+        )
+    }
+
+    CUSTOM_KERNEL_OPTION_BARE_LINE.matchEntire(clean)?.let { match ->
+        val symbol = KernelSupport.normalizeCustomKernelSymbol(match.groupValues[1])
+        require(symbol.isNotBlank()) { "Invalid kernel option symbol: $clean" }
+        return ParsedCustomKernelOptionLine(
+            option = CustomKernelOption(symbol = symbol, mode = CustomKernelOptionMode.IGNORE),
+            skipped = false
+        )
+    }
+
+    throw IllegalArgumentException("Unsupported kernel option line: $clean")
+}
+
+internal fun parseCustomKernelOptionsText(text: String): CustomKernelOptionsImportResult {
+    val merged = linkedMapOf<String, CustomKernelOption>()
+    var skippedCount = 0
+    var duplicateCount = 0
+
+    text.lineSequence().forEach { rawLine ->
+        val parsed = parseCustomKernelOptionLine(rawLine)
+        if (parsed.skipped) {
+            skippedCount += 1
+            return@forEach
+        }
+        val option = parsed.option ?: return@forEach
+        if (merged.containsKey(option.symbol)) duplicateCount += 1
+        merged.remove(option.symbol)
+        merged[option.symbol] = option
+    }
+
+    val options = KernelSupport.normalizeCustomKernelOptions(merged.values.toList())
+    return CustomKernelOptionsImportResult(
+        options = options,
+        importedCount = options.size,
+        skippedCount = skippedCount,
+        duplicateCount = duplicateCount
+    )
+}
+
+internal fun CustomKernelOption.toWorkflowLine(): String? {
+    val symbol = KernelSupport.normalizeCustomKernelSymbol(symbol)
+    if (symbol.isBlank()) return null
+    return when (CustomKernelOptionMode.normalize(mode)) {
+        CustomKernelOptionMode.ENABLED_Y -> "$symbol=y"
+        CustomKernelOptionMode.ENABLED_M -> "$symbol=m"
+        CustomKernelOptionMode.DISABLED -> "# $symbol is not set"
+        CustomKernelOptionMode.RAW -> rawValue.trim().takeIf { it.isNotBlank() }?.let { "$symbol=$it" }
+        else -> null
+    }
+}
+
 private const val LATE_FAILED_ARTIFACT_POLL_ATTEMPTS = 6
 private const val LATE_FAILED_ARTIFACT_POLL_INTERVAL_MS = 5_000L
 
 private const val BUILD_PLAN_CODE_PREFIX = "ABKP2:"
 private const val BUILD_PLAN_LEGACY_CODE_PREFIX = "ABKP1:"
-private const val BUILD_PLAN_CODE_VERSION = 6
+private const val BUILD_PLAN_CODE_VERSION = 7
 private const val BUILD_PLAN_MIN_SUPPORTED_VERSION = 2
 private const val BUILD_PLAN_CUSTOM_REF_VERSION = 3
 private const val BUILD_PLAN_ONEPLUS_FIELDS_VERSION = 4
 private const val BUILD_PLAN_KSU_BRANCH_V5_VERSION = 5
 private const val BUILD_PLAN_MODULE_METADATA_VERSION = 6
+private const val BUILD_PLAN_KERNEL_OPTIONS_VERSION = 7
 private const val BUILD_PLAN_NAME_LIMIT = 80
 private const val BUILD_PLAN_MAX_STRING_BYTES = 4096
 private const val BUILD_PLAN_MAX_MODULES = 32
+private const val BUILD_PLAN_MAX_KERNEL_OPTIONS = 256
 private const val OFFICIAL_BUILD_MODULE_CATALOG_ID = "official-abk-module-catalog"
 private const val OFFICIAL_BUILD_MODULE_CATALOG_URL = "https://github.com/xingguangcuican6666/ABK_repo"
 
@@ -4991,6 +5590,7 @@ private val BUILD_PLAN_MODULE_STAGES = listOf(
     CustomExternalModuleStage.AFTER_PATCH,
     CustomExternalModuleStage.BEFORE_BUILD
 )
+private val BUILD_PLAN_KERNEL_OPTION_MODES = CustomKernelOptionMode.options
 
 private const val BUILD_SUMMARY_STEP_NAME = "\u6784\u5efa\u4fe1\u606f\u6458\u8981"
 private const val BUILD_SUMMARY_HEADER = "\u5185\u6838\u6784\u5efa\u914d\u7f6e\u6458\u8981"
@@ -5318,7 +5918,9 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
         "zram_extra_algos" to config.zramExtraAlgos,
         "kpm_password" to config.kpmPassword,
         "virtualization_support" to config.virtualizationSupport,
-        "use_custom_external_modules" to config.useCustomExternalModules.toString(),
+        "custom_kernel_options" to config.customKernelOptions
+            .mapNotNull { it.toWorkflowLine() }
+            .joinToString("\n"),
         "custom_ref" to if (config.kernelsuBranch == KSU_BRANCH_CUSTOM) {
             config.customRef.trim()
         } else {
@@ -5432,7 +6034,7 @@ private const val CANCEL_COMPLETION_POLL_INITIAL_DELAY_MS = 2_000L
 private const val CANCEL_COMPLETION_POLL_INTERVAL_MS = 5_000L
 private const val CANCEL_COMPLETION_POLL_MAX_ATTEMPTS = 24
 
-private fun normalizeMirrorBaseUrl(url: String): String {
+internal fun normalizeMirrorBaseUrl(url: String): String {
     val trimmed = url.trim()
     if (trimmed.isBlank()) return ""
     return if (trimmed.endsWith("/")) trimmed else "$trimmed/"
@@ -5527,6 +6129,11 @@ private data class ThemePreferences(
     val dynamicColorEnabled: Boolean,
     val customThemeColorArgb: Int?,
     val customAccentColorArgb: Int?
+)
+
+private data class SecuritySigningPreferences(
+    val enabled: Boolean,
+    val configured: Boolean,
 )
 
 private data class BackgroundPreferences(

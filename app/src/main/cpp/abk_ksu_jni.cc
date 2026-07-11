@@ -46,6 +46,27 @@ Java_com_abk_kernel_utils_AbkKsuNative_getSuperuserCount(JNIEnv *env, jobject) {
 }
 
 extern "C"
+JNIEXPORT jintArray JNICALL
+Java_com_abk_kernel_utils_AbkKsuNative_getGrantedUids(JNIEnv *env, jobject) {
+    const auto uids = get_allow_list_uids();
+    auto result = env->NewIntArray(static_cast<jsize>(uids.size()));
+    if (result == nullptr) {
+        return nullptr;
+    }
+    if (uids.empty()) {
+        return result;
+    }
+
+    std::vector<jint> java_uids;
+    java_uids.reserve(uids.size());
+    for (const auto uid: uids) {
+        java_uids.push_back(static_cast<jint>(uid));
+    }
+    env->SetIntArrayRegion(result, 0, static_cast<jsize>(java_uids.size()), java_uids.data());
+    return result;
+}
+
+extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_abk_kernel_utils_AbkKsuNative_isSafeMode(JNIEnv *env, jclass clazz) {
     return is_safe_mode();

@@ -8,6 +8,7 @@ import com.abk.kernel.data.repository.GitHubRepository
 import com.abk.kernel.data.repository.PreferencesRepository
 import com.abk.kernel.data.repository.Result
 import com.abk.kernel.utils.LocaleHelper
+import com.abk.kernel.utils.AbkKsuNative
 import com.abk.kernel.utils.RootUtils
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -15,6 +16,7 @@ import java.lang.reflect.Type
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -190,6 +192,150 @@ class RuntimeCoordinator(
         }
     }
 
+    fun openRootGrantProfile(packageName: String) {
+        val cleanPackage = packageName.trim()
+        if (cleanPackage.isBlank() || readState().rootGrantDetailLoading) return
+        val baseApp = readState().rootGrantApps.firstOrNull { it.packageName == cleanPackage } ?: return
+
+        scope.launch {
+            updateState {
+                it.copy(
+                    rootGrantDetailApp = null,
+                    rootGrantDetailLoading = true,
+                    rootGrantDetailWarning = null,
+                    rootGrantError = null
+                )
+            }
+            val rootGranted = readState().rootGranted
+            val result = withContext(Dispatchers.IO) {
+                val access = resolveManagerAccess(rootGranted)
+                if (!access.hasNativeManagerPermission) {
+                    return@withContext Triple(
+                        null as RootGrantApp?,
+                        managerAccessErrorMessage(access, rootGranted),
+                        null as String?
+                    )
+                }
+
+                val recoveryRecord = RootGrantProfileRecoveryRecord(
+                    packageName = cleanPackage,
+                    uid = baseApp.uid,
+                    label = baseApp.label.ifBlank { cleanPackage }
+                )
+                val fallbackProfile = baseApp.profile.copy(
+                    name = cleanPackage,
+                    currentUid = baseApp.uid,
+                )
+                val pendingRecovery = prefs.pendingRootGrantProfileRecovery.first()
+                val blockedPackages = prefs.rootGrantProfileReadBlockedPackages.first()
+                if (pendingRecovery?.packageName == cleanPackage || cleanPackage in blockedPackages) {
+                    return@withContext Triple(
+                        baseApp.copy(
+                            profile = fallbackProfile,
+                            profileLoaded = false
+                        ),
+                        null as String?,
+                        text(R.string.root_auth_profile_read_disabled_message)
+                    )
+                }
+                val loadedProfile = runCatching {
+                    prefs.savePendingRootGrantProfileRecovery(recoveryRecord)
+                    val profile = AbkKsuNative.readProfile(cleanPackage, baseApp.uid)
+                    prefs.clearPendingRootGrantProfileRecovery()
+                    profile
+                }.getOrElse {
+                    runCatching { prefs.clearPendingRootGrantProfileRecovery() }
+                    null
+                }
+                Triple(
+                    baseApp.copy(
+                        profile = (loadedProfile ?: fallbackProfile).copy(
+                            name = cleanPackage,
+                            currentUid = baseApp.uid
+                        ),
+                        profileLoaded = loadedProfile != null
+                    ),
+                    null as String?,
+                    null as String?
+                )
+            }
+            updateState { state ->
+                if (result.first != null) {
+                    state.copy(
+                        rootGrantDetailApp = result.first,
+                        rootGrantDetailLoading = false,
+                        rootGrantDetailWarning = result.third,
+                        rootGrantError = null
+                    )
+                } else {
+                    state.copy(
+                        rootGrantDetailApp = null,
+                        rootGrantDetailLoading = false,
+                        rootGrantDetailWarning = null,
+                        rootGrantError = result.second ?: text(R.string.runtime_manager_inactive)
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearRootGrantDetail() {
+        updateState {
+            it.copy(
+                rootGrantDetailApp = null,
+                rootGrantDetailLoading = false,
+                rootGrantDetailWarning = null
+            )
+        }
+    }
+
+    fun handlePendingRootGrantProfileRecovery() {
+        scope.launch {
+            val record = prefs.pendingRootGrantProfileRecovery.first() ?: return@launch
+            val rootGranted = readState().rootGranted
+            val outcome = withContext(Dispatchers.IO) {
+                prefs.addRootGrantProfileReadBlockedPackage(record.packageName)
+                val access = resolveManagerAccess(rootGranted)
+                if (!access.hasNativeManagerPermission) {
+                    return@withContext false
+                }
+                val reset = RootUtils.setRootGrantProfile(
+                    RootGrantProfile(
+                        name = record.packageName,
+                        currentUid = record.uid
+                    )
+                )
+                if (reset) {
+                    prefs.clearPendingRootGrantProfileRecovery()
+                }
+                reset
+            }
+            val label = record.label.ifBlank { record.packageName }
+            updateState {
+                it.copy(
+                    rootGrantRecoveryNotice = RootGrantRecoveryNotice(
+                        title = text(R.string.root_auth_recovery_title),
+                        message = text(
+                            if (outcome) {
+                                R.string.root_auth_recovery_reset_message
+                            } else {
+                                R.string.root_auth_recovery_reset_failed_message
+                            },
+                            label
+                        )
+                    )
+                )
+            }
+            if (outcome && readState().rootGrantApps.isNotEmpty()) {
+                refreshRootGrantApps(force = true)
+            }
+        }
+    }
+
+    fun dismissRootGrantRecoveryNotice() {
+        updateState { it.copy(rootGrantRecoveryNotice = null) }
+    }
+
     fun setRootGrantAllowed(packageName: String, allowed: Boolean) {
         val app = readState().rootGrantApps.firstOrNull { it.packageName == packageName } ?: return
         val updatedProfile = app.profile.copy(
@@ -221,12 +367,30 @@ class RuntimeCoordinator(
             }
             updateState { state ->
                 if (result.first) {
+                    val savedProfile = profile.copy(name = cleanPackage)
                     state.copy(
                         rootGrantSavingPackage = null,
                         rootGrantError = null,
                         rootGrantApps = state.rootGrantApps.map { app ->
                             if (app.packageName == cleanPackage) {
-                                app.copy(profile = profile.copy(name = cleanPackage))
+                                app.copy(
+                                    profile = app.profile.copy(
+                                        name = cleanPackage,
+                                        currentUid = app.uid,
+                                        allowSu = savedProfile.allowSu
+                                    ),
+                                    profileLoaded = false
+                                )
+                            } else {
+                                app
+                            }
+                        },
+                        rootGrantDetailApp = state.rootGrantDetailApp?.let { app ->
+                            if (app.packageName == cleanPackage) {
+                                app.copy(
+                                    profile = savedProfile,
+                                    profileLoaded = true
+                                )
                             } else {
                                 app
                             }

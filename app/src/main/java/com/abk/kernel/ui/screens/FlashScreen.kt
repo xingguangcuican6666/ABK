@@ -189,6 +189,7 @@ import com.abk.kernel.utils.FlashFilterWorkflowState
 import com.abk.kernel.utils.FlashWorkflowFilter
 import com.abk.kernel.utils.WorkflowPrimary
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
 import com.abk.kernel.ui.components.ObserveChildPageVisibility
 import com.abk.kernel.ui.components.childPageOverlayEnterTransition
 import com.abk.kernel.ui.components.childPageOverlayExitTransition
@@ -224,7 +225,7 @@ import kotlinx.coroutines.withContext
 fun FlashScreen(
     vm: MainViewModel,
     outerPadding: PaddingValues = PaddingValues(0.dp),
-    onDetailPageVisibleChange: (Boolean) -> Unit = {}
+    onDetailPageVisibleChange: (Boolean) -> Unit = {},
 ) {
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
@@ -245,7 +246,7 @@ fun FlashScreen(
     var prebuiltParameterTarget by remember { mutableStateOf<PrebuiltGkiRelease?>(null) }
     var deleteRemoteWorkflowRun by remember { mutableStateOf(false) }
     var showFlashConfirm by remember { mutableStateOf(false) }
-    var showUnverifiedFlashConfirm by remember { mutableStateOf(false) }
+    var flashSecurityPrompt by remember { mutableStateOf<DownloadUtils.FlashSecurityPrompt?>(null) }
     var allowLegacyBundleFallback by remember { mutableStateOf(false) }
     var showInstallManagerConfirm by remember { mutableStateOf(false) }
     var cancelConfirmRunId by remember { mutableStateOf<Long?>(null) }
@@ -627,7 +628,8 @@ fun FlashScreen(
         val prepared = DownloadUtils.prepareDownloadedArtifact(
             context = context,
             artifact = item,
-            allowHighRiskFallback = allowHighRiskFallback
+            allowHighRiskFallback = allowHighRiskFallback,
+            signingVerificationEnabled = state.artifactSigningVerificationEnabled
         )
         try {
             if (prepared.cleanupDir != null) {
@@ -797,11 +799,12 @@ fun FlashScreen(
     fun requestFlash(item: DownloadedArtifact) {
         selectedItem = item
         allowLegacyBundleFallback = false
-        if ((item.type == ArtifactType.KERNEL_PACKAGE || item.type == ArtifactType.KERNEL_IMG || item.type == ArtifactType.ANYKERNEL3) && !item.verified) {
-            showUnverifiedFlashConfirm = true
-        } else {
-            showFlashConfirm = true
-        }
+        flashSecurityPrompt = DownloadUtils.precheckFlashSecurity(
+            context = context,
+            artifact = item,
+            signingVerificationEnabled = state.artifactSigningVerificationEnabled,
+        )
+        if (flashSecurityPrompt == null) showFlashConfirm = true
     }
 
     if (showFlashConfirm) {
@@ -871,32 +874,29 @@ fun FlashScreen(
         }
     }
 
-    if (showUnverifiedFlashConfirm) {
+    flashSecurityPrompt?.let { prompt ->
         val item = selectedItem
         if (item != null) {
             AlertDialog(
-                onDismissRequest = { showUnverifiedFlashConfirm = false },
+                onDismissRequest = { flashSecurityPrompt = null },
                 icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
                 title = { Text(stringResource(R.string.flash_confirm)) },
                 text = {
-                    Text(
-                        item.verificationSummary
-                            ?: context.getString(R.string.flash_bundle_unverified_requires_confirmation)
-                    )
+                    Text(prompt.message)
                 },
                 confirmButton = {
-                    Button(
-                        onClick = {
-                            showUnverifiedFlashConfirm = false
-                            allowLegacyBundleFallback = true
-                            showFlashConfirm = true
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) { Text(stringResource(R.string.flash_confirm)) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showUnverifiedFlashConfirm = false }) {
-                        Text(stringResource(R.string.cancel))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { flashSecurityPrompt = null }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                        Button(
+                            onClick = {
+                                flashSecurityPrompt = null
+                                allowLegacyBundleFallback = true
+                                showFlashConfirm = true
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) { Text(stringResource(R.string.flash_confirm)) }
                     }
                 }
             )
@@ -1111,6 +1111,15 @@ fun FlashScreen(
 
     @Composable
     fun FlashListContent(listScrollState: LazyListState) {
+        val workflowRefreshPresentation = rememberAbkInteractiveRefreshPresentation(
+            loading = state.isRefreshingRecentRuns
+        )
+        val showWorkflowRefreshLoading = workflowRefreshPresentation.showLoading
+        val prebuiltReleaseRefreshPresentation = rememberAbkInteractiveRefreshPresentation(
+            loading = state.isLoadingPrebuiltGkiReleases
+        )
+        val showPrebuiltReleaseRefreshLoading =
+            prebuiltReleaseRefreshPresentation.showLoading && state.prebuiltGkiReleases.isNotEmpty()
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
@@ -1157,7 +1166,10 @@ fun FlashScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 OutlinedButton(
-                                    onClick = { vm.loadRecentRuns() },
+                                    onClick = {
+                                        workflowRefreshPresentation.beginRefresh()
+                                        vm.loadRecentRuns()
+                                    },
                                     modifier = Modifier.weight(1f),
                                     enabled = !state.isRefreshingRecentRuns
                                 ) {
@@ -1190,6 +1202,11 @@ fun FlashScreen(
                         }
 
                         when {
+                            showWorkflowRefreshLoading -> {
+                                item {
+                                    LoadingRow(stringResource(R.string.flash_refreshing_artifacts))
+                                }
+                            }
                             visibleWorkflowGroups.isNotEmpty() -> {
                                 items(visibleWorkflowGroups, key = { "workflow-${it.runId}" }) { group ->
                                     val run = recentRunById[group.runId]
@@ -1291,12 +1308,15 @@ fun FlashScreen(
                                 PrebuiltReleaseListHeader(
                                     releaseCount = state.prebuiltGkiReleases.size,
                                     isLoading = state.isLoadingPrebuiltGkiReleases,
-                                    onRefresh = { vm.loadPrebuiltGkiReleases(force = true) }
+                                    onRefresh = {
+                                        prebuiltReleaseRefreshPresentation.beginRefresh()
+                                        vm.loadPrebuiltGkiReleases(force = true)
+                                    }
                                 )
                             }
 
                             when {
-                                state.isLoadingPrebuiltGkiReleases -> {
+                                showPrebuiltReleaseRefreshLoading || state.isLoadingPrebuiltGkiReleases -> {
                                     item {
                                         LoadingRow(stringResource(R.string.flash_loading_release))
                                     }
@@ -1640,6 +1660,11 @@ fun FlashScreen(
                 }.orEmpty()
                 val selectedPrebuiltAssetsLoading = release?.id
                     ?.let { it in state.loadingPrebuiltGkiAssetReleaseIds } == true
+                val prebuiltAssetRefreshPresentation = rememberAbkInteractiveRefreshPresentation(
+                    loading = selectedPrebuiltAssetsLoading
+                )
+                val showPrebuiltAssetRefreshLoading =
+                    prebuiltAssetRefreshPresentation.showLoading && selectedPrebuiltAssets.isNotEmpty()
                 var prebuiltFilter by remember(release?.id) {
                     mutableStateOf(defaultPrebuiltFilter())
                 }
@@ -1687,7 +1712,10 @@ fun FlashScreen(
                                     visibleCount = filteredPrebuiltAssets.size,
                                     onBack = dismiss,
                                     onShowParameters = { prebuiltParameterTarget = release },
-                                    onRefresh = { vm.loadPrebuiltGkiAssets(release, force = true) }
+                                    onRefresh = {
+                                        prebuiltAssetRefreshPresentation.beginRefresh()
+                                        vm.loadPrebuiltGkiAssets(release, force = true)
+                                    }
                                 )
                             }
 
@@ -1699,7 +1727,7 @@ fun FlashScreen(
                             }
 
                             when {
-                                selectedPrebuiltAssetsLoading -> {
+                                showPrebuiltAssetRefreshLoading || selectedPrebuiltAssetsLoading -> {
                                     item {
                                         LoadingRow(stringResource(R.string.flash_loading_prebuilt, release.name))
                                     }

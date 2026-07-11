@@ -103,11 +103,11 @@ on:
         default: ""
 
       # ==================== 自定义外部模块 ====================
-      use_custom_external_modules:
-        required: false
-        type: boolean
-        default: false
       custom_external_modules:
+        required: false
+        type: string
+        default: ""
+      custom_kernel_options:
         required: false
         type: string
         default: ""
@@ -210,7 +210,8 @@ jobs:
           echo "KPM 密码      : ${{ inputs.kpm_password && '已自定义' || '默认' }}"
           echo "Re-Kernel     : ${{ inputs.use_rekernel }}"
           echo "虚拟化支持   : ${{ inputs.virtualization_support }}"
-          echo "自定义注入    : ${{ inputs.use_custom_external_modules }}"
+          echo "自定义注入    : ${{ inputs.custom_external_modules != '' }}"
+          echo "内核选项覆盖  : ${{ inputs.custom_kernel_options != '' }}"
           echo "Stock Config  : 自动检测 config/stock_defconfig"
           echo "========================================"
 
@@ -654,7 +655,7 @@ jobs:
           git clone https://github.com/Numbersf/Action-Build.git --depth=1
 
       - name: 克隆自定义外部模块
-        if: inputs.use_custom_external_modules
+        if: inputs.custom_external_modules != ''
         env:
           CUSTOM_EXTERNAL_MODULES: ${{ inputs.custom_external_modules }}
         run: |
@@ -783,7 +784,7 @@ jobs:
           fi
 
       - name: 生成刷写外层 Magisk 依赖清单
-        if: inputs.use_custom_external_modules
+        if: inputs.custom_external_modules != ''
         env:
           ABK_FLASH_DEPENDENCY_MANIFEST: ${{ github.workspace }}/ABK_FLASH_DEPENDENCIES.json
         run: |
@@ -2455,7 +2456,6 @@ jobs:
           enable_required_config CONFIG_IPC_NS
           enable_required_config CONFIG_PID_NS
           enable_required_config CONFIG_DEVTMPFS
-          enable_required_config CONFIG_USER_NS
 
           # 可选: 网络相关配置 (Docker/NAT 模式)
           enable_config_if_defined CONFIG_NETFILTER_XT_MATCH_ADDRTYPE
@@ -2864,37 +2864,38 @@ jobs:
         if: inputs.use_rekernel
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
-          set -e
+          set -euo pipefail
           echo "Integrating Re-Kernel..."
           TMP_REKERNEL=/tmp/rekernel
           rm -rf "$TMP_REKERNEL"
           git clone --depth 1 https://github.com/Sakion-Team/Re-Kernel.git "$TMP_REKERNEL"
 
-          # 准备驱动源码
+          REKERNEL_SRC="$TMP_REKERNEL/LKM-Source"
+          if [ ! -d "$REKERNEL_SRC" ]; then
+            echo "::error::Re-Kernel upstream 缺少 LKM-Source 目录"
+            exit 1
+          fi
+
+          test -f "$REKERNEL_SRC/Makefile"
+          test -f "$REKERNEL_SRC/Kconfig"
+          test -f "$REKERNEL_SRC/rekernel_main.c"
+          test -f "$REKERNEL_SRC/rekernel.h"
+
+          # 准备驱动源码（上游已改为多文件结构）
+          rm -rf common/drivers/rekernel
           mkdir -p common/drivers/rekernel
-          cp "$TMP_REKERNEL/LKM-Source/rekernel.c" common/drivers/rekernel/
-          cp "$TMP_REKERNEL/LKM-Source/rekernel.h" common/drivers/rekernel/
+          cp "$REKERNEL_SRC"/*.c common/drivers/rekernel/
+          cp "$REKERNEL_SRC"/*.h common/drivers/rekernel/
+          cp "$REKERNEL_SRC/Makefile" common/drivers/rekernel/
+          cp "$REKERNEL_SRC/Kconfig" common/drivers/rekernel/
 
-          # 生成构建配置
-          cat > common/drivers/rekernel/Kconfig << 'EOF'
-          menu "Re:Kernel"
-          config REKERNEL
-              bool "Re:Kernel support (GKI Vendor Hooks)"
-              default y
-              help
-                Enable Re-Kernel support via GKI Vendor Hooks.
+          # 适配上游 LKM Makefile 到 in-tree 构建
+          sed -i 's/^obj-m[[:space:]]*:=/obj-$(CONFIG_REKERNEL) +=/' common/drivers/rekernel/Makefile
 
-          config REKERNEL_NETWORK
-              bool "Re:Kernel NetReceive unfreeze support"
-              depends on REKERNEL
-              default n
-          endmenu
-          EOF
-
-          cat > common/drivers/rekernel/Makefile << 'EOF'
-          obj-$(CONFIG_REKERNEL) += rekernel.o
-          ccflags-$(CONFIG_REKERNEL_NETWORK) += -DNETWORK_FILTER
-          EOF
+          # 适配上游 Kconfig 到 ABK 当前的 in-tree 默认启用方式
+          sed -i '/depends on MODULES/d' common/drivers/rekernel/Kconfig
+          sed -i '0,/bool "Re:Kernel module"/s//bool "Re:Kernel support (GKI Vendor Hooks)"/' common/drivers/rekernel/Kconfig
+          sed -i '0,/default n/s//\tdefault y/' common/drivers/rekernel/Kconfig
 
           # 挂载到驱动树
           if ! grep -qF 'source "drivers/rekernel/Kconfig"' common/drivers/Kconfig; then
@@ -2904,24 +2905,19 @@ jobs:
             echo 'obj-$(CONFIG_REKERNEL) += rekernel/' >> common/drivers/Makefile
           fi
 
-          # 启用内核版本宏
-          REKERNEL_H="common/drivers/rekernel/rekernel.h"
-          VERSION_MACRO="KERNEL_$(echo "${{ inputs.kernel_version }}" | tr '.' '_')"
-          if grep -q "^// #define ${VERSION_MACRO}$" "$REKERNEL_H"; then
-            sed -i "s|^// #define ${VERSION_MACRO}$|#define ${VERSION_MACRO}|" "$REKERNEL_H"
-          fi
-
           # 修正头文件包含路径（适配 in-tree 编译）
-          sed -i 's|#include <../android/binder_internal.h>|#include "../../drivers/android/binder_internal.h"|g' common/drivers/rekernel/rekernel.c
-          # 补齐 binder_internal 依赖（避免 5.10 下 DEFINE_SHOW_ATTRIBUTE 报错）
-          grep -qF '#include <linux/seq_file.h>' common/drivers/rekernel/rekernel.c || sed -i '/#include <trace\/hooks\/signal.h>/a #include <linux/seq_file.h>' common/drivers/rekernel/rekernel.c
+          if [ -f common/drivers/rekernel/rekernel_binder.c ]; then
+            sed -i 's|#include <../android/binder_internal.h>|#include "../../drivers/android/binder_internal.h"|g' common/drivers/rekernel/rekernel_binder.c
+            grep -qF '#include <linux/seq_file.h>' common/drivers/rekernel/rekernel_binder.c || \
+              sed -i '/#include <trace\/hooks\/binder.h>/a #include <linux/seq_file.h>' common/drivers/rekernel/rekernel_binder.c
+          fi
 
           # 配置 defconfig（幂等）
           grep -q '^CONFIG_REKERNEL=y$' "$DEFCONFIG" || echo "CONFIG_REKERNEL=y" >> "$DEFCONFIG"
           grep -q '^CONFIG_REKERNEL_NETWORK=y$' "$DEFCONFIG" || echo "CONFIG_REKERNEL_NETWORK=y" >> "$DEFCONFIG"
 
       - name: 执行自定义外部模块 (after_patch)
-        if: inputs.use_custom_external_modules
+        if: inputs.custom_external_modules != ''
         env:
           CUSTOM_EXTERNAL_MODULE_STAGE: after_patch
           ABK_BUILD_ANDROID_VERSION: ${{ inputs.android_version }}
@@ -3185,7 +3181,7 @@ jobs:
           fi
 
       - name: 执行自定义外部模块 (before_build)
-        if: inputs.use_custom_external_modules
+        if: inputs.custom_external_modules != ''
         env:
           CUSTOM_EXTERNAL_MODULE_STAGE: before_build
           ABK_BUILD_ANDROID_VERSION: ${{ inputs.android_version }}
@@ -3245,6 +3241,126 @@ jobs:
           if [ "$executed" -eq 0 ]; then
             echo "没有配置 $CUSTOM_EXTERNAL_MODULE_STAGE 阶段的自定义外部模块。"
           fi
+
+      - name: 应用自定义内核选项
+        if: inputs.custom_kernel_options != ''
+        working-directory: ${{ env.KERNEL_ROOT }}
+        env:
+          CUSTOM_KERNEL_OPTIONS: ${{ inputs.custom_kernel_options }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          defconfig = Path(os.environ["DEFCONFIG"])
+          text = defconfig.read_text()
+          lines = os.environ["CUSTOM_KERNEL_OPTIONS"].replace("\r", "").splitlines()
+
+          parsed = []
+          disabled_re = re.compile(r"^#\s*(CONFIG_[A-Za-z0-9_]+)\s+is\s+not\s+set$", re.I)
+          assigned_re = re.compile(r"^(CONFIG_[A-Za-z0-9_]+)=(.+)$")
+
+          def normalize_symbol(raw: str) -> str:
+              candidate = raw.strip().replace(" ", "")
+              if not candidate:
+                  return ""
+              if not candidate.upper().startswith("CONFIG_"):
+                  candidate = f"CONFIG_{candidate}"
+              candidate = candidate.upper()
+              if not re.fullmatch(r"CONFIG_[A-Z0-9_]+", candidate):
+                  return ""
+              return candidate
+
+          def config_defined(symbol: str) -> bool:
+              name = symbol.removeprefix("CONFIG_")
+              result = subprocess.run(
+                  [
+                      "bash",
+                      "-lc",
+                      "find . -type f -name 'Kconfig*' -print0 | xargs -0 grep -El \"^[[:space:]]*(menuconfig|config)[[:space:]]+" + name + "([[:space:]]|$)\" >/dev/null"
+                  ],
+                  cwd=os.getcwd(),
+              )
+              return result.returncode == 0
+
+          def set_config_value(symbol: str, mode: str, value: str = ""):
+              clean = symbol.removeprefix("CONFIG_")
+              filtered = []
+              for line in text_lines:
+                  if re.match(rf"^(CONFIG_{re.escape(clean)}=|# CONFIG_{re.escape(clean)} is not set$)", line):
+                      continue
+                  filtered.append(line)
+              if mode == "disabled":
+                  filtered.append(f"# CONFIG_{clean} is not set")
+              elif mode == "raw":
+                  filtered.append(f"CONFIG_{clean}={value}")
+              else:
+                  filtered.append(f"CONFIG_{clean}={mode}")
+              return filtered
+
+          for raw in lines:
+              clean = raw.strip()
+              if not clean:
+                  continue
+              if clean.startswith("#") and not clean.startswith("# CONFIG_"):
+                  continue
+              disabled = disabled_re.match(clean)
+              assigned = assigned_re.match(clean)
+              if disabled:
+                  symbol = normalize_symbol(disabled.group(1))
+                  if symbol:
+                      parsed.append((symbol, "disabled", ""))
+                  continue
+              if assigned:
+                  symbol = normalize_symbol(assigned.group(1))
+                  value = assigned.group(2).strip()
+                  if not symbol:
+                      print(f"::warning::无效自定义内核选项，已跳过: {clean}")
+                      continue
+                  if value.lower() == "y":
+                      parsed.append((symbol, "y", ""))
+                  elif value.lower() == "m":
+                      parsed.append((symbol, "m", ""))
+                  elif value.lower() == "n":
+                      parsed.append((symbol, "disabled", ""))
+                  else:
+                      parsed.append((symbol, "raw", value))
+                  continue
+              print(f"::warning::无法识别的自定义内核选项行，已跳过: {clean}")
+
+          deduped = []
+          seen = set()
+          for symbol, mode, value in reversed(parsed):
+              if symbol in seen:
+                  continue
+              seen.add(symbol)
+              deduped.append((symbol, mode, value))
+          deduped.reverse()
+
+          text_lines = text.splitlines()
+          applied = 0
+          skipped = 0
+          for symbol, mode, value in deduped:
+              if not config_defined(symbol):
+                  print(f"::warning::{symbol} 未在 Kconfig 中定义，已跳过")
+                  skipped += 1
+                  continue
+              text_lines = set_config_value(symbol, mode, value)
+              applied += 1
+              if mode == "raw":
+                  print(f"Applied custom kernel option: {symbol}={value}")
+              elif mode == "disabled":
+                  print(f"Applied custom kernel option: # {symbol} is not set")
+              else:
+                  print(f"Applied custom kernel option: {symbol}={mode}")
+
+          defconfig.write_text("\n".join(text_lines) + "\n")
+          print(f"自定义内核选项: 应用 {applied} 条，跳过 {skipped} 条")
+          PY
 
       - name: 修复 Official SUSFS 源码兼容
         if: inputs.ksu_variant == 'Official' && inputs.enable_susfs
@@ -4114,7 +4230,8 @@ jobs:
               )
               if not region_pattern.search(text):
                   raise SystemExit(f"{path} 缺少 Official sucompat execveat 兼容替换锚点")
-              text = region_pattern.sub(replacement, text, count=1)
+              # Keep C escape sequences literal; re.sub() would reinterpret \n in the replacement text.
+              text = region_pattern.sub(lambda _match: replacement, text, count=1)
 
               if text != original:
                   path.write_text(text)
@@ -5043,7 +5160,7 @@ jobs:
           PY
 
       - name: 校验 ABK 管理器桥接
-        if: inputs.use_custom_external_modules && inputs.ksu_variant != 'None'
+        if: inputs.custom_external_modules != '' && inputs.ksu_variant != 'None'
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail

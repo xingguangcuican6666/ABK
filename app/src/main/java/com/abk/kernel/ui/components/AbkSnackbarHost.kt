@@ -1,13 +1,11 @@
 package com.abk.kernel.ui.components
 
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -56,25 +54,19 @@ fun AbkSnackbarHost(
     hostState: SnackbarHostState,
     modifier: Modifier = Modifier
 ) {
+    val colors = MaterialTheme.colorScheme
     SnackbarHost(
         hostState = hostState,
-        modifier = modifier.padding(horizontal = 20.dp),
+        modifier = modifier.padding(horizontal = 16.dp),
         snackbar = { data ->
             Snackbar(
+                snackbarData = data,
                 modifier = Modifier.padding(vertical = 4.dp),
-                shape = RoundedCornerShape(14.dp),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                actionContentColor = MaterialTheme.colorScheme.primary,
-                dismissActionContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            ) {
-                Text(
-                    text = data.visuals.message,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                )
-            }
+                containerColor = colors.surfaceContainerHigh,
+                contentColor = colors.onSurface,
+                actionContentColor = colors.primary,
+                dismissActionContentColor = colors.onSurfaceVariant,
+            )
         }
     )
 }

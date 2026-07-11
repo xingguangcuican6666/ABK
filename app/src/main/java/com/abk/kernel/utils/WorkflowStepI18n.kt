@@ -14,6 +14,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -120,7 +121,7 @@ object WorkflowStepI18n {
     private fun languagesToFetch(lang: String): List<String> =
         if (lang == FALLBACK_LANG) listOf(lang) else listOf(lang, FALLBACK_LANG)
 
-    private fun fetchRemoteBundle(context: FetchContext, lang: String): WorkflowStepI18nBundle? {
+    suspend fun fetchRemoteBundle(context: FetchContext, lang: String): WorkflowStepI18nBundle? {
         val urls = buildRemoteUrls(context, lang)
         for (url in urls) {
             val body = httpGet(url) ?: continue
@@ -154,14 +155,15 @@ object WorkflowStepI18n {
     private fun rawGitUrl(owner: String, repo: String, branch: String, path: String): String =
         "https://raw.githubusercontent.com/$owner/$repo/$branch/$path"
 
-    private fun httpGet(url: String): String? {
-        return try {
+    suspend fun httpGet(url: String): String? = withContext(Dispatchers.IO) {
+        try {
             val request = Request.Builder().url(url).header("Accept", "application/json").build()
             httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
+                if (!response.isSuccessful) return@withContext null
                 response.body?.string()
-            }
-        } catch (_: Exception) {
+            } 
+        }    
+        catch (_: Exception) {
             null
         }
     }

@@ -629,6 +629,11 @@
     <string name="settings_enter_color_appearance">Open color and appearance</string>
     <string name="settings_about_desc">Repository entry points, version information, and contributors</string>
     <string name="settings_enter_about">Open about</string>
+    <string name="settings_export_diagnostics">Export diagnostics bundle</string>
+    <string name="settings_export_diagnostics_desc">Package current-startup ABK logs, kernel logs, module state, and module logs into a zip and share it</string>
+    <string name="settings_export_diagnostics_share">Share diagnostics bundle</string>
+    <string name="settings_export_diagnostics_partial">The diagnostics bundle was created, but %1$d items could not be collected</string>
+    <string name="settings_export_diagnostics_failed">Diagnostics export failed: %1$s</string>
     <string name="settings_open_source_licenses">Open source licenses</string>
     <string name="settings_open_source_licenses_desc">Licenses for repository references, embedded source, and dependencies</string>
     <string name="settings_enter_open_source_licenses">Open open source licenses</string>
@@ -872,6 +877,12 @@
     <string name="root_auth_use_default_non_root">Use default non-root profile</string>
     <string name="root_auth_building_list">Building authorization list</string>
     <string name="root_auth_refreshing_list">Refreshing authorization list</string>
+    <string name="root_auth_loading_profile">Loading app profile</string>
+    <string name="root_auth_recovery_title">Superuser profile reset</string>
+    <string name="root_auth_recovery_reset_message">ABK detected that reading the superuser profile for “%1$s” crashed the app last time, so its profile has been reset to safe defaults.</string>
+    <string name="root_auth_recovery_reset_failed_message">ABK detected that reading the superuser profile for “%1$s” crashed the app last time, but it could not reset that profile automatically on this launch. Check manager access and try again.</string>
+    <string name="root_auth_profile_read_disabled_title">Native profile read disabled</string>
+    <string name="root_auth_profile_read_disabled_message">Reading this app’s native profile previously crashed ABK. This page is using safe defaults and will not try that native read again.</string>
     <string name="save">Save</string>
 
     <!-- Module repository -->

@@ -725,14 +725,13 @@ object RootUtils {
         if (!isNativeManagerActive()) return emptyList()
         val packageManager = context.packageManager
         val apps = installedApplications(packageManager)
+        val grantedUids = AbkKsuNative.grantedUids()
         return apps
             .asSequence()
             .filter { it.packageName.isNotBlank() }
             .mapNotNull { appInfo ->
                 val packageName = appInfo.packageName ?: return@mapNotNull null
                 val uid = appInfo.uid
-                val profile = AbkKsuNative.readProfile(packageName, uid)
-                    ?: RootGrantProfile(name = packageName, currentUid = uid)
                 RootGrantApp(
                     packageName = packageName,
                     label = runCatching {
@@ -741,7 +740,7 @@ object RootUtils {
                     uid = uid,
                     userName = AbkKsuNative.userName(uid),
                     isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
-                    profile = profile
+                    profile = buildRootGrantListProfile(packageName, uid, grantedUids)
                 )
             }
             .distinctBy { "${it.uid}:${it.packageName}" }
@@ -760,6 +759,16 @@ object RootUtils {
         }
         return AbkKsuNative.writeProfile(profile)
     }
+
+    internal fun buildRootGrantListProfile(
+        packageName: String,
+        uid: Int,
+        grantedUids: Set<Int>
+    ): RootGrantProfile = RootGrantProfile(
+        name = packageName,
+        currentUid = uid,
+        allowSu = uid in grantedUids
+    )
 
     fun readKsuFeature(featureName: String): KsuFeatureState {
         val feature = normalizeKsuFeatureName(featureName)

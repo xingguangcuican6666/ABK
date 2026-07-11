@@ -113,13 +113,13 @@ on:
           - "123"
           - "345"
         default: "off"
-      use_custom_external_modules:
-        description: "启用自定义外部模块注入"
-        required: false
-        type: boolean
-        default: false
       custom_external_modules:
         description: "自定义外部模块（兼容旧 repo;stage，也支持 module:repo;stage 与 set:repo#child;stage，用 | 分隔）"
+        required: false
+        type: string
+        default: ""
+      custom_kernel_options:
+        description: "自定义内核选项（每行一条 Kconfig/defconfig 片段）"
         required: false
         type: string
         default: ""
@@ -205,11 +205,11 @@ on:
         required: false
         type: string
         default: "off"
-      use_custom_external_modules:
-        required: false
-        type: boolean
-        default: false
       custom_external_modules:
+        required: false
+        type: string
+        default: ""
+      custom_kernel_options:
         required: false
         type: string
         default: ""
@@ -256,7 +256,6 @@ jobs:
           MATRIX_KPM_PASSWORD: ${{ inputs.kpm_password || '' }}
           MATRIX_USE_REKERNEL: ${{ inputs.use_rekernel }}
           MATRIX_SUPP_OP: ${{ inputs.supp_op }}
-          MATRIX_USE_CUSTOM_EXTERNAL_MODULES: ${{ inputs.use_custom_external_modules }}
           MATRIX_CUSTOM_EXTERNAL_MODULES: ${{ inputs.custom_external_modules || '' }}
           MATRIX_UPLOAD_AUX_ARTIFACTS: ${{ inputs.upload_aux_artifacts }}
         run: |
@@ -355,7 +354,7 @@ jobs:
               summary.write(f"- KPM 密码: {'已自定义' if os.environ.get('MATRIX_EFFECTIVE_KPM_PASSWORD', '') else '默认'}\n")
               summary.write(f"- Re-Kernel: {env_enabled('MATRIX_USE_REKERNEL')}\n")
               summary.write(f"- 一加 8E: {env_enabled('MATRIX_SUPP_OP')}\n")
-              summary.write(f"- 自定义外部模块: {env_enabled('MATRIX_USE_CUSTOM_EXTERNAL_MODULES')}\n")
+              summary.write(f"- 自定义外部模块: {'true' if os.environ.get('MATRIX_CUSTOM_EXTERNAL_MODULES', '').strip() else 'false'}\n")
               summary.write(f"- 自定义外部模块参数: {env_value('MATRIX_CUSTOM_EXTERNAL_MODULES')}\n")
               summary.write(f"- 上传辅助产物: {env_enabled('MATRIX_UPLOAD_AUX_ARTIFACTS')}\n")
               summary.write("- Android16/6.12: ZRAM off\n")
@@ -399,8 +398,8 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
-      use_custom_external_modules: ${{ inputs.use_custom_external_modules }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
+      custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       upload_aux_artifacts: ${{ inputs.upload_aux_artifacts }}
 
   trigger-full-feature-release:
@@ -431,8 +430,8 @@ jobs:
       USE_KPM: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
       USE_REKERNEL: ${{ inputs.use_rekernel }}
       SUPP_OP: ${{ inputs.supp_op }}
-      USE_CUSTOM_EXTERNAL_MODULES: ${{ inputs.use_custom_external_modules }}
       CUSTOM_EXTERNAL_MODULES: ${{ inputs.custom_external_modules || '' }}
+      CUSTOM_KERNEL_OPTIONS: ${{ inputs.custom_kernel_options || '' }}
       USE_NTSYNC: ${{ inputs.use_ntsync }}
       USE_NETWORKING: ${{ inputs.use_networking }}
       VIRTUALIZATION_SUPPORT: ${{ inputs.virtualization_support }}
@@ -473,6 +472,12 @@ jobs:
             custom_modules_label="无"
           fi
 
+          if [ -n "$CUSTOM_KERNEL_OPTIONS" ]; then
+            custom_kernel_options_label="已设置"
+          else
+            custom_kernel_options_label="无"
+          fi
+
           if [ "$VIRTUALIZATION_SUPPORT" = "off" ]; then
             virtualization_support_label="off"
           else
@@ -496,8 +501,8 @@ jobs:
               --arg kpm_password "$kpm_password_label" \
               --arg use_rekernel "$USE_REKERNEL" \
               --arg supp_op "$SUPP_OP" \
-              --arg use_custom_external_modules "$USE_CUSTOM_EXTERNAL_MODULES" \
               --arg custom_external_modules "$custom_modules_label" \
+              --arg custom_kernel_options "$custom_kernel_options_label" \
               --arg use_ntsync "$USE_NTSYNC" \
               --arg use_networking "$USE_NETWORKING" \
               --arg virtualization_support "$virtualization_support_label" \
@@ -518,8 +523,8 @@ jobs:
                 kpm_password: $kpm_password,
                 use_rekernel: $use_rekernel,
                 supp_op: $supp_op,
-                use_custom_external_modules: $use_custom_external_modules,
                 custom_external_modules: $custom_external_modules,
+                custom_kernel_options: $custom_kernel_options,
                 use_ntsync: $use_ntsync,
                 use_networking: $use_networking,
                 virtualization_support: $virtualization_support,
@@ -555,7 +560,11 @@ jobs:
             echo "- KPM: ${USE_KPM}"
             echo "- Re-Kernel: ${USE_REKERNEL}"
             echo "- 一加 8E: ${SUPP_OP}"
-            echo "- 自定义注入: ${USE_CUSTOM_EXTERNAL_MODULES}"
+            if [ -n "$CUSTOM_EXTERNAL_MODULES" ]; then
+              echo "- 自定义注入: true"
+            else
+              echo "- 自定义注入: false"
+            fi
             echo "- 自定义注入参数列表: ${custom_modules_label}"
             echo "- 上传辅助产物: ${UPLOAD_AUX_ARTIFACTS}"
           } >> "$GITHUB_STEP_SUMMARY"

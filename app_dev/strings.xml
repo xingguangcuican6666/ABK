@@ -120,6 +120,9 @@
     <string name="build_failed">构建失败</string>
     <string name="build_queued">构建已排队</string>
     <string name="build_confirm_submit">确认提交构建</string>
+    <string name="build_submitted_title">构建已提交</string>
+    <string name="build_submitted_desc">构建已成功提交，可前往「当前状态」页查看进度。</string>
+    <string name="build_submitted_ok">确定</string>
     <string name="build_config_overview">构建配置概览：</string>
     <string name="build_kernel_line">Android %1$s · 内核 %2$s.%3$s</string>
     <string name="build_patch_level_line">补丁级别: %1$s</string>
@@ -130,7 +133,9 @@
     <string name="build_sync_network_line">NTsync: %1$s · 网络增强: %2$s</string>
     <string name="build_virtualization_line">虚拟化支持: %1$s</string>
     <string name="build_external_modules_line">外部模块: %1$s</string>
+    <string name="build_kernel_options_line">内核选项: %1$s</string>
     <string name="build_external_modules_count">%1$d 个</string>
+    <string name="build_kernel_options_count">%1$d 条</string>
     <string name="build_oneplus_device_line">OnePlus 机型: %1$s</string>
     <string name="build_oneplus_kernel_line">OnePlus KMI: %1$s · 内核 %2$s</string>
     <string name="build_oneplus_feature_line">SUSFS: %1$s · lz4kd: %2$s · KPM: %3$s</string>
@@ -187,6 +192,30 @@
     <string name="build_enable_kpm">启用 KPM 功能</string>
     <string name="build_enable_rekernel">启用 Re-Kernel 驱动 (测试)</string>
     <string name="build_virtualization_support">虚拟化支持</string>
+    <string name="build_kernel_options_title">自定义内核选项</string>
+    <string name="build_kernel_option_add">添加条目</string>
+    <string name="build_kernel_option_edit">编辑条目</string>
+    <string name="build_kernel_option_empty">暂无自定义内核选项。可手动添加，或导入 Kconfig / defconfig 片段。</string>
+    <string name="build_kernel_option_symbol">配置符号</string>
+    <string name="build_kernel_option_symbol_invalid">配置符号必须是有效的 CONFIG_* 名称</string>
+    <string name="build_kernel_option_mode">条目模式</string>
+    <string name="build_kernel_option_mode_y">开启 (=y)</string>
+    <string name="build_kernel_option_mode_m">模块 (=m)</string>
+    <string name="build_kernel_option_mode_disabled">关闭 (is not set)</string>
+    <string name="build_kernel_option_mode_ignore">忽略 (不修改)</string>
+    <string name="build_kernel_option_mode_raw">原始值</string>
+    <string name="build_kernel_option_raw_value">原始值</string>
+    <string name="build_kernel_option_raw_placeholder">例如: 65534 或 "bbr"</string>
+    <string name="build_kernel_option_raw_required">原始值模式下必须填写值</string>
+    <string name="build_kernel_option_raw_summary">原始值: %1$s</string>
+    <string name="build_kernel_option_import_title">导入自定义内核选项</string>
+    <string name="build_kernel_option_import_desc">支持 `CONFIG_FOO=y`、`CONFIG_FOO=m`、`# CONFIG_FOO is not set`、`CONFIG_FOO=123`、`CONFIG_BAR="x"` 和裸 `CONFIG_FOO`。</string>
+    <string name="build_kernel_option_import_text">内核选项文本</string>
+    <string name="build_kernel_option_pick_file">选择文件</string>
+    <string name="build_kernel_option_import_summary">已导入 %1$d 条，覆盖重复 %2$d 条，跳过 %3$d 行</string>
+    <string name="build_kernel_option_import_failed">导入自定义内核选项失败</string>
+    <string name="build_kernel_option_import_read_failed">读取导入文件失败</string>
+    <string name="build_kernel_option_save_failed">保存自定义内核选项失败</string>
     <string name="build_enable_oneplus_8e">启用一加 8E 支持</string>
     <string name="build_oneplus_lz4kd">启用 lz4kd</string>
     <string name="build_oneplus_bbr">启用 BBR</string>
@@ -221,12 +250,17 @@
     <string name="extension_manager_empty_desc">当前运行环境没有已注入的 ABK 扩展，后续注入后会显示在这里。</string>
     <string name="extension_bootstrap_install_title">需要先安装伴生应用</string>
     <string name="extension_bootstrap_install_desc">当前扩展依赖 %1$s，安装完成后才能继续初始化。</string>
+    <string name="extension_bootstrap_install_dialog_title">需要安装伴生应用</string>
+    <string name="extension_bootstrap_install_dialog_desc">扩展 %1$s 需要先安装 %2$s，安装完成后才能继续初始化或启动服务。</string>
     <string name="extension_bootstrap_oobe_required_title">需要完成扩展初始化</string>
     <string name="extension_bootstrap_oobe_required_desc">当前扩展已检测到 OOBE 入口，继续后必须完成首次配置。</string>
     <string name="extension_bootstrap_oobe_missing_title">扩展未提供 OOBE</string>
     <string name="extension_bootstrap_oobe_missing_desc">%1$s 已安装，但没有声明 OOBE 入口。请打开伴生应用按其说明完成初始化。</string>
+    <string name="extension_bootstrap_service_title">将启动扩展服务</string>
+    <string name="extension_bootstrap_service_desc">当前扩展声明了启动服务入口，继续后会直接打开对应页面。</string>
     <string name="extension_install_action">安装扩展</string>
     <string name="extension_run_oobe_action">运行 OOBE</string>
+    <string name="extension_run_service_action">启动服务</string>
     <string name="extension_open_companion_action">打开伴生应用</string>
     <string name="extension_open_settings_action">扩展设置</string>
     <string name="extension_reset_action">重置</string>
@@ -301,6 +335,7 @@
     <string name="build_feature_virtualization">虚拟化 %1$s</string>
     <string name="build_base_config">基础配置</string>
     <string name="build_summary_external_modules">外部模块 %1$d</string>
+    <string name="build_summary_kernel_options">内核选项 %1$d</string>
     <string name="build_hero_desc">触发 GitHub Actions 并自动整理 img、AK3、管理器和 SUSFS 模块。</string>
     <string name="build_oneplus_hero_desc">使用 OnePlus/Oplus manifest 构建机型专用 AnyKernel3 包。</string>
     <string name="build_susfs_on">SUSFS 开启</string>
@@ -308,6 +343,7 @@
     <string name="build_virtualization_chip">虚拟化支持 %1$s</string>
     <string name="build_device_recommended">设备推荐</string>
     <string name="build_virtualization_off">关闭</string>
+    <string name="build_section_kernel_options_desc">逐条覆盖 defconfig。支持 y / m / 关闭 / 忽略 / 原始值，最终优先级高于页面内置开关。</string>
     <string name="build_virtualization_on">开启</string>
     <string name="build_virtualization_slot_678">槽位 6/7/8</string>
     <string name="build_virtualization_slot_123">槽位 1/2/3</string>
@@ -348,6 +384,13 @@
     <string name="flash_confirm_msg">刷写内核存在风险，请确保您了解后果。是否继续？</string>
     <string name="flash_confirm_install_manager">确认安装</string>
     <string name="flash_confirm_install_manager_msg">安装管理器应用将替换设备上的当前管理器。是否继续？</string>
+    <string name="flash_bundle_legacy_requires_confirmation">这是旧版刷写包，继续将进入高风险流程。</string>
+    <string name="flash_bundle_unverified_requires_confirmation">该刷写包尚未通过签名验证，继续将进入高风险流程。</string>
+    <string name="flash_bundle_verification_disabled">签名校验已在安全设置中关闭。</string>
+    <string name="flash_bundle_missing_signature_message">该刷写包缺少签名文件，继续刷写将进入高风险流程。</string>
+    <string name="flash_bundle_signature_mismatch_message">该刷写包的签名与当前公钥不匹配，继续刷写将进入高风险流程。</string>
+    <string name="flash_bundle_missing_public_key_message">当前缺少用于校验刷写包的公钥，继续刷写将进入高风险流程。</string>
+    <string name="flash_refreshing_artifacts">正在刷新构建产物</string>
     <string name="flash_files_title">文件</string>
     <string name="flash_terminal">终端</string>
     <string name="flash_copy_path_done">已复制文件路径</string>
@@ -581,6 +624,7 @@
     <string name="settings_title">设置</string>
     <string name="settings_account">账户</string>
     <string name="settings_build">构建</string>
+    <string name="settings_security">安全</string>
     <string name="settings_notification">通知</string>
     <string name="settings_about">关于</string>
     <string name="settings_extensions_title">扩展</string>
@@ -620,6 +664,12 @@
     <string name="settings_color_appearance">颜色与外观</string>
     <string name="settings_enter_color_appearance">进入颜色与外观</string>
     <string name="settings_about_desc">本仓库入口、版本信息与贡献者</string>
+    <string name="settings_export_diagnostics">导出诊断包</string>
+    <string name="settings_export_diagnostics_desc">打包本次启动中的 ABK 日志、内核日志、模块状态与模块日志并分享 zip</string>
+    <string name="settings_export_diagnostics_share">分享诊断包</string>
+    <string name="settings_export_diagnostics_partial">诊断包已生成，但有 %1$d 项采集失败</string>
+    <string name="settings_export_diagnostics_failed">诊断包导出失败：%1$s</string>
+    <string name="settings_security_requires_fork">需要先登录 GitHub 并完成 fork 准备，才能管理签名校验和密钥。</string>
     <string name="settings_enter_about">进入关于</string>
     <string name="settings_open_source_licenses">开放源代码许可</string>
     <string name="settings_open_source_licenses_desc">本仓库引用、内嵌源码和依赖包的许可证清单</string>
@@ -686,6 +736,7 @@
     <string name="settings_waiting_fork">等待 Fork</string>
     <string name="settings_group_account_desc">GitHub 账户、fork 仓库和退出登录。</string>
     <string name="settings_group_build_desc">控制构建成功后的自动化行为。</string>
+    <string name="settings_group_security_desc">管理刷写包签名校验，以及当前 fork 的签名密钥对。</string>
     <string name="settings_group_notification_desc">同步工作流状态到系统通知。</string>
     <string name="settings_group_navigation_desc">控制返回手势和页面切换体验。</string>
     <string name="settings_group_theme_desc">Material 3 Expressive 主题显示模式。</string>
@@ -743,8 +794,10 @@
 
     <!-- Runtime / modules -->
     <string name="runtime_refresh">刷新运行态信息</string>
+    <string name="runtime_refreshing_status">正在刷新运行态信息</string>
     <string name="runtime_installed_modules_title">已安装模块</string>
     <string name="runtime_refresh_installed_modules">刷新已安装模块</string>
+    <string name="runtime_refreshing_modules">正在刷新已安装模块</string>
     <string name="runtime_install_module">安装模块</string>
     <string name="runtime_copying_module">正在复制模块文件...</string>
     <string name="runtime_wait_root_shell">等待 root shell 返回，请不要退出应用...</string>
@@ -862,6 +915,12 @@
     <string name="root_auth_use_default_non_root">使用默认非 Root 配置</string>
     <string name="root_auth_building_list">正在构建授权列表</string>
     <string name="root_auth_refreshing_list">正在刷新授权列表</string>
+    <string name="root_auth_loading_profile">正在读取应用配置</string>
+    <string name="root_auth_recovery_title">超级用户配置已重置</string>
+    <string name="root_auth_recovery_reset_message">检测到上次读取“%1$s”的超级用户配置时导致 ABK 崩溃，现已将该应用的 profile 重置为安全默认值。</string>
+    <string name="root_auth_recovery_reset_failed_message">检测到上次读取“%1$s”的超级用户配置时导致 ABK 崩溃，但这次未能自动重置该应用的 profile。请确认管理器权限后重试。</string>
+    <string name="root_auth_profile_read_disabled_title">已禁用原生配置读取</string>
+    <string name="root_auth_profile_read_disabled_message">该应用之前读取原生 profile 时会导致 ABK 崩溃。当前页面使用安全默认值，不再尝试原生读取。</string>
     <string name="save">保存</string>
 
     <!-- Module repository -->
@@ -897,6 +956,7 @@
     <string name="module_repo_delete_keep_modules">删除中央仓库不会移除已经加入构建配置的单模块仓库。</string>
     <string name="module_repo_module_count">%1$d 个模块</string>
     <string name="module_repo_skipped_count">跳过 %1$d</string>
+    <string name="module_repo_refreshing_repository">正在刷新仓库</string>
     <string name="refresh">刷新</string>
     <string name="delete">删除</string>
 
@@ -931,6 +991,39 @@
     <string name="settings_selinux_permissive">宽容</string>
     <string name="settings_selinux_disabled">已禁用</string>
     <string name="settings_unknown">未知</string>
+    <string name="settings_security_signing_title">签名校验</string>
+    <string name="settings_security_signing_status">密钥状态</string>
+    <string name="settings_security_status_enabled_configured">签名校验已开启，当前密钥对已配置。</string>
+    <string name="settings_security_status_enabled_pending">签名校验已开启，等待初始化新的签名密钥对。</string>
+    <string name="settings_security_status_disabled">签名校验已关闭，当前密钥对已删除。</string>
+    <string name="settings_security_import_keys">导入自定义公私钥</string>
+    <string name="settings_security_import_keys_desc">导入自定义 PEM 公钥和私钥，覆盖当前 fork 的签名材料。</string>
+    <string name="settings_security_import_dialog_title">导入自定义公私钥</string>
+    <string name="settings_security_import_public_key">公钥 PEM</string>
+    <string name="settings_security_import_private_key">私钥 PEM</string>
+    <string name="settings_security_import_pick_public_key">选择公钥文件</string>
+    <string name="settings_security_import_pick_private_key">选择私钥文件</string>
+    <string name="settings_security_import_public_key_required">请填写公钥 PEM。</string>
+    <string name="settings_security_import_private_key_required">请填写私钥 PEM。</string>
+    <string name="settings_security_import_invalid_public_key">公钥 PEM 无法解析。</string>
+    <string name="settings_security_import_invalid_private_key">私钥 PEM 无法解析。</string>
+    <string name="settings_security_import_key_pair_mismatch">公钥和私钥不匹配。</string>
+    <string name="settings_security_import_read_failed">读取密钥文件失败。</string>
+    <string name="settings_security_import_done">自定义签名密钥对已导入并发布。</string>
+    <string name="settings_security_import_requires_enabled">请先重新开启签名校验，再导入自定义密钥对。</string>
+    <string name="settings_security_reset_keys">重置远程私钥和本地公钥</string>
+    <string name="settings_security_reset_keys_desc">重新生成新的密钥对并覆盖远程 Secret、公钥资产和本地缓存。旧 bundle 会全部失效。</string>
+    <string name="settings_security_disable_dialog_title_1">关闭签名校验？</string>
+    <string name="settings_security_disable_dialog_message_1">关闭后将跳过下载与刷写阶段的签名校验。为了保证安全，当前远程私钥和本地公钥会被删除。</string>
+    <string name="settings_security_disable_dialog_title_2">最终确认删除密钥对</string>
+    <string name="settings_security_disable_dialog_message_2">确认后会删除本地公钥、远程私钥 Secret 和远程公钥资产。旧签名 bundle 将立即失效。</string>
+    <string name="settings_security_reset_dialog_title">重置签名密钥对</string>
+    <string name="settings_security_reset_dialog_message">将重新生成并发布新的远程私钥和本地公钥。已有旧签名 bundle 会全部失效。</string>
+    <string name="settings_security_signing_disabled">签名校验已关闭，当前密钥对已删除。</string>
+    <string name="settings_security_signing_enabled">签名校验已重新开启，并已生成新的密钥对。</string>
+    <string name="settings_security_keys_reset_done">新的签名密钥对已生成并发布。</string>
+    <string name="settings_security_operation_running">正在处理安全设置…</string>
+    <string name="settings_tools_refreshing">正在刷新工具状态</string>
     <string name="settings_local_templates">本地模板</string>
     <string name="settings_templates_loading">正在读取模板</string>
     <string name="settings_templates_loading_desc">从 ReSukiSU profile 存储加载</string>
@@ -1096,6 +1189,7 @@
     <string name="build_status_run_id">运行 %1$d</string>
     <string name="vm_plan_bad_version">不支持的方案码版本</string>
     <string name="vm_plan_too_many_modules">外部模块数量超出限制</string>
+    <string name="vm_plan_too_many_kernel_options">自定义内核选项数量超出限制</string>
     <string name="vm_plan_negative_number">负数无法写入方案码</string>
     <string name="vm_plan_field_too_long">方案字段过长</string>
     <string name="vm_plan_incomplete">方案码内容不完整</string>
