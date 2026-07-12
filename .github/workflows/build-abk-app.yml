@@ -11,6 +11,7 @@ on:
       - "gradle/**"
       - ".github/workflows/build-abk-app.yml"
       - ".github/actions/prepare-abk-app-inputs/**"
+      - ".github/scripts/patch-ksud-uapi-compat.py"
   pull_request:
     paths:
       - "app/**"
@@ -20,6 +21,7 @@ on:
       - "gradle/**"
       - ".github/workflows/build-abk-app.yml"
       - ".github/actions/prepare-abk-app-inputs/**"
+      - ".github/scripts/patch-ksud-uapi-compat.py"
 
 jobs:
   build:
@@ -137,6 +139,8 @@ jobs:
           rm -rf "$source_dir" "$target_dir" "$jni_target_dir"
           git clone --depth 1 --branch "$SUKISU_ULTRA_REF" "$SUKISU_ULTRA_REPO" "$source_dir"
           commit="$(git -C "$source_dir" rev-parse HEAD)"
+          python3 .github/scripts/patch-ksud-uapi-compat.py "$source_dir"
+          grep -q "ABK legacy uapi=0 compatibility" "$source_dir/userspace/ksud/src/ksucalls.rs"
           mkdir -p "$target_dir" "$jni_target_dir"
 
           setup_rust_build() {
@@ -237,6 +241,7 @@ jobs:
             echo "ref=$SUKISU_ULTRA_REF"
             echo "commit=$commit"
             echo "abis=$SUKISU_KSUD_ABIS"
+            echo "patches=legacy_uapi_zero_compat"
             echo "built_by=.github/workflows/build-abk-app.yml"
           } > "$target_dir/source.properties"
 
@@ -310,6 +315,7 @@ jobs:
             echo "- ABIs: $SUKISU_KSUD_ABIS"
             echo "- Embedded ksuinit: aarch64-unknown-linux-musl, x86_64-unknown-linux-musl"
             echo "- magiskboot: removed upstream (ksud uses bootimg crate)"
+            echo "- Patch: allow legacy kernel uapi=0 for bundled ksud"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cache LKM assets
