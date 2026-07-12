@@ -198,7 +198,7 @@
   "arg_status_filter": "ステータスでフィルタ (デフォルト: all)",
   "arg_limit": "表示件数 (デフォルト: 10)",
   "arg_download": "アーティファクトをダウンロードするニャ",
-  "arg_output": "出力ディレクトリ (デフォルト: ~/Downloads)",
+  "arg_output": "出力ディレクトリ (デフォルト: {dir})",
   "build_epilog": "カーネルバージョンオプションニャ:\n  --android-version   Android バージョン (デフォルト: android12)\n  --kernel-version    メインカーネルバージョン (デフォルト: 5.10)\n  --sub-level         サブレベル (必須だニャ)\n  --os-patch-level    セキュリティパッチレベル (必須だニャ)\n  --revision          リビジョン (5.10 のみ)\n\nマトリクスビルド (全サブレベル):\n  --matrix a14              kernel-a14-6-1.yml を使うニャ\n\nOnePlus ビルド:\n  --oneplus                 oneplus-custom.yml を使うニャ (--device が必要)\n\nKernelSU バリアント:\n  None / Official / SukiSU / ReSukiSU (デフォルト)\n\nKernelSU ブランチ:\n  Stable(标准) / Dev(开发) / Custom(自定义)\n\n仮想化: off (デフォルト) / 678 / 123 / 345\n\n例ニャ:\n  abk build --sub-level 162 --os-patch-level 2026-03\n  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram\n  abk build --matrix a15                                    # マトリクス\n  abk build --matrix both                                   # 全バージョン\n  abk build --matrix full                                   # フルマトリクス\n  abk build --matrix all-managers                           # 全マネージャー\n  abk build --oneplus --device oneplus_12_b                 # OnePlus 🐱",
   "err_unknown_device": "知らないデバイス '{device}' ニャ...",
   "err_available_devices": "使えるデバイス: {devices} ニャ",

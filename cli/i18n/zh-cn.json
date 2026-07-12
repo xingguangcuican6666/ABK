@@ -119,7 +119,7 @@
   "arg_limit": "显示数量 (默认: 10)",
   "arg_run_id": "构建运行 ID",
   "arg_download": "下载产物",
-  "arg_output": "输出目录 (默认: ~/Downloads)",
+  "arg_output": "输出目录 (默认: {dir})",
   "status_no_builds": "没有构建记录",
   "status_recent": "最近 {n} 个构建:\n",
   "artifacts_no_artifacts": "该构建没有产物",

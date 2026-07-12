@@ -152,7 +152,7 @@
   "arg_custom_modules": "Custom external modules (format: url;stage|url;stage)",
   "arg_run_id": "Build run ID",
   "arg_download": "Download artifacts",
-  "arg_output": "Output directory (default: ~/Downloads)",
+  "arg_output": "Output directory (default: {dir})",
   "arg_no_sync": "Skip sync even if behind",
   "arg_limit": "Number of results (default: 10)",
   "arg_target": "Filter by build target",

@@ -150,7 +150,8 @@ abk build --oneplus --device oneplus_12_b
 - ZRAM / DDK / NTsync / 网络增强 / Re-Kernel / 虚拟化 / 自定义外部模块 → 自动禁用
 - MTK CPU 设备 → 代理优化自动禁用
 - SUSFS 仅支持 android14/6.1 和 android15/6.6
-- KPM 仅支持 SukiSU / ReSukiSU 变体
+- KPM 仅支持 SukiSU；ReSukiSU `main` 不支持 KPM，会自动禁用
+- 全管理器 OnePlus 矩阵包含 ReSukiSU 时，OnePlus KPM 会对该矩阵整体禁用
 
 不兼容的选项会被自动禁用并给出警告。
 
@@ -173,7 +174,7 @@ abk status --status in_progress          # 按状态过滤
 
 ```bash
 abk artifacts --run-id 12345             # 列出产物
-abk artifacts --run-id 12345 --download  # 下载到 ~/Downloads
+abk artifacts --run-id 12345 --download  # 下载到当前用户的 Downloads 目录
 abk artifacts --run-id 12345 -o ./out    # 指定目录
 abk artifacts --set-download-dir ./out   # 持久化默认目录
 ```

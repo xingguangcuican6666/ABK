@@ -314,6 +314,39 @@ class CommandBehaviorTests(unittest.TestCase):
             self.assertIn(f'"{input_name}": "true"', output)
         self.assertEqual(0, client.create_fork_calls)
 
+    def test_resukisu_dev_dry_run_disables_kpm(self):
+        client = RecordingGitHubClient(fork=None)
+
+        result, output = self._run_build(
+            client,
+            ksu_variant="ReSukiSU",
+            ksu_branch="Dev",
+            kpm=True,
+            kpm_password="secret",
+            dry_run=True,
+        )
+
+        self.assertEqual(0, result, output)
+        self.assertIn('"use_kpm": "false"', output)
+        self.assertNotIn('"kpm_password"', output)
+        self.assertIn("ReSukiSU", output)
+
+    def test_oneplus_resukisu_dry_run_disables_kpm(self):
+        client = RecordingGitHubClient(fork=None)
+
+        result, output = self._run_build(
+            client,
+            oneplus=True,
+            device="oneplus_12_b",
+            ksu_variant="ReSukiSU",
+            kpm=True,
+            dry_run=True,
+        )
+
+        self.assertEqual(0, result, output)
+        self.assertIn('"use_kpm": "false"', output)
+        self.assertIn("ReSukiSU", output)
+
     def test_existing_full_matrix_contract_rejects_custom_ref(self):
         client = RecordingGitHubClient(fork=None)
 
@@ -513,6 +546,20 @@ class CommandBehaviorTests(unittest.TestCase):
             result, _ = self._run_artifacts(client, verification={})
 
             self.assertEqual(1, result)
+
+    def test_artifact_help_uses_platform_default_download_dir(self):
+        output = io.StringIO()
+        argv = ["abk", "artifacts", "--help"]
+
+        with mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(output):
+            with self.assertRaises(SystemExit) as raised:
+                abk.main()
+
+        help_text = output.getvalue()
+        self.assertEqual(0, raised.exception.code)
+        self.assertIn(str(abk.default_download_dir()), help_text)
+        self.assertNotIn("~/Downloads", help_text)
+        self.assertNotIn("{dir}", help_text)
 
 
 if __name__ == "__main__":

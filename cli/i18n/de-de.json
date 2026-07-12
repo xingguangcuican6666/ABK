@@ -198,7 +198,7 @@
   "arg_status_filter": "Nach Status filtern (Standard: all)",
   "arg_limit": "Anzahl Ergebnisse (Standard: 10)",
   "arg_download": "Artefakte herunterladen",
-  "arg_output": "Ausgabeverzeichnis (Standard: ~/Downloads)",
+  "arg_output": "Ausgabeverzeichnis (Standard: {dir})",
   "build_epilog": "Kernel-Versionsoptionen:\n  --android-version   Android-Version (Standard: android12)\n  --kernel-version    Hauptkernel-Version (Standard: 5.10)\n  --sub-level         Sublevel (erforderlich)\n  --os-patch-level    Sicherheitspatch-Level (erforderlich)\n  --revision          Revision (nur 5.10)\n\nMatrix-Build (alle Sublevel):\n  --matrix a14              kernel-a14-6-1.yml verwenden\n\nOnePlus-Build:\n  --oneplus                 oneplus-custom.yml verwenden (--device erforderlich)\n\nKernelSU-Varianten:\n  None / Official / SukiSU / ReSukiSU (Standard)\n\nKernelSU-Branches:\n  Stable(标准) / Dev(开发) / Custom(自定义)\n\nVirtualisierung: off (Standard) / 678 / 123 / 345\n\nBeispiele:\n  abk build --sub-level 162 --os-patch-level 2026-03\n  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram\n  abk build --matrix a15                                    # Matrix\n  abk build --matrix both                                   # Alle Versionen\n  abk build --matrix full                                   # Volle Matrix\n  abk build --matrix all-managers                           # Alle Manager\n  abk build --oneplus --device oneplus_12_b                 # OnePlus",
   "err_unknown_device": "Unbekanntes Gerät '{device}'",
   "err_available_devices": "Verfügbare Geräte: {devices}",

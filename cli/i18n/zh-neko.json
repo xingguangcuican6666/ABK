@@ -198,7 +198,7 @@
   "arg_status_filter": "按状态过滤喵 (默认: all)",
   "arg_limit": "显示数量 (默认: 10)",
   "arg_download": "下载产物喵",
-  "arg_output": "输出目录 (默认: ~/Downloads)",
+  "arg_output": "输出目录 (默认: {dir})",
   "build_epilog": "内核版本选项喵:\n  --android-version   Android 版本 (默认: android12)\n  --kernel-version    内核主版本 (默认: 5.10)\n  --sub-level         子版本号 (必需)\n  --os-patch-level    安全补丁级别 (必需)\n  --revision          修订版本 (仅 5.10)\n\n矩阵构建 (所有子版本):\n  --matrix a14              使用 kernel-a14-6-1.yml\n\nOnePlus 构建:\n  --oneplus                 使用 oneplus-custom.yml (需要 --device)\n\nKernelSU 变体:\n  None / Official / SukiSU / ReSukiSU (默认)\n\nKernelSU 分支:\n  Stable(标准) / Dev(开发) / Custom(自定义)\n\n虚拟化支持: off (默认) / 678 / 123 / 345\n\n示例喵:\n  abk build --sub-level 162 --os-patch-level 2026-03\n  abk build --sub-level 162 --os-patch-level 2026-03 --ksu Official --zram\n  abk build --matrix a15                                    # 矩阵构建\n  abk build --matrix both                                   # 全版本\n  abk build --matrix full                                   # 全属性矩阵\n  abk build --matrix all-managers                           # 全管理器\n  abk build --oneplus --device oneplus_12_b                 # OnePlus 🐱",
   "err_unknown_device": "不认识这个设备 '{device}' 喵...",
   "err_available_devices": "可用的设备: {devices} 喵",

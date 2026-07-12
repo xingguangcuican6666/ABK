@@ -119,7 +119,7 @@
   "arg_limit": "你想看几个？（默认才给 10 个哦）",
   "arg_run_id": "运行 ID 啦，别输错了",
   "arg_download": "要把产物抱回家吗？",
-  "arg_output": "产物塞到哪里（默认在 ~/Downloads 啦）",
+  "arg_output": "产物塞到哪里（默认在 {dir} 啦）",
   "status_no_builds": "空空如也，根本没有构建记录，你是不是什么都没干过？",
   "status_recent": "最近折腾的 {n} 个构建记录在这呢：\n",
   "artifacts_no_artifacts": "那个构建什么都没拉出来（没有产物）~",

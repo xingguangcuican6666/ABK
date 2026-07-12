@@ -1,3 +1,4 @@
+import json
 import re
 import sys
 import unittest
@@ -119,6 +120,48 @@ class WorkflowContractTests(unittest.TestCase):
             abk.FULL_MATRIX_WORKFLOWS["all-managers"],
             all_managers,
         )
+
+    def test_kpm_support_matches_the_selected_ksu_source(self):
+        cases = (
+            ("SukiSU", "Stable", False, True),
+            ("SukiSU", "Dev", False, True),
+            ("ReSukiSU", None, False, True),
+            ("ReSukiSU", "Stable", False, True),
+            ("ReSukiSU", "Dev", False, False),
+            ("ReSukiSU", "Custom", False, False),
+            ("ReSukiSU", "Stable", True, False),
+            ("Official", "Stable", False, False),
+            ("None", "Stable", False, False),
+        )
+        for variant, branch, oneplus, expected in cases:
+            with self.subTest(variant=variant, branch=branch, oneplus=oneplus):
+                self.assertEqual(
+                    expected,
+                    abk.supports_kpm(variant, branch, oneplus=oneplus),
+                )
+
+    def test_non_stable_resukisu_inputs_disable_kpm_and_password(self):
+        args = build_args(kpm=True, ksu_branch="Dev", kpm_password="secret")
+
+        standard = abk._standard_build_inputs(args, "ReSukiSU")
+        full = abk._full_matrix_inputs(args, "ReSukiSU")
+
+        self.assertEqual("false", standard["use_kpm"])
+        self.assertNotIn("kpm_password", standard)
+        self.assertEqual("false", full["use_kpm"])
+        self.assertEqual("", full["kpm_password"])
+
+    def test_all_managers_avoids_resukisu_main_kpm(self):
+        all_variants = abk._all_managers_inputs(
+            build_args(kpm=True, manager_variants="all")
+        )
+        sukisu_only = abk._all_managers_inputs(
+            build_args(kpm=True, manager_variants="SukiSU")
+        )
+
+        self.assertEqual("true", all_variants["use_kpm"])
+        self.assertFalse(json.loads(all_variants["oneplus_options_json"])["use_kpm"])
+        self.assertTrue(json.loads(sukisu_only["oneplus_options_json"])["use_kpm"])
 
     def test_signing_identifiers_match_android_authority(self):
         android = (

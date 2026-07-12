@@ -42,6 +42,15 @@ class TranslationCatalogTests(unittest.TestCase):
                         placeholders(catalog[key]),
                     )
 
+    def test_output_help_uses_a_platform_path_placeholder(self):
+        for locale, catalog in self.catalogs.items():
+            with self.subTest(locale=locale):
+                self.assertEqual(
+                    collections.Counter({"dir": 1}),
+                    placeholders(catalog["arg_output"]),
+                )
+                self.assertNotIn("~/Downloads", catalog["arg_output"])
+
 
 if __name__ == "__main__":
     unittest.main()

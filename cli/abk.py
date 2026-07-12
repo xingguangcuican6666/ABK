@@ -99,6 +99,12 @@ KERNEL_VERSIONS = ["5.10", "5.15", "6.1", "6.6", "6.12"]
 MATRIX_TARGETS = ["a12", "a13", "a14", "a15", "a16"]
 MATRIX_TARGETS_ALL = MATRIX_TARGETS + ["both", "full", "all-managers"]
 KSU_ALL_VARIANTS = ["Official", "SukiSU", "ReSukiSU"]
+MANAGER_VARIANT_ALIASES = {
+    "official": "Official",
+    "sukisu": "SukiSU",
+    "resukisu": "ReSukiSU",
+    "none": "None",
+}
 
 FULL_MATRIX_WORKFLOWS = {
     "full": "kernel-full-feature-matrix.yml",
@@ -115,6 +121,42 @@ KSU_BRANCH_VALUES = ["Stable(标准)", "Dev(开发)", "Custom(自定义)"]
 
 def resolve_ksu_branch(b):
     return KSU_BRANCH_MAP.get(b, b) if b else "Stable(标准)"
+
+
+def supports_kpm(variant, ksu_branch=None, *, oneplus=False):
+    """Return whether the selected KernelSU source exposes KPM.
+
+    ReSukiSU provides KPM in stable tags, while OnePlus builds pin its main
+    branch. SukiSU exposes KPM on both standard and OnePlus build paths.
+    """
+    if variant == "SukiSU":
+        return True
+    if variant != "ReSukiSU" or oneplus:
+        return False
+    return resolve_ksu_branch(ksu_branch) == "Stable(标准)"
+
+
+def default_download_dir():
+    """Return the platform-native default artifact download directory."""
+    return Path.home() / "Downloads"
+
+
+def selected_manager_variants(value):
+    """Return the manager variants selected by an all-managers build."""
+    raw = (value or "all").strip()
+    if raw.lower() in {"all", "*"}:
+        return set(MANAGER_VARIANT_ALIASES.values())
+    tokens = {
+        item.strip().lower().replace("-", "").replace("_", "")
+        for item in raw.split(",")
+    }
+    return {
+        MANAGER_VARIANT_ALIASES[token]
+        for token in tokens
+        if token in MANAGER_VARIANT_ALIASES
+    }
+
+
 VIRT_OPTIONS = ["off", "678", "123", "345"]
 
 ONEPLUS_DEVICES = {
@@ -1724,7 +1766,7 @@ def _set_build_defaults(args):
 
 
 def _standard_build_inputs(args, variant):
-    kpm_enabled = bool(args.kpm) and variant in ("SukiSU", "ReSukiSU")
+    kpm_enabled = bool(args.kpm) and supports_kpm(variant, args.ksu_branch)
     inputs = {
         "kernelsu_variant": variant,
         "kernelsu_branch": resolve_ksu_branch(args.ksu_branch),
@@ -1756,7 +1798,7 @@ def _standard_build_inputs(args, variant):
 
 
 def _full_matrix_inputs(args, variant):
-    kpm_enabled = bool(args.kpm) and variant in ("SukiSU", "ReSukiSU")
+    kpm_enabled = bool(args.kpm) and supports_kpm(variant, args.ksu_branch)
     return {
         "kernelsu_variant": variant,
         "kernelsu_branch": resolve_ksu_branch(args.ksu_branch),
@@ -1781,9 +1823,11 @@ def _full_matrix_inputs(args, variant):
 
 
 def _all_managers_inputs(args):
+    manager_variants = selected_manager_variants(args.manager_variants)
+    oneplus_kpm_enabled = bool(args.kpm) and "ReSukiSU" not in manager_variants
     oneplus_options = {
         "enable_susfs": bool(args.susfs),
-        "use_kpm": bool(args.kpm),
+        "use_kpm": oneplus_kpm_enabled,
         "use_lz4kd": bool(args.lz4kd),
         "use_bbg": bool(args.bbg),
         "use_bbr": bool(args.bbr),
@@ -1890,14 +1934,26 @@ def cmd_build(args):
             else [args.ksu_variant or "ReSukiSU"]
         )
         for variant in variants:
-            if args.kpm and variant not in ("SukiSU", "ReSukiSU"):
-                print(t("warning_prefix") + " " + t("op_no_kpm_ksu", ksu=variant))
+            if args.kpm and not supports_kpm(variant, args.ksu_branch):
+                selection = f"{variant} ({resolve_ksu_branch(args.ksu_branch)})"
+                print(t("warning_prefix") + " " + t("op_no_kpm_ksu", ksu=selection))
             plans.append({
                 "workflow": FULL_MATRIX_WORKFLOWS["full"],
                 "name": f"{t('build_target_full')} ({variant})",
                 "inputs": _full_matrix_inputs(args, variant),
             })
     elif args.matrix == "all-managers":
+        manager_variants = selected_manager_variants(args.manager_variants)
+        if (
+            args.kpm
+            and (args.build_scope or "Both") != "GKI"
+            and "ReSukiSU" in manager_variants
+        ):
+            print(
+                t("warning_prefix")
+                + " "
+                + t("op_no_kpm_ksu", ksu="ReSukiSU (OnePlus main)")
+            )
         plans.append({
             "workflow": FULL_MATRIX_WORKFLOWS["all-managers"],
             "name": t("build_target_all_managers"),
@@ -1922,9 +1978,13 @@ def cmd_build(args):
             for variant in variants:
                 workflow = WORKFLOWS[target]
                 if target == "oneplus":
-                    kpm_enabled = bool(args.kpm) and variant in ("SukiSU", "ReSukiSU")
+                    kpm_enabled = bool(args.kpm) and supports_kpm(
+                        variant,
+                        oneplus=True,
+                    )
                     if args.kpm and not kpm_enabled:
-                        print(t("warning_prefix") + " " + t("op_no_kpm_ksu", ksu=variant))
+                        selection = f"{variant} (OnePlus main)"
+                        print(t("warning_prefix") + " " + t("op_no_kpm_ksu", ksu=selection))
                     inputs = {
                         "ksu_variant": variant,
                         "device_manifest": args.device,
@@ -1940,8 +2000,9 @@ def cmd_build(args):
                         "use_unicode_bypass": str(bool(args.unicode_bypass)).lower(),
                     }
                 else:
-                    if args.kpm and variant not in ("SukiSU", "ReSukiSU"):
-                        print(t("warning_prefix") + " " + t("op_no_kpm_ksu", ksu=variant))
+                    if args.kpm and not supports_kpm(variant, args.ksu_branch):
+                        selection = f"{variant} ({resolve_ksu_branch(args.ksu_branch)})"
+                        print(t("warning_prefix") + " " + t("op_no_kpm_ksu", ksu=selection))
                     inputs = _standard_build_inputs(args, variant)
                     if target == "custom":
                         inputs.update({
@@ -2072,7 +2133,7 @@ def cmd_artifacts(args):
         if args.download:
             config = load_config()
             output_dir = Path(
-                args.output or config.get("download_dir") or Path.home() / "Downloads"
+                args.output or config.get("download_dir") or default_download_dir()
             ).expanduser()
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             print(f"\n" + t("artifacts_download_to", dir=output_dir))
@@ -2398,7 +2459,11 @@ def main():
         description=t("cmd_artifacts_desc"))
     artifacts_parser.add_argument("--run-id", type=int, help=t("arg_run_id"))
     artifacts_parser.add_argument("--download", action="store_true", help=t("arg_download"))
-    artifacts_parser.add_argument("--output", "-o", help=t("arg_output"))
+    artifacts_parser.add_argument(
+        "--output",
+        "-o",
+        help=t("arg_output", dir=default_download_dir()),
+    )
     artifacts_parser.add_argument("--set-download-dir", metavar="DIR", help=t("arg_set_download_dir"))
     artifacts_parser.set_defaults(func=cmd_artifacts)
 
