@@ -213,6 +213,9 @@ jobs:
       - name: Prepare Linux cross-packaging runtime
         if: ${{ matrix.target_id == 'linux-armhf' || matrix.target_id == 'linux-x86' }}
         shell: bash
+        env:
+          CROSS_PLATFORM: ${{ matrix.target_id == 'linux-armhf' && 'linux/arm/v7' || 'linux/386' }}
+          CROSS_BINFMT: ${{ matrix.target_id == 'linux-armhf' && 'arm' || '386' }}
         run: |
           set -euo pipefail
 
@@ -228,7 +231,23 @@ jobs:
             exit 1
           fi
 
-          sudo docker run --privileged --rm tonistiigi/binfmt --install arm,386
+          # x86_64 Linux normally executes i386 containers natively, and some
+          # arm64 runners provide arm32 EL0 support. Install only the emulator
+          # that is actually needed when native execution is unavailable.
+          docker pull --platform "$CROSS_PLATFORM" python:3.12-bookworm
+          if docker run --rm \
+            --platform "$CROSS_PLATFORM" \
+            --entrypoint /bin/true \
+            python:3.12-bookworm; then
+            echo "Native $CROSS_PLATFORM container execution is available."
+          else
+            echo "Native $CROSS_PLATFORM execution unavailable; enabling $CROSS_BINFMT emulation."
+            sudo docker run --privileged --rm tonistiigi/binfmt --install "$CROSS_BINFMT"
+            docker run --rm \
+              --platform "$CROSS_PLATFORM" \
+              --entrypoint /bin/true \
+              python:3.12-bookworm
+          fi
 
       - name: Build linux-armhf bundle in container
         if: ${{ matrix.target_id == 'linux-armhf' }}
@@ -236,9 +255,19 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf build dist
+          pip_cache="$HOME/.cache/pip"
+          runner_uid="$(id -u)"
+          runner_gid="$(id -g)"
+          mkdir -p "$pip_cache"
+          sudo chown -R 0:0 "$pip_cache"
+          restore_pip_cache_owner() {
+            sudo chown -R "$runner_uid:$runner_gid" "$pip_cache"
+          }
+          trap restore_pip_cache_owner EXIT
           docker run --rm \
             --platform linux/arm/v7 \
             -v "$PWD:/work" \
+            -v "$pip_cache:/root/.cache/pip" \
             -w /work \
             python:3.12-bookworm \
             bash -lc '
@@ -247,30 +276,25 @@ jobs:
               apt-get install -y build-essential zlib1g-dev
               python -m pip install --upgrade pip
               python -m pip install pyinstaller certifi pycryptodome pynacl
-              python -m pip install cryptography 2>/dev/null || echo "::warning::cryptography unavailable, using pycryptodome"
+              PYTHONPATH=cli python -c "import abk; assert abk._CRYPTO_BACKEND == \"pycryptodome\""
+              PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s cli/tests -v
               pyinstaller \
                 --noconfirm \
                 --clean \
                 --onedir \
                 --name abk \
-                --hidden-import cryptography \
-                --hidden-import cryptography.hazmat.primitives \
-                --hidden-import cryptography.hazmat.primitives.asymmetric \
-                --hidden-import cryptography.hazmat.primitives.asymmetric.padding \
-                --hidden-import cryptography.hazmat.primitives.hashes \
-                --hidden-import cryptography.hazmat.backends.openssl \
                 --hidden-import certifi \
                 --collect-all certifi \
                 --hidden-import nacl \
                 --hidden-import nacl.bindings \
-                --hidden-import Cryptodome \
-                --hidden-import Cryptodome.PublicKey \
-                --hidden-import Cryptodome.Signature \
-                --hidden-import Cryptodome.Hash \
+                --hidden-import Crypto \
+                --hidden-import Crypto.PublicKey \
+                --hidden-import Crypto.Signature \
+                --hidden-import Crypto.Hash \
                 --add-data "cli/i18n:i18n" \
                 cli/abk.py
             '
-          sudo chown -R "$(id -u):$(id -g)" build dist
+          sudo chown -R "$runner_uid:$runner_gid" build dist
 
       - name: Build linux-x86 bundle in container
         if: ${{ matrix.target_id == 'linux-x86' }}
@@ -278,9 +302,19 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf build dist
+          pip_cache="$HOME/.cache/pip"
+          runner_uid="$(id -u)"
+          runner_gid="$(id -g)"
+          mkdir -p "$pip_cache"
+          sudo chown -R 0:0 "$pip_cache"
+          restore_pip_cache_owner() {
+            sudo chown -R "$runner_uid:$runner_gid" "$pip_cache"
+          }
+          trap restore_pip_cache_owner EXIT
           docker run --rm \
             --platform linux/386 \
             -v "$PWD:/work" \
+            -v "$pip_cache:/root/.cache/pip" \
             -w /work \
             python:3.12-bookworm \
             bash -lc '
@@ -289,30 +323,25 @@ jobs:
               apt-get install -y build-essential zlib1g-dev
               python -m pip install --upgrade pip
               python -m pip install pyinstaller certifi pycryptodome pynacl
-              python -m pip install cryptography 2>/dev/null || echo "::warning::cryptography unavailable, using pycryptodome"
+              PYTHONPATH=cli python -c "import abk; assert abk._CRYPTO_BACKEND == \"pycryptodome\""
+              PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s cli/tests -v
               pyinstaller \
                 --noconfirm \
                 --clean \
                 --onedir \
                 --name abk \
-                --hidden-import cryptography \
-                --hidden-import cryptography.hazmat.primitives \
-                --hidden-import cryptography.hazmat.primitives.asymmetric \
-                --hidden-import cryptography.hazmat.primitives.asymmetric.padding \
-                --hidden-import cryptography.hazmat.primitives.hashes \
-                --hidden-import cryptography.hazmat.backends.openssl \
                 --hidden-import certifi \
                 --collect-all certifi \
                 --hidden-import nacl \
                 --hidden-import nacl.bindings \
-                --hidden-import Cryptodome \
-                --hidden-import Cryptodome.PublicKey \
-                --hidden-import Cryptodome.Signature \
-                --hidden-import Cryptodome.Hash \
+                --hidden-import Crypto \
+                --hidden-import Crypto.PublicKey \
+                --hidden-import Crypto.Signature \
+                --hidden-import Crypto.Hash \
                 --add-data "cli/i18n:i18n" \
                 cli/abk.py
             '
-          sudo chown -R "$(id -u):$(id -g)" build dist
+          sudo chown -R "$runner_uid:$runner_gid" build dist
 
       - name: Add bundled README
         if: runner.os != 'Windows'

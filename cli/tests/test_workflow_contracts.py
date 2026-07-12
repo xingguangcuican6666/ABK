@@ -200,6 +200,33 @@ class WorkflowContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("python -m unittest discover -s cli/tests -v", workflow)
 
+    def test_cross_packaging_uses_fast_compatible_crypto_fallback(self):
+        workflow = (
+            REPO_ROOT / ".github" / "workflows" / "build-abk-cli.yml"
+        ).read_text(encoding="utf-8")
+        cross_workflow = workflow.split(
+            "- name: Prepare Linux cross-packaging runtime",
+            maxsplit=1,
+        )[1]
+
+        self.assertNotIn(
+            "python -m pip install cryptography 2>/dev/null",
+            cross_workflow,
+        )
+        self.assertEqual(
+            2,
+            cross_workflow.count(
+                'assert abk._CRYPTO_BACKEND == \\\"pycryptodome\\\"'
+            ),
+        )
+        self.assertEqual(
+            2,
+            cross_workflow.count('$pip_cache:/root/.cache/pip'),
+        )
+        self.assertEqual(2, cross_workflow.count("trap restore_pip_cache_owner EXIT"))
+        self.assertIn('--entrypoint /bin/true', cross_workflow)
+        self.assertIn('--install "$CROSS_BINFMT"', cross_workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
