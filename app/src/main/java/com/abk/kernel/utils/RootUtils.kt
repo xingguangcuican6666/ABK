@@ -10,9 +10,12 @@ import android.os.Build
 import android.os.Environment
 import android.util.Base64
 import android.util.Log
+import com.abk.kernel.data.model.SusfsConfig
+import com.abk.kernel.data.model.SusfsRuntimeStatus
 import com.abk.kernel.data.model.RootGrantApp
 import com.abk.kernel.data.model.ROOT_PROFILE_FLAG_NO_NEW_PRIVS
 import com.abk.kernel.data.model.RootGrantProfile
+import com.google.gson.GsonBuilder
 import com.topjohnwu.superuser.CallbackList
 import com.topjohnwu.superuser.Shell
 import org.json.JSONObject
@@ -35,6 +38,10 @@ object RootUtils {
     private const val BUNDLED_KSUD_BINARY_NAME = "ksud"
     private const val BUNDLED_KSUD_METADATA_NAME = "source.properties"
     private const val BUNDLED_KSUD_INSTALL_DIR = "bundled-ksud"
+    private const val BUNDLED_SUSFS_ASSET_DIR = "susfs"
+    private const val BUNDLED_SUSFS_BINARY_NAME = "ksu_susfs"
+    private const val BUNDLED_SUSFS_METADATA_NAME = "source.properties"
+    private const val BUNDLED_SUSFS_INSTALL_DIR = "bundled-susfs"
     private const val ABK_META_MOUNT_ID = "meta-abk-mount"
     /** Matches KernelSU/Magisk folder names under /data/adb/modules (see meta-abk-mount). */
     private val SAFE_MODULE_ID_FOR_PATH = Regex("^[A-Za-z0-9._-]+$")
@@ -50,6 +57,7 @@ object RootUtils {
     private val bundledKsudLock = Any()
     @Volatile
     private var abkMetaMountPlaceholderEnsured = false
+    private val gsonPretty = GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create()
 
     private data class BundledKsudMetadata(
         val ref: String,
@@ -66,6 +74,28 @@ object RootUtils {
                 return raw.replace(Regex("""[^A-Za-z0-9._-]"""), "_").ifBlank { "default" }
             }
     }
+
+    private data class BundledSusfsMetadata(
+        val ref: String,
+        val commit: String,
+        val supportedAbis: List<String>,
+        val sha256ByAbi: Map<String, String>,
+    ) {
+        val installToken: String
+            get() {
+                val raw = listOf(ref, commit.take(12))
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .joinToString("-")
+                return raw.replace(Regex("""[^A-Za-z0-9._-]"""), "_").ifBlank { "default" }
+            }
+    }
+
+    private data class RootTextFile(
+        val path: String,
+        val content: String,
+        val mode: String = "0644",
+    )
 
     enum class Ak3SlotTarget(val slotSelectValue: String) {
         CURRENT("active"),
@@ -727,23 +757,41 @@ object RootUtils {
         val packageManager = context.packageManager
         val apps = installedApplications(packageManager)
         val grantedUids = AbkKsuNative.grantedUids()
+        return prepareRootGrantAppsForDisplay(
+            apps = apps
+                .asSequence()
+                .filter { it.packageName.isNotBlank() }
+                .mapNotNull { appInfo ->
+                    val packageName = appInfo.packageName ?: return@mapNotNull null
+                    val uid = appInfo.uid
+                    RootGrantApp(
+                        packageName = packageName,
+                        label = runCatching {
+                            packageManager.getApplicationLabel(appInfo).toString()
+                        }.getOrDefault(packageName),
+                        uid = uid,
+                        userName = AbkKsuNative.userName(uid),
+                        isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                        profile = buildRootGrantListProfile(packageName, uid, grantedUids)
+                    )
+                }
+                .toList(),
+            selfPackageName = context.packageName
+        )
+    }
+
+    internal fun prepareRootGrantAppsForDisplay(
+        apps: List<RootGrantApp>,
+        selfPackageName: String
+    ): List<RootGrantApp> {
+        val cleanSelfPackage = selfPackageName.trim()
         return apps
             .asSequence()
-            .filter { it.packageName.isNotBlank() }
-            .mapNotNull { appInfo ->
-                val packageName = appInfo.packageName ?: return@mapNotNull null
-                val uid = appInfo.uid
-                RootGrantApp(
-                    packageName = packageName,
-                    label = runCatching {
-                        packageManager.getApplicationLabel(appInfo).toString()
-                    }.getOrDefault(packageName),
-                    uid = uid,
-                    userName = AbkKsuNative.userName(uid),
-                    isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
-                    profile = buildRootGrantListProfile(packageName, uid, grantedUids)
-                )
+            .filterNot {
+                cleanSelfPackage.isNotBlank() &&
+                    it.packageName.equals(cleanSelfPackage, ignoreCase = true)
             }
+            .filter { it.packageName.isNotBlank() }
             .distinctBy { "${it.uid}:${it.packageName}" }
             .sortedWith(
                 compareByDescending<RootGrantApp> { it.profile.allowSu }
@@ -1156,9 +1204,169 @@ object RootUtils {
         return execRootScript(script, timeoutSeconds = 15L)
     }
 
+    fun readSusfsConfig(): SusfsConfig {
+        val json = readRootTextFile(SUSFS_CONFIG_PATH).orEmpty()
+        if (json.isBlank()) return defaultSusfsConfig()
+        return runCatching {
+            normalizeSusfsConfig(gsonPretty.fromJson(json, SusfsConfig::class.java))
+        }.getOrDefault(defaultSusfsConfig())
+    }
+
+    fun readSusfsRuntimeStatus(): SusfsRuntimeStatus {
+        val context = appContext ?: return SusfsRuntimeStatus(
+            diagnostics = listOf("ABK context unavailable"),
+            runtimeModuleId = SUSFS_RUNTIME_MODULE_ID,
+            runtimeModuleDir = SUSFS_RUNTIME_MODULE_DIR,
+            configPath = SUSFS_CONFIG_PATH,
+        )
+        val bundledPath = prepareBundledSusfsPath(context).orEmpty()
+        val installedPath = ensureBundledSusfsInstalled(context)
+        val metadata = readBundledSusfsMetadata(context)
+        val diagnostics = mutableListOf<String>()
+        if (installedPath == null) {
+            diagnostics += "bundled_susfs_binary_unavailable"
+        }
+        val versionResult = runSusfsCommand(listOf("show", "version"))
+        val featureResult = runSusfsCommand(listOf("show", "enabled_features"))
+        val versionText = versionResult.output.lastOrNull { it.isNotBlank() }?.trim().orEmpty()
+        val featureText = featureResult.output.joinToString("\n").trim()
+        if (!versionResult.success && versionResult.output.isNotEmpty()) {
+            diagnostics += versionResult.output.takeLast(2)
+        }
+        if (!featureResult.success && featureResult.output.isNotEmpty()) {
+            diagnostics += featureResult.output.takeLast(2)
+        }
+        val featureFlags = parseSusfsFeatureFlags(featureText)
+        val available = parseSusfsVersion(versionText) != null
+        return SusfsRuntimeStatus(
+            available = available,
+            kernelVersion = versionText,
+            rawFeatureText = featureText,
+            featureFlags = featureFlags,
+            support = if (available) buildSusfsSupportMatrix(versionText, featureFlags) else buildSusfsSupportMatrix("", emptyList()),
+            bundledBinaryRef = metadata?.ref.orEmpty().ifBlank { BUNDLED_SUSFS_REF },
+            bundledBinaryVersion = BUNDLED_SUSFS_VERSION,
+            bundledBinaryPublishedAt = BUNDLED_SUSFS_PUBLISHED_AT,
+            bundledBinaryPath = bundledPath,
+            installedBinaryPath = installedPath.orEmpty(),
+            runtimeModuleId = SUSFS_RUNTIME_MODULE_ID,
+            runtimeModuleDir = SUSFS_RUNTIME_MODULE_DIR,
+            configPath = SUSFS_CONFIG_PATH,
+            diagnostics = diagnostics.map { it.trim() }.filter { it.isNotBlank() }.distinct(),
+        )
+    }
+
+    fun applySusfsConfig(
+        config: SusfsConfig,
+        onOutput: ((String) -> Unit)? = null,
+    ): ShellResult {
+        val context = appContext
+            ?: return ShellResult(false, listOf("ABK context unavailable"))
+        val installedBinary = ensureBundledSusfsInstalled(context)
+            ?: return ShellResult(false, listOf("bundled_susfs_binary_unavailable"))
+        val normalized = normalizeSusfsConfig(config)
+        val files = listOf(
+            RootTextFile(SUSFS_CONFIG_PATH, gsonPretty.toJson(normalized)),
+            RootTextFile("$SUSFS_COMPAT_DIR/config.sh", renderSusfsCompatConfig(normalized)),
+            RootTextFile("$SUSFS_COMPAT_DIR/legit_mounts.txt", renderSusfsStringList(normalized.legitMounts)),
+            RootTextFile("$SUSFS_COMPAT_DIR/sus_path.txt", renderSusfsPathRules(normalized.pathRules)),
+            RootTextFile("$SUSFS_COMPAT_DIR/sus_path_loop.txt", renderSusfsPathRules(normalized.loopPathRules)),
+            RootTextFile("$SUSFS_COMPAT_DIR/sus_maps.txt", renderSusfsStringList(normalized.maps)),
+            RootTextFile("$SUSFS_COMPAT_DIR/sus_mount.txt", renderSusfsStringList(normalized.mounts)),
+            RootTextFile("$SUSFS_COMPAT_DIR/try_umount.txt", renderSusfsStringList(normalized.tryUmounts)),
+            RootTextFile("$SUSFS_COMPAT_DIR/sus_open_redirect.txt", renderSusfsOpenRedirectCompat(normalized.openRedirects)),
+            RootTextFile("$SUSFS_COMPAT_DIR/sus_kstat_statically.json", renderSusfsKstatJson(normalized.kstatEntries)),
+            RootTextFile("$SUSFS_RUNTIME_MODULE_DIR/module.prop", renderSusfsModuleProp()),
+            RootTextFile("$SUSFS_RUNTIME_MODULE_DIR/action.sh", renderSusfsActionScript(), mode = "0755"),
+            RootTextFile("$SUSFS_RUNTIME_MODULE_DIR/utils.sh", renderSusfsUtilsScript(), mode = "0755"),
+            RootTextFile("$SUSFS_RUNTIME_MODULE_DIR/post-fs-data.sh", renderSusfsPostFsDataScript(), mode = "0755"),
+            RootTextFile("$SUSFS_RUNTIME_MODULE_DIR/post-mount.sh", renderSusfsPostMountScript(), mode = "0755"),
+            RootTextFile("$SUSFS_RUNTIME_MODULE_DIR/service.sh", renderSusfsServiceScript(), mode = "0755"),
+            RootTextFile("$SUSFS_RUNTIME_MODULE_DIR/boot-completed.sh", renderSusfsBootCompletedScript(), mode = "0755"),
+        )
+        val writeResult = writeRootTextFiles(files)
+        if (!writeResult.success) return writeResult
+        val stateResult = execRootScript(
+            """
+                set -e
+                mkdir -p ${shellQuote(SUSFS_BINARY_DIR)} ${shellQuote(SUSFS_ROOT_DIR)} ${shellQuote(SUSFS_RUNTIME_MODULE_DIR)}
+                binary=${shellQuote(installedBinary)}
+                [ -x "${'$'}binary" ] || exit 127
+                rm -f ${shellQuote("$SUSFS_RUNTIME_MODULE_DIR/remove")}
+                if [ "${if (normalized.autoReplayEnabled) "1" else "0"}" = "1" ]; then
+                    rm -f ${shellQuote("$SUSFS_RUNTIME_MODULE_DIR/disable")}
+                else
+                    : > ${shellQuote("$SUSFS_RUNTIME_MODULE_DIR/disable")}
+                fi
+            """.trimIndent(),
+            timeoutSeconds = 20L,
+        )
+        if (!stateResult.success) return mergeShellResults(writeResult, stateResult)
+        val applyScript = """
+            set +e
+            for stage in post-fs-data.sh post-mount.sh service.sh boot-completed.sh; do
+                script=${shellQuote("$SUSFS_RUNTIME_MODULE_DIR")}/"${'$'}stage"
+                if [ -x "${'$'}script" ]; then
+                    echo "[ABK] susfs stage ${'$'}stage"
+                    sh "${'$'}script"
+                    rc=${'$'}?
+                    echo "[ABK] susfs stage ${'$'}stage rc=${'$'}rc"
+                fi
+            done
+        """.trimIndent()
+        val applyResult = execRootScript(applyScript, timeoutSeconds = 180L, onOutput = onOutput)
+        return mergeShellResults(writeResult, stateResult, applyResult)
+    }
+
+    fun resetSusfsConfig(onOutput: ((String) -> Unit)? = null): ShellResult =
+        applySusfsConfig(defaultSusfsConfig(), onOutput)
+
     private fun sanitizeExtensionId(value: String): String? {
         val clean = value.trim()
         return clean.takeIf { it.isNotBlank() && SAFE_EXTENSION_ID.matches(it) }
+    }
+
+    private fun readRootTextFile(path: String): String? {
+        return try {
+            createRootShell(timeoutSeconds = 20L).use { shell ->
+                val result = execWithShell(
+                    shell = shell,
+                    script = """
+                        file=${shellQuote(path)}
+                        [ -f "${'$'}file" ] || exit 3
+                        base64 "${'$'}file" 2>/dev/null | tr -d '\n'
+                    """.trimIndent(),
+                    normalizeOutput = false,
+                )
+                if (!result.success) return null
+                val encoded = result.output.joinToString("").trim()
+                if (encoded.isBlank()) "" else String(Base64.decode(encoded, Base64.DEFAULT))
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun writeRootTextFiles(files: List<RootTextFile>): ShellResult {
+        if (files.isEmpty()) return ShellResult(true, emptyList())
+        val script = buildString {
+            appendLine("set -e")
+            files.forEach { file ->
+                val payload = Base64.encodeToString(file.content.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+                val parent = File(file.path).parentFile?.absolutePath ?: "/"
+                appendLine("dir=${shellQuote(parent)}")
+                appendLine("file=${shellQuote(file.path)}")
+                appendLine("mkdir -p \"${'$'}dir\"")
+                if (payload.isBlank()) {
+                    appendLine(": > \"${'$'}file\"")
+                } else {
+                    appendLine("printf '%s' ${shellQuote(payload)} | base64 -d > \"${'$'}file\"")
+                }
+                appendLine("chmod ${file.mode} \"${'$'}file\" 2>/dev/null || true")
+                appendLine("restorecon \"${'$'}file\" 2>/dev/null || true")
+            }
+        }.trimIndent()
+        return execRootScript(script, timeoutSeconds = 60L)
     }
 
     private fun abkMetaMountPlaceholderScript(): String = """
@@ -1896,6 +2104,48 @@ object RootUtils {
         }.getOrNull()
     }
 
+    private fun prepareBundledSusfsPath(context: Context): String? {
+        val metadata = readBundledSusfsMetadata(context) ?: return null
+        val abi = selectBundledSusfsAbi(context, metadata) ?: return null
+        val assetPath = "$BUNDLED_SUSFS_ASSET_DIR/$abi/$BUNDLED_SUSFS_BINARY_NAME"
+        if (!assetExists(context, assetPath)) return null
+
+        val rootDir = File(context.filesDir, BUNDLED_SUSFS_INSTALL_DIR).apply { mkdirs() }
+        val installDir = File(rootDir, "${metadata.installToken}/$abi").apply { mkdirs() }
+        val binaryFile = File(installDir, BUNDLED_SUSFS_BINARY_NAME)
+
+        if (isBundledSusfsReady(binaryFile, abi, metadata)) {
+            cleanupObsoleteBundledSusfs(rootDir, metadata.installToken)
+            return binaryFile.absolutePath
+        }
+
+        installDir.deleteRecursively()
+        installDir.mkdirs()
+        val tempFile = File(installDir, "$BUNDLED_SUSFS_BINARY_NAME.tmp")
+        return runCatching {
+            context.assets.open(assetPath).use { input ->
+                tempFile.outputStream().use { output -> input.copyTo(output) }
+            }
+            tempFile.setReadable(true, true)
+            tempFile.setWritable(true, true)
+            tempFile.setExecutable(true, true)
+            val installed = File(installDir, BUNDLED_SUSFS_BINARY_NAME)
+            if (!tempFile.renameTo(installed)) {
+                tempFile.copyTo(installed, overwrite = true)
+                tempFile.delete()
+            }
+            installed.setReadable(true, true)
+            installed.setWritable(true, true)
+            installed.setExecutable(true, true)
+            if (!isBundledSusfsReady(installed, abi, metadata)) {
+                installed.delete()
+                return@runCatching null
+            }
+            cleanupObsoleteBundledSusfs(rootDir, metadata.installToken)
+            installed.absolutePath
+        }.getOrNull()
+    }
+
     private fun stageBundledAbkLkmAsset(
         context: Context,
         workDir: File,
@@ -2027,6 +2277,35 @@ object RootUtils {
         }.getOrNull()
     }
 
+    private fun readBundledSusfsMetadata(context: Context): BundledSusfsMetadata? {
+        return runCatching {
+            val props = Properties()
+            context.assets.open("$BUNDLED_SUSFS_ASSET_DIR/$BUNDLED_SUSFS_METADATA_NAME").use(props::load)
+            val listedAbis = runCatching {
+                context.assets.list(BUNDLED_SUSFS_ASSET_DIR).orEmpty().toList()
+            }.getOrDefault(emptyList())
+                .filter { it.isNotBlank() && it != BUNDLED_SUSFS_METADATA_NAME }
+            val supportedAbis = props.getProperty("abis")
+                ?.split(',')
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+                ?.ifEmpty { listedAbis }
+                ?: listedAbis
+            val sha256ByAbi = supportedAbis.mapNotNull { abi ->
+                props.getProperty("sha256.$abi")
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { digest -> abi to digest.lowercase() }
+            }.toMap()
+            BundledSusfsMetadata(
+                ref = props.getProperty("ref").orEmpty(),
+                commit = props.getProperty("commit").orEmpty(),
+                supportedAbis = supportedAbis,
+                sha256ByAbi = sha256ByAbi,
+            )
+        }.getOrNull()
+    }
+
     private fun selectBundledKsudAbi(
         context: Context,
         metadata: BundledKsudMetadata
@@ -2042,6 +2321,21 @@ object RootUtils {
         }
     }
 
+    private fun selectBundledSusfsAbi(
+        context: Context,
+        metadata: BundledSusfsMetadata,
+    ): String? {
+        val supported = metadata.supportedAbis.toSet()
+        Build.SUPPORTED_ABIS.forEach { abi ->
+            if (abi in supported && assetExists(context, "$BUNDLED_SUSFS_ASSET_DIR/$abi/$BUNDLED_SUSFS_BINARY_NAME")) {
+                return abi
+            }
+        }
+        return metadata.supportedAbis.firstOrNull { abi ->
+            assetExists(context, "$BUNDLED_SUSFS_ASSET_DIR/$abi/$BUNDLED_SUSFS_BINARY_NAME")
+        }
+    }
+
     private fun assetExists(context: Context, assetPath: String): Boolean =
         runCatching {
             context.assets.open(assetPath).use { true }
@@ -2051,6 +2345,20 @@ object RootUtils {
         binaryFile: File,
         abi: String,
         metadata: BundledKsudMetadata
+    ): Boolean {
+        if (!binaryFile.isFile || binaryFile.length() <= 0L) return false
+        if (!binaryFile.canExecute()) {
+            binaryFile.setExecutable(true, true)
+        }
+        if (!binaryFile.canExecute()) return false
+        val expectedSha256 = metadata.sha256ByAbi[abi] ?: return true
+        return sha256(binaryFile)?.equals(expectedSha256, ignoreCase = true) == true
+    }
+
+    private fun isBundledSusfsReady(
+        binaryFile: File,
+        abi: String,
+        metadata: BundledSusfsMetadata,
     ): Boolean {
         if (!binaryFile.isFile || binaryFile.length() <= 0L) return false
         if (!binaryFile.canExecute()) {
@@ -2080,6 +2388,44 @@ object RootUtils {
         rootDir.listFiles()
             ?.filter { it.isDirectory && it.name != currentToken }
             ?.forEach { it.deleteRecursively() }
+    }
+
+    private fun cleanupObsoleteBundledSusfs(rootDir: File, currentToken: String) {
+        rootDir.listFiles()
+            ?.filter { it.isDirectory && it.name != currentToken }
+            ?.forEach { it.deleteRecursively() }
+    }
+
+    private fun ensureBundledSusfsInstalled(context: Context): String? {
+        val staged = prepareBundledSusfsPath(context) ?: return null
+        val script = """
+            set -e
+            src=${shellQuote(staged)}
+            dst=${shellQuote(SUSFS_BINARY_PATH)}
+            dir=${shellQuote(SUSFS_BINARY_DIR)}
+            [ -r "${'$'}src" ] || exit 127
+            mkdir -p "${'$'}dir"
+            cp -f "${'$'}src" "${'$'}dst"
+            chmod 0755 "${'$'}dst" 2>/dev/null || true
+            restorecon "${'$'}dst" 2>/dev/null || true
+        """.trimIndent()
+        val result = execRootScript(script, timeoutSeconds = 30L)
+        return if (result.success) SUSFS_BINARY_PATH else null
+    }
+
+    private fun runSusfsCommand(
+        args: List<String>,
+        timeoutSeconds: Long = 20L,
+        onOutput: ((String) -> Unit)? = null,
+    ): ShellResult {
+        val context = appContext ?: return ShellResult(false, listOf("ABK context unavailable"))
+        val binaryPath = ensureBundledSusfsInstalled(context)
+            ?: return ShellResult(false, listOf("bundled_susfs_binary_unavailable"))
+        val command = buildList {
+            add(shellQuote(binaryPath))
+            addAll(args.map(::shellQuote))
+        }.joinToString(" ")
+        return execRootScript(command, timeoutSeconds = timeoutSeconds, onOutput = onOutput)
     }
 
     private fun withManagerShellHelpers(script: String): String {

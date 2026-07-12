@@ -273,11 +273,6 @@ fun InstalledModulesScreen(
     val modules = remember(state.abkRuntimeStatus?.modules, query) {
         state.abkRuntimeStatus?.modules.orEmpty()
             .filter { it.matchesRuntimeModuleQuery(query) }
-            .sortedWith(
-                compareBy<AbkRuntimeModule> { it.typeOrder() }
-                    .thenBy { !it.enabled }
-                    .thenBy { it.displayName().lowercase() }
-            )
     }
     val groupedModules = remember(modules) { groupRuntimeModulesForDisplay(modules) }
 
@@ -1377,13 +1372,6 @@ private fun AbkRuntimeModule.normalizedType(): String =
 
 private fun AbkRuntimeModule.canUninstallRuntimeModule(): Boolean =
     normalizedType() == "standard" && controllable && !readonly
-
-private fun AbkRuntimeModule.typeOrder(): Int = when (normalizedType()) {
-    "builtin" -> 0
-    "standard" -> 1
-    "kpm" -> 2
-    else -> 3
-}
 
 private data class RuntimeModuleDisplayGroup(
     val groupName: String? = null,

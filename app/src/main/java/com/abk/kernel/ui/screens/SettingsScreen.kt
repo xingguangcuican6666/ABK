@@ -114,11 +114,12 @@ fun SettingsScreen(
     var showThemeSettings by rememberSaveable { mutableStateOf(false) }
     var showAppProfileTemplates by rememberSaveable { mutableStateOf(false) }
     var showManagerTools by rememberSaveable { mutableStateOf(false) }
+    var showSusfsControl by rememberSaveable { mutableStateOf(false) }
     var showAboutPage by rememberSaveable { mutableStateOf(false) }
     var showOpenSourceLicenses by rememberSaveable { mutableStateOf(false) }
     var showExtensionManagerPage by rememberSaveable { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-    val showChildPage = showThemeSettings || showAppProfileTemplates || showManagerTools ||
+    val showChildPage = showThemeSettings || showAppProfileTemplates || showManagerTools || showSusfsControl ||
         showAboutPage || showOpenSourceLicenses || showExtensionManagerPage
     val childPageTransition = rememberChildPageOverlayTransition(
         visible = showChildPage,
@@ -128,6 +129,7 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         vm.refreshManagerSettings(force = true)
+        vm.refreshSusfsState(force = true)
     }
 
     LaunchedEffect(state.hasNativeManagerPermission) {
@@ -147,6 +149,7 @@ fun SettingsScreen(
         showThemeSettings = false
         showAppProfileTemplates = false
         showManagerTools = false
+        showSusfsControl = false
         showAboutPage = false
         showOpenSourceLicenses = false
         showExtensionManagerPage = false
@@ -193,11 +196,24 @@ fun SettingsScreen(
         childPageBack.resetProgress()
         showThemeSettings = false
         showAppProfileTemplates = false
+        showSusfsControl = false
         showAboutPage = false
         showOpenSourceLicenses = false
         showExtensionManagerPage = false
         showManagerTools = true
         vm.refreshManagerTools(force = true)
+    }
+
+    fun openSusfsControl() {
+        childPageBack.resetProgress()
+        showThemeSettings = false
+        showAppProfileTemplates = false
+        showManagerTools = false
+        showAboutPage = false
+        showOpenSourceLicenses = false
+        showExtensionManagerPage = false
+        showSusfsControl = true
+        vm.refreshSusfsState(force = true)
     }
 
     fun openAboutPage() {
@@ -304,6 +320,7 @@ fun SettingsScreen(
                 onOpenThemeSettings = ::openThemeSettings,
                 onOpenAppProfileTemplates = ::openAppProfileTemplates,
                 onOpenManagerTools = ::openManagerTools,
+                onOpenSusfsControl = ::openSusfsControl,
                 onOpenInstalledModules = onOpenInstalledModules,
                 onAbout = ::openAboutPage,
                 onOpenSourceLicenses = ::openOpenSourceLicenses,
@@ -506,6 +523,58 @@ fun SettingsScreen(
         }
 
         childPageTransition.AnimatedVisibility(
+            visible = { it && showSusfsControl },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
+            modifier = childPageModifier
+        ) {
+            val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = state.susfsLoading)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(childPageBack.backTransformModifier())
+            ) {
+                SettingsPageBackground(
+                    backgroundUri = state.customBackgroundUri,
+                    backgroundImageEnabled = state.backgroundImageEnabled
+                )
+                Scaffold(
+                    containerColor = Color.Transparent,
+                    topBar = {
+                        ExpressiveTopBar(
+                            title = stringResource(R.string.susfs_title),
+                            navigationIcon = {
+                                IconButton(onClick = childPageBack::requestDismiss) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                                }
+                            },
+                            actions = {
+                                IconButton(onClick = {
+                                    refreshPresentation.beginRefresh()
+                                    vm.refreshSusfsState(force = true)
+                                }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                                }
+                            }
+                        )
+                    }
+                ) {
+                    SusfsControlScreen(
+                        padding = it,
+                        state = state,
+                        showRefreshLoading = refreshPresentation.showLoading,
+                        onApply = vm::applySusfsConfig,
+                        onReset = vm::resetSusfsConfig,
+                        onRefresh = {
+                            refreshPresentation.beginRefresh()
+                            vm.refreshSusfsState(force = true)
+                        }
+                    )
+                }
+            }
+        }
+
+        childPageTransition.AnimatedVisibility(
             visible = { it && showAboutPage },
             enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
             exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
@@ -602,6 +671,7 @@ private fun SettingsMainContent(
     onOpenThemeSettings: () -> Unit,
     onOpenAppProfileTemplates: () -> Unit,
     onOpenManagerTools: () -> Unit,
+    onOpenSusfsControl: () -> Unit,
     onOpenInstalledModules: () -> Unit,
     onAbout: () -> Unit,
     onOpenSourceLicenses: () -> Unit,
@@ -818,6 +888,7 @@ private fun SettingsMainContent(
             vm = vm,
             onOpenAppProfileTemplates = onOpenAppProfileTemplates,
             onOpenManagerTools = onOpenManagerTools,
+            onOpenSusfsControl = onOpenSusfsControl,
             onOpenInstalledModules = onOpenInstalledModules
         )
 
@@ -938,9 +1009,9 @@ private fun ManagerInjectedSettingsGroup(
     vm: MainViewModel,
     onOpenAppProfileTemplates: () -> Unit,
     onOpenManagerTools: () -> Unit,
+    onOpenSusfsControl: () -> Unit,
     onOpenInstalledModules: () -> Unit
 ) {
-    if (!state.hasNativeManagerPermission) return
     val hasInjectedSettings = state.managerSettingsItems.isNotEmpty()
     val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = state.managerSettingsLoading)
     val showRefreshLoading = refreshPresentation.showLoading
@@ -992,6 +1063,7 @@ private fun ManagerInjectedSettingsGroup(
                             when (item.id) {
                                 "app_profile_templates" -> onOpenAppProfileTemplates()
                                 "manager_tools" -> onOpenManagerTools()
+                                "susfs_control" -> onOpenSusfsControl()
                                 "kpm" -> onOpenInstalledModules()
                             }
                         }
@@ -1674,6 +1746,7 @@ private fun managerSettingIcon(id: String) = when (id) {
     "selinux_hide" -> Icons.Default.Shield
     "default_umount_modules" -> Icons.Default.FolderDelete
     "webview_debug" -> Icons.Default.Code
+    "susfs_control" -> Icons.Default.Extension
     else -> Icons.Default.Settings
 }
 
@@ -2532,6 +2605,7 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
             "SukiSU" -> stringResource(R.string.settings_group_backend_desc, "SukiSU")
             "KernelSU" -> stringResource(R.string.settings_group_backend_desc, "KernelSU")
             stringResource(R.string.settings_manager_settings) -> stringResource(R.string.settings_group_manager_settings_desc)
+            stringResource(R.string.settings_kernel_capabilities) -> stringResource(R.string.settings_group_kernel_capabilities_desc)
             stringResource(R.string.settings_system_tools) -> stringResource(R.string.settings_group_system_tools_desc)
             stringResource(R.string.settings_allowlist) -> stringResource(R.string.settings_group_allowlist_desc)
             stringResource(R.string.settings_tool_status) -> stringResource(R.string.settings_group_tool_status_desc)
@@ -2555,6 +2629,7 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
             stringResource(R.string.settings_theme) -> Icons.Default.Palette
             "ReSukiSU", "SukiSU", "KernelSU" -> Icons.Default.AdminPanelSettings
             stringResource(R.string.settings_manager_settings) -> Icons.Default.AdminPanelSettings
+            stringResource(R.string.settings_kernel_capabilities) -> Icons.Default.Extension
             stringResource(R.string.settings_system_tools) -> Icons.Default.Build
             stringResource(R.string.settings_allowlist) -> Icons.Default.VerifiedUser
             stringResource(R.string.settings_tool_status) -> Icons.Default.Info
