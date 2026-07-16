@@ -659,19 +659,29 @@ class CommandBehaviorTests(unittest.TestCase):
                 self.assertEqual([], client.trigger_calls)
 
     def test_dry_run_redacts_kpm_password(self):
-        client = RecordingGitHubClient(fork=None)
-
-        result, output = self._run_build(
-            client,
-            ksu_variant="SukiSU",
-            kpm=True,
-            kpm_password="safe-$password!",
-            dry_run=True,
+        cases = (
+            ("standard", {}),
+            ("full", {"matrix": "full"}),
+            (
+                "all-managers",
+                {"matrix": "all-managers", "manager_variants": "SukiSU"},
+            ),
         )
+        for label, overrides in cases:
+            with self.subTest(mode=label):
+                client = RecordingGitHubClient(fork=None)
+                result, output = self._run_build(
+                    client,
+                    ksu_variant="SukiSU",
+                    kpm=True,
+                    kpm_password="safe-$password!",
+                    dry_run=True,
+                    **overrides,
+                )
 
-        self.assertEqual(0, result, output)
-        self.assertNotIn("safe-$password!", output)
-        self.assertIn('"kpm_password": "***"', output)
+                self.assertEqual(0, result, output)
+                self.assertNotIn("safe-$password!", output)
+                self.assertIn('"kpm_password": "***"', output)
 
     def test_first_build_dispatches_to_newly_created_user_fork(self):
         client = RecordingGitHubClient(fork=None)
@@ -767,6 +777,10 @@ class CommandBehaviorTests(unittest.TestCase):
         self.assertEqual(1, result)
         self.assertNotIn(password, output)
         self.assertIn("***", output)
+        self.assertEqual(
+            password,
+            client.trigger_calls[0]["inputs"]["kpm_password"],
+        )
 
     def test_verified_artifact_download_succeeds(self):
         with tempfile.TemporaryDirectory() as output_dir:

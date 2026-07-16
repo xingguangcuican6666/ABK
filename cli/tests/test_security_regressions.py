@@ -612,6 +612,50 @@ print(json.dumps({"started": started, "finished": finished}))
         )
         opener.open.assert_called_once_with(request, timeout=30)
 
+    def test_verbose_api_logging_never_includes_request_url_or_secret_name(self):
+        client = abk.GitHubClient(
+            token="sensitive-token",
+            repo="alice/ABK",
+            verbose=True,
+        )
+        secret_path = (
+            f"/repos/alice/ABK/actions/secrets/{abk.SIGNING_SECRET_NAME}"
+        )
+        signed_path = secret_path + "?signature=sensitive-signature"
+        stderr = io.StringIO()
+
+        with (
+            mock.patch.object(
+                abk,
+                "_open_without_redirect",
+                return_value=io.BytesIO(b"{}"),
+            ),
+            contextlib.redirect_stderr(stderr),
+        ):
+            result = client._request("GET", signed_path)
+
+        rendered = stderr.getvalue()
+        self.assertEqual({}, result)
+        self.assertEqual("> GET GitHub API request\n", rendered)
+        self.assertNotIn(secret_path, rendered)
+        self.assertNotIn(abk.SIGNING_SECRET_NAME, rendered)
+        self.assertNotIn("sensitive-signature", rendered)
+        self.assertNotIn("sensitive-token", rendered)
+
+    def test_public_build_inputs_never_copy_the_password_value(self):
+        private_inputs = {
+            "use_kpm": "true",
+            "kpm_password": "sensitive-password",
+        }
+
+        public_inputs = abk._redacted_inputs(private_inputs)
+
+        self.assertEqual("true", public_inputs["use_kpm"])
+        self.assertEqual("***", public_inputs["kpm_password"])
+        self.assertNotIn("sensitive-password", json.dumps(public_inputs))
+        self.assertEqual("sensitive-password", private_inputs["kpm_password"])
+        self.assertEqual("", abk._redacted_inputs({"kpm_password": ""})["kpm_password"])
+
     def test_tls_context_preserves_an_explicit_custom_ca_bundle(self):
         ca_bundle = Path(self.temp_dir.name) / "corporate-ca.pem"
         ca_bundle.write_text("test CA", encoding="utf-8")

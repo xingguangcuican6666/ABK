@@ -766,7 +766,10 @@ class GitHubClient:
             data = json.dumps(data).encode()
 
         if self.verbose:
-            print(f"> {method} {url}", file=sys.stderr)
+            # Request URLs can contain secret identifiers or signed query
+            # parameters.  Keep verbose output useful without ever treating
+            # the full URL as log-safe data.
+            print(f"> {method} GitHub API request", file=sys.stderr)
         req = Request(url, data=data, headers=headers, method=method)
         try:
             with _open_without_redirect(req, timeout=30) as resp:
@@ -2642,9 +2645,14 @@ def _all_managers_inputs(args):
 
 
 def _redacted_inputs(inputs):
-    result = dict(inputs)
-    if result.get("kpm_password"):
-        result["kpm_password"] = "***"
+    # Build the public representation field by field so the password value is
+    # never copied into an object that may be rendered in logs or JSON.
+    result = {}
+    for name, value in inputs.items():
+        if name == "kpm_password":
+            result[name] = "***" if value else ""
+            continue
+        result[name] = value
     return result
 
 
