@@ -317,35 +317,39 @@ abk sync
 使用 `--lang` 切换语言（持久化保存）：
 
 ```bash
-abk --lang en-us --help    # English
-abk --lang ja-jp --help    # 日本語
-abk --lang zh-neko --help  # 中文猫娘 🐱
+abk --lang en-US --help          # English
+abk --lang ja-JP --help          # 日本語
+abk --lang zh-CN-x-neko --help   # 中文猫娘 🐱
 ```
 
 | Code | Language |
 |------|----------|
-| `zh-cn` | 中文 (默认) |
-| `en-us` | English |
-| `ru-ru` | Русский |
-| `ja-jp` | 日本語 |
-| `ko-kr` | 한국어 |
-| `hi-in` | हिन्दी |
-| `de-de` | Deutsch |
-| `fr-fr` | Français |
-| `es-es` | Español |
-| `pt-br` | Português |
-| `jp-neko` | 日本語猫娘 🐱 |
-| `zh-neko` | 中文猫娘 🐱 |
+| `zh-CN` | 中文 (默认) |
+| `en-US` | English |
+| `ru-RU` | Русский |
+| `ja-JP` | 日本語 |
+| `ko-KR` | 한국어 |
+| `hi-IN` | हिन्दी |
+| `de-DE` | Deutsch |
+| `fr-FR` | Français |
+| `es-ES` | Español |
+| `pt-BR` | Português |
+| `ja-JP-x-neko` | 日本語猫娘 🐱 |
+| `zh-CN-x-neko` | 中文猫娘 🐱 |
 | `eo` | Esperanto |
-| `zh-zako` | zako~ zako~ |
+| `zh-CN-x-zako` | zako~ zako~ |
+
+Language tags are matched case-insensitively. Existing lowercase values and the
+legacy custom IDs `jp-neko`, `zh-neko`, and `zh-zako` remain accepted for
+backward compatibility. The CLI exposes canonical tags, while its shared config
+continues to store the older IDs so previous CLI/Desktop builds can still read it.
 
 ## 添加新语言 / Adding New Languages
 
-1. 在 `cli/i18n/` 目录下创建新的 JSON 文件，文件名使用语言代码（如 `fr-fr.json`）
+1. 在 `cli/i18n/` 目录下创建新的 JSON 文件；`LANGUAGE_CATALOGS` 将规范语言标签映射到全小写的目录文件名（例如对外使用 `fr-FR`，文件名为 `fr-fr.json`）
 2. 复制 `zh-cn.json` 的内容，将所有值翻译为目标语言
-3. 更新 `cli/i18n/__init__.py`，将新语言代码添加到 `detect_language()` 函数的白名单
-4. 更新 `cli/abk.py` 中的 `SUPPORTED_LANGUAGES`
-5. 更新本 README 的语言支持表格
+3. 更新 `cli/i18n/__init__.py` 中的 `LANGUAGE_CATALOGS`；如需迁移旧值，同时添加兼容别名
+4. 更新本 README 的语言支持表格
 
 **注意：** KernelSU 分支名作为 API 参数时**不能翻译**，CLI 会自动将
 `Stable`/`Latest`/`Dev`/`Custom` 映射为

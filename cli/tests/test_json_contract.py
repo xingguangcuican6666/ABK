@@ -164,10 +164,11 @@ class JsonContractTests(unittest.TestCase):
         self.assertEqual("whoami", payload["command"])
         self.assertEqual("", stderr)
 
-    def test_explicit_repo_whoami_reports_only_that_repository(self):
+    def test_explicit_repo_whoami_preserves_user_identity_for_user_token(self):
         client = mock.Mock()
         client.authentication_error = None
         client.repo = "org/custom-abk"
+        client.get.return_value = {"full_name": "org/custom-abk"}
         client.get_user.return_value = {"login": "alice"}
         with (
             mock.patch.object(abk, "make_client", return_value=client),
@@ -191,11 +192,94 @@ class JsonContractTests(unittest.TestCase):
         self.assertEqual("org/custom-abk", payload["repo"])
         self.assertFalse(payload["needsFork"])
         self.assertFalse(payload["needsSync"])
+        self.assertEqual({"login": "alice"}, payload["user"])
         self.assertIsNone(payload["fork"])
         self.assertEqual("repository", payload["signingKeySource"])
+        client.get.assert_called_once_with("/repos/org/custom-abk")
+        client.get_user.assert_called_once_with()
         client.get_fork.assert_not_called()
         client.check_behind.assert_not_called()
         metadata.assert_called_once_with("org/custom-abk", client)
+        self.assertEqual("", stderr)
+
+    def test_explicit_repo_whoami_supports_installation_token_without_user(self):
+        client = mock.Mock()
+        client.authentication_error = None
+        client.repo = "org/custom-abk"
+        client.get.return_value = {"full_name": "org/custom-abk"}
+        client.get_user.side_effect = abk.GitHubAPIError(
+            403,
+            "resource not accessible by integration",
+        )
+        with (
+            mock.patch.object(abk, "make_client", return_value=client),
+            mock.patch.object(
+                abk,
+                "_signing_key_metadata",
+                return_value=(False, None),
+            ),
+        ):
+            exit_code, payload, stderr = self._run_main([
+                "abk",
+                "--json",
+                "--token",
+                "ghs_installation-token",
+                "--repo",
+                "org/custom-abk",
+                "whoami",
+            ])
+
+        self.assertEqual(0, exit_code)
+        self.assertTrue(payload["loggedIn"])
+        self.assertIsNone(payload["user"])
+        client.get.assert_called_once_with("/repos/org/custom-abk")
+        client.get_user.assert_not_called()
+        self.assertEqual("", stderr)
+
+    def test_explicit_repo_whoami_maps_an_invalid_token_to_not_authenticated(self):
+        client = mock.Mock()
+        client.authentication_error = None
+        client.repo = "org/custom-abk"
+        client.get.side_effect = abk.GitHubAPIError(401, "bad credentials")
+        with mock.patch.object(abk, "make_client", return_value=client):
+            exit_code, payload, stderr = self._run_main([
+                "abk",
+                "--json",
+                "--token",
+                "expired-token",
+                "--repo",
+                "org/custom-abk",
+                "whoami",
+            ])
+
+        self.assertEqual(1, exit_code)
+        self.assertFalse(payload["ok"])
+        self.assertEqual("not_authenticated", payload["errorCode"])
+        client.get_user.assert_not_called()
+        self.assertEqual("", stderr)
+
+    def test_explicit_repo_whoami_maps_user_probe_401_to_not_authenticated(self):
+        client = mock.Mock()
+        client.authentication_error = None
+        client.repo = "org/custom-abk"
+        client.get.return_value = {"full_name": "org/custom-abk"}
+        client.get_user.side_effect = abk.GitHubAPIError(401, "bad credentials")
+        with mock.patch.object(abk, "make_client", return_value=client):
+            exit_code, payload, stderr = self._run_main([
+                "abk",
+                "--json",
+                "--token",
+                "expired-user-token",
+                "--repo",
+                "org/custom-abk",
+                "whoami",
+            ])
+
+        self.assertEqual(1, exit_code)
+        self.assertFalse(payload["ok"])
+        self.assertEqual("not_authenticated", payload["errorCode"])
+        client.get.assert_called_once_with("/repos/org/custom-abk")
+        client.get_user.assert_called_once_with()
         self.assertEqual("", stderr)
 
     def test_whoami_without_a_fork_does_not_adopt_upstream_signing_metadata(self):
@@ -387,6 +471,105 @@ class JsonContractTests(unittest.TestCase):
         self.assertFalse(payload["ok"])
         self.assertEqual("unexpected_error", payload["errorCode"])
         self.assertIn("read-only", payload["error"])
+        self.assertEqual("", stderr)
+
+    def test_language_selected_with_help_is_persisted_before_argparse_exits(self):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        self.addCleanup(abk.refresh_workflow_names)
+        self.addCleanup(abk.load_translations, "zh-CN")
+        with (
+            mock.patch.object(
+                sys,
+                "argv",
+                ["abk", "--lang", "en-us", "--help"],
+            ),
+            contextlib.redirect_stdout(stdout),
+            contextlib.redirect_stderr(stderr),
+            self.assertRaises(SystemExit) as raised,
+        ):
+            abk.main()
+
+        self.assertEqual(0, raised.exception.code)
+        self.assertIn("usage:", stdout.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        saved = json.loads(abk.CONFIG_FILE.read_text(encoding="utf-8"))
+        self.assertEqual("en-us", saved["lang"])
+
+    def test_help_uses_the_last_language_selected_before_the_help_flag(self):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        self.addCleanup(abk.refresh_workflow_names)
+        self.addCleanup(abk.load_translations, "zh-CN")
+        with (
+            mock.patch.object(
+                sys,
+                "argv",
+                [
+                    "abk",
+                    "--lang",
+                    "en-us",
+                    "--lang=fr-FR",
+                    "--help",
+                    "--lang",
+                    "de-DE",
+                ],
+            ),
+            contextlib.redirect_stdout(stdout),
+            contextlib.redirect_stderr(stderr),
+            self.assertRaises(SystemExit) as raised,
+        ):
+            abk.main()
+
+        self.assertEqual(0, raised.exception.code)
+        self.assertIn("Afficher cette aide et quitter", stdout.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        saved = json.loads(abk.CONFIG_FILE.read_text(encoding="utf-8"))
+        self.assertEqual("fr-fr", saved["lang"])
+
+    def test_language_pre_scan_ignores_options_after_double_dash(self):
+        self.assertEqual(
+            "en-us",
+            abk.requested_language([
+                "--lang",
+                "en-us",
+                "--",
+                "--lang",
+                "fr-fr",
+            ]),
+        )
+
+    def test_legacy_language_alias_is_persisted_as_its_canonical_tag(self):
+        self.addCleanup(abk.refresh_workflow_names)
+        self.addCleanup(abk.load_translations, "zh-CN")
+
+        exit_code, payload, stderr = self._run_main([
+            "abk",
+            "--json",
+            "--lang",
+            "jp-neko",
+            "list",
+        ])
+
+        self.assertEqual(0, exit_code)
+        self.assertTrue(payload["ok"])
+        self.assertEqual("", stderr)
+        saved = json.loads(abk.CONFIG_FILE.read_text(encoding="utf-8"))
+        self.assertEqual("jp-neko", saved["lang"])
+
+    def test_explicit_language_does_not_fallback_from_an_invalid_tag(self):
+        exit_code, payload, stderr = self._run_main([
+            "abk",
+            "--json",
+            "--lang",
+            "zh-zak0",
+            "list",
+        ])
+
+        self.assertEqual(2, exit_code)
+        self.assertFalse(payload["ok"])
+        self.assertEqual("invalid_arguments", payload["errorCode"])
+        self.assertFalse(abk.CONFIG_FILE.exists())
         self.assertEqual("", stderr)
 
     def test_build_preflight_errors_use_invalid_arguments_code(self):

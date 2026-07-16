@@ -52,7 +52,13 @@ except ImportError:
     _CERTIFI_CA_BUNDLE = None
 
 sys.path.insert(0, str(Path(__file__).parent))
-from i18n import t, load_translations
+from i18n import (
+    SUPPORTED_LANGUAGES,
+    language_storage_id,
+    load_translations,
+    normalize_language_tag,
+    t,
+)
 
 
 def configure_stdio():
@@ -1884,6 +1890,19 @@ def _set_build_error(args, message, error_code, *, repo=None, stage=None, warnin
     _set_json_error(args, message, error_code, **payload)
 
 
+def _authentication_error_code(error, default="authentication_failed"):
+    if isinstance(error, GitHubAPIError) and error.status_code == 401:
+        return "not_authenticated"
+    return default
+
+
+def _is_installation_access_token(token):
+    # GitHub documents ghs_ as the installation-access-token prefix. Keep the
+    # endpoint fallback below for older or nonstandard credentials, but avoid
+    # an unsupported GET /user request for the normal installation-token path.
+    return isinstance(token, str) and token.startswith("ghs_")
+
+
 def _report_client_authentication_error(client, args, **payload):
     error = getattr(client, "authentication_error", None)
     if not isinstance(error, BaseException):
@@ -1898,11 +1917,7 @@ def _report_client_authentication_error(client, args, **payload):
     )
     message = t("login_verify_failed", error=redacted_error)
     print(message, file=sys.stderr)
-    error_code = (
-        "not_authenticated"
-        if isinstance(error, GitHubAPIError) and error.status_code == 401
-        else "authentication_failed"
-    )
+    error_code = _authentication_error_code(error)
     _set_json_error(args, redacted_error, error_code, **payload)
     return True
 
@@ -2175,10 +2190,29 @@ def cmd_whoami(args):
     if _report_client_authentication_error(client, args):
         return 1
     try:
-        user = client.get_user()
-        print(t("status_user", user=user.get('login', 'Unknown')))
-
         explicit_repo = _repo_is_explicit(client, args)
+        if explicit_repo:
+            # Repository-scoped credentials, including GitHub App installation
+            # tokens, can access a repository without representing a user.
+            # Validate repository access first, then preserve user identity for
+            # OAuth/PAT credentials while tolerating /user for installation
+            # tokens only after the credential has already proved usable.
+            client.get(f"/repos/{client.repo}")
+            if _is_installation_access_token(token):
+                user = None
+            else:
+                try:
+                    user = client.get_user()
+                except GitHubAPIError as exc:
+                    if exc.status_code != 403:
+                        raise
+                    user = None
+        else:
+            user = client.get_user()
+
+        if user is not None:
+            print(t("status_user", user=user.get('login', 'Unknown')))
+
         fork = None if explicit_repo else client.get_fork()
         behind = {"behind_by": 0, "ahead_by": 0}
         if explicit_repo:
@@ -2222,7 +2256,11 @@ def cmd_whoami(args):
                 ),
                 behindBy=behind.get("behind_by", 0),
                 aheadBy=behind.get("ahead_by", 0),
-                user={"login": user.get("login", "")},
+                user=(
+                    {"login": user.get("login", "")}
+                    if user is not None
+                    else None
+                ),
                 fork=(
                     {"fullName": fork.get("full_name", "")}
                     if fork and not explicit_repo
@@ -2235,7 +2273,14 @@ def cmd_whoami(args):
         return 0
     except Exception as exc:
         print(t("login_verify_failed", error=exc), file=sys.stderr)
-        _set_json_error(args, exc, "login_verification_failed")
+        _set_json_error(
+            args,
+            exc,
+            _authentication_error_code(
+                exc,
+                default="login_verification_failed",
+            ),
+        )
         return 1
 
 
@@ -3445,12 +3490,6 @@ def cmd_self_test(args):
         return 1
 
 
-SUPPORTED_LANGUAGES = (
-    "zh-cn", "en-us", "ru-ru", "ja-jp", "ko-kr", "hi-in", "de-de",
-    "fr-fr", "es-es", "pt-br", "jp-neko", "zh-neko", "eo", "zh-zako",
-)
-
-
 def refresh_workflow_names():
     name_keys = {
         "a12": "build_target_a12",
@@ -3465,13 +3504,23 @@ def refresh_workflow_names():
         WORKFLOWS[target]["name"] = t(key)
 
 
-def requested_language(argv):
+def requested_language(argv, stop_at_help=False):
+    requested = None
     for index, arg in enumerate(argv):
+        if arg == "--" or (stop_at_help and arg in {"-h", "--help"}):
+            break
         if arg == "--lang" and index + 1 < len(argv):
-            return argv[index + 1]
+            requested = argv[index + 1]
         if arg.startswith("--lang="):
-            return arg.split("=", 1)[1]
-    return None
+            requested = arg.split("=", 1)[1]
+    return requested
+
+
+def supported_language_tag(value):
+    normalized = normalize_language_tag(value, allow_fallback=False)
+    if normalized is None:
+        raise argparse.ArgumentTypeError(f"unsupported language tag: {value}")
+    return normalized
 
 
 def repo_slug(value):
@@ -3653,21 +3702,34 @@ def _run_json_command(args):
 
 
 def _persist_requested_language(language):
-    if language not in SUPPORTED_LANGUAGES:
+    stored_language = language_storage_id(language)
+    if stored_language is None:
         return
     with _config_process_lock():
         config = load_config()
-        if config.get("lang") != language:
-            config["lang"] = language
+        if config.get("lang") != stored_language:
+            config["lang"] = stored_language
             save_config(config)
 
 
 def main():
     # 提前检测 --lang 以确保帮助文本使用正确语言
-    early_language = requested_language(sys.argv[1:])
-    if early_language in SUPPORTED_LANGUAGES:
+    raw_argv = sys.argv[1:]
+    option_argv = raw_argv[:raw_argv.index("--")] if "--" in raw_argv else raw_argv
+    help_requested = any(arg in {"-h", "--help"} for arg in option_argv)
+    early_language = normalize_language_tag(
+        requested_language(option_argv, stop_at_help=help_requested),
+        allow_fallback=False,
+    )
+    if early_language:
         load_translations(early_language)
         refresh_workflow_names()
+
+        # argparse exits while handling --help, so persist that selection now.
+        # Other invocations retain the normal post-parse behavior below; JSON
+        # commands keep persistence inside their output-capture boundary.
+        if help_requested:
+            _persist_requested_language(early_language)
     
     parser = ABKArgumentParser(
         prog="abk",
@@ -3679,7 +3741,12 @@ def main():
     parser.add_argument("--token", help=t("help_token"))
     parser.add_argument("--repo", type=repo_slug, help=t("help_repo"))
     parser.add_argument("--verbose", "-v", action="store_true", help=t("help_verbose"))
-    parser.add_argument("--lang", choices=SUPPORTED_LANGUAGES, help=t("help_lang"))
+    parser.add_argument(
+        "--lang",
+        type=supported_language_tag,
+        choices=SUPPORTED_LANGUAGES,
+        help=t("help_lang"),
+    )
     parser.add_argument(
         "--json",
         action="store_true",
