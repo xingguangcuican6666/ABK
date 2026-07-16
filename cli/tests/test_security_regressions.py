@@ -1,10 +1,15 @@
 import base64
 import contextlib
+import errno
 import io
+import json
 import os
+import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from email.message import Message
 from pathlib import Path
 from unittest import mock
@@ -28,6 +33,7 @@ class SigningClient:
         self.secret_updates = []
         self.publications = []
         self.secret_deletes = []
+        self.events = []
 
     def repository_secret_exists(self, name):
         return self.secret_exists
@@ -36,11 +42,13 @@ class SigningClient:
         return self.published_key
 
     def create_or_update_secret(self, name, value):
+        self.events.append("secret")
         self.secret_updates.append((name, value))
         self.secret_exists = True
         return True
 
     def publish_signing_key(self, value):
+        self.events.append("public")
         self.publications.append(value)
         self.published_key = value
         return True
@@ -86,6 +94,7 @@ class SecurityRegressionTests(unittest.TestCase):
         else:
             self.assertTrue(abk.RSA.import_key(private_material).has_private())
         self.assertEqual([public_key], client.publications)
+        self.assertEqual(["public", "secret"], client.events)
         config = abk.load_config()
         state = config[abk.SIGNING_STATE_CONFIG_KEY]["alice/abk"]
         self.assertEqual(public_key, state["public_key"])
@@ -94,11 +103,48 @@ class SecurityRegressionTests(unittest.TestCase):
         if os.name != "nt":
             self.assertEqual(0o700, self.config_dir.stat().st_mode & 0o777)
             self.assertEqual(0o600, self.config_file.stat().st_mode & 0o777)
+            self.assertEqual(
+                0o600,
+                (self.config_dir / abk.CONFIG_LOCK_FILE).stat().st_mode & 0o777,
+            )
 
     def test_missing_crypto_backend_fails_cleanly(self):
         with mock.patch.object(abk, "_CRYPTO_BACKEND", None):
             with self.assertRaisesRegex(RuntimeError, "requires cryptography"):
                 abk.generate_signing_keypair()
+
+    def test_logout_without_config_has_no_filesystem_side_effect(self):
+        args = mock.Mock(json=False)
+        with (
+            mock.patch.object(abk, "_config_process_lock") as process_lock,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            result = abk.cmd_logout(args)
+
+        self.assertEqual(0, result)
+        process_lock.assert_not_called()
+        self.assertFalse(self.config_dir.exists())
+
+    def test_signing_metadata_rejects_invalid_environment_and_config_keys(self):
+        config = {
+            abk.SIGNING_STATE_CONFIG_KEY: {
+                "alice/abk": {
+                    "public_key": "not-an-rsa-key",
+                    "secret_name": abk.SIGNING_SECRET_NAME,
+                    "version": abk.SIGNING_KEY_VERSION,
+                }
+            }
+        }
+        abk.save_config(config)
+
+        with mock.patch.dict(
+            os.environ,
+            {"ABK_SIGNING_KEY": "also-not-an-rsa-key"},
+        ):
+            available, source = abk._signing_key_metadata("alice/ABK")
+
+        self.assertFalse(available)
+        self.assertIsNone(source)
 
     def test_existing_published_key_is_adopted_without_rotating_secret(self):
         if not abk._CRYPTO_BACKEND:
@@ -135,6 +181,33 @@ class SecurityRegressionTests(unittest.TestCase):
         state = abk.load_config()[abk.SIGNING_STATE_CONFIG_KEY]["alice/abk"]
         self.assertEqual(result, state["public_key"])
 
+    def test_valid_android_key_repairs_a_damaged_cli_cache(self):
+        if not abk._CRYPTO_BACKEND:
+            self.skipTest("RSA backend unavailable")
+        _, android_public_key = abk.generate_signing_keypair()
+        abk.save_config({
+            abk.SIGNING_STATE_CONFIG_KEY: {
+                "alice/abk": {
+                    "public_key": "damaged-local-cache",
+                    "secret_name": abk.SIGNING_SECRET_NAME,
+                    "version": abk.SIGNING_KEY_VERSION,
+                }
+            }
+        })
+        client = SigningClient(
+            secret_exists=True,
+            published_key=android_public_key,
+        )
+
+        result = abk.ensure_signing_key(client)
+
+        expected = abk.normalize_signing_public_key(android_public_key)
+        self.assertEqual(expected.strip(), result.strip())
+        state = abk.load_config()[abk.SIGNING_STATE_CONFIG_KEY]["alice/abk"]
+        self.assertEqual(expected.strip(), state["public_key"].strip())
+        self.assertEqual([], client.secret_updates)
+        self.assertEqual([], client.publications)
+
     def test_signing_state_is_scoped_to_repository(self):
         if not abk._CRYPTO_BACKEND:
             self.skipTest("RSA backend unavailable")
@@ -160,7 +233,7 @@ class SecurityRegressionTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "private GitHub secret is missing"):
                 abk.ensure_signing_key(client)
 
-    def test_publication_failure_rolls_back_private_secret(self):
+    def test_publication_failure_never_deletes_write_only_secret(self):
         if not abk._CRYPTO_BACKEND:
             self.skipTest("RSA backend unavailable")
 
@@ -170,11 +243,281 @@ class SecurityRegressionTests(unittest.TestCase):
 
         client = FailingPublisher()
         with contextlib.redirect_stdout(io.StringIO()):
-            with self.assertRaisesRegex(RuntimeError, "publication failure"):
+            with self.assertRaisesRegex(RuntimeError, "publication failed before"):
                 abk.ensure_signing_key(client)
 
-        self.assertEqual([abk.SIGNING_SECRET_NAME], client.secret_deletes)
+        self.assertEqual([], client.secret_deletes)
+        self.assertEqual([], client.secret_updates)
         self.assertFalse(self.config_file.exists())
+
+    def test_android_winning_initialization_is_adopted_before_cli_secret_write(self):
+        if not abk._CRYPTO_BACKEND:
+            self.skipTest("RSA backend unavailable")
+        cli_private, cli_public = abk.generate_signing_keypair()
+        _, android_public = abk.generate_signing_keypair()
+
+        class AndroidWinsClient(SigningClient):
+            def publish_signing_key(self, value):
+                self.events.append("android-public-and-secret")
+                self.published_key = android_public
+                self.secret_exists = True
+                return False
+
+        client = AndroidWinsClient()
+        with (
+            mock.patch.object(
+                abk,
+                "generate_signing_keypair",
+                return_value=(cli_private, cli_public),
+            ),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            result = abk.ensure_signing_key(client)
+
+        self.assertEqual(
+            abk.normalize_signing_public_key(android_public).strip(),
+            result.strip(),
+        )
+        self.assertEqual([], client.secret_updates)
+
+    def test_android_completion_after_cli_publication_stops_cli_secret_write(self):
+        if not abk._CRYPTO_BACKEND:
+            self.skipTest("RSA backend unavailable")
+        cli_private, cli_public = abk.generate_signing_keypair()
+        _, android_public = abk.generate_signing_keypair()
+
+        class LateAndroidWinsClient(SigningClient):
+            def __init__(self):
+                super().__init__()
+                self.secret_checks = 0
+
+            def repository_secret_exists(self, name):
+                self.secret_checks += 1
+                if self.secret_checks == 2:
+                    self.secret_exists = True
+                    self.published_key = android_public
+                return self.secret_exists
+
+        client = LateAndroidWinsClient()
+        with (
+            mock.patch.object(
+                abk,
+                "generate_signing_keypair",
+                return_value=(cli_private, cli_public),
+            ),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "appeared concurrently"):
+                abk.ensure_signing_key(client)
+
+        self.assertEqual([], client.secret_updates)
+        self.assertEqual(2, client.secret_checks)
+
+    def test_transient_signing_secret_failure_is_retried(self):
+        if not abk._CRYPTO_BACKEND:
+            self.skipTest("RSA backend unavailable")
+
+        class TransientSecretClient(SigningClient):
+            def create_or_update_secret(self, name, value):
+                self.events.append("secret")
+                self.secret_updates.append((name, value))
+                if len(self.secret_updates) == 1:
+                    return False
+                self.secret_exists = True
+                return True
+
+        client = TransientSecretClient()
+        with (
+            mock.patch.object(abk.time, "sleep") as sleep,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            abk.ensure_signing_key(client)
+
+        self.assertEqual(2, len(client.secret_updates))
+        self.assertEqual(client.secret_updates[0], client.secret_updates[1])
+        sleep.assert_called_once_with(0.5)
+
+    def test_lost_secret_response_does_not_repeat_the_put(self):
+        if not abk._CRYPTO_BACKEND:
+            self.skipTest("RSA backend unavailable")
+
+        class LostResponseClient(SigningClient):
+            def create_or_update_secret(self, name, value):
+                self.events.append("secret")
+                self.secret_updates.append((name, value))
+                self.secret_exists = True
+                raise TimeoutError("response lost after GitHub accepted the PUT")
+
+        client = LostResponseClient()
+        with (
+            mock.patch.object(abk.time, "sleep") as sleep,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            abk.ensure_signing_key(client)
+
+        self.assertEqual(1, len(client.secret_updates))
+        sleep.assert_called_once_with(0.5)
+
+    def test_secret_retry_stops_when_android_rotates_during_backoff(self):
+        if not abk._CRYPTO_BACKEND:
+            self.skipTest("RSA backend unavailable")
+        _, android_public = abk.generate_signing_keypair()
+
+        class FirstPutFailsClient(SigningClient):
+            def create_or_update_secret(self, name, value):
+                self.events.append("secret")
+                self.secret_updates.append((name, value))
+                return False
+
+        client = FirstPutFailsClient()
+
+        def android_finishes(_delay):
+            client.published_key = android_public
+            client.secret_exists = True
+
+        with (
+            mock.patch.object(abk.time, "sleep", side_effect=android_finishes),
+            contextlib.redirect_stdout(io.StringIO()),
+            self.assertRaisesRegex(RuntimeError, "public key changed"),
+        ):
+            abk.ensure_signing_key(client)
+
+        self.assertEqual(1, len(client.secret_updates))
+
+    def test_signing_state_save_merges_the_latest_config_snapshot(self):
+        if not abk._CRYPTO_BACKEND:
+            self.skipTest("RSA backend unavailable")
+        _, public_key = abk.generate_signing_keypair()
+
+        class ConcurrentConfigClient(SigningClient):
+            def get_published_signing_key(self):
+                abk.save_config({"token": "fresh-token", "download_dir": "/fresh"})
+                return self.published_key
+
+        client = ConcurrentConfigClient(
+            secret_exists=True,
+            published_key=public_key,
+        )
+        abk.ensure_signing_key(client)
+
+        config = abk.load_config()
+        self.assertEqual("fresh-token", config["token"])
+        self.assertEqual("/fresh", config["download_dir"])
+        self.assertIn("alice/abk", config[abk.SIGNING_STATE_CONFIG_KEY])
+
+    def test_concurrent_signing_initialization_publishes_one_matching_pair(self):
+        if not abk._CRYPTO_BACKEND:
+            self.skipTest("RSA backend unavailable")
+        private_key, public_key = abk.generate_signing_keypair()
+        state_lock = threading.Lock()
+        state = {
+            "secret_exists": False,
+            "published_key": None,
+            "secret_updates": [],
+            "publications": [],
+            "secret_deletes": [],
+        }
+
+        class SharedSigningClient:
+            token = "test-token"
+            repo = "alice/ABK"
+
+            def repository_secret_exists(self, name):
+                with state_lock:
+                    return state["secret_exists"]
+
+            def get_published_signing_key(self):
+                with state_lock:
+                    return state["published_key"]
+
+            def create_or_update_secret(self, name, value):
+                with state_lock:
+                    state["secret_exists"] = True
+                    state["secret_updates"].append((name, value))
+                return True
+
+            def publish_signing_key(self, value):
+                with state_lock:
+                    state["published_key"] = value
+                    state["publications"].append(value)
+                return True
+
+            def delete_repository_secret(self, name):
+                with state_lock:
+                    state["secret_deletes"].append(name)
+
+        barrier = threading.Barrier(2)
+
+        def initialize():
+            barrier.wait(timeout=5)
+            return abk.ensure_signing_key(SharedSigningClient())
+
+        with mock.patch.object(
+            abk,
+            "generate_signing_keypair",
+            return_value=(private_key, public_key),
+        ) as generate:
+            with contextlib.redirect_stdout(io.StringIO()):
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    results = list(executor.map(lambda _: initialize(), range(2)))
+
+        self.assertEqual(1, generate.call_count)
+        self.assertEqual(1, len(state["secret_updates"]))
+        self.assertEqual(1, len(state["publications"]))
+        self.assertEqual([], state["secret_deletes"])
+        self.assertEqual(results[0].strip(), results[1].strip())
+        self.assertEqual(state["published_key"].strip(), results[0].strip())
+
+    def test_config_lock_serializes_independent_python_processes(self):
+        script = """
+import json
+import time
+import abk
+with abk._config_process_lock(timeout=5):
+    started = time.monotonic()
+    time.sleep(0.2)
+    finished = time.monotonic()
+print(json.dumps({"started": started, "finished": finished}))
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(CLI_DIR)
+        env["XDG_CONFIG_HOME"] = self.temp_dir.name
+        env["APPDATA"] = self.temp_dir.name
+        processes = [
+            subprocess.Popen(
+                [sys.executable, "-c", script],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+            for _ in range(2)
+        ]
+        intervals = []
+        for process in processes:
+            stdout, stderr = process.communicate(timeout=10)
+            self.assertEqual(0, process.returncode, stderr)
+            intervals.append(json.loads(stdout))
+
+        intervals.sort(key=lambda item: item["started"])
+        self.assertGreaterEqual(
+            intervals[1]["started"],
+            intervals[0]["finished"] - 0.01,
+        )
+
+    @unittest.skipIf(os.name == "nt", "POSIX flock-specific regression")
+    def test_config_lock_does_not_retry_permanent_platform_errors(self):
+        error = OSError(errno.ENOTSUP, "locking unsupported")
+        with (
+            mock.patch("fcntl.flock", side_effect=error),
+            mock.patch.object(abk.time, "sleep") as sleep,
+            self.assertRaises(OSError) as raised,
+        ):
+            with abk._config_process_lock(timeout=120):
+                self.fail("lock unexpectedly acquired")
+
+        self.assertEqual(errno.ENOTSUP, raised.exception.errno)
+        sleep.assert_not_called()
 
     def test_artifact_redirect_does_not_forward_authorization(self):
         location = "https://objects.example.test/signed-artifact"
@@ -182,29 +525,222 @@ class SecurityRegressionTests(unittest.TestCase):
         headers["Location"] = location
 
         class RedirectingOpener:
+            def __init__(self):
+                self.requests = []
+
             def open(self, request, timeout=None):
-                raise HTTPError(request.full_url, 302, "Found", headers, io.BytesIO())
-
-        redirected_requests = []
-
-        def redirected_urlopen(request, timeout=None):
-            redirected_requests.append(request)
-            return io.BytesIO(b"artifact bytes")
+                self.requests.append(request)
+                if len(self.requests) == 1:
+                    raise HTTPError(
+                        request.full_url,
+                        302,
+                        "Found",
+                        headers,
+                        io.BytesIO(),
+                    )
+                return io.BytesIO(b"artifact bytes")
 
         client = object.__new__(abk.GitHubClient)
         client.token = "SECRET"
         client.repo = "alice/ABK"
         client.verbose = False
+        opener = RedirectingOpener()
 
-        with (
-            mock.patch.object(abk, "build_opener", return_value=RedirectingOpener()),
-            mock.patch.object(abk, "urlopen", side_effect=redirected_urlopen),
-        ):
+        with mock.patch.object(abk, "build_opener", return_value=opener):
             path = client.download_artifact(123, self.temp_dir.name)
 
         self.assertEqual(b"artifact bytes", Path(path).read_bytes())
-        self.assertEqual(1, len(redirected_requests))
-        self.assertNotIn("Authorization", redirected_requests[0].headers)
+        self.assertEqual(2, len(opener.requests))
+        self.assertIsNotNone(opener.requests[0].get_header("Authorization"))
+        self.assertIsNone(opener.requests[1].get_header("Authorization"))
+
+    def test_oauth_device_requests_fail_closed_on_redirect(self):
+        headers = Message()
+        headers["Location"] = "https://attacker.example.test/oauth"
+
+        class RedirectingOpener:
+            def __init__(self):
+                self.requests = []
+
+            def open(self, request, timeout=None):
+                self.requests.append(request)
+                raise HTTPError(
+                    request.full_url,
+                    302,
+                    "Found",
+                    headers,
+                    io.BytesIO(),
+                )
+
+        for operation in ("device_code", "device_token"):
+            with self.subTest(operation=operation):
+                opener = RedirectingOpener()
+                with (
+                    mock.patch.object(abk, "build_opener", return_value=opener) as build,
+                    contextlib.redirect_stderr(io.StringIO()),
+                ):
+                    if operation == "device_code":
+                        result = abk.request_device_code()
+                        self.assertIsNone(result)
+                    else:
+                        result = abk.poll_device_token_once("sensitive-device-code")
+                        self.assertEqual("http_302", result["error"])
+
+                self.assertEqual(1, len(opener.requests))
+                if operation == "device_token":
+                    self.assertIn(b"sensitive-device-code", opener.requests[0].data)
+                handlers = build.call_args.args
+                self.assertTrue(any(isinstance(item, abk.HTTPSHandler) for item in handlers))
+                self.assertTrue(
+                    any(isinstance(item, abk._NoRedirectHandler) for item in handlers)
+                )
+
+    def test_network_opener_uses_the_same_tls_context_factory_as_self_test(self):
+        opener = mock.Mock()
+        context = mock.sentinel.tls_context
+        request = abk.Request("https://api.github.com/user")
+
+        with (
+            mock.patch.object(abk, "_create_tls_context", return_value=context) as create,
+            mock.patch.object(abk, "build_opener", return_value=opener) as build,
+        ):
+            abk._open_without_redirect(request, timeout=30)
+
+        create.assert_called_once_with()
+        self.assertTrue(
+            any(isinstance(item, abk.HTTPSHandler) for item in build.call_args.args)
+        )
+        opener.open.assert_called_once_with(request, timeout=30)
+
+    def test_tls_context_preserves_an_explicit_custom_ca_bundle(self):
+        ca_bundle = Path(self.temp_dir.name) / "corporate-ca.pem"
+        ca_bundle.write_text("test CA", encoding="utf-8")
+        context = mock.sentinel.tls_context
+
+        with (
+            mock.patch.dict(os.environ, {"SSL_CERT_FILE": str(ca_bundle)}),
+            mock.patch.object(
+                abk.ssl,
+                "create_default_context",
+                return_value=context,
+            ) as create,
+        ):
+            result = abk._create_tls_context()
+
+        self.assertIs(context, result)
+        create.assert_called_once_with()
+
+    def test_artifact_redirect_rejects_later_http_downgrade(self):
+        first_headers = Message()
+        first_headers["Location"] = "https://objects.example.test/first"
+        second_headers = Message()
+        second_headers["Location"] = "http://objects.example.test/plaintext"
+
+        class DowngradingOpener:
+            def __init__(self):
+                self.calls = 0
+
+            def open(self, request, timeout=None):
+                self.calls += 1
+                headers = first_headers if self.calls == 1 else second_headers
+                raise HTTPError(
+                    request.full_url,
+                    302,
+                    "Found",
+                    headers,
+                    io.BytesIO(),
+                )
+
+        client = object.__new__(abk.GitHubClient)
+        client.token = "SECRET"
+        client.repo = "alice/ABK"
+        opener = DowngradingOpener()
+
+        with (
+            mock.patch.object(abk, "build_opener", return_value=opener),
+            self.assertRaisesRegex(RuntimeError, "unsafe URL"),
+        ):
+            client.download_artifact(123, self.temp_dir.name)
+
+        self.assertFalse((Path(self.temp_dir.name) / "artifact-123.zip").exists())
+        self.assertEqual([], list(Path(self.temp_dir.name).glob(".artifact-123-*.tmp")))
+
+    def test_release_asset_rejects_non_github_url_before_sending_token(self):
+        client = object.__new__(abk.GitHubClient)
+        client.token = "SECRET"
+        opener = mock.Mock()
+
+        with (
+            mock.patch.object(abk, "build_opener", opener),
+            self.assertRaisesRegex(RuntimeError, "unsafe URL"),
+        ):
+            client._download_release_asset_text(
+                "https://objects.example.test/untrusted-key.pem"
+            )
+
+        opener.assert_not_called()
+
+    def test_release_upload_rejects_nonstandard_https_port(self):
+        client = object.__new__(abk.GitHubClient)
+        client.token = "SECRET"
+        client.get_release_by_tag = mock.Mock(return_value={
+            "assets": [],
+            "upload_url": "https://uploads.github.com:444/repos/alice/ABK/releases/1/assets{?name}",
+        })
+
+        with (
+            mock.patch.object(abk, "_open_without_redirect") as open_request,
+            self.assertRaisesRegex(RuntimeError, "unsafe release upload URL"),
+        ):
+            client.publish_signing_key("public key")
+
+        open_request.assert_not_called()
+
+    def test_oversized_artifact_does_not_replace_existing_file(self):
+        output_dir = Path(self.temp_dir.name)
+        existing = output_dir / "artifact-123.zip"
+        existing.write_bytes(b"old artifact")
+
+        class StaticOpener:
+            def open(self, request, timeout=None):
+                return io.BytesIO(b"12345")
+
+        client = object.__new__(abk.GitHubClient)
+        client.token = "SECRET"
+        client.repo = "alice/ABK"
+
+        with (
+            mock.patch.object(abk, "build_opener", return_value=StaticOpener()),
+            mock.patch.object(abk, "MAX_ARTIFACT_DOWNLOAD_SIZE", 4),
+            self.assertRaisesRegex(RuntimeError, "unexpectedly large"),
+        ):
+            client.download_artifact(123, output_dir)
+
+        self.assertEqual(b"old artifact", existing.read_bytes())
+        self.assertEqual([], list(output_dir.glob(".artifact-123-*.tmp")))
+
+    def test_artifact_content_length_mismatch_is_rejected(self):
+        response_headers = Message()
+        response_headers["Content-Length"] = "6"
+
+        class Response(io.BytesIO):
+            headers = response_headers
+
+        class StaticOpener:
+            def open(self, request, timeout=None):
+                return Response(b"12345")
+
+        client = object.__new__(abk.GitHubClient)
+        client.token = "SECRET"
+        client.repo = "alice/ABK"
+
+        with (
+            mock.patch.object(abk, "build_opener", return_value=StaticOpener()),
+            self.assertRaisesRegex(RuntimeError, "truncated"),
+        ):
+            client.download_artifact(123, self.temp_dir.name)
+
+        self.assertFalse((Path(self.temp_dir.name) / "artifact-123.zip").exists())
 
 
 if __name__ == "__main__":

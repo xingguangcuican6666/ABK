@@ -1,5 +1,6 @@
 import contextlib
 import io
+import os
 import sys
 import tempfile
 import unittest
@@ -214,6 +215,37 @@ class ArtifactGitHubClient:
         return str(path)
 
 class CommandBehaviorTests(unittest.TestCase):
+    def test_human_whoami_does_not_fetch_signing_metadata(self):
+        client = mock.Mock()
+        client.repo = "alice/ABK"
+        client.get_user.return_value = {"login": "alice"}
+        client.get_fork.return_value = {
+            "full_name": "alice/ABK",
+            "name": "ABK",
+            "owner": {"login": "alice"},
+        }
+        client.check_behind.return_value = {
+            "behind_by": 0,
+            "ahead_by": 0,
+            "status": "identical",
+        }
+        args = SimpleNamespace(
+            token="test-token",
+            repo=None,
+            verbose=False,
+            json=False,
+        )
+
+        with (
+            mock.patch.object(abk, "get_token", return_value="test-token"),
+            mock.patch.object(abk, "make_client", return_value=client),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            result = abk.cmd_whoami(args)
+
+        self.assertEqual(0, result)
+        client.get_published_signing_key.assert_not_called()
+
     def _run_build(self, client, **overrides):
         args = build_args(**overrides)
         output = io.StringIO()
@@ -273,6 +305,64 @@ class CommandBehaviorTests(unittest.TestCase):
         self.assertEqual(0, client.sync_fork_calls)
         self.assertEqual([], client.trigger_calls)
 
+    def test_explicit_repo_build_never_switches_to_the_users_default_fork(self):
+        client = RecordingGitHubClient(fork=None)
+        client.repo = "org/custom-abk"
+
+        result, output = self._run_build(
+            client,
+            repo="org/custom-abk",
+        )
+
+        self.assertEqual(0, result, output)
+        self.assertEqual(0, client.create_fork_calls)
+        self.assertEqual(0, client.check_behind_calls)
+        self.assertEqual(0, client.sync_fork_calls)
+        self.assertEqual(1, len(client.trigger_calls))
+        self.assertEqual("org/custom-abk", client.trigger_calls[0]["repo"])
+
+    def test_environment_repo_is_explicit_for_target_commands(self):
+        with mock.patch.dict(os.environ, {"ABK_REPO": "org/environment-abk"}):
+            build_client = RecordingGitHubClient(fork=None)
+            build_client.repo = "org/environment-abk"
+            result, output = self._run_build(build_client)
+
+            self.assertEqual(0, result, output)
+            self.assertEqual(0, build_client.create_fork_calls)
+            self.assertEqual(0, build_client.check_behind_calls)
+            self.assertEqual(
+                "org/environment-abk",
+                build_client.trigger_calls[0]["repo"],
+            )
+
+            status_client = RecordingGitHubClient(fork=None)
+            status_client.repo = "org/environment-abk"
+            result, output = self._run_status(status_client)
+
+            self.assertEqual(0, result, output)
+            self.assertEqual(0, status_client.check_behind_calls)
+            self.assertEqual(1, len(status_client.list_runs_calls))
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                artifact_client = ArtifactGitHubClient(temp_dir)
+                artifact_client.repo = "org/environment-abk"
+                artifact_client.get_fork = mock.Mock(
+                    side_effect=AssertionError("explicit repo must not probe a fork")
+                )
+                verification = {
+                    "verified": True,
+                    "status": "verified",
+                    "message": "verified",
+                    "bundles": [],
+                }
+                result, output = self._run_artifacts(
+                    artifact_client,
+                    verification,
+                )
+
+                self.assertEqual(0, result, output)
+                artifact_client.get_fork.assert_not_called()
+
     def test_full_dry_run_uses_full_feature_defaults(self):
         client = RecordingGitHubClient(fork=None)
         defaulted = {
@@ -331,7 +421,7 @@ class CommandBehaviorTests(unittest.TestCase):
         self.assertNotIn('"kpm_password"', output)
         self.assertIn("ReSukiSU", output)
 
-    def test_oneplus_resukisu_dry_run_disables_kpm(self):
+    def test_oneplus_resukisu_dry_run_enables_supported_kpm(self):
         client = RecordingGitHubClient(fork=None)
 
         result, output = self._run_build(
@@ -344,8 +434,57 @@ class CommandBehaviorTests(unittest.TestCase):
         )
 
         self.assertEqual(0, result, output)
-        self.assertIn('"use_kpm": "false"', output)
+        self.assertIn('"use_kpm": "true"', output)
         self.assertIn("ReSukiSU", output)
+
+    def test_none_dry_runs_disable_susfs_for_direct_build_modes(self):
+        cases = (
+            ({"ksu_variant": "None", "dry_run": True}, '"cancel_susfs": "true"'),
+            (
+                {"matrix": "full", "ksu_variant": "None", "dry_run": True},
+                '"enable_susfs": "false"',
+            ),
+            (
+                {
+                    "oneplus": True,
+                    "device": "oneplus_12_b",
+                    "ksu_variant": "None",
+                    "dry_run": True,
+                },
+                '"enable_susfs": "false"',
+            ),
+        )
+        for overrides, expected in cases:
+            with self.subTest(overrides=overrides):
+                client = RecordingGitHubClient(fork=None)
+                result, output = self._run_build(client, **overrides)
+
+                self.assertEqual(0, result, output)
+                self.assertIn(expected, output)
+
+    def test_a15_and_a16_dry_runs_forward_oneplus_8e_support(self):
+        for matrix in ("a15", "a16"):
+            with self.subTest(matrix=matrix):
+                client = RecordingGitHubClient(fork=None)
+                result, output = self._run_build(
+                    client,
+                    matrix=matrix,
+                    oneplus_8e=True,
+                    dry_run=True,
+                )
+
+                self.assertEqual(0, result, output)
+                self.assertIn('"supp_op": "true"', output)
+
+        client = RecordingGitHubClient(fork=None)
+        result, output = self._run_build(
+            client,
+            matrix="a14",
+            oneplus_8e=True,
+            dry_run=True,
+        )
+        self.assertEqual(0, result, output)
+        self.assertNotIn('"supp_op"', output)
 
     def test_existing_full_matrix_contract_rejects_custom_ref(self):
         client = RecordingGitHubClient(fork=None)
@@ -373,6 +512,124 @@ class CommandBehaviorTests(unittest.TestCase):
 
         self.assertEqual(0, result, output)
         self.assertIn('"custom_ref": "feature/test"', output)
+
+    def test_a16_dry_run_normalizes_legacy_virtualization_slot(self):
+        client = RecordingGitHubClient(fork=None)
+
+        result, output = self._run_build(
+            client,
+            matrix="a16",
+            virt="123",
+            dry_run=True,
+        )
+
+        self.assertEqual(0, result, output)
+        self.assertIn('"virtualization_support": "on"', output)
+        self.assertNotIn('"virtualization_support": "123"', output)
+
+    def test_old_kernel_dry_run_maps_common_virtualization_on_to_678(self):
+        client = RecordingGitHubClient(fork=None)
+
+        result, output = self._run_build(
+            client,
+            matrix="a14",
+            virt="on",
+            dry_run=True,
+        )
+
+        self.assertEqual(0, result, output)
+        self.assertIn('"virtualization_support": "678"', output)
+
+    def test_revision_is_rejected_when_selected_workflow_cannot_accept_it(self):
+        for matrix in ("a12", "a13", "a16", "both"):
+            with self.subTest(matrix=matrix):
+                client = RecordingGitHubClient(fork=None)
+                result, output = self._run_build(
+                    client,
+                    matrix=matrix,
+                    revision="r99",
+                    dry_run=True,
+                )
+
+                self.assertEqual(2, result, output)
+                self.assertIn("--revision", output)
+                self.assertEqual([], client.trigger_calls)
+
+    def test_custom_non_510_revision_is_rejected(self):
+        client = RecordingGitHubClient(fork=None)
+
+        result, output = self._run_build(
+            client,
+            android_version="android14",
+            kernel_version="6.1",
+            revision="r99",
+            dry_run=True,
+        )
+
+        self.assertEqual(2, result, output)
+        self.assertIn("--revision", output)
+        self.assertEqual([], client.trigger_calls)
+
+    def test_custom_revision_is_normalized_and_validated(self):
+        client = RecordingGitHubClient(fork=None)
+
+        result, output = self._run_build(
+            client,
+            revision="R11",
+            dry_run=True,
+        )
+
+        self.assertEqual(0, result, output)
+        self.assertIn('"revision": "r11"', output)
+
+        invalid_client = RecordingGitHubClient(fork=None)
+        invalid_result, invalid_output = self._run_build(
+            invalid_client,
+            revision="FOO",
+            dry_run=True,
+        )
+        self.assertEqual(2, invalid_result, invalid_output)
+        self.assertEqual([], invalid_client.trigger_calls)
+
+    def test_custom_lts_pair_is_accepted_and_must_be_complete(self):
+        client = RecordingGitHubClient(fork=None)
+
+        result, output = self._run_build(
+            client,
+            sub_level="x",
+            os_patch_level="LTS",
+            dry_run=True,
+        )
+
+        self.assertEqual(0, result, output)
+        self.assertIn('"sub_level": "X"', output)
+        self.assertIn('"os_patch_level": "lts"', output)
+
+        for sub_level, patch_level in (("X", "2026-01"), ("101", "lts")):
+            with self.subTest(sub_level=sub_level, patch_level=patch_level):
+                invalid_client = RecordingGitHubClient(fork=None)
+                invalid_result, invalid_output = self._run_build(
+                    invalid_client,
+                    sub_level=sub_level,
+                    os_patch_level=patch_level,
+                    dry_run=True,
+                )
+                self.assertEqual(2, invalid_result, invalid_output)
+                self.assertEqual([], invalid_client.trigger_calls)
+
+    def test_custom_android_kernel_pair_must_match_upstream_contract(self):
+        client = RecordingGitHubClient(fork=None)
+
+        result, output = self._run_build(
+            client,
+            android_version="android12",
+            kernel_version="6.12",
+            dry_run=True,
+        )
+
+        self.assertEqual(2, result, output)
+        self.assertIn("unsupported Android/kernel combination", output)
+        self.assertEqual([], client.trigger_calls)
 
     def test_unsafe_freeform_workflow_inputs_are_rejected(self):
         dangerous_values = {
@@ -491,6 +748,25 @@ class CommandBehaviorTests(unittest.TestCase):
             else:
                 self.assertIsInstance(result, int, output.getvalue())
                 self.assertNotEqual(0, result, output.getvalue())
+
+    def test_human_dispatch_failure_redacts_kpm_password(self):
+        password = "human-secret-password"
+        fork = {"full_name": "alice/ABK", "name": "ABK", "owner": {"login": "alice"}}
+        client = RecordingGitHubClient(
+            fork=fork,
+            trigger_error=RuntimeError(f"dispatch rejected {password}"),
+        )
+
+        result, output = self._run_build(
+            client,
+            ksu_variant="SukiSU",
+            kpm=True,
+            kpm_password=password,
+        )
+
+        self.assertEqual(1, result)
+        self.assertNotIn(password, output)
+        self.assertIn("***", output)
 
     def test_verified_artifact_download_succeeds(self):
         with tempfile.TemporaryDirectory() as output_dir:

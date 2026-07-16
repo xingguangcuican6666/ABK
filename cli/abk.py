@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 
 import argparse
+import contextlib
+import errno
+import io
 import json
 import os
 import re
 import shutil
+import ssl
 import sys
 import tempfile
+import threading
 import time
 import webbrowser
 from pathlib import Path, PurePosixPath
-from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urljoin, urlparse
 import zipfile
 import hashlib
 import hmac
@@ -41,15 +46,17 @@ except ImportError:
 # PyInstaller bundle: point SSL certs to certifi if available
 try:
     import certifi
-    os.environ.setdefault('SSL_CERT_FILE', certifi.where())
+    _CERTIFI_CA_BUNDLE = certifi.where()
+    os.environ.setdefault('SSL_CERT_FILE', _CERTIFI_CA_BUNDLE)
 except ImportError:
-    pass
+    _CERTIFI_CA_BUNDLE = None
 
 sys.path.insert(0, str(Path(__file__).parent))
 from i18n import t, load_translations
 
 
 def configure_stdio():
+    json_mode = "--json" in sys.argv[1:]
     for stream_name in ("stdout", "stderr"):
         stream = getattr(sys, stream_name, None)
         if stream is None or not hasattr(stream, "reconfigure"):
@@ -57,7 +64,10 @@ def configure_stdio():
         try:
             # Avoid crashing on terminals or pipelines whose locale encoding
             # cannot represent translated help or status output.
-            stream.reconfigure(errors="replace")
+            options = {"errors": "replace"}
+            if json_mode:
+                options.update({"encoding": "utf-8", "newline": "\n"})
+            stream.reconfigure(**options)
         except Exception:
             pass
 
@@ -79,9 +89,15 @@ SIGNING_RELEASE_TAG = "abk-artifact-key"
 SIGNING_PUBLIC_KEY_ASSET = "abk-artifact-signing-public.pem"
 SIGNING_KEY_VERSION = 1
 SIGNING_STATE_CONFIG_KEY = "signing_keys"
+CONFIG_LOCK_FILE = ".config.lock"
+JSON_SCHEMA_VERSION = 1
 MAX_MANIFEST_SIZE = 1024 * 1024
 MAX_SIGNATURE_SIZE = 64 * 1024
 MAX_PAYLOAD_SIZE = 8 * 1024 * 1024 * 1024
+MAX_ARTIFACT_DOWNLOAD_SIZE = MAX_PAYLOAD_SIZE + 64 * 1024 * 1024
+
+_CONFIG_THREAD_LOCK = threading.RLock()
+_CONFIG_LOCK_STATE = threading.local()
 
 WORKFLOWS = {
     "a12": {"file": "kernel-a12-5-10.yml", "name": t("build_target_a12"), "android": "android12", "kernel": "5.10"},
@@ -111,29 +127,61 @@ FULL_MATRIX_WORKFLOWS = {
     "all-managers": "all-managers-full-feature-matrix.yml",
 }
 
+# These names are part of the machine-readable CLI contract. GitHub reports
+# workflow runs by the top-level `name:` in each workflow, not by the
+# translated label shown by the interactive CLI.
+WORKFLOW_RUNTIME_NAMES = {
+    "kernel-a12-5-10.yml": "内核构建 - Android 12 (5.10)",
+    "kernel-a13-5-15.yml": "内核构建 - Android 13 (5.15)",
+    "kernel-a14-6-1.yml": "内核构建 - Android 14 (6.1)",
+    "kernel-a15-6-6.yml": "内核构建 - Android 15 (6.6)",
+    "kernel-a16-6-12.yml": "内核构建 - Android 16 (6.12)",
+    "kernel-custom.yml": "Android 内核构建-自定义",
+    "oneplus-custom.yml": "OnePlus 内核构建-自定义",
+    "kernel-full-feature-matrix.yml": "全属性内核构建矩阵",
+    "all-managers-full-feature-matrix.yml": "全管理器全矩阵编译",
+}
+
 KSU_VARIANTS = ["None", "Official", "SukiSU", "ReSukiSU"]
 KSU_BRANCH_MAP = {
     "stable": "Stable(标准)", "Stable": "Stable(标准)",
+    "latest": "Latest(最新)", "Latest": "Latest(最新)",
     "dev": "Dev(开发)", "Dev": "Dev(开发)",
     "custom": "Custom(自定义)", "Custom": "Custom(自定义)",
 }
-KSU_BRANCH_VALUES = ["Stable(标准)", "Dev(开发)", "Custom(自定义)"]
+KSU_BRANCH_VALUES = [
+    "Stable(标准)",
+    "Latest(最新)",
+    "Dev(开发)",
+    "Custom(自定义)",
+]
 
 def resolve_ksu_branch(b):
     return KSU_BRANCH_MAP.get(b, b) if b else "Stable(标准)"
 
 
+def resolve_plan_ksu_branch(variant, branch):
+    """Apply Android's per-variant branch normalization to one build plan."""
+    if variant == "None":
+        return "Stable(标准)"
+    return resolve_ksu_branch(branch)
+
+
 def supports_kpm(variant, ksu_branch=None, *, oneplus=False):
     """Return whether the selected KernelSU source exposes KPM.
 
-    ReSukiSU provides KPM in stable tags, while OnePlus builds pin its main
-    branch. SukiSU exposes KPM on both standard and OnePlus build paths.
+    Keep this aligned with Android's KernelSupport.isKpmSupported contract.
     """
+    if oneplus:
+        return variant in {"SukiSU", "ReSukiSU"}
     if variant == "SukiSU":
         return True
-    if variant != "ReSukiSU" or oneplus:
+    if variant != "ReSukiSU":
         return False
-    return resolve_ksu_branch(ksu_branch) == "Stable(标准)"
+    return resolve_ksu_branch(ksu_branch) in {
+        "Stable(标准)",
+        "Custom(自定义)",
+    }
 
 
 def default_download_dir():
@@ -157,7 +205,7 @@ def selected_manager_variants(value):
     }
 
 
-VIRT_OPTIONS = ["off", "678", "123", "345"]
+VIRT_OPTIONS = ["off", "on", "678", "123", "345"]
 
 ONEPLUS_DEVICES = {
     "oneplus_13_b": {"name": "OnePlus 13", "cpu": "sm8750", "android": "android15", "kernel": "6.6"},
@@ -254,7 +302,7 @@ def invalid_build_argument(args):
         return "--version"
 
     revision = getattr(args, "revision", None)
-    if revision and re.fullmatch(r"[A-Za-z0-9._+-]{1,32}", revision) is None:
+    if revision and re.fullmatch(r"r[1-9][0-9]{0,30}", revision) is None:
         return "--revision"
 
     build_time = getattr(args, "build_time", None)
@@ -265,14 +313,19 @@ def invalid_build_argument(args):
         return "--build-time"
 
     sub_level = getattr(args, "sub_level", None)
-    if sub_level and (
-        re.fullmatch(r"[0-9]{1,4}", sub_level) is None
-        or int(sub_level) > 9999
-    ):
-        return "--sub-level"
+    if sub_level and sub_level != "X":
+        if (
+            re.fullmatch(r"[0-9]{1,4}", sub_level) is None
+            or int(sub_level) > 9999
+        ):
+            return "--sub-level"
 
     patch_level = getattr(args, "os_patch_level", None)
-    if patch_level and re.fullmatch(r"20[0-9]{2}-(0[1-9]|1[0-2])", patch_level) is None:
+    if (
+        patch_level
+        and patch_level != "lts"
+        and re.fullmatch(r"20[0-9]{2}-(0[1-9]|1[0-2])", patch_level) is None
+    ):
         return "--os-patch-level"
 
     extra_algos = getattr(args, "zram_extra_algos", None)
@@ -381,30 +434,33 @@ def load_config():
 
 
 def save_config(config):
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if os.name != "nt":
-        CONFIG_DIR.chmod(0o700)
+    with _config_process_lock():
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if os.name != "nt":
+            CONFIG_DIR.chmod(0o700)
 
-    payload = json.dumps(config, indent=2, ensure_ascii=False) + "\n"
-    fd, temp_name = tempfile.mkstemp(prefix=".config-", suffix=".tmp", dir=CONFIG_DIR)
-    try:
-        if os.name != "nt":
-            os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            fd = None
-            stream.write(payload)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temp_name, CONFIG_FILE)
-        if os.name != "nt":
-            CONFIG_FILE.chmod(0o600)
-    finally:
-        if fd is not None:
-            os.close(fd)
+        payload = json.dumps(config, indent=2, ensure_ascii=False) + "\n"
+        fd, temp_name = tempfile.mkstemp(
+            prefix=".config-", suffix=".tmp", dir=CONFIG_DIR
+        )
         try:
-            Path(temp_name).unlink()
-        except FileNotFoundError:
-            pass
+            if os.name != "nt":
+                os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                fd = None
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temp_name, CONFIG_FILE)
+            if os.name != "nt":
+                CONFIG_FILE.chmod(0o600)
+        finally:
+            if fd is not None:
+                os.close(fd)
+            try:
+                Path(temp_name).unlink()
+            except FileNotFoundError:
+                pass
 
 
 def get_token(args):
@@ -441,7 +497,7 @@ def request_device_code():
     )
     
     try:
-        with urlopen(req, timeout=30) as resp:
+        with _open_without_redirect(req, timeout=30) as resp:
             result = json.loads(resp.read())
             return result if isinstance(result, dict) else None
     except Exception as exc:
@@ -468,7 +524,7 @@ def poll_device_token_once(device_code):
     )
     
     try:
-        with urlopen(req, timeout=30) as resp:
+        with _open_without_redirect(req, timeout=30) as resp:
             result = json.loads(resp.read())
     except HTTPError as exc:
         return {"success": False, "error": f"http_{exc.code}"}
@@ -574,6 +630,73 @@ class _NoRedirectHandler(HTTPRedirectHandler):
         return None
 
 
+_DOWNLOAD_REDIRECT_CODES = (301, 302, 303, 307, 308)
+
+
+def _create_tls_context():
+    """Create the exact TLS context used by every CLI HTTPS request."""
+    ca_bundle = os.environ.get("SSL_CERT_FILE")
+    if ca_bundle:
+        if not Path(ca_bundle).is_file():
+            raise RuntimeError("configured CA bundle is missing")
+    # The no-argument form uses OpenSSL's complete default path set.  It
+    # honors SSL_CERT_FILE and SSL_CERT_DIR together, preserving enterprise
+    # CA directories while our import-time default supplies certifi in frozen
+    # bundles that otherwise lack a usable cafile.
+    return ssl.create_default_context()
+
+
+def _build_network_opener(*handlers):
+    return build_opener(HTTPSHandler(context=_create_tls_context()), *handlers)
+
+
+def _validated_https_url(url, unsafe_label):
+    parsed = urlparse(url or "")
+    if (
+        parsed.scheme.lower() != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise RuntimeError(f"{unsafe_label} returned an unsafe URL")
+    return parsed
+
+
+def _open_without_redirect(request, timeout):
+    return _build_network_opener(_NoRedirectHandler()).open(
+        request,
+        timeout=timeout,
+    )
+
+
+def _open_https_download(request, timeout, unsafe_label, max_redirects=5):
+    """Follow a bounded HTTPS-only chain and strip credentials after hop one."""
+    opener = _build_network_opener(_NoRedirectHandler())
+    current = request
+    for redirect_count in range(max_redirects + 1):
+        _validated_https_url(current.full_url, unsafe_label)
+        try:
+            return opener.open(current, timeout=timeout)
+        except HTTPError as exc:
+            if exc.code not in _DOWNLOAD_REDIRECT_CODES:
+                raise
+            location = exc.headers.get("Location")
+            if redirect_count >= max_redirects or not location:
+                exc.close()
+                raise RuntimeError(f"{unsafe_label} returned too many redirects")
+            next_url = urljoin(current.full_url, location)
+            exc.close()
+            _validated_https_url(next_url, unsafe_label)
+            current = Request(
+                next_url,
+                headers={
+                    "Accept": "application/octet-stream",
+                    "User-Agent": "ABK-CLI",
+                },
+            )
+    raise RuntimeError(f"{unsafe_label} returned too many redirects")
+
+
 class GitHubAPIError(RuntimeError):
     def __init__(self, status_code, message):
         super().__init__(message)
@@ -589,31 +712,40 @@ class GitHubClient:
             or os.environ.get("GH_TOKEN")
             or config.get("token")
         )
-        self.repo = repo
-        self.repo_explicit = bool(repo)
+        self.repo = repo or os.environ.get("ABK_REPO")
+        self.repo_explicit = bool(self.repo)
         self.verbose = verbose
         self.username = None
         self.fork_repo = None
+        self.authentication_error = None
+        self.fork_detection_error = None
         
-        if self.token:
-            self._detect_user(detect_fork=not self.repo_explicit)
+        if self.token and not self.repo_explicit:
+            self._detect_user(detect_fork=True)
         
         if not self.repo:
             if self.fork_repo:
                 self.repo = self.fork_repo.get("full_name")
             else:
-                self.repo = os.environ.get("ABK_REPO", DEFAULT_REPO)
+                self.repo = DEFAULT_REPO
 
     def _detect_user(self, detect_fork=True):
         try:
             user = self.get("/user")
             self.username = user.get("login")
-            if detect_fork:
+        except Exception as exc:
+            self.authentication_error = exc
+            return
+        if detect_fork:
+            try:
                 fork = self.get_fork()
                 if fork:
                     self.fork_repo = fork
-        except Exception as e:
-            print(t("login_verify_failed", error=e), file=sys.stderr)
+            except Exception as exc:
+                # Fork discovery is repository setup, not token validation.
+                # Commands that need a fork will retry and report it in their
+                # own operation-specific error shape.
+                self.fork_detection_error = exc
 
     def get_default_branch(self):
         repo_info = self.get(f"/repos/{self.repo}")
@@ -637,7 +769,7 @@ class GitHubClient:
             print(f"> {method} {url}", file=sys.stderr)
         req = Request(url, data=data, headers=headers, method=method)
         try:
-            with urlopen(req, timeout=30) as resp:
+            with _open_without_redirect(req, timeout=30) as resp:
                 body = resp.read()
                 if not body:
                     return {}
@@ -675,6 +807,11 @@ class GitHubClient:
         try:
             user_repo = self.get(f"/repos/{self.username}/{repo}")
             if user_repo.get("fork") and user_repo.get("parent", {}).get("full_name") == f"{owner}/{repo}":
+                if not getattr(self, "repo_explicit", False):
+                    self.fork_repo = user_repo
+                    full_name = user_repo.get("full_name")
+                    if full_name:
+                        self.repo = full_name
                 return user_repo
         except GitHubAPIError as exc:
             if exc.status_code != 404:
@@ -748,7 +885,11 @@ class GitHubClient:
 
     def trigger_workflow(self, workflow_file, ref, inputs):
         path = f"/repos/{self.repo}/actions/workflows/{workflow_file}/dispatches"
-        return self.post(path, {"ref": ref, "inputs": inputs})
+        return self.post(path, {
+            "ref": ref,
+            "inputs": inputs,
+            "return_run_details": True,
+        })
 
     def list_runs(self, workflow_file=None, status=None, per_page=10):
         params = {"per_page": per_page}
@@ -764,33 +905,54 @@ class GitHubClient:
         return self.get(f"/repos/{self.repo}/actions/runs/{run_id}")
 
     def list_artifacts(self, run_id):
-        return self.get(f"/repos/{self.repo}/actions/runs/{run_id}/artifacts")
+        artifacts = []
+        first_response = None
+        total_count = None
+        page = 1
+        while True:
+            params = urlencode({"per_page": 100, "page": page})
+            response = self.get(
+                f"/repos/{self.repo}/actions/runs/{run_id}/artifacts?{params}"
+            )
+            if first_response is None:
+                first_response = dict(response)
+                raw_total = response.get("total_count")
+                if isinstance(raw_total, int) and raw_total >= 0:
+                    total_count = raw_total
+            page_items = response.get("artifacts", [])
+            if not isinstance(page_items, list):
+                page_items = []
+            artifacts.extend(page_items)
+            if not page_items:
+                break
+            if total_count is not None and len(artifacts) >= total_count:
+                break
+            if len(page_items) < 100:
+                break
+            page += 1
+
+        result = first_response or {}
+        result["artifacts"] = artifacts
+        result["total_count"] = total_count if total_count is not None else len(artifacts)
+        return result
 
     def download_artifact(self, artifact_id, output_dir="."):
         url = f"{GITHUB_API}/repos/{self.repo}/actions/artifacts/{artifact_id}/zip"
         headers = {
-            "Authorization": f"Bearer {self.token}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
             "User-Agent": "ABK-CLI",
         }
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
         req = Request(url, headers=headers)
-        opener = build_opener(_NoRedirectHandler())
         response = None
         try:
-            try:
-                response = opener.open(req, timeout=30)
-            except HTTPError as exc:
-                if exc.code not in (301, 302, 303, 307, 308):
-                    raise
-                location = exc.headers.get("Location")
-                exc.close()
-                parsed = urlparse(location or "")
-                if parsed.scheme != "https" or not parsed.hostname:
-                    raise RuntimeError("GitHub returned an unsafe artifact redirect")
-                # Never forward the GitHub credential to the object-storage origin.
-                redirected = Request(location, headers={"User-Agent": "ABK-CLI"})
-                response = urlopen(redirected, timeout=60)
+            response = _open_https_download(
+                req,
+                timeout=60,
+                unsafe_label="GitHub artifact download",
+            )
 
             output_dir = Path(output_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -801,9 +963,39 @@ class GitHubClient:
             try:
                 with os.fdopen(fd, "wb") as stream:
                     fd = None
-                    shutil.copyfileobj(response, stream, length=1024 * 1024)
+                    content_length = None
+                    response_headers = getattr(response, "headers", None)
+                    if response_headers is not None:
+                        raw_length = response_headers.get("Content-Length")
+                        if raw_length not in (None, ""):
+                            try:
+                                content_length = int(raw_length)
+                            except (TypeError, ValueError) as exc:
+                                raise RuntimeError(
+                                    "artifact response has an invalid Content-Length"
+                                ) from exc
+                            if (
+                                content_length < 0
+                                or content_length > MAX_ARTIFACT_DOWNLOAD_SIZE
+                            ):
+                                raise RuntimeError("artifact download is unexpectedly large")
+
+                    downloaded = 0
+                    while True:
+                        remaining = MAX_ARTIFACT_DOWNLOAD_SIZE - downloaded
+                        chunk = response.read(min(1024 * 1024, remaining + 1))
+                        if not chunk:
+                            break
+                        downloaded += len(chunk)
+                        if downloaded > MAX_ARTIFACT_DOWNLOAD_SIZE:
+                            raise RuntimeError("artifact download is unexpectedly large")
+                        stream.write(chunk)
+                    if content_length is not None and downloaded != content_length:
+                        raise RuntimeError("artifact download was truncated")
                     stream.flush()
                     os.fsync(stream.fileno())
+                response.close()
+                response = None
                 os.replace(temp_name, output_path)
             finally:
                 if fd is not None:
@@ -859,7 +1051,7 @@ class GitHubClient:
             "Accept": "application/vnd.github+json",
             "User-Agent": "ABK-CLI",
         })
-        with urlopen(req, timeout=30) as resp:
+        with _open_without_redirect(req, timeout=30) as resp:
             return json.loads(resp.read())
 
     def create_or_update_secret(self, secret_name, secret_value):
@@ -879,7 +1071,7 @@ class GitHubClient:
             "User-Agent": "ABK-CLI",
             "Content-Type": "application/json",
         })
-        with urlopen(req, timeout=30) as resp:
+        with _open_without_redirect(req, timeout=30) as resp:
             return resp.status in (201, 204)
 
     def repository_secret_exists(self, secret_name):
@@ -919,31 +1111,30 @@ class GitHubClient:
         )
 
     def _download_release_asset_text(self, asset_url):
+        parsed = _validated_https_url(asset_url, "GitHub release asset")
+        api_origin = urlparse(GITHUB_API)
+        if (
+            parsed.hostname.lower() != api_origin.hostname.lower()
+            or parsed.port not in (None, 443)
+        ):
+            raise RuntimeError("GitHub release asset returned an unsafe URL")
+        headers = {
+            "Accept": "application/octet-stream",
+            "User-Agent": "ABK-CLI",
+        }
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
         request = Request(
             asset_url,
-            headers={
-                "Authorization": f"Bearer {self.token}",
-                "Accept": "application/octet-stream",
-                "User-Agent": "ABK-CLI",
-            },
+            headers=headers,
         )
-        opener = build_opener(_NoRedirectHandler())
         response = None
         try:
-            try:
-                response = opener.open(request, timeout=30)
-            except HTTPError as exc:
-                if exc.code not in (301, 302, 303, 307, 308):
-                    raise
-                location = exc.headers.get("Location")
-                exc.close()
-                parsed = urlparse(location or "")
-                if parsed.scheme != "https" or not parsed.hostname:
-                    raise RuntimeError("GitHub returned an unsafe release-asset redirect")
-                response = urlopen(
-                    Request(location, headers={"User-Agent": "ABK-CLI"}),
-                    timeout=30,
-                )
+            response = _open_https_download(
+                request,
+                timeout=30,
+                unsafe_label="GitHub release asset",
+            )
             content = response.read(MAX_MANIFEST_SIZE + 1)
             if len(content) > MAX_MANIFEST_SIZE:
                 raise RuntimeError("published signing key is unexpectedly large")
@@ -975,7 +1166,13 @@ class GitHubClient:
 
         upload_url = str(release.get("upload_url", "")).split("{", 1)[0]
         parsed = urlparse(upload_url)
-        if parsed.scheme != "https" or parsed.hostname != "uploads.github.com":
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname != "uploads.github.com"
+            or parsed.port not in (None, 443)
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
             raise RuntimeError("GitHub returned an unsafe release upload URL")
         url = f"{upload_url}?{urlencode({'name': SIGNING_PUBLIC_KEY_ASSET})}"
         request = Request(
@@ -989,7 +1186,7 @@ class GitHubClient:
                 "User-Agent": "ABK-CLI",
             },
         )
-        with urlopen(request, timeout=30) as response:
+        with _open_without_redirect(request, timeout=30) as response:
             return response.status in (200, 201)
 
 
@@ -1009,20 +1206,24 @@ def _save_signing_state(config, repo, public_key_pem):
     repo_key = _signing_repo_key(repo)
     if not repo_key:
         raise ValueError("cannot save an artifact signing key without a repository")
-    states = config.get(SIGNING_STATE_CONFIG_KEY, {})
-    if not isinstance(states, dict):
-        states = {}
-    states[repo_key] = {
-        "public_key": public_key_pem,
-        "secret_name": SIGNING_SECRET_NAME,
-        "version": SIGNING_KEY_VERSION,
-    }
-    config[SIGNING_STATE_CONFIG_KEY] = states
-    # Remove the old global state so a key from one fork can never be reused
-    # implicitly for another account or explicit --repo target.
-    for legacy_key in ("signing_key", "signing_secret_name", "signing_key_version"):
-        config.pop(legacy_key, None)
-    save_config(config)
+    with _config_process_lock():
+        latest = load_config()
+        states = latest.get(SIGNING_STATE_CONFIG_KEY, {})
+        if not isinstance(states, dict):
+            states = {}
+        states[repo_key] = {
+            "public_key": public_key_pem,
+            "secret_name": SIGNING_SECRET_NAME,
+            "version": SIGNING_KEY_VERSION,
+        }
+        latest[SIGNING_STATE_CONFIG_KEY] = states
+        # Remove the old global state so a key from one fork can never be reused
+        # implicitly for another account or explicit --repo target.
+        for legacy_key in ("signing_key", "signing_secret_name", "signing_key_version"):
+            latest.pop(legacy_key, None)
+        save_config(latest)
+        config.clear()
+        config.update(latest)
 
 
 def get_signing_key(repo=None):
@@ -1092,8 +1293,169 @@ def normalize_signing_public_key(public_key_pem):
     return key.publickey().export_key('PEM').decode("ascii")
 
 
+@contextlib.contextmanager
+def _config_process_lock(timeout=120):
+    """Serialize config transactions across threads and local CLI processes."""
+    with _CONFIG_THREAD_LOCK:
+        depth = getattr(_CONFIG_LOCK_STATE, "depth", 0)
+        if depth:
+            _CONFIG_LOCK_STATE.depth = depth + 1
+            try:
+                yield
+            finally:
+                _CONFIG_LOCK_STATE.depth -= 1
+            return
+
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if os.name != "nt":
+            CONFIG_DIR.chmod(0o700)
+        lock_path = CONFIG_DIR / CONFIG_LOCK_FILE
+        flags = os.O_RDWR | os.O_CREAT
+        if hasattr(os, "O_BINARY"):
+            flags |= os.O_BINARY
+        fd = os.open(lock_path, flags, 0o600)
+        try:
+            stream = os.fdopen(fd, "r+b", buffering=0)
+        except Exception:
+            os.close(fd)
+            raise
+        locked = False
+        try:
+            if os.name != "nt":
+                os.fchmod(stream.fileno(), 0o600)
+            stream.seek(0, os.SEEK_END)
+            if stream.tell() == 0:
+                stream.write(b"\0")
+            deadline = time.monotonic() + timeout
+            contention_errnos = {errno.EACCES, errno.EAGAIN}
+            if os.name == "nt" and hasattr(errno, "EDEADLK"):
+                contention_errnos.add(errno.EDEADLK)
+            while True:
+                try:
+                    stream.seek(0)
+                    if os.name == "nt":
+                        import msvcrt
+
+                        msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+
+                        fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    locked = True
+                    break
+                except (BlockingIOError, OSError) as exc:
+                    if exc.errno not in contention_errnos:
+                        raise
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(
+                            "timed out waiting for the ABK config lock"
+                        ) from exc
+                    time.sleep(0.1)
+            _CONFIG_LOCK_STATE.depth = 1
+            try:
+                yield
+            finally:
+                _CONFIG_LOCK_STATE.depth = 0
+        finally:
+            if locked:
+                try:
+                    stream.seek(0)
+                    if os.name == "nt":
+                        import msvcrt
+
+                        msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        import fcntl
+
+                        fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+                except OSError:
+                    pass
+            stream.close()
+
+
 def ensure_signing_key(client):
     """Ensure the target repo has a private signing secret; retain only its public key."""
+    if not client.token:
+        raise RuntimeError(t("err_no_token"))
+    if not client.repo or (
+        client.repo == DEFAULT_REPO and not getattr(client, "repo_explicit", False)
+    ):
+        raise RuntimeError("artifact signing must be configured on a fork or explicit repo")
+
+    # `load_config()` and every remote read intentionally happen after the
+    # lock is acquired so a process that waited cannot act on stale state.
+    with _config_process_lock():
+        return _ensure_signing_key_locked(client)
+
+
+def _publish_and_confirm_signing_key(client, public_key_pem):
+    if not client.publish_signing_key(public_key_pem):
+        raise RuntimeError("GitHub did not accept the signing public key asset")
+    published = client.get_published_signing_key()
+    if not published:
+        raise RuntimeError("GitHub did not return the published signing public key")
+    published = normalize_signing_public_key(published)
+    expected = normalize_signing_public_key(public_key_pem)
+    if published.strip() != expected.strip():
+        raise RuntimeError("artifact signing public key changed concurrently")
+    return published
+
+
+def _create_or_update_signing_secret(
+    client,
+    private_key_b64,
+    public_key_pem,
+    attempts=3,
+):
+    """Retry a Secret PUT only while the matching public key remains stable."""
+    expected_key = normalize_signing_public_key(public_key_pem).strip()
+    last_error = None
+    for attempt in range(attempts):
+        if attempt:
+            time.sleep(0.5 * attempt)
+
+        # Android publishes its public asset before its Secret.  Read the
+        # public key on both sides of the Secret existence check so a rotation
+        # during a retry never leads to a blind overwrite with our private key.
+        public_before = client.get_published_signing_key()
+        secret_exists = client.repository_secret_exists(SIGNING_SECRET_NAME)
+        public_after = client.get_published_signing_key()
+        normalized_keys = [
+            normalize_signing_public_key(value).strip()
+            for value in (public_before, public_after)
+            if value
+        ]
+        if (
+            len(normalized_keys) != 2
+            or any(value != expected_key for value in normalized_keys)
+        ):
+            raise RuntimeError(
+                "artifact signing public key changed before secret publication; "
+                "retry after Android finishes"
+            )
+        if secret_exists:
+            if attempt:
+                # The previous PUT may have reached GitHub even if its response
+                # was lost.  Never overwrite an existing write-only Secret.
+                return
+            raise RuntimeError(
+                "artifact signing secret appeared concurrently; retry after "
+                "Android finishes"
+            )
+
+        try:
+            if client.create_or_update_secret(SIGNING_SECRET_NAME, private_key_b64):
+                return
+            last_error = RuntimeError("GitHub rejected the signing secret update")
+        except Exception as exc:
+            last_error = exc
+    raise RuntimeError(
+        "GitHub did not accept the artifact signing secret; regenerate "
+        "signing material from the ABK app"
+    ) from last_error
+
+
+def _ensure_signing_key_locked(client):
     config = load_config()
     external_key = os.environ.get("ABK_SIGNING_KEY")
     state = _get_signing_state(config, client.repo)
@@ -1102,13 +1464,6 @@ def ensure_signing_key(client):
         state.get("secret_name") == SIGNING_SECRET_NAME
         and state.get("version") == SIGNING_KEY_VERSION
     )
-    if not client.token:
-        raise RuntimeError(t("err_no_token"))
-    if not client.repo or (
-        client.repo == DEFAULT_REPO and not getattr(client, "repo_explicit", False)
-    ):
-        raise RuntimeError("artifact signing must be configured on a fork or explicit repo")
-
     secret_exists = client.repository_secret_exists(SIGNING_SECRET_NAME)
     published_key = client.get_published_signing_key()
     if published_key:
@@ -1126,22 +1481,24 @@ def ensure_signing_key(client):
                 "GitHub secret is missing"
             )
         if not published_key:
-            client.publish_signing_key(existing)
+            _publish_and_confirm_signing_key(client, existing)
         return existing
 
     if existing and initialized:
-        existing = normalize_signing_public_key(existing)
-        if published_key and published_key.strip() != existing.strip():
-            # The Android app is the authoritative key manager and may have
-            # rotated this fork's material since the CLI last ran.
+        if published_key:
+            # The Android app is the authoritative key manager.  Prefer its
+            # valid remote key even if the CLI's cached copy is stale or
+            # damaged.
             existing = published_key
+        else:
+            existing = normalize_signing_public_key(existing)
         if not secret_exists:
             raise RuntimeError(
                 "the signing public key exists but the private GitHub secret is missing; "
                 "regenerate signing material from the ABK app"
             )
         if not published_key:
-            client.publish_signing_key(existing)
+            _publish_and_confirm_signing_key(client, existing)
         _save_signing_state(config, client.repo, existing)
         return existing
 
@@ -1162,15 +1519,71 @@ def ensure_signing_key(client):
 
     print(t("signing_key_generating"))
     private_key_b64, public_key_pem = generate_signing_keypair()
-    if not client.create_or_update_secret(SIGNING_SECRET_NAME, private_key_b64):
-        raise RuntimeError("GitHub did not accept the artifact signing secret")
-
     try:
-        if not client.publish_signing_key(public_key_pem):
-            raise RuntimeError("GitHub did not accept the signing public key asset")
-    except Exception:
-        client.delete_repository_secret(SIGNING_SECRET_NAME)
-        raise
+        public_key_pem = _publish_and_confirm_signing_key(client, public_key_pem)
+    except Exception as exc:
+        # A same-name release asset is the closest available remote CAS.  If
+        # Android won the race and already completed its matching Secret, adopt
+        # that pair without ever overwriting the Secret with our private key.
+        competing_key = client.get_published_signing_key()
+        if competing_key:
+            competing_key = normalize_signing_public_key(competing_key)
+            candidate_key = normalize_signing_public_key(public_key_pem)
+            if competing_key.strip() == candidate_key.strip():
+                # The upload succeeded but its response/confirmation failed;
+                # this process still owns the matching private material.
+                public_key_pem = competing_key
+            elif client.repository_secret_exists(SIGNING_SECRET_NAME):
+                confirmed_competing_key = client.get_published_signing_key()
+                if not confirmed_competing_key or (
+                    normalize_signing_public_key(confirmed_competing_key).strip()
+                    != competing_key.strip()
+                ):
+                    raise RuntimeError(
+                        "another signing initializer changed its public key; "
+                        "retry after Android finishes"
+                    ) from exc
+                _save_signing_state(config, client.repo, competing_key)
+                return competing_key
+            else:
+                raise RuntimeError(
+                    "another signing initializer is still publishing its secret"
+                ) from exc
+        else:
+            raise RuntimeError(
+                "artifact signing public key publication failed before the private "
+                "secret was changed"
+            ) from exc
+
+    # Publish first so a competing Android/CLI initializer can win via the
+    # unique asset name before this process changes the write-only Secret.
+    current_key = client.get_published_signing_key()
+    if not current_key or (
+        normalize_signing_public_key(current_key).strip() != public_key_pem.strip()
+    ):
+        raise RuntimeError(
+            "artifact signing public key changed before secret publication; "
+            "retry after Android finishes"
+        )
+
+    # Android also initializes this pair public-key-first.  Recheck immediately
+    # before the Secret PUT so a completed Android initialization is adopted
+    # instead of being overwritten with this process's private key.
+    if client.repository_secret_exists(SIGNING_SECRET_NAME):
+        raise RuntimeError(
+            "artifact signing secret appeared concurrently; retry after "
+            "Android finishes"
+        )
+
+    _create_or_update_signing_secret(client, private_key_b64, public_key_pem)
+    confirmed_key = client.get_published_signing_key()
+    if not confirmed_key or (
+        normalize_signing_public_key(confirmed_key).strip() != public_key_pem.strip()
+    ):
+        raise RuntimeError(
+            "artifact signing material changed concurrently; regenerate it from "
+            "the ABK app"
+        )
 
     _save_signing_state(config, client.repo, public_key_pem)
     print(t("signing_key_generated"))
@@ -1414,22 +1827,165 @@ def verify_artifact_archive(archive_path, public_key_pem=None, expected_run_id=N
         )
 
 
+def _target_repo(args):
+    """Return the explicit repository selected by CLI option or environment."""
+    return getattr(args, "repo", None) or os.environ.get("ABK_REPO")
+
+
+def _repo_is_explicit(client, args):
+    explicit = getattr(client, "repo_explicit", None)
+    if isinstance(explicit, bool):
+        return explicit
+    return bool(_target_repo(args))
+
+
 def make_client(args, token):
     return GitHubClient(
         token=token,
-        repo=getattr(args, "repo", None),
+        repo=_target_repo(args),
         verbose=getattr(args, "verbose", False),
     )
 
 
+def _json_mode(args):
+    return bool(getattr(args, "json", False))
+
+
+def _set_json_result(args, **payload):
+    if _json_mode(args):
+        args._json_result = payload
+
+
+def _set_json_error(args, message, error_code="operation_failed", **payload):
+    _set_json_result(
+        args,
+        ok=False,
+        error=str(message),
+        errorCode=error_code,
+        **payload,
+    )
+
+
+def _set_build_error(args, message, error_code, *, repo=None, stage=None, warnings=None):
+    payload = {
+        "repo": repo,
+        "dryRun": bool(getattr(args, "dry_run", False)),
+        "total": 0,
+        "run": None,
+        "runs": [],
+        "dispatches": [],
+        "warnings": list(warnings or []),
+    }
+    if stage is not None:
+        payload["stage"] = stage
+    _set_json_error(args, message, error_code, **payload)
+
+
+def _report_client_authentication_error(client, args, **payload):
+    error = getattr(client, "authentication_error", None)
+    if not isinstance(error, BaseException):
+        return False
+    secrets = _collect_json_secrets(args)
+    client_token = getattr(client, "token", None)
+    if isinstance(client_token, str) and client_token:
+        secrets.add(client_token)
+    redacted_error = _redact_secret_text(
+        str(error),
+        secrets,
+    )
+    message = t("login_verify_failed", error=redacted_error)
+    print(message, file=sys.stderr)
+    error_code = (
+        "not_authenticated"
+        if isinstance(error, GitHubAPIError) and error.status_code == 401
+        else "authentication_failed"
+    )
+    _set_json_error(args, redacted_error, error_code, **payload)
+    return True
+
+
+def _normalize_run(run):
+    return {
+        "id": run.get("id"),
+        "name": run.get("name") or "",
+        "displayTitle": run.get("display_title") or run.get("name") or "",
+        "status": run.get("status") or "",
+        "conclusion": run.get("conclusion"),
+        "event": run.get("event"),
+        "headBranch": run.get("head_branch"),
+        "htmlUrl": run.get("html_url"),
+        "createdAt": run.get("created_at"),
+        "updatedAt": run.get("updated_at"),
+        "runNumber": run.get("run_number") or 0,
+    }
+
+
+def _normalize_artifact(artifact):
+    return {
+        "id": artifact.get("id"),
+        "name": artifact.get("name") or "",
+        "sizeBytes": artifact.get("size_in_bytes") or 0,
+        "expired": bool(artifact.get("expired", False)),
+        "archiveDownloadUrl": artifact.get("archive_download_url"),
+    }
+
+
+def _signing_key_metadata(repo, client=None):
+    candidates = (
+        ("environment", os.environ.get("ABK_SIGNING_KEY")),
+        ("config", get_signing_key(repo) if repo else None),
+    )
+    for source, candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            normalize_signing_public_key(candidate)
+            return True, source
+        except Exception:
+            pass
+    if client is not None:
+        try:
+            published = client.get_published_signing_key()
+            if published:
+                normalize_signing_public_key(published)
+                return True, "repository"
+        except Exception:
+            pass
+    return False, None
+
+
+def _dispatch_run_details(response):
+    response = response if isinstance(response, dict) else {}
+    run_id = (
+        response.get("workflow_run_id")
+        or response.get("run_id")
+        or response.get("id")
+    )
+    run_url = (
+        response.get("workflow_run_url")
+        or response.get("run_url")
+        or response.get("url")
+    )
+    html_url = response.get("workflow_run_html_url") or response.get("html_url")
+    return run_id, run_url, html_url
+
+
 def prepare_build_repository(client, args):
     """Select a writable target repository and configure artifact signing."""
-    if getattr(args, "repo", None):
+    if _repo_is_explicit(client, args):
         try:
             ensure_signing_key(client)
             return True
         except Exception as exc:
-            print(t("err_fork_failed", error=exc), file=sys.stderr)
+            message = _redact_secret_text(str(exc), _collect_json_secrets(args))
+            print(t("err_fork_failed", error=message), file=sys.stderr)
+            _set_build_error(
+                args,
+                message,
+                "repository_setup_failed",
+                repo=client.repo,
+                stage="prepare_repository",
+            )
             return False
 
     try:
@@ -1457,6 +2013,10 @@ def prepare_build_repository(client, args):
             if behind.get("behind_by", 0) > 0:
                 print(t("warn_behind_upstream", n=behind['behind_by']))
                 if not args.force:
+                    if _json_mode(args):
+                        raise RuntimeError(
+                            "fork is behind upstream; sync it before building"
+                        )
                     sync = input(t("ask_sync")).strip().lower()
                     if sync in ('y', 'yes'):
                         client.sync_fork()
@@ -1465,7 +2025,15 @@ def prepare_build_repository(client, args):
         ensure_signing_key(client)
         return True
     except Exception as exc:
-        print(t("err_fork_failed", error=exc), file=sys.stderr)
+        message = _redact_secret_text(str(exc), _collect_json_secrets(args))
+        print(t("err_fork_failed", error=message), file=sys.stderr)
+        _set_build_error(
+            args,
+            message,
+            "repository_setup_failed",
+            repo=client.repo,
+            stage="prepare_repository",
+        )
         return False
 
 
@@ -1483,16 +2051,25 @@ def print_workflow_run(run):
 
 
 def cmd_login(args):
+    if _json_mode(args):
+        message = "login requires the interactive device flow"
+        print(message, file=sys.stderr)
+        _set_json_error(args, message, "interaction_required")
+        return 1
+
     token = device_flow_login()
     if not token:
         return 1
 
     client = make_client(args, token)
+    if _report_client_authentication_error(client, args):
+        return 1
     try:
         user = client.get_user()
-        config = load_config()
-        config["token"] = token
-        save_config(config)
+        with _config_process_lock():
+            config = load_config()
+            config["token"] = token
+            save_config(config)
         print()
         print(t("token_saved_to", path=CONFIG_FILE))
         print(t("logged_in_as", user=user.get('login', 'Unknown')))
@@ -1530,50 +2107,132 @@ def cmd_login(args):
 
 
 def cmd_logout(args):
-    if CONFIG_FILE.exists():
-        config = load_config()
-        if "token" in config:
-            del config["token"]
-            save_config(config)
-            print(t("logged_out_token_removed"))
+    if not CONFIG_FILE.exists():
+        print(t("logout_not"))
+        _set_json_result(
+            args,
+            ok=True,
+            loggedIn=bool(get_token(args)),
+            storedTokenRemoved=False,
+        )
+        return 0
+
+    with _config_process_lock():
+        if CONFIG_FILE.exists():
+            config = load_config()
+            if "token" in config:
+                del config["token"]
+                save_config(config)
+                removed = True
+            else:
+                removed = False
         else:
-            print(t("logout_not"))
+            removed = False
+    if removed:
+        print(t("logged_out_token_removed"))
     else:
         print(t("logout_not"))
+    _set_json_result(
+        args,
+        ok=True,
+        loggedIn=bool(get_token(args)),
+        storedTokenRemoved=removed,
+    )
     return 0
 
 
 def cmd_whoami(args):
     token = get_token(args)
-    
+
     if not token:
+        if _json_mode(args):
+            repo = _target_repo(args) or DEFAULT_REPO
+            configured_dir = load_config().get("download_dir")
+            _set_json_result(
+                args,
+                ok=True,
+                loggedIn=False,
+                repo=repo,
+                needsFork=False,
+                needsSync=False,
+                behindBy=0,
+                aheadBy=0,
+                user=None,
+                fork=None,
+                signingKeyAvailable=False,
+                signingKeySource=None,
+                downloadDir=configured_dir or str(default_download_dir()),
+            )
+            return 0
         print(t("logout_not"))
         print(t("run_login_hint"))
         return 1
-    
+
     client = make_client(args, token)
+    if _report_client_authentication_error(client, args):
+        return 1
     try:
         user = client.get_user()
         print(t("status_user", user=user.get('login', 'Unknown')))
-        
-        fork = client.get_fork()
-        if fork:
+
+        explicit_repo = _repo_is_explicit(client, args)
+        fork = None if explicit_repo else client.get_fork()
+        behind = {"behind_by": 0, "ahead_by": 0}
+        if explicit_repo:
+            print(f"Repository: {client.repo}")
+        elif fork:
             print(f"Fork: {fork.get('full_name')}")
-            
+
             behind = client.check_behind()
             if behind.get("error"):
                 print(behind["error"], file=sys.stderr)
+                _set_json_error(args, behind["error"], "fork_status_failed")
                 return 1
             elif behind.get("behind_by", 0) > 0:
                 print(t("status_behind", n=behind['behind_by']))
             else:
                 print(t("status_synced"))
-        else:
+        elif not explicit_repo:
             print(t("fork_not_detected"))
             print(t("hint_run_fork"))
+        if _json_mode(args):
+            repo = client.repo if explicit_repo else (
+                fork.get("full_name") if fork else client.repo
+            )
+            if explicit_repo:
+                key_available, key_source = _signing_key_metadata(repo, client)
+            elif fork:
+                key_available, key_source = _signing_key_metadata(repo, client)
+            else:
+                key_available, key_source = False, None
+            configured_dir = load_config().get("download_dir")
+            _set_json_result(
+                args,
+                ok=True,
+                loggedIn=True,
+                repo=repo,
+                needsFork=False if explicit_repo else not bool(fork),
+                needsSync=(
+                    False
+                    if explicit_repo
+                    else bool(behind.get("behind_by", 0) > 0)
+                ),
+                behindBy=behind.get("behind_by", 0),
+                aheadBy=behind.get("ahead_by", 0),
+                user={"login": user.get("login", "")},
+                fork=(
+                    {"fullName": fork.get("full_name", "")}
+                    if fork and not explicit_repo
+                    else None
+                ),
+                signingKeyAvailable=key_available,
+                signingKeySource=key_source,
+                downloadDir=configured_dir or str(default_download_dir()),
+            )
         return 0
     except Exception as exc:
         print(t("login_verify_failed", error=exc), file=sys.stderr)
+        _set_json_error(args, exc, "login_verification_failed")
         return 1
 
 
@@ -1582,14 +2241,27 @@ def cmd_fork(args):
     
     if not token:
         print(t("err_no_token"), file=sys.stderr)
+        _set_json_error(args, t("err_no_token"), "not_authenticated")
         return 1
     
     client = make_client(args, token)
+    if _report_client_authentication_error(client, args):
+        return 1
     
     try:
-        if getattr(args, "repo", None):
+        created = False
+        sync_requested = False
+        if _repo_is_explicit(client, args):
             print(t("fork_exists", fork=client.repo))
             ensure_signing_key(client)
+            _set_json_result(
+                args,
+                ok=True,
+                created=False,
+                syncRequested=False,
+                repo=client.repo,
+                fork={"fullName": client.repo},
+            )
             return 0
 
         fork = client.get_fork()
@@ -1606,6 +2278,7 @@ def cmd_fork(args):
                 if not args.no_sync:
                     print(t("fork_syncing"))
                     client.sync_fork()
+                    sync_requested = True
                     print(t("fork_sync_done"))
             else:
                 print(t("fork_already_latest"))
@@ -1619,10 +2292,20 @@ def cmd_fork(args):
             if callable(wait_for_repo):
                 wait_for_repo(full_name)
             print(t("fork_created", fork=result.get('full_name')))
+            created = True
         ensure_signing_key(client)
+        _set_json_result(
+            args,
+            ok=True,
+            created=created,
+            syncRequested=sync_requested,
+            repo=client.repo,
+            fork={"fullName": client.repo},
+        )
         return 0
     except Exception as exc:
         print(t("err_fork_failed", error=exc), file=sys.stderr)
+        _set_json_error(args, exc, "fork_failed")
         return 1
 
 
@@ -1631,14 +2314,18 @@ def cmd_sync(args):
     
     if not token:
         print(t("err_no_token"), file=sys.stderr)
+        _set_json_error(args, t("err_no_token"), "not_authenticated")
         return 1
     
     client = make_client(args, token)
+    if _report_client_authentication_error(client, args):
+        return 1
     
     try:
         fork = client.get_fork()
         if not fork:
             print(t("err_no_fork"), file=sys.stderr)
+            _set_json_error(args, t("err_no_fork"), "fork_not_found")
             return 1
         client.repo = fork.get("full_name", client.repo)
         client.fork_repo = fork
@@ -1646,16 +2333,27 @@ def cmd_sync(args):
         behind = client.check_behind()
         if behind.get("error"):
             raise RuntimeError(behind["error"])
-        if behind.get("behind_by", 0) == 0:
+        behind_before = behind.get("behind_by", 0)
+        changed = behind_before > 0
+        if not changed:
             print(t("fork_already_latest"))
         else:
-            print(t("syncing_n_commits", n=behind['behind_by']))
+            print(t("syncing_n_commits", n=behind_before))
             client.sync_fork()
             print(t("fork_sync_done"))
         ensure_signing_key(client)
+        _set_json_result(
+            args,
+            ok=True,
+            changed=changed,
+            behindByBefore=behind_before,
+            repo=client.repo,
+            fork={"fullName": client.repo},
+        )
         return 0
     except Exception as exc:
         print(t("err_sync_failed", error=exc), file=sys.stderr)
+        _set_json_error(args, exc, "sync_failed")
         return 1
 
 
@@ -1664,28 +2362,41 @@ def cmd_status(args):
     
     if not token:
         print(t("err_no_token"), file=sys.stderr)
+        _set_json_error(args, t("err_no_token"), "not_authenticated", run=None, runs=[], total=0)
         return 1
     
     client = make_client(args, token)
+    if _report_client_authentication_error(
+        client,
+        args,
+        run=None,
+        runs=[],
+        total=0,
+    ):
+        return 1
 
-    if not getattr(args, "repo", None):
+    if not _repo_is_explicit(client, args):
         try:
             fork = client.get_fork()
             if not fork:
                 print(t("err_no_fork"), file=sys.stderr)
+                _set_json_error(args, t("err_no_fork"), "fork_not_found", run=None, runs=[], total=0)
                 return 1
             client.repo = fork.get("full_name", client.repo)
             client.fork_repo = fork
         except Exception as exc:
             print(t("fetch_status_failed", error=exc), file=sys.stderr)
+            _set_json_error(args, exc, "status_failed", run=None, runs=[], total=0)
             return 1
 
     if args.cancel:
         try:
             client.cancel_run(args.cancel)
             print(t("cancel_ok", id=args.cancel))
+            _set_json_result(args, ok=True, action="cancel", runId=args.cancel, repo=client.repo)
         except Exception as exc:
             print(t("cancel_fail", error=exc), file=sys.stderr)
+            _set_json_error(args, exc, "cancel_failed", runId=args.cancel, repo=client.repo)
             return 1
         return 0
 
@@ -1693,13 +2404,15 @@ def cmd_status(args):
         try:
             client.rerun(args.rerun)
             print(t("rerun_ok", id=args.rerun))
+            _set_json_result(args, ok=True, action="rerun", runId=args.rerun, repo=client.repo)
         except Exception as exc:
             print(t("rerun_fail", error=exc), file=sys.stderr)
+            _set_json_error(args, exc, "rerun_failed", runId=args.rerun, repo=client.repo)
             return 1
         return 0
 
     try:
-        if not getattr(args, "repo", None):
+        if not _repo_is_explicit(client, args):
             behind = client.check_behind()
             if behind.get("error"):
                 print(behind["error"], file=sys.stderr)
@@ -1709,7 +2422,16 @@ def cmd_status(args):
                 print()
 
         if args.run_id:
-            print_workflow_run(client.get_run(args.run_id))
+            run = client.get_run(args.run_id)
+            print_workflow_run(run)
+            _set_json_result(
+                args,
+                ok=True,
+                repo=client.repo,
+                total=1,
+                run=_normalize_run(run),
+                runs=[],
+            )
             return 0
 
         if args.target in WORKFLOWS:
@@ -1728,14 +2450,32 @@ def cmd_status(args):
         
         if not workflow_runs:
             print(t("status_no_builds"))
+            _set_json_result(
+                args,
+                ok=True,
+                repo=client.repo,
+                total=0,
+                run=None,
+                runs=[],
+            )
             return 0
         
         print(t("status_recent", n=len(workflow_runs)))
         for run in workflow_runs:
             print_workflow_run(run)
+        normalized_runs = [_normalize_run(run) for run in workflow_runs]
+        _set_json_result(
+            args,
+            ok=True,
+            repo=client.repo,
+            total=len(normalized_runs),
+            run=None,
+            runs=normalized_runs,
+        )
         return 0
     except Exception as exc:
         print(t("fetch_status_failed", error=exc), file=sys.stderr)
+        _set_json_error(args, exc, "status_failed", run=None, runs=[], total=0)
         return 1
 
 
@@ -1765,26 +2505,56 @@ def _set_build_defaults(args):
         args.virt = "on" if all_managers else "off"
 
 
-def _standard_build_inputs(args, variant):
+def normalize_virtualization_support(kernel_version, value):
+    """Map the common CLI option to the selected workflow's input contract."""
+    value = value or "off"
+    if value == "off":
+        return "off"
+    if kernel_version == "6.12":
+        return "on"
+    if value == "on":
+        return "678"
+    return value
+
+
+def _susfs_enabled(args, variant):
+    """Return the effective SUSFS state after Android's None normalization."""
+    return bool(args.susfs) and variant != "None"
+
+
+def _standard_build_inputs(
+    args,
+    variant,
+    kernel_version="5.10",
+    *,
+    supports_supp_op=False,
+):
     kpm_enabled = bool(args.kpm) and supports_kpm(variant, args.ksu_branch)
+    susfs_enabled = _susfs_enabled(args, variant)
+    virtualization_support = normalize_virtualization_support(
+        kernel_version,
+        args.virt,
+    )
     inputs = {
         "kernelsu_variant": variant,
-        "kernelsu_branch": resolve_ksu_branch(args.ksu_branch),
+        "kernelsu_branch": resolve_plan_ksu_branch(variant, args.ksu_branch),
         "use_zram": str(bool(args.zram)).lower(),
         "use_bbg": str(bool(args.bbg)).lower(),
         "use_ddk": str(bool(args.ddk)).lower(),
         "use_kpm": str(kpm_enabled).lower(),
         "use_rekernel": str(bool(args.rekernel)).lower(),
-        "cancel_susfs": str(not bool(args.susfs)).lower(),
+        "cancel_susfs": str(not susfs_enabled).lower(),
         "use_ntsync": str(bool(args.ntsync)).lower(),
         "use_networking": str(bool(args.networking)).lower(),
         "zram_full_algo": str(bool(args.zram_full_algo)).lower(),
     }
-    if args.virt != "off":
-        inputs["virtualization_support"] = args.virt
+    if virtualization_support != "off":
+        inputs["virtualization_support"] = virtualization_support
+    if supports_supp_op:
+        inputs["supp_op"] = str(bool(args.oneplus_8e)).lower()
     if args.version:
         inputs["version"] = args.version
-    if args.custom_ref:
+    if args.custom_ref and variant != "None":
         inputs["custom_ref"] = args.custom_ref
     if args.kpm_password and kpm_enabled:
         inputs["kpm_password"] = args.kpm_password
@@ -1801,12 +2571,12 @@ def _full_matrix_inputs(args, variant):
     kpm_enabled = bool(args.kpm) and supports_kpm(variant, args.ksu_branch)
     return {
         "kernelsu_variant": variant,
-        "kernelsu_branch": resolve_ksu_branch(args.ksu_branch),
+        "kernelsu_branch": resolve_plan_ksu_branch(variant, args.ksu_branch),
         "version": args.version or "",
         "revision": args.revision or "r11",
         "build_time": args.build_time or "",
         "kpm_password": args.kpm_password if kpm_enabled and args.kpm_password else "",
-        "enable_susfs": str(bool(args.susfs)).lower(),
+        "enable_susfs": str(_susfs_enabled(args, variant)).lower(),
         "use_zram": str(bool(args.zram)).lower(),
         "use_bbg": str(bool(args.bbg)).lower(),
         "use_ddk": str(bool(args.ddk)).lower(),
@@ -1824,7 +2594,15 @@ def _full_matrix_inputs(args, variant):
 
 def _all_managers_inputs(args):
     manager_variants = selected_manager_variants(args.manager_variants)
-    oneplus_kpm_enabled = bool(args.kpm) and "ReSukiSU" not in manager_variants
+    build_scope = args.build_scope or "Both"
+    selected_gki_supports_kpm = False
+    if build_scope in ("Both", "GKI"):
+        selected_gki_supports_kpm = any(
+            supports_kpm(variant, args.ksu_branch)
+            for variant in manager_variants
+        )
+    include_kpm_password = bool(args.kpm) and selected_gki_supports_kpm
+    oneplus_kpm_enabled = bool(args.kpm)
     oneplus_options = {
         "enable_susfs": bool(args.susfs),
         "use_kpm": oneplus_kpm_enabled,
@@ -1835,13 +2613,17 @@ def _all_managers_inputs(args):
         "use_unicode_bypass": bool(args.unicode_bypass),
     }
     return {
-        "build_scope": args.build_scope or "Both",
+        "build_scope": build_scope,
         "manager_variants": args.manager_variants or "all",
         "kernelsu_branch": resolve_ksu_branch(args.ksu_branch),
         "version": args.version or "",
         "revision": args.revision or "r11",
         "build_time": args.build_time or "",
-        "kpm_password": args.kpm_password or "",
+        "kpm_password": (
+            args.kpm_password
+            if include_kpm_password and args.kpm_password
+            else ""
+        ),
         "enable_susfs": str(bool(args.susfs)).lower(),
         "use_zram": str(bool(args.zram)).lower(),
         "use_bbg": str(bool(args.bbg)).lower(),
@@ -1866,64 +2648,154 @@ def _redacted_inputs(inputs):
     return result
 
 
+def _build_plan_id(plan, ref):
+    canonical = json.dumps(
+        {
+            "workflow": plan["workflow"],
+            "ref": ref,
+            "inputs": _redacted_inputs(plan["inputs"]),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
 def cmd_build(args):
+    warning_messages = []
     if args.matrix and args.oneplus:
-        print("--matrix and --oneplus are mutually exclusive", file=sys.stderr)
+        message = "--matrix and --oneplus are mutually exclusive"
+        print(message, file=sys.stderr)
+        _set_build_error(args, message, "invalid_arguments")
         return 2
 
     effective_ksu_branch = resolve_ksu_branch(args.ksu_branch)
     if not args.oneplus:
         if args.matrix in ("full", "all-managers") and (
-            args.custom_ref or effective_ksu_branch == "Custom(自定义)"
-        ):
-            print(
-                t("err_custom_ref_unsupported_matrix", matrix=args.matrix),
-                file=sys.stderr,
+            args.custom_ref
+            or (
+                effective_ksu_branch == "Custom(自定义)"
+                and not (
+                    args.matrix == "full"
+                    and args.ksu_variant == "None"
+                )
             )
+        ):
+            message = t("err_custom_ref_unsupported_matrix", matrix=args.matrix)
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
             return 2
         if args.custom_ref and effective_ksu_branch != "Custom(自定义)":
-            print(t("err_custom_ref_requires_custom_branch"), file=sys.stderr)
+            message = t("err_custom_ref_requires_custom_branch")
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
             return 2
         if (
             effective_ksu_branch == "Custom(自定义)"
             and args.ksu_variant != "None"
             and not args.custom_ref
         ):
-            print(t("err_custom_branch_requires_ref"), file=sys.stderr)
+            message = t("err_custom_branch_requires_ref")
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
             return 2
 
     _set_build_defaults(args)
+    if args.revision:
+        args.revision = args.revision.lower()
+    if args.sub_level and args.sub_level.lower() == "x":
+        args.sub_level = "X"
+    if args.os_patch_level and args.os_patch_level.lower() == "lts":
+        args.os_patch_level = "lts"
+
+    if args.revision:
+        revision_supported = args.matrix in ("full", "all-managers") or (
+            not args.matrix
+            and not args.oneplus
+            and (args.kernel_version or "5.10") == "5.10"
+        )
+        if not revision_supported:
+            message = (
+                "--revision is supported only by custom 5.10, full, "
+                "and all-managers builds"
+            )
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
+            return 2
+
+    if not args.matrix and not args.oneplus:
+        selected_line = (
+            args.android_version or "android12",
+            args.kernel_version or "5.10",
+        )
+        supported_lines = {
+            (workflow["android"], workflow["kernel"])
+            for workflow in WORKFLOWS.values()
+            if "android" in workflow and "kernel" in workflow
+        }
+        if selected_line not in supported_lines:
+            message = (
+                "unsupported Android/kernel combination: "
+                f"{selected_line[0]}/{selected_line[1]}"
+            )
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
+            return 2
+        if (args.sub_level == "X") != (args.os_patch_level == "lts"):
+            message = "--sub-level X and --os-patch-level lts must be used together"
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
+            return 2
+
     device_info = None
     if args.oneplus:
         if not args.device:
-            print(t("err_need_device"), file=sys.stderr)
+            message = t("err_need_device")
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
             return 2
         device_info = ONEPLUS_DEVICES.get(args.device)
         if not device_info:
-            print(t("err_unknown_device", device=args.device), file=sys.stderr)
+            message = t("err_unknown_device", device=args.device)
+            print(message, file=sys.stderr)
             print(
                 t("err_available_devices", devices=", ".join(ONEPLUS_DEVICES.keys())),
                 file=sys.stderr,
             )
+            _set_build_error(args, message, "invalid_arguments")
             return 2
         errors, warnings = validate_oneplus_build(args, device_info)
         for warning in warnings:
+            warning_messages.append(warning)
             print(t("warning_prefix") + " " + warning)
         if errors:
             for error in errors:
                 print(t("error_prefix") + " " + error, file=sys.stderr)
+            _set_build_error(
+                args,
+                errors[0],
+                "invalid_arguments",
+                warnings=warning_messages,
+            )
             return 2
     elif not args.matrix:
         if not args.sub_level:
-            print(t("err_need_sub_level"), file=sys.stderr)
+            message = t("err_need_sub_level")
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
             return 2
         if not args.os_patch_level:
-            print(t("err_need_os_patch"), file=sys.stderr)
+            message = t("err_need_os_patch")
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
             return 2
 
     invalid_argument = invalid_build_argument(args)
     if invalid_argument:
-        print(t("err_invalid_build_arg", name=invalid_argument), file=sys.stderr)
+        message = t("err_invalid_build_arg", name=invalid_argument)
+        print(message, file=sys.stderr)
+        _set_build_error(args, message, "invalid_arguments")
         return 2
 
     plans = []
@@ -1935,28 +2807,27 @@ def cmd_build(args):
         )
         for variant in variants:
             if args.kpm and not supports_kpm(variant, args.ksu_branch):
-                selection = f"{variant} ({resolve_ksu_branch(args.ksu_branch)})"
-                print(t("warning_prefix") + " " + t("op_no_kpm_ksu", ksu=selection))
+                selection = (
+                    f"{variant} "
+                    f"({resolve_plan_ksu_branch(variant, args.ksu_branch)})"
+                )
+                warning = t("op_no_kpm_ksu", ksu=selection)
+                warning_messages.append(warning)
+                print(t("warning_prefix") + " " + warning)
             plans.append({
                 "workflow": FULL_MATRIX_WORKFLOWS["full"],
                 "name": f"{t('build_target_full')} ({variant})",
+                "target": "full",
+                "ksu_variant": variant,
                 "inputs": _full_matrix_inputs(args, variant),
             })
     elif args.matrix == "all-managers":
         manager_variants = selected_manager_variants(args.manager_variants)
-        if (
-            args.kpm
-            and (args.build_scope or "Both") != "GKI"
-            and "ReSukiSU" in manager_variants
-        ):
-            print(
-                t("warning_prefix")
-                + " "
-                + t("op_no_kpm_ksu", ksu="ReSukiSU (OnePlus main)")
-            )
         plans.append({
             "workflow": FULL_MATRIX_WORKFLOWS["all-managers"],
             "name": t("build_target_all_managers"),
+            "target": "all-managers",
+            "ksu_variant": None,
             "inputs": _all_managers_inputs(args),
         })
     else:
@@ -1984,14 +2855,16 @@ def cmd_build(args):
                     )
                     if args.kpm and not kpm_enabled:
                         selection = f"{variant} (OnePlus main)"
-                        print(t("warning_prefix") + " " + t("op_no_kpm_ksu", ksu=selection))
+                        warning = t("op_no_kpm_ksu", ksu=selection)
+                        warning_messages.append(warning)
+                        print(t("warning_prefix") + " " + warning)
                     inputs = {
                         "ksu_variant": variant,
                         "device_manifest": args.device,
                         "cpu": device_info["cpu"],
                         "android_version": device_info["android"],
                         "kernel_version": device_info["kernel"],
-                        "enable_susfs": str(bool(args.susfs)).lower(),
+                        "enable_susfs": str(_susfs_enabled(args, variant)).lower(),
                         "use_kpm": str(kpm_enabled).lower(),
                         "use_lz4kd": str(bool(args.lz4kd)).lower(),
                         "use_bbg": str(bool(args.bbg)).lower(),
@@ -2001,9 +2874,24 @@ def cmd_build(args):
                     }
                 else:
                     if args.kpm and not supports_kpm(variant, args.ksu_branch):
-                        selection = f"{variant} ({resolve_ksu_branch(args.ksu_branch)})"
-                        print(t("warning_prefix") + " " + t("op_no_kpm_ksu", ksu=selection))
-                    inputs = _standard_build_inputs(args, variant)
+                        selection = (
+                            f"{variant} "
+                            f"({resolve_plan_ksu_branch(variant, args.ksu_branch)})"
+                        )
+                        warning = t("op_no_kpm_ksu", ksu=selection)
+                        warning_messages.append(warning)
+                        print(t("warning_prefix") + " " + warning)
+                    kernel_version = (
+                        args.kernel_version or "5.10"
+                        if target == "custom"
+                        else workflow["kernel"]
+                    )
+                    inputs = _standard_build_inputs(
+                        args,
+                        variant,
+                        kernel_version,
+                        supports_supp_op=target in ("a15", "a16"),
+                    )
                     if target == "custom":
                         inputs.update({
                             "supp_op": str(bool(args.oneplus_8e)).lower(),
@@ -2017,35 +2905,96 @@ def cmd_build(args):
                 plans.append({
                     "workflow": workflow["file"],
                     "name": f"{workflow['name']} ({variant})",
+                    "target": target,
+                    "ksu_variant": variant,
                     "inputs": inputs,
                 })
 
     client = None
     if args.dry_run:
         ref = args.ref or "dev"
-        repo_name = args.repo or "<auto-fork>"
+        repo_name = _target_repo(args) or "<auto-fork>"
     else:
         token = get_token(args)
         if not token:
-            print(t("err_no_token"), file=sys.stderr)
+            message = t("err_no_token")
+            print(message, file=sys.stderr)
+            _set_build_error(
+                args,
+                message,
+                "not_authenticated",
+            )
             return 1
         client = make_client(args, token)
+        if _report_client_authentication_error(
+            client,
+            args,
+            repo=_target_repo(args),
+            dryRun=False,
+            total=0,
+            run=None,
+            runs=[],
+            dispatches=[],
+            warnings=warning_messages,
+        ):
+            return 1
         if not prepare_build_repository(client, args):
             return 1
-        ref = args.ref or client.get_default_branch()
+        try:
+            ref = args.ref or client.get_default_branch()
+        except Exception as exc:
+            message = _redact_secret_text(str(exc), _collect_json_secrets(args))
+            print(t("err_fork_failed", error=message), file=sys.stderr)
+            _set_build_error(
+                args,
+                message,
+                "repository_setup_failed",
+                repo=client.repo,
+                stage="resolve_default_branch",
+            )
+            return 1
         repo_name = client.repo
 
     failures = 0
     successes = 0
+    dispatches = []
+    dispatched_runs = []
+    failure_messages = []
     for index, plan in enumerate(plans, start=1):
+        dispatch = {
+            "planId": _build_plan_id(plan, ref),
+            "workflowFile": plan["workflow"],
+            "workflowName": WORKFLOW_RUNTIME_NAMES.get(
+                plan["workflow"], plan["name"]
+            ),
+            "target": plan["target"],
+            "ksuVariant": plan["ksu_variant"],
+            "ref": ref,
+            "inputs": _redacted_inputs(plan["inputs"]),
+            "runId": None,
+            "runUrl": None,
+            "htmlUrl": None,
+            "status": "planned" if args.dry_run else "pending",
+            "error": None,
+        }
         if len(plans) > 1:
             print(f"\n[{index}/{len(plans)}] ", end="")
         print(t("triggering_name", name=plan["name"]))
         plan_kpm_enabled = plan["inputs"].get("use_kpm", str(bool(args.kpm)).lower()) == "true"
+        if "enable_susfs" in plan["inputs"]:
+            plan_susfs_enabled = (
+                str(plan["inputs"]["enable_susfs"]).lower() == "true"
+            )
+        elif "cancel_susfs" in plan["inputs"]:
+            plan_susfs_enabled = (
+                str(plan["inputs"]["cancel_susfs"]).lower() != "true"
+            )
+        else:
+            plan_susfs_enabled = bool(args.susfs)
         print(
             "  " + t(
                 "build_feat_line",
-                susfs=t("enabled") if args.susfs else t("disabled"),
+                susfs=t("enabled") if plan_susfs_enabled else t("disabled"),
                 zram=t("enabled") if args.zram else t("disabled"),
                 bbg=t("enabled") if args.bbg else t("disabled"),
                 ddk=t("enabled") if args.ddk else t("disabled"),
@@ -2067,87 +3016,247 @@ def cmd_build(args):
                 )
             )
             successes += 1
+            dispatch["status"] = "dry-run"
+            dispatches.append(dispatch)
             continue
 
         try:
-            client.trigger_workflow(plan["workflow"], ref, plan["inputs"])
+            response = client.trigger_workflow(plan["workflow"], ref, plan["inputs"])
+            run_id, run_url, html_url = _dispatch_run_details(response)
+            dispatch.update({
+                "runId": run_id,
+                "runUrl": run_url,
+                "htmlUrl": html_url,
+                "status": "dispatched",
+            })
+            response_run = (
+                response.get("workflow_run")
+                if isinstance(response, dict)
+                and isinstance(response.get("workflow_run"), dict)
+                else None
+            )
+            if response_run:
+                dispatched_runs.append(_normalize_run(response_run))
+            elif run_id:
+                dispatched_runs.append(_normalize_run({
+                    "id": run_id,
+                    "name": dispatch["workflowName"],
+                    "display_title": dispatch["workflowName"],
+                    "status": "queued",
+                    "html_url": html_url,
+                    "head_branch": ref,
+                    "event": "workflow_dispatch",
+                }))
             print(t("build_triggered_ok"))
             successes += 1
         except Exception as exc:
             failures += 1
-            print(t("build_triggered_fail", error=exc), file=sys.stderr)
-            if "404" in str(exc):
+            message = _redact_secret_text(
+                str(exc),
+                _collect_json_secrets(args),
+            )
+            failure_messages.append(message)
+            dispatch.update({"status": "failed", "error": message})
+            print(t("build_triggered_fail", error=message), file=sys.stderr)
+            if "404" in message:
                 print(t("workflow_404_hint"), file=sys.stderr)
+        dispatches.append(dispatch)
 
     if not args.dry_run and len(plans) > 1 and successes:
         print(t("build_multiple_count", count=successes))
     if not args.dry_run:
         print(t("build_check_status"))
         print(t("build_actions_url", repo=client.repo))
+    _set_json_result(
+        args,
+        ok=not bool(failures),
+        repo=repo_name,
+        dryRun=bool(args.dry_run),
+        total=len(plans),
+        run=(
+            dispatched_runs[0]
+            if len(plans) == 1 and dispatched_runs
+            else None
+        ),
+        runs=dispatched_runs if len(plans) > 1 else [],
+        dispatches=dispatches,
+        warnings=warning_messages,
+        error="; ".join(failure_messages) if failure_messages else None,
+        errorCode="dispatch_failed" if failures else None,
+    )
     return 1 if failures else 0
 
 
 def cmd_artifacts(args):
+    configured_dir = None
     if args.set_download_dir:
-        config = load_config()
         configured_dir = str(Path(args.set_download_dir).expanduser().resolve())
-        config["download_dir"] = configured_dir
-        save_config(config)
+        with _config_process_lock():
+            config = load_config()
+            config["download_dir"] = configured_dir
+            save_config(config)
         print(t("download_dir_saved", dir=configured_dir))
-        if not args.run_id and not args.download:
+        if (
+            not args.run_id
+            and not args.download
+            and getattr(args, "artifact_id", None) is None
+        ):
+            _set_json_result(
+                args,
+                ok=True,
+                runId=None,
+                total=0,
+                artifacts=[],
+                downloads=[],
+                downloadDir=configured_dir,
+            )
             return 0
 
     if not args.run_id:
         print(t("err_need_run_id"), file=sys.stderr)
+        _set_json_error(
+            args,
+            t("err_need_run_id"),
+            "invalid_arguments",
+            runId=None,
+            total=0,
+            artifacts=[],
+            downloads=[],
+            downloadDir=configured_dir,
+        )
         return 2
 
     token = get_token(args)
     if not token:
         print(t("err_no_token"), file=sys.stderr)
+        _set_json_error(
+            args,
+            t("err_no_token"),
+            "not_authenticated",
+            runId=args.run_id,
+            total=0,
+            artifacts=[],
+            downloads=[],
+        )
         return 1
     client = make_client(args, token)
 
-    if not getattr(args, "repo", None):
+    if _report_client_authentication_error(
+        client,
+        args,
+        runId=args.run_id,
+        total=0,
+        artifacts=[],
+        downloads=[],
+    ):
+        return 1
+
+    if not _repo_is_explicit(client, args):
         try:
             fork = client.get_fork()
             if not fork:
                 print(t("err_no_fork"), file=sys.stderr)
+                _set_json_error(
+                    args,
+                    t("err_no_fork"),
+                    "fork_not_found",
+                    runId=args.run_id,
+                    total=0,
+                    artifacts=[],
+                    downloads=[],
+                )
                 return 1
             client.repo = fork.get("full_name", client.repo)
             client.fork_repo = fork
         except Exception as exc:
             print(f"Artifact operation failed: {exc}", file=sys.stderr)
+            _set_json_error(
+                args,
+                exc,
+                "artifact_operation_failed",
+                runId=args.run_id,
+                total=0,
+                artifacts=[],
+                downloads=[],
+            )
             return 1
 
     try:
-        artifacts = client.list_artifacts(args.run_id)
-        if not artifacts.get("artifacts"):
+        response = client.list_artifacts(args.run_id)
+        all_artifacts = response.get("artifacts", [])
+        artifact_id = getattr(args, "artifact_id", None)
+        artifacts = all_artifacts
+        if artifact_id is not None:
+            artifacts = [art for art in all_artifacts if art.get("id") == artifact_id]
+            if not artifacts:
+                message = f"artifact {artifact_id} does not belong to run {args.run_id}"
+                print(message, file=sys.stderr)
+                _set_json_error(
+                    args,
+                    message,
+                    "artifact_not_found",
+                    repo=client.repo,
+                    runId=args.run_id,
+                    total=0,
+                    artifacts=[],
+                    downloads=[],
+                )
+                return 1
+
+        config = load_config()
+        output_dir = Path(
+            args.output
+            or configured_dir
+            or config.get("download_dir")
+            or default_download_dir()
+        ).expanduser().resolve()
+        normalized_artifacts = [_normalize_artifact(art) for art in artifacts]
+        downloads = []
+
+        if not artifacts:
             print(t("artifacts_no_artifacts"))
+            _set_json_result(
+                args,
+                ok=True,
+                repo=client.repo,
+                runId=args.run_id,
+                total=0,
+                artifacts=[],
+                downloads=[],
+                downloadDir=str(output_dir),
+            )
             return 0
 
         print(t("artifacts_list", id=args.run_id))
-        for art in artifacts["artifacts"]:
+        for art in artifacts:
             size_kb = art["size_in_bytes"] / 1024
             print(f"  {art['id']} | {art['name']} | {size_kb:.1f} KB")
 
         if args.download:
-            config = load_config()
-            output_dir = Path(
-                args.output or config.get("download_dir") or default_download_dir()
-            ).expanduser()
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             print(f"\n" + t("artifacts_download_to", dir=output_dir))
             signing_key = resolve_verification_key(client)
             failures = 0
-            for art in artifacts["artifacts"]:
+            failure_messages = []
+            verification_failed = False
+            for art in artifacts:
                 print(f"  " + t("artifacts_downloading", name=art["name"]))
                 try:
                     path = client.download_artifact(art["id"], output_dir)
                 except Exception as exc:
                     failures += 1
+                    failure_messages.append(str(exc))
+                    downloads.append({
+                        "artifactId": art["id"],
+                        "name": art["name"],
+                        "path": None,
+                        "verification": None,
+                        "error": str(exc),
+                    })
                     print(f"    download failed: {exc}", file=sys.stderr)
                     continue
 
+                path = str(Path(path).expanduser().resolve())
                 print(f"    -> {path}")
                 print(f"    " + t("artifact_verifying"))
                 result = verify_artifact_archive(path, signing_key, args.run_id)
@@ -2160,20 +3269,77 @@ def cmd_artifacts(args):
 
                 if not result['verified']:
                     failures += 1
-                    sys.stdout.write("    " + t("artifact_verify_confirm"))
-                    sys.stdout.flush()
-                    answer = sys.stdin.readline().strip().lower()
-                    if answer not in ('y', 'yes', 'j', 'ja', 'o', 'oui', 's', 'si', 'sí'):
+                    verification_failed = True
+                    failure_messages.append(result.get("message") or "verification failed")
+                    if _json_mode(args):
                         try:
                             Path(path).unlink()
                         except FileNotFoundError:
                             pass
+                        retained_path = None
                         print(f"    {t('artifact_verify_skip_user')}")
+                    else:
+                        retained_path = path
+                        sys.stdout.write("    " + t("artifact_verify_confirm"))
+                        sys.stdout.flush()
+                        answer = sys.stdin.readline().strip().lower()
+                        if answer not in ('y', 'yes', 'j', 'ja', 'o', 'oui', 's', 'si', 'sí'):
+                            try:
+                                Path(path).unlink()
+                            except FileNotFoundError:
+                                pass
+                            retained_path = None
+                            print(f"    {t('artifact_verify_skip_user')}")
+                else:
+                    retained_path = path
+                downloads.append({
+                    "artifactId": art["id"],
+                    "name": art["name"],
+                    "path": retained_path,
+                    "verification": result,
+                    "error": None if result.get("verified") else result.get("message"),
+                })
             if failures:
+                _set_json_result(
+                    args,
+                    ok=False,
+                    repo=client.repo,
+                    runId=args.run_id,
+                    total=len(normalized_artifacts),
+                    artifacts=normalized_artifacts,
+                    downloads=downloads,
+                    downloadDir=str(output_dir),
+                    error="; ".join(failure_messages),
+                    errorCode=(
+                        "artifact_verification_failed"
+                        if verification_failed
+                        else "artifact_download_failed"
+                    ),
+                )
                 return 1
+        _set_json_result(
+            args,
+            ok=True,
+            repo=client.repo,
+            runId=args.run_id,
+            total=len(normalized_artifacts),
+            artifacts=normalized_artifacts,
+            downloads=downloads,
+            downloadDir=str(output_dir),
+        )
         return 0
     except Exception as exc:
         print(f"Artifact operation failed: {exc}", file=sys.stderr)
+        _set_json_error(
+            args,
+            exc,
+            "artifact_operation_failed",
+            repo=client.repo,
+            runId=args.run_id,
+            total=0,
+            artifacts=[],
+            downloads=[],
+        )
         return 1
 
 
@@ -2182,6 +3348,22 @@ def cmd_list(args):
         print(t("op_list_title"))
         for did, info in ONEPLUS_DEVICES.items():
             print(f"  {did:<35} {info['name']:<20} {info['cpu']:<10} {info['android']} {info['kernel']}")
+        devices = [
+            {
+                "id": did,
+                "name": info["name"],
+                "cpu": info["cpu"],
+                "androidVersion": info["android"],
+                "kernelVersion": info["kernel"],
+            }
+            for did, info in ONEPLUS_DEVICES.items()
+        ]
+        _set_json_result(
+            args,
+            ok=True,
+            total=len(devices),
+            devices=devices,
+        )
         return 0
 
     print("=" * 50)
@@ -2199,7 +3381,7 @@ def cmd_list(args):
     print("  " + " / ".join(KSU_VARIANTS + ["all"]))
 
     print(f"\n{t('ksu_branches_label')}")
-    print("  Stable / Dev / Custom")
+    print("  Stable / Latest / Dev / Custom")
 
     print(f"\n{t('op_features_title')}")
     print(f"  --[no-]lz4kd  --[no-]bbr  --[no-]proxy-optimization  --[no-]unicode-bypass")
@@ -2217,7 +3399,42 @@ def cmd_list(args):
         print(f"  abk {cmd:<12} {t(key)}")
 
     print("\n  abk build --help | abk status --help")
+    _set_json_result(
+        args,
+        ok=True,
+        targets=list(MATRIX_TARGETS_ALL),
+        ksuVariants=list(KSU_VARIANTS) + ["all"],
+    )
     return 0
+
+
+def cmd_self_test(args):
+    """Exercise dependencies required by the frozen CLI bundle."""
+    try:
+        _, public_key = generate_signing_keypair()
+        normalize_signing_public_key(public_key)
+        import nacl.bindings
+        import certifi as certifi_module
+
+        nacl.bindings.sodium_init()
+        ca_bundle = certifi_module.where()
+        if not Path(ca_bundle).is_file():
+            raise RuntimeError("certifi CA bundle is missing")
+        _create_tls_context()
+        _set_json_result(
+            args,
+            ok=True,
+            cryptoBackend=_CRYPTO_BACKEND,
+            pynacl=True,
+            caBundle=True,
+            tlsContext=True,
+        )
+        print("ABK CLI self-test: ok")
+        return 0
+    except Exception as exc:
+        print(f"ABK CLI self-test failed: {exc}", file=sys.stderr)
+        _set_json_error(args, exc, "self_test_failed")
+        return 1
 
 
 SUPPORTED_LANGUAGES = (
@@ -2263,18 +3480,188 @@ def status_limit(value):
     return number
 
 
+def positive_int(value):
+    try:
+        number = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if number <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return number
+
+
+class ABKArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        message = _redact_secret_text(message, _collect_json_secrets())
+        if "--json" in sys.argv[1:]:
+            candidate = self.prog.rsplit(maxsplit=1)[-1]
+            command = getattr(self, "_command_hint", None)
+            if command is None and candidate in {
+                "login", "logout", "whoami", "fork", "sync", "build",
+                "status", "artifacts", "list", "self-test",
+            }:
+                command = candidate
+            payload = {
+                "schemaVersion": JSON_SCHEMA_VERSION,
+                "ok": False,
+                "command": command,
+                "error": message,
+                "errorCode": "invalid_arguments",
+            }
+            self._print_message(
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n",
+                sys.stdout,
+            )
+            self.exit(2)
+        super().error(message)
+
+
+def _collect_json_secrets(args=None, argv=None):
+    stored_token = None
+    if CONFIG_FILE.exists():
+        stored_token = load_config().get("token")
+    values = {
+        value
+        for value in (
+            getattr(args, "token", None) if args is not None else None,
+            getattr(args, "kpm_password", None) if args is not None else None,
+            os.environ.get("GITHUB_TOKEN"),
+            os.environ.get("GH_TOKEN"),
+            os.environ.get("ABK_KPM_PASSWORD"),
+            stored_token,
+        )
+        if isinstance(value, str) and value
+    }
+    raw_args = list(sys.argv[1:] if argv is None else argv)
+    secret_flags = ("--token", "--kpm-password")
+    for index, item in enumerate(raw_args):
+        if item in secret_flags and index + 1 < len(raw_args):
+            value = raw_args[index + 1]
+            if value:
+                values.add(value)
+            continue
+        for flag in secret_flags:
+            prefix = flag + "="
+            if item.startswith(prefix) and item[len(prefix):]:
+                values.add(item[len(prefix):])
+                break
+    return values
+
+
+def _redact_secret_text(value, secrets):
+    for secret in sorted(secrets, key=len, reverse=True):
+        value = value.replace(secret, "***")
+    return value
+
+
+def _redact_json_secrets(value, secrets, sensitive_context=False):
+    if isinstance(value, dict):
+        return {
+            key: _redact_json_secrets(
+                item,
+                secrets,
+                sensitive_context or key.lower() in {
+                    "error",
+                    "message",
+                    "detail",
+                    "details",
+                    "stderr",
+                    "stdout",
+                    "output",
+                },
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _redact_json_secrets(item, secrets, sensitive_context)
+            for item in value
+        ]
+    if isinstance(value, str) and sensitive_context:
+        value = _redact_secret_text(value, secrets)
+    return value
+
+
+def _run_json_command(args):
+    captured_stdout = io.StringIO()
+    captured_stderr = io.StringIO()
+    try:
+        with (
+            contextlib.redirect_stdout(captured_stdout),
+            contextlib.redirect_stderr(captured_stderr),
+        ):
+            _persist_requested_language(getattr(args, "lang", None))
+            result = args.func(args)
+        exit_code = result if isinstance(result, int) else 0
+    except KeyboardInterrupt:
+        exit_code = 1
+        args._json_result = {
+            "ok": False,
+            "error": "operation cancelled",
+            "errorCode": "cancelled",
+        }
+    except Exception as exc:
+        exit_code = 1
+        args._json_result = {
+            "ok": False,
+            "error": str(exc),
+            "errorCode": "unexpected_error",
+        }
+
+    payload = getattr(args, "_json_result", None)
+    if not isinstance(payload, dict):
+        lines = [
+            line.strip()
+            for line in (captured_stderr.getvalue() or captured_stdout.getvalue()).splitlines()
+            if line.strip()
+        ]
+        payload = {"ok": exit_code == 0}
+        if exit_code != 0:
+            payload.update({
+                "error": lines[-1] if lines else "command failed",
+                "errorCode": (
+                    "invalid_arguments" if exit_code == 2 else "command_failed"
+                ),
+            })
+
+    payload = dict(payload)
+    payload["ok"] = exit_code == 0 and payload.get("ok", True) is not False
+    payload.setdefault("schemaVersion", JSON_SCHEMA_VERSION)
+    payload.setdefault("command", args.command)
+    payload.setdefault("error", None)
+    payload.setdefault("errorCode", None)
+    secrets = _collect_json_secrets(args)
+    payload = _redact_json_secrets(payload, secrets)
+    sys.stdout.write(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            default=str,
+        ) + "\n"
+    )
+    sys.stdout.flush()
+    return exit_code
+
+
+def _persist_requested_language(language):
+    if language not in SUPPORTED_LANGUAGES:
+        return
+    with _config_process_lock():
+        config = load_config()
+        if config.get("lang") != language:
+            config["lang"] = language
+            save_config(config)
+
+
 def main():
     # 提前检测 --lang 以确保帮助文本使用正确语言
     early_language = requested_language(sys.argv[1:])
     if early_language in SUPPORTED_LANGUAGES:
         load_translations(early_language)
         refresh_workflow_names()
-        config = load_config()
-        if config.get("lang") != early_language:
-            config["lang"] = early_language
-            save_config(config)
     
-    parser = argparse.ArgumentParser(
+    parser = ABKArgumentParser(
         prog="abk",
         description=t("abk_cli_desc_full"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -2285,6 +3672,11 @@ def main():
     parser.add_argument("--repo", type=repo_slug, help=t("help_repo"))
     parser.add_argument("--verbose", "-v", action="store_true", help=t("help_verbose"))
     parser.add_argument("--lang", choices=SUPPORTED_LANGUAGES, help=t("help_lang"))
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help=t("arg_json"),
+    )
 
     subparsers = parser.add_subparsers(dest="command", help=t("help_subcommands"))
 
@@ -2330,7 +3722,11 @@ def main():
     build_mode.add_argument("--oneplus", action="store_true", help=t("arg_oneplus"))
     build_parser.add_argument("--ref", help=t("arg_ref"))
     build_parser.add_argument("--ksu", dest="ksu_variant", choices=KSU_VARIANTS + ["all"], help=t("arg_ksu"))
-    build_parser.add_argument("--ksu-branch", choices=["Stable","Dev","Custom"], help=t("arg_ksu_branch"))
+    build_parser.add_argument(
+        "--ksu-branch",
+        choices=["Stable", "Latest", "Dev", "Custom"],
+        help=t("arg_ksu_branch"),
+    )
     build_parser.add_argument("--custom-ref", help=t("arg_custom_ref"))
     build_parser.add_argument("--version", help=t("arg_version"))
     build_parser.add_argument("--device", help=t("arg_device"))
@@ -2436,7 +3832,7 @@ def main():
         help=t("cmd_status_help"),
         description=t("cmd_status_desc"))
     run_action = status_parser.add_mutually_exclusive_group()
-    run_action.add_argument("--run-id", type=int, help=t("arg_run_id_status"))
+    run_action.add_argument("--run-id", type=positive_int, help=t("arg_run_id_status"))
     status_parser.add_argument(
         "--target",
         choices=list(WORKFLOWS) + list(FULL_MATRIX_WORKFLOWS),
@@ -2449,15 +3845,20 @@ def main():
         help=t("arg_status_filter"),
     )
     status_parser.add_argument("--limit", type=status_limit, default=10, help=t("arg_limit"))
-    run_action.add_argument("--cancel", type=int, metavar="RUN_ID", help=t("arg_cancel"))
-    run_action.add_argument("--rerun", type=int, metavar="RUN_ID", help=t("arg_rerun"))
+    run_action.add_argument("--cancel", type=positive_int, metavar="RUN_ID", help=t("arg_cancel"))
+    run_action.add_argument("--rerun", type=positive_int, metavar="RUN_ID", help=t("arg_rerun"))
     status_parser.set_defaults(func=cmd_status)
 
     # artifacts
     artifacts_parser = subparsers.add_parser("artifacts", 
         help=t("cmd_artifacts_help"),
         description=t("cmd_artifacts_desc"))
-    artifacts_parser.add_argument("--run-id", type=int, help=t("arg_run_id"))
+    artifacts_parser.add_argument("--run-id", type=positive_int, help=t("arg_run_id"))
+    artifacts_parser.add_argument(
+        "--artifact-id",
+        type=positive_int,
+        help=t("arg_artifact_id"),
+    )
     artifacts_parser.add_argument("--download", action="store_true", help=t("arg_download"))
     artifacts_parser.add_argument(
         "--output",
@@ -2474,15 +3875,32 @@ def main():
     list_parser.add_argument("--oneplus", action="store_true", help=t("arg_oneplus"))
     list_parser.set_defaults(func=cmd_list)
 
+    self_test_parser = subparsers.add_parser(
+        "self-test",
+        help=t("cmd_self_test_help"),
+    )
+    self_test_parser.set_defaults(func=cmd_self_test)
+
     args = parser.parse_args()
     if args.lang:
         load_translations(args.lang)
         refresh_workflow_names()
 
     if not args.command:
+        if args.json:
+            parser.error("a command is required")
+        _persist_requested_language(args.lang)
         parser.print_help()
         return 0
 
+    if _target_repo(args) and args.command in {"login", "sync"}:
+        source = "--repo" if args.repo else "ABK_REPO"
+        parser._command_hint = args.command
+        parser.error(f"{source} is not supported by {args.command}")
+
+    if args.json:
+        return _run_json_command(args)
+    _persist_requested_language(args.lang)
     return args.func(args) or 0
 
 

@@ -8,14 +8,34 @@ on:
   push:
     paths:
       - "cli/**"
+      - "LICENSE"
       - ".github/workflows/build-abk-cli.yml"
+      - ".github/workflows/kernel-a12-5-10.yml"
+      - ".github/workflows/kernel-a13-5-15.yml"
+      - ".github/workflows/kernel-a14-6-1.yml"
+      - ".github/workflows/kernel-a15-6-6.yml"
+      - ".github/workflows/kernel-a16-6-12.yml"
+      - ".github/workflows/kernel-custom.yml"
+      - ".github/workflows/kernel-full-feature-matrix.yml"
+      - ".github/workflows/all-managers-full-feature-matrix.yml"
+      - ".github/workflows/oneplus-custom.yml"
   pull_request:
     paths:
       - "cli/**"
+      - "LICENSE"
       - ".github/workflows/build-abk-cli.yml"
+      - ".github/workflows/kernel-a12-5-10.yml"
+      - ".github/workflows/kernel-a13-5-15.yml"
+      - ".github/workflows/kernel-a14-6-1.yml"
+      - ".github/workflows/kernel-a15-6-6.yml"
+      - ".github/workflows/kernel-a16-6-12.yml"
+      - ".github/workflows/kernel-custom.yml"
+      - ".github/workflows/kernel-full-feature-matrix.yml"
+      - ".github/workflows/all-managers-full-feature-matrix.yml"
+      - ".github/workflows/oneplus-custom.yml"
 
 concurrency:
-  group: build-abk-cli-${{ github.event.pull_request.number || github.ref }}
+  group: build-abk-cli-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -359,7 +379,7 @@ jobs:
           Environment:
             Set GITHUB_TOKEN before triggering builds that require authentication.
           EOF
-          curl https://raw.githubusercontent.com/xingguangcuican6666/ABK/refs/heads/dev/LICENSE --output dist/abk/LICENSE
+          cp LICENSE dist/abk/LICENSE
 
       - name: Add bundled README
         if: runner.os == 'Windows'
@@ -377,7 +397,7 @@ jobs:
             Set GITHUB_TOKEN before triggering builds that require authentication.
           "@ | Set-Content -Path dist/abk/README.txt
           
-          curl https://raw.githubusercontent.com/xingguangcuican6666/ABK/refs/heads/dev/LICENSE --output dist/abk/LICENSE
+          Copy-Item -LiteralPath "LICENSE" -Destination "dist/abk/LICENSE" -Force
 
       - name: Verify bundle contents
         if: runner.os != 'Windows'
@@ -386,6 +406,7 @@ jobs:
           set -euo pipefail
           test -f "dist/abk/${{ matrix.binary_name }}"
           test -f "dist/abk/README.txt"
+          test -f "dist/abk/LICENSE"
           test -f "dist/abk/_internal/i18n/zh-cn.json"
           test -f "dist/abk/_internal/i18n/en-us.json"
 
@@ -395,6 +416,7 @@ jobs:
         run: |
           if (!(Test-Path "dist/abk/${{ matrix.binary_name }}")) { throw "Missing binary" }
           if (!(Test-Path "dist/abk/README.txt")) { throw "Missing README" }
+          if (!(Test-Path "dist/abk/LICENSE")) { throw "Missing LICENSE" }
           if (!(Test-Path "dist/abk/_internal/i18n/zh-cn.json")) { throw "Missing zh-cn.json" }
           if (!(Test-Path "dist/abk/_internal/i18n/en-us.json")) { throw "Missing en-us.json" }
 
@@ -404,6 +426,8 @@ jobs:
         run: |
           set -euo pipefail
           ./dist/abk/abk --help > /dev/null
+          ./dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
+          ./dist/abk/abk --json build --dry-run --matrix a14 --ksu Official | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
 
       - name: Smoke test linux-armhf
         if: ${{ matrix.target_id == 'linux-armhf' }}
@@ -411,6 +435,8 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --help > /dev/null
+          docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
+          docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json build --dry-run --matrix a14 --ksu Official | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
 
       - name: Smoke test linux-x86
         if: ${{ matrix.target_id == 'linux-x86' }}
@@ -418,12 +444,26 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --help > /dev/null
+          docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
+          docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json build --dry-run --matrix a14 --ksu Official | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
 
       - name: Smoke test Windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           .\dist\abk\abk.exe --lang en-us --help | Out-Null
+          $selfTest = & .\dist\abk\abk.exe --json self-test
+          if ($LASTEXITCODE -ne 0) { throw "Frozen CLI self-test failed" }
+          $result = $selfTest | ConvertFrom-Json
+          if ($result.schemaVersion -ne 1 -or $result.ok -ne $true -or $result.command -ne "self-test" -or -not $result.cryptoBackend -or $result.pynacl -ne $true -or $result.caBundle -ne $true -or $result.tlsContext -ne $true) {
+            throw "Unexpected frozen CLI self-test result"
+          }
+          $dryRun = & .\dist\abk\abk.exe --json build --dry-run --matrix a14 --ksu Official
+          if ($LASTEXITCODE -ne 0) { throw "Frozen CLI UTF-8 dry-run failed" }
+          $plan = $dryRun | ConvertFrom-Json
+          if ($plan.schemaVersion -ne 1 -or $plan.ok -ne $true -or $plan.dispatches[0].workflowName -ne "内核构建 - Android 14 (6.1)") {
+            throw "Unexpected frozen CLI UTF-8 dry-run result"
+          }
 
       - name: Package artifact
         if: runner.os != 'Windows'

@@ -31,7 +31,7 @@ CLI 也兼容 `pycryptodome` / `pycryptodomex`：
 
 ```bash
 python3 -m pip install -r ~/ABK/cli/requirements.txt
-# 或：python3 -m pip install pycryptodome PyNaCl
+# 或：python3 -m pip install pycryptodome PyNaCl certifi
 ```
 
 ## 配置 / Configuration
@@ -96,14 +96,14 @@ abk sync                                 # 同步 fork 与上游
 需指定 `--sub-level` 和 `--os-patch-level`：
 
 ```bash
-abk build --sub-level 162 --os-patch-level 2026-03
+abk build --sub-level 246 --os-patch-level 2025-12
 abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
 ```
 
 #### 预览构建计划 / Preview Build Plan
 
 ```bash
-abk build --sub-level 162 --os-patch-level 2026-03 --dry-run
+abk build --sub-level 246 --os-patch-level 2025-12 --dry-run
 abk build --matrix both --ksu all --dry-run
 ```
 
@@ -150,15 +150,15 @@ abk build --oneplus --device oneplus_12_b
 - ZRAM / DDK / NTsync / 网络增强 / Re-Kernel / 虚拟化 / 自定义外部模块 → 自动禁用
 - MTK CPU 设备 → 代理优化自动禁用
 - SUSFS 仅支持 android14/6.1 和 android15/6.6
-- KPM 仅支持 SukiSU；ReSukiSU `main` 不支持 KPM，会自动禁用
-- 全管理器 OnePlus 矩阵包含 ReSukiSU 时，OnePlus KPM 会对该矩阵整体禁用
+- KPM 仅对 SukiSU / ReSukiSU 生效；其他变体会自动禁用
+- 全管理器 OnePlus 矩阵由工作流按每个 KernelSU 变体独立决定 KPM
 
 不兼容的选项会被自动禁用并给出警告。
 
 #### 全 KSU 变体 / All KSU Variants
 
 ```bash
-abk build --sub-level 162 --os-patch-level 2026-03 --ksu all
+abk build --sub-level 246 --os-patch-level 2025-12 --ksu all
 abk build --matrix both --ksu all        # 全版本 × 全 KSU
 ```
 
@@ -175,9 +175,25 @@ abk status --status in_progress          # 按状态过滤
 ```bash
 abk artifacts --run-id 12345             # 列出产物
 abk artifacts --run-id 12345 --download  # 下载到当前用户的 Downloads 目录
+abk artifacts --run-id 12345 --download --artifact-id 67890  # 仅下载指定产物
 abk artifacts --run-id 12345 -o ./out    # 指定目录
 abk artifacts --set-download-dir ./out   # 持久化默认目录
 ```
+
+### 机器可读 JSON / Machine-readable JSON
+
+自动化调用可使用全局前置参数 `--json`。命令执行时 stdout 始终只有一个
+`schemaVersion: 1` JSON 文档；该模式不会读取 stdin 或打开浏览器。
+`--help` 仍是供人阅读的文本，不属于 JSON 合同：
+
+```bash
+abk --json whoami
+abk --json status --limit 20
+abk --json build --matrix a14 --ksu ReSukiSU --force
+abk --json artifacts --run-id 12345 --download --artifact-id 67890
+```
+
+冻结产物可用 `abk --json self-test` 离线验证 RSA、PyNaCl 和 CA bundle。
 
 ### 列出可用选项 / List Options
 
@@ -205,11 +221,16 @@ abk list
 | `--kernel-version` | 5.10/5.15/6.1/6.6/6.12 (默认: 5.10) |
 | `--sub-level` | 子版本号，如 66, 162 |
 | `--os-patch-level` | 安全补丁级别，如 2022-01, 2026-03 |
-| `--revision` | 修订版本，如 r11 (仅 5.10) |
+| `--revision` | 修订版本，如 r11；仅 custom 5.10、full、all-managers 接收 |
+
+自定义 LTS 构建使用固定组合 `--sub-level X --os-patch-level lts`；两项必须
+同时指定。Android 与内核版本也必须使用上游支持的配对（android12/5.10 至
+android16/6.12）。
 
 为避免自由文本进入现有 Actions Shell，CLI 会在本地拒绝不安全参数：
-`--sub-level` 必须为数字，补丁级别必须为 `YYYY-MM`，自定义 ref 必须符合
-Git ref 规则；版本、构建时间、ZRAM 算法及自定义模块参数也会做长度和字符校验。
+除固定的 `X`/`lts` 组合外，`--sub-level` 必须为数字，补丁级别必须为
+`YYYY-MM`；自定义 ref 必须符合 Git ref 规则。版本、构建时间、ZRAM 算法及
+自定义模块参数也会做长度和字符校验。
 
 ## 功能开关 / Feature Flags
 
@@ -242,6 +263,7 @@ Git ref 规则；版本、构建时间、ZRAM 算法及自定义模块参数也�
 | 分支 / Branch | 描述 / Description |
 |------|------|
 | `Stable` | 稳定版 (默认)，映射到 Stable(标准) |
+| `Latest` | 最新版，映射到 Latest(最新) |
 | `Dev` | 开发版，映射到 Dev(开发) |
 | `Custom` | 自定义引用，映射到 Custom(自定义) |
 
@@ -250,6 +272,7 @@ Git ref 规则；版本、构建时间、ZRAM 算法及自定义模块参数也�
 | 选项 / Option | 描述 / Description |
 |------|------|
 | `off` | 关闭（默认） |
+| `on` | 启用（旧内核映射到 678，6.12 映射到 on） |
 | `678` | 6_7_8 槽位补丁（推荐） |
 | `123` | 1_2_3 槽位补丁（备用） |
 | `345` | 3_4_5 槽位补丁（备用） |
@@ -262,7 +285,7 @@ abk login
 abk fork
 
 # 自定义构建
-abk build --sub-level 162 --os-patch-level 2026-03
+abk build --sub-level 246 --os-patch-level 2025-12
 
 # 全版本矩阵
 abk build --matrix both
@@ -324,7 +347,10 @@ abk --lang zh-neko --help  # 中文猫娘 🐱
 4. 更新 `cli/abk.py` 中的 `SUPPORTED_LANGUAGES`
 5. 更新本 README 的语言支持表格
 
-**注意：** KernelSU 分支名作为 API 参数时**不能翻译**，CLI 会自动将 `Stable`/`Dev`/`Custom` 映射为 `Stable(标准)`/`Dev(开发)`/`Custom(自定义)`。语言文件只需展示短名。其他 API 值同理（如设备名、KSU 变体名）。
+**注意：** KernelSU 分支名作为 API 参数时**不能翻译**，CLI 会自动将
+`Stable`/`Latest`/`Dev`/`Custom` 映射为
+`Stable(标准)`/`Latest(最新)`/`Dev(开发)`/`Custom(自定义)`。语言文件只需展示
+短名。其他 API 值同理（如设备名、KSU 变体名）。
 
 ## 语言维护 / Language Maintenance
 

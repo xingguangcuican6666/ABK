@@ -124,13 +124,17 @@ class WorkflowContractTests(unittest.TestCase):
     def test_kpm_support_matches_the_selected_ksu_source(self):
         cases = (
             ("SukiSU", "Stable", False, True),
+            ("SukiSU", "Latest", False, True),
             ("SukiSU", "Dev", False, True),
             ("ReSukiSU", None, False, True),
             ("ReSukiSU", "Stable", False, True),
+            ("ReSukiSU", "Latest", False, False),
             ("ReSukiSU", "Dev", False, False),
-            ("ReSukiSU", "Custom", False, False),
-            ("ReSukiSU", "Stable", True, False),
+            ("ReSukiSU", "Custom", False, True),
+            ("SukiSU", "Stable", True, True),
+            ("ReSukiSU", "Stable", True, True),
             ("Official", "Stable", False, False),
+            ("Official", "Stable", True, False),
             ("None", "Stable", False, False),
         )
         for variant, branch, oneplus, expected in cases:
@@ -140,7 +144,72 @@ class WorkflowContractTests(unittest.TestCase):
                     abk.supports_kpm(variant, branch, oneplus=oneplus),
                 )
 
-    def test_non_stable_resukisu_inputs_disable_kpm_and_password(self):
+    def test_virtualization_values_are_normalized_for_each_kernel_contract(self):
+        cases = (
+            ("5.10", "off", "off"),
+            ("5.10", "on", "678"),
+            ("5.10", "123", "123"),
+            ("6.6", "345", "345"),
+            ("6.12", "on", "on"),
+            ("6.12", "678", "on"),
+            ("6.12", "123", "on"),
+        )
+        for kernel_version, requested, expected in cases:
+            with self.subTest(kernel=kernel_version, requested=requested):
+                self.assertEqual(
+                    expected,
+                    abk.normalize_virtualization_support(
+                        kernel_version,
+                        requested,
+                    ),
+                )
+
+    def test_standard_inputs_never_send_an_invalid_a16_virtualization_slot(self):
+        inputs = abk._standard_build_inputs(
+            build_args(virt="123"),
+            "Official",
+            "6.12",
+        )
+
+        self.assertEqual("on", inputs["virtualization_support"])
+
+    def test_none_variant_disables_susfs_like_android_normalization(self):
+        standard = abk._standard_build_inputs(
+            build_args(
+                susfs=True,
+                ksu_branch="Custom",
+                custom_ref="feature/ignored-for-none",
+            ),
+            "None",
+        )
+        full = abk._full_matrix_inputs(
+            build_args(susfs=True, ksu_branch="Dev"),
+            "None",
+        )
+
+        self.assertEqual("true", standard["cancel_susfs"])
+        self.assertEqual("Stable(标准)", standard["kernelsu_branch"])
+        self.assertNotIn("custom_ref", standard)
+        self.assertEqual("false", full["enable_susfs"])
+        self.assertEqual("Stable(标准)", full["kernelsu_branch"])
+
+    def test_supp_op_is_only_added_to_supporting_standard_workflows(self):
+        unsupported = abk._standard_build_inputs(
+            build_args(oneplus_8e=True),
+            "Official",
+            "6.1",
+        )
+        supported = abk._standard_build_inputs(
+            build_args(oneplus_8e=True),
+            "Official",
+            "6.6",
+            supports_supp_op=True,
+        )
+
+        self.assertNotIn("supp_op", unsupported)
+        self.assertEqual("true", supported["supp_op"])
+
+    def test_unsupported_resukisu_inputs_disable_kpm_and_password(self):
         args = build_args(kpm=True, ksu_branch="Dev", kpm_password="secret")
 
         standard = abk._standard_build_inputs(args, "ReSukiSU")
@@ -151,7 +220,20 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual("false", full["use_kpm"])
         self.assertEqual("", full["kpm_password"])
 
-    def test_all_managers_avoids_resukisu_main_kpm(self):
+        latest = abk._standard_build_inputs(
+            build_args(kpm=True, ksu_branch="Latest", kpm_password="secret"),
+            "ReSukiSU",
+        )
+        custom = abk._standard_build_inputs(
+            build_args(kpm=True, ksu_branch="Custom", kpm_password="secret"),
+            "ReSukiSU",
+        )
+        self.assertEqual("false", latest["use_kpm"])
+        self.assertNotIn("kpm_password", latest)
+        self.assertEqual("true", custom["use_kpm"])
+        self.assertEqual("secret", custom["kpm_password"])
+
+    def test_all_managers_delegates_oneplus_kpm_filtering_to_workflow(self):
         all_variants = abk._all_managers_inputs(
             build_args(kpm=True, manager_variants="all")
         )
@@ -160,8 +242,45 @@ class WorkflowContractTests(unittest.TestCase):
         )
 
         self.assertEqual("true", all_variants["use_kpm"])
-        self.assertFalse(json.loads(all_variants["oneplus_options_json"])["use_kpm"])
+        self.assertTrue(json.loads(all_variants["oneplus_options_json"])["use_kpm"])
         self.assertTrue(json.loads(sukisu_only["oneplus_options_json"])["use_kpm"])
+
+    def test_all_managers_only_forwards_kpm_password_when_supported(self):
+        disabled = abk._all_managers_inputs(
+            build_args(kpm=False, kpm_password="secret", manager_variants="SukiSU")
+        )
+        unsupported = abk._all_managers_inputs(
+            build_args(kpm=True, kpm_password="secret", manager_variants="Official")
+        )
+        oneplus_only = abk._all_managers_inputs(
+            build_args(
+                kpm=True,
+                kpm_password="secret",
+                manager_variants="SukiSU",
+                build_scope="OnePlus",
+            )
+        )
+        supported = abk._all_managers_inputs(
+            build_args(kpm=True, kpm_password="secret", manager_variants="SukiSU")
+        )
+
+        self.assertEqual("", disabled["kpm_password"])
+        self.assertEqual("", unsupported["kpm_password"])
+        self.assertEqual("", oneplus_only["kpm_password"])
+        self.assertEqual("secret", supported["kpm_password"])
+
+    def test_machine_readable_workflow_names_match_github_workflow_names(self):
+        for workflow_file, expected_name in abk.WORKFLOW_RUNTIME_NAMES.items():
+            with self.subTest(workflow=workflow_file):
+                workflow = (
+                    REPO_ROOT / ".github" / "workflows" / workflow_file
+                ).read_text(encoding="utf-8")
+                actual_name = next(
+                    line.split(":", 1)[1].strip()
+                    for line in workflow.splitlines()
+                    if line.startswith("name:")
+                )
+                self.assertEqual(expected_name, actual_name)
 
     def test_signing_identifiers_match_android_authority(self):
         android = (
@@ -199,6 +318,20 @@ class WorkflowContractTests(unittest.TestCase):
             REPO_ROOT / ".github" / "workflows" / "build-abk-cli.yml"
         ).read_text(encoding="utf-8")
         self.assertIn("python -m unittest discover -s cli/tests -v", workflow)
+        self.assertIn("github.event_name == 'workflow_dispatch' && github.run_id", workflow)
+        self.assertGreaterEqual(workflow.count("--json self-test"), 4)
+        self.assertGreaterEqual(
+            workflow.count("--json build --dry-run --matrix a14"),
+            4,
+        )
+        self.assertIn('result["schemaVersion"] == 1', workflow)
+        self.assertIn('result["tlsContext"] is True', workflow)
+        self.assertIn('"LICENSE"', workflow)
+        for dependency in abk.WORKFLOW_RUNTIME_NAMES:
+            self.assertIn(f'".github/workflows/{dependency}"', workflow)
+        self.assertNotIn("raw.githubusercontent.com", workflow)
+        self.assertIn("cp LICENSE dist/abk/LICENSE", workflow)
+        self.assertIn('Copy-Item -LiteralPath "LICENSE"', workflow)
 
     def test_cross_packaging_uses_fast_compatible_crypto_fallback(self):
         workflow = (
