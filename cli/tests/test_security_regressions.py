@@ -554,6 +554,106 @@ print(json.dumps({"started": started, "finished": finished}))
         self.assertIsNotNone(opener.requests[0].get_header("Authorization"))
         self.assertIsNone(opener.requests[1].get_header("Authorization"))
 
+    def test_artifact_same_origin_redirect_preserves_authorization(self):
+        location = "https://api.github.com/repos/alice/ABK/actions/artifacts/456/zip"
+        headers = Message()
+        headers["Location"] = location
+
+        class RedirectingOpener:
+            def __init__(self):
+                self.requests = []
+
+            def open(self, request, timeout=None):
+                self.requests.append(request)
+                if len(self.requests) == 1:
+                    raise HTTPError(
+                        request.full_url,
+                        301,
+                        "Moved Permanently",
+                        headers,
+                        io.BytesIO(),
+                    )
+                return io.BytesIO(b"artifact bytes")
+
+        client = object.__new__(abk.GitHubClient)
+        client.token = "SECRET"
+        client.repo = "alice/ABK"
+        client.verbose = False
+        opener = RedirectingOpener()
+
+        with mock.patch.object(abk, "build_opener", return_value=opener):
+            path = client.download_artifact(123, self.temp_dir.name)
+
+        self.assertEqual(b"artifact bytes", Path(path).read_bytes())
+        self.assertEqual(2, len(opener.requests))
+        self.assertIsNotNone(opener.requests[0].get_header("Authorization"))
+        self.assertIsNotNone(opener.requests[1].get_header("Authorization"))
+
+    def test_github_api_follows_same_origin_redirect_with_method_and_token(self):
+        headers = Message()
+        headers["Location"] = "https://api.github.com/repos/alice/new/issues"
+
+        class RedirectingOpener:
+            def __init__(self):
+                self.requests = []
+
+            def open(self, request, timeout=None):
+                self.requests.append(request)
+                if len(self.requests) == 1:
+                    raise HTTPError(
+                        request.full_url,
+                        301,
+                        "Moved Permanently",
+                        headers,
+                        io.BytesIO(),
+                    )
+                return io.BytesIO(b'{"number":1}')
+
+        client = object.__new__(abk.GitHubClient)
+        client.token = "SECRET"
+        client.verbose = False
+        opener = RedirectingOpener()
+
+        with mock.patch.object(abk, "build_opener", return_value=opener):
+            result = client.post("/repos/alice/old/issues", {"title": "test"})
+
+        self.assertEqual({"number": 1}, result)
+        self.assertEqual(2, len(opener.requests))
+        self.assertEqual("POST", opener.requests[1].get_method())
+        self.assertEqual(opener.requests[0].data, opener.requests[1].data)
+        self.assertIsNotNone(opener.requests[1].get_header("Authorization"))
+
+    def test_github_api_rejects_cross_origin_redirect(self):
+        headers = Message()
+        headers["Location"] = "https://attacker.example.test/collect"
+
+        class RedirectingOpener:
+            def __init__(self):
+                self.requests = []
+
+            def open(self, request, timeout=None):
+                self.requests.append(request)
+                raise HTTPError(
+                    request.full_url,
+                    302,
+                    "Found",
+                    headers,
+                    io.BytesIO(),
+                )
+
+        client = object.__new__(abk.GitHubClient)
+        client.token = "SECRET"
+        client.verbose = False
+        opener = RedirectingOpener()
+
+        with (
+            mock.patch.object(abk, "build_opener", return_value=opener),
+            self.assertRaisesRegex(RuntimeError, "unsafe redirect"),
+        ):
+            client.get("/user")
+
+        self.assertEqual(1, len(opener.requests))
+
     def test_oauth_device_requests_fail_closed_on_redirect(self):
         headers = Message()
         headers["Location"] = "https://attacker.example.test/oauth"
@@ -627,7 +727,7 @@ print(json.dumps({"started": started, "finished": finished}))
         with (
             mock.patch.object(
                 abk,
-                "_open_without_redirect",
+                "_open_same_origin_redirect",
                 return_value=io.BytesIO(b"{}"),
             ),
             contextlib.redirect_stderr(stderr),
@@ -733,7 +833,7 @@ print(json.dumps({"started": started, "finished": finished}))
         })
 
         with (
-            mock.patch.object(abk, "_open_without_redirect") as open_request,
+            mock.patch.object(abk, "_open_same_origin_redirect") as open_request,
             self.assertRaisesRegex(RuntimeError, "unsafe release upload URL"),
         ):
             client.publish_signing_key("public key")

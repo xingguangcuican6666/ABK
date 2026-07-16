@@ -539,7 +539,7 @@ class JsonContractTests(unittest.TestCase):
             ]),
         )
 
-    def test_legacy_language_alias_is_persisted_as_its_canonical_tag(self):
+    def test_legacy_language_alias_uses_a_backward_compatible_storage_id(self):
         self.addCleanup(abk.refresh_workflow_names)
         self.addCleanup(abk.load_translations, "zh-CN")
 
@@ -756,6 +756,27 @@ class JsonContractTests(unittest.TestCase):
         self.assertEqual(4242, dispatch["runId"])
         self.assertIn("/runs/4242", dispatch["runUrl"])
         self.assertEqual(4242, payload["run"]["id"])
+        self.assertEqual("completed", payload["run"]["status"])
+        self.assertEqual(7, payload["run"]["runNumber"])
+
+    def test_build_does_not_invent_run_state_when_detail_lookup_fails(self):
+        client = ContractClient()
+        client.get_run = mock.Mock(side_effect=RuntimeError("run not visible yet"))
+        argv = [
+            "abk", "--json", "--repo", "alice/ABK", "build", "--matrix", "a14",
+            "--ksu", "ReSukiSU", "--no-kpm", "--force",
+        ]
+        with (
+            mock.patch.object(abk, "get_token", return_value="test-token"),
+            mock.patch.object(abk, "GitHubClient", return_value=client),
+            mock.patch.object(abk, "ensure_signing_key", return_value="public-key"),
+        ):
+            exit_code, payload, _ = self._run_main(argv)
+
+        self.assertEqual(0, exit_code)
+        self.assertEqual(4242, payload["run"]["id"])
+        self.assertEqual("", payload["run"]["status"])
+        self.assertEqual(0, payload["run"]["runNumber"])
 
     def test_partial_dispatch_failure_reports_every_plan_without_secrets(self):
         class PartialFailureClient(ContractClient):
@@ -967,6 +988,25 @@ class GitHubClientContractTests(unittest.TestCase):
         self.assertEqual(165, len(result["artifacts"]))
         self.assertIn("per_page=100", client.get.call_args_list[0].args[0])
         self.assertIn("page=2", client.get.call_args_list[1].args[0])
+
+    def test_artifact_listing_deduplicates_shifted_pages_without_omissions(self):
+        client = object.__new__(abk.GitHubClient)
+        client.repo = "alice/ABK"
+        first = [{"id": value} for value in range(1, 101)]
+        shifted_second = [{"id": value} for value in range(100, 200)]
+        final = [{"id": 200}]
+        client.get = mock.Mock(side_effect=[
+            {"total_count": 200, "artifacts": first},
+            {"total_count": 201, "artifacts": shifted_second},
+            {"total_count": 201, "artifacts": final},
+        ])
+
+        result = client.list_artifacts(999)
+
+        ids = [artifact["id"] for artifact in result["artifacts"]]
+        self.assertEqual(list(range(1, 201)), ids)
+        self.assertEqual(200, result["total_count"])
+        self.assertEqual(3, client.get.call_count)
 
     def test_workflow_dispatch_requests_run_details(self):
         client = object.__new__(abk.GitHubClient)

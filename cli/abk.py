@@ -668,6 +668,14 @@ def _validated_https_url(url, unsafe_label):
     return parsed
 
 
+def _url_origin(parsed):
+    return (
+        parsed.scheme.casefold(),
+        parsed.hostname.casefold(),
+        parsed.port or 443,
+    )
+
+
 def _open_without_redirect(request, timeout):
     return _build_network_opener(_NoRedirectHandler()).open(
         request,
@@ -675,8 +683,46 @@ def _open_without_redirect(request, timeout):
     )
 
 
+def _open_same_origin_redirect(
+    request,
+    timeout,
+    unsafe_label,
+    max_redirects=5,
+):
+    """Follow bounded HTTPS redirects without sending credentials elsewhere."""
+    opener = _build_network_opener(_NoRedirectHandler())
+    initial = _validated_https_url(request.full_url, unsafe_label)
+    allowed_origin = _url_origin(initial)
+    current = request
+    for redirect_count in range(max_redirects + 1):
+        current_url = _validated_https_url(current.full_url, unsafe_label)
+        if _url_origin(current_url) != allowed_origin:
+            raise RuntimeError(f"{unsafe_label} returned an unsafe redirect")
+        try:
+            return opener.open(current, timeout=timeout)
+        except HTTPError as exc:
+            if exc.code not in _DOWNLOAD_REDIRECT_CODES:
+                raise
+            location = exc.headers.get("Location")
+            if redirect_count >= max_redirects or not location:
+                exc.close()
+                raise RuntimeError(f"{unsafe_label} returned too many redirects")
+            next_url = urljoin(current.full_url, location)
+            exc.close()
+            parsed = _validated_https_url(next_url, unsafe_label)
+            if _url_origin(parsed) != allowed_origin:
+                raise RuntimeError(f"{unsafe_label} returned an unsafe redirect")
+            current = Request(
+                next_url,
+                data=current.data,
+                headers=dict(current.header_items()),
+                method=current.get_method(),
+            )
+    raise RuntimeError(f"{unsafe_label} returned too many redirects")
+
+
 def _open_https_download(request, timeout, unsafe_label, max_redirects=5):
-    """Follow a bounded HTTPS-only chain and strip credentials after hop one."""
+    """Follow HTTPS downloads, retaining credentials only on the same origin."""
     opener = _build_network_opener(_NoRedirectHandler())
     current = request
     for redirect_count in range(max_redirects + 1):
@@ -692,13 +738,22 @@ def _open_https_download(request, timeout, unsafe_label, max_redirects=5):
                 raise RuntimeError(f"{unsafe_label} returned too many redirects")
             next_url = urljoin(current.full_url, location)
             exc.close()
-            _validated_https_url(next_url, unsafe_label)
-            current = Request(
-                next_url,
-                headers={
+            current_origin = _url_origin(
+                _validated_https_url(current.full_url, unsafe_label)
+            )
+            next_origin = _url_origin(
+                _validated_https_url(next_url, unsafe_label)
+            )
+            if next_origin == current_origin:
+                headers = dict(current.header_items())
+            else:
+                headers = {
                     "Accept": "application/octet-stream",
                     "User-Agent": "ABK-CLI",
-                },
+                }
+            current = Request(
+                next_url,
+                headers=headers,
             )
     raise RuntimeError(f"{unsafe_label} returned too many redirects")
 
@@ -778,7 +833,11 @@ class GitHubClient:
             print(f"> {method} GitHub API request", file=sys.stderr)
         req = Request(url, data=data, headers=headers, method=method)
         try:
-            with _open_without_redirect(req, timeout=30) as resp:
+            with _open_same_origin_redirect(
+                req,
+                timeout=30,
+                unsafe_label="GitHub API",
+            ) as resp:
                 body = resp.read()
                 if not body:
                     return {}
@@ -915,8 +974,8 @@ class GitHubClient:
 
     def list_artifacts(self, run_id):
         artifacts = []
+        seen_ids = set()
         first_response = None
-        total_count = None
         page = 1
         while True:
             params = urlencode({"per_page": 100, "page": page})
@@ -925,16 +984,19 @@ class GitHubClient:
             )
             if first_response is None:
                 first_response = dict(response)
-                raw_total = response.get("total_count")
-                if isinstance(raw_total, int) and raw_total >= 0:
-                    total_count = raw_total
             page_items = response.get("artifacts", [])
             if not isinstance(page_items, list):
                 page_items = []
-            artifacts.extend(page_items)
+            for artifact in page_items:
+                artifact_id = (
+                    artifact.get("id") if isinstance(artifact, dict) else None
+                )
+                if artifact_id is not None:
+                    if artifact_id in seen_ids:
+                        continue
+                    seen_ids.add(artifact_id)
+                artifacts.append(artifact)
             if not page_items:
-                break
-            if total_count is not None and len(artifacts) >= total_count:
                 break
             if len(page_items) < 100:
                 break
@@ -942,7 +1004,7 @@ class GitHubClient:
 
         result = first_response or {}
         result["artifacts"] = artifacts
-        result["total_count"] = total_count if total_count is not None else len(artifacts)
+        result["total_count"] = len(artifacts)
         return result
 
     def download_artifact(self, artifact_id, output_dir="."):
@@ -1060,7 +1122,11 @@ class GitHubClient:
             "Accept": "application/vnd.github+json",
             "User-Agent": "ABK-CLI",
         })
-        with _open_without_redirect(req, timeout=30) as resp:
+        with _open_same_origin_redirect(
+            req,
+            timeout=30,
+            unsafe_label="GitHub API",
+        ) as resp:
             return json.loads(resp.read())
 
     def create_or_update_secret(self, secret_name, secret_value):
@@ -1080,7 +1146,11 @@ class GitHubClient:
             "User-Agent": "ABK-CLI",
             "Content-Type": "application/json",
         })
-        with _open_without_redirect(req, timeout=30) as resp:
+        with _open_same_origin_redirect(
+            req,
+            timeout=30,
+            unsafe_label="GitHub API",
+        ) as resp:
             return resp.status in (201, 204)
 
     def repository_secret_exists(self, secret_name):
@@ -1195,7 +1265,11 @@ class GitHubClient:
                 "User-Agent": "ABK-CLI",
             },
         )
-        with _open_without_redirect(request, timeout=30) as response:
+        with _open_same_origin_redirect(
+            request,
+            timeout=30,
+            unsafe_label="GitHub release upload",
+        ) as response:
             return response.status in (200, 201)
 
 
@@ -3082,24 +3156,31 @@ def cmd_build(args):
                 "htmlUrl": html_url,
                 "status": "dispatched",
             })
-            response_run = (
-                response.get("workflow_run")
-                if isinstance(response, dict)
-                and isinstance(response.get("workflow_run"), dict)
-                else None
-            )
-            if response_run:
-                dispatched_runs.append(_normalize_run(response_run))
-            elif run_id:
-                dispatched_runs.append(_normalize_run({
-                    "id": run_id,
-                    "name": dispatch["workflowName"],
-                    "display_title": dispatch["workflowName"],
-                    "status": "queued",
-                    "html_url": html_url,
-                    "head_branch": ref,
-                    "event": "workflow_dispatch",
-                }))
+            if _json_mode(args):
+                response_run = (
+                    response.get("workflow_run")
+                    if isinstance(response, dict)
+                    and isinstance(response.get("workflow_run"), dict)
+                    else None
+                )
+                if response_run is None and run_id:
+                    try:
+                        fetched_run = client.get_run(run_id)
+                    except Exception:
+                        fetched_run = None
+                    if isinstance(fetched_run, dict):
+                        response_run = fetched_run
+                    else:
+                        response_run = {
+                            "id": run_id,
+                            "name": dispatch["workflowName"],
+                            "display_title": dispatch["workflowName"],
+                            "html_url": html_url,
+                            "head_branch": ref,
+                            "event": "workflow_dispatch",
+                        }
+                if response_run:
+                    dispatched_runs.append(_normalize_run(response_run))
             print(t("build_triggered_ok"))
             successes += 1
         except Exception as exc:
