@@ -940,6 +940,30 @@ object DownloadUtils {
         return directory.takeIf { it.isDirectory && it.canWrite() }
     }
 
+    private fun resolveDirectAssetStorage(
+        context: Context? = null,
+        name: String,
+        downloadDirectoryPath: String? = null,
+        storageSubdirectory: String? = "prebuilt-gki",
+        preserveDownloadedZip: Boolean = false,
+        bundleWithNotices: Boolean = false,
+    ): DirectAssetStorage? {
+        val downloadsRoot = resolveDownloadsRoot(downloadDirectoryPath) ?: return null
+        val assetDir = storageSubdirectory
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { subdirectory -> File(downloadsRoot, subdirectory).apply { mkdirs() } }
+            ?: downloadsRoot
+        val usableAssetDir = assetDir.takeIf { it.exists() || it.mkdirs() }?.takeIf { it.isDirectory && it.canWrite() }
+            ?: return null
+        return DirectAssetStorage(
+            assetDir = usableAssetDir,
+            preserveDownloadedZip = preserveDownloadedZip,
+            bundleWithNotices = bundleWithNotices,
+            downloadedFileIsRoot = usableAssetDir == downloadsRoot
+        )
+    }
+
     private fun downloadHttpErrorMessage(context: Context, code: Int): String =
         context.getString(R.string.download_http_failed, code)
 
