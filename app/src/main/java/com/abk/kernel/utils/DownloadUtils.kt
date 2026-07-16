@@ -1,6 +1,7 @@
 package com.abk.kernel.utils
 
 import android.content.Context
+import android.os.Environment
 import com.abk.kernel.BuildConfig
 import com.abk.kernel.R
 import com.abk.kernel.data.model.APP_UPDATE_LINE_DEV
@@ -72,6 +73,13 @@ object DownloadUtils {
     private data class NoticeFiles(
         val license: File,
         val thirdPartyNotices: File
+    )
+
+    private data class DirectAssetStorage(
+        val assetDir: File,
+        val preserveDownloadedZip: Boolean = false,
+        val bundleWithNotices: Boolean = false,
+        val downloadedFileIsRoot: Boolean = false,
     )
 
     private data class LocalDownloadEntry(
@@ -408,18 +416,80 @@ object DownloadUtils {
         runTitle: String,
         sourceAssetId: Long = 0L,
         downloadDirectoryPath: String? = null,
+        storageSubdirectory: String? = "prebuilt-gki",
+        preserveDownloadedZip: Boolean = false,
         bundleWithNotices: Boolean = false,
         onProgress: (Int) -> Unit = {}
+    ): DownloadResult = downloadDirectAsset(
+        context = context,
+        token = token,
+        url = url,
+        name = name,
+        sizeBytes = sizeBytes,
+        runId = runId,
+        runTitle = runTitle,
+        sourceAssetId = sourceAssetId,
+        storage = resolveDirectAssetStorage(
+            context = context,
+            name = name,
+            downloadDirectoryPath = downloadDirectoryPath,
+            storageSubdirectory = storageSubdirectory,
+            preserveDownloadedZip = preserveDownloadedZip,
+            bundleWithNotices = bundleWithNotices,
+        ) ?: return DownloadResult(
+            errorMessage = downloadDirectoryErrorMessage(context, downloadDirectoryPath)
+        ),
+        onProgress = onProgress,
+    )
+
+    suspend fun downloadRuntimeModuleAsset(
+        context: Context,
+        url: String,
+        name: String,
+        runTitle: String,
+        onProgress: (Int) -> Unit = {}
+    ): DownloadResult = downloadDirectAsset(
+        context = context,
+        token = null,
+        url = url,
+        name = name,
+        sizeBytes = 0L,
+        runId = -2_000_000_001L,
+        runTitle = runTitle,
+        storage = resolveDirectAssetStorage(
+            name = name,
+            downloadDirectoryPath = Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_DOWNLOADS
+            ).absolutePath,
+            storageSubdirectory = "",
+            preserveDownloadedZip = true,
+            bundleWithNotices = false,
+        ) ?: return DownloadResult(
+            errorMessage = downloadDirectoryErrorMessage(
+                context,
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath,
+            )
+        ),
+        onProgress = onProgress,
+    )
+
+    private suspend fun downloadDirectAsset(
+        context: Context,
+        token: String?,
+        url: String,
+        name: String,
+        sizeBytes: Long,
+        runId: Long,
+        runTitle: String,
+        sourceAssetId: Long = 0L,
+        storage: DirectAssetStorage,
+        onProgress: (Int) -> Unit = {}
     ): DownloadResult = withContext(Dispatchers.IO) {
-        var assetDir: File? = null
+        var assetDir: File? = storage.assetDir
         var file: File? = null
         var outDir: File? = null
         var stageDir: File? = null
         try {
-            val downloadsRoot = resolveDownloadsRoot(downloadDirectoryPath)
-                ?: return@withContext DownloadResult(
-                    errorMessage = downloadDirectoryErrorMessage(context, downloadDirectoryPath)
-                )
             val request = Request.Builder()
                 .url(url)
                 .header("Accept", "application/octet-stream")
@@ -453,14 +523,15 @@ object DownloadUtils {
                         else -> 1L
                     }
 
-                    val targetAssetDir = File(downloadsRoot, "prebuilt-gki/${safeFileName(name)}").apply {
-                        if (bundleWithNotices && exists()) {
+                    val targetAssetDir = requireNotNull(assetDir)
+                    targetAssetDir.apply {
+                        if (storage.bundleWithNotices && exists()) {
                             deleteRecursively()
                         }
                         mkdirs()
                     }
                     assetDir = targetAssetDir
-                    if (bundleWithNotices) {
+                    if (storage.bundleWithNotices) {
                         stageDir = createStageDir(context, "prebuilt-${safeFileName(name)}")
                         file = File(requireNotNull(stageDir), safeFileName(name))
                     } else {
@@ -476,7 +547,7 @@ object DownloadUtils {
             }
 
             val downloadedFile = requireNotNull(file)
-            val records = if (bundleWithNotices) {
+            val records = if (storage.bundleWithNotices) {
                 val signingPublicKeyPem = PreferencesRepository(context)
                     .readForkArtifactSigningPublicKeyBlocking()
                     ?.takeIf { it.isNotBlank() }
@@ -508,7 +579,7 @@ object DownloadUtils {
                     if (candidateFiles.isEmpty()) {
                         stageDir?.deleteRecursively()
                         stageDir = null
-                        assetDir?.deleteRecursively()
+                        if (!storage.downloadedFileIsRoot) assetDir?.deleteRecursively()
                         return@withContext DownloadResult(
                             errorMessage = "No downloadable payload was found in $name"
                         )
@@ -517,7 +588,7 @@ object DownloadUtils {
                         ?: run {
                             stageDir?.deleteRecursively()
                             stageDir = null
-                            assetDir?.deleteRecursively()
+                            if (!storage.downloadedFileIsRoot) assetDir?.deleteRecursively()
                             return@withContext DownloadResult(
                                 errorMessage = "Failed to fetch $LICENSE_FILE_NAME or $THIRD_PARTY_NOTICES_FILE_NAME"
                             )
@@ -539,7 +610,7 @@ object DownloadUtils {
                 }
             } else {
                 val byName = classifyDownloadedFile(downloadedFile)
-                val files = if (downloadedFile.extension.equals("zip", ignoreCase = true) && byName in setOf(ArtifactType.KERNEL_PACKAGE, ArtifactType.OTHER)) {
+                val files = if (!storage.preserveDownloadedZip && downloadedFile.extension.equals("zip", ignoreCase = true) && byName in setOf(ArtifactType.KERNEL_PACKAGE, ArtifactType.OTHER)) {
                     val extractedDir = File(requireNotNull(assetDir), "extracted")
                     outDir = extractedDir
                     extractedDir.mkdirs()
@@ -611,14 +682,14 @@ object DownloadUtils {
             file?.delete()
             stageDir?.deleteRecursively()
             outDir?.deleteRecursively()
-            assetDir?.deleteRecursively()
+            if (!storage.downloadedFileIsRoot) assetDir?.deleteRecursively()
             throw e
         } catch (e: Exception) {
             coroutineContext.ensureActive()
             file?.delete()
             stageDir?.deleteRecursively()
             outDir?.deleteRecursively()
-            assetDir?.takeIf { bundleWithNotices }?.deleteRecursively()
+            if (!storage.downloadedFileIsRoot) assetDir?.takeIf { storage.bundleWithNotices }?.deleteRecursively()
             DownloadResult(errorMessage = downloadExceptionMessage(context, e))
         }
     }

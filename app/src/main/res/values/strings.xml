@@ -841,6 +841,13 @@
     <string name="runtime_enabled">已启用</string>
     <string name="runtime_disabled">已关闭</string>
     <string name="runtime_pending_update">待更新</string>
+    <string name="runtime_update_available">发现更新</string>
+    <string name="runtime_update_module">更新模块</string>
+    <string name="runtime_update_version_change">版本：%1$s → %2$s</string>
+    <string name="runtime_update_source">来源：%1$s</string>
+    <string name="runtime_update_changelog">更新日志</string>
+    <string name="runtime_confirm_update_module_desc">模块压缩包将下载到公共 Downloads 目录，安装完成通常需要重启后生效。</string>
+    <string name="runtime_module_download_failed">模块下载失败</string>
     <string name="runtime_pending_remove">待卸载</string>
     <string name="runtime_readonly">只读</string>
     <string name="runtime_controllable">可控制</string>

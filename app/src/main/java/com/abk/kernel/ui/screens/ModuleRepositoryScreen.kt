@@ -3,6 +3,7 @@
 package com.abk.kernel.ui.screens
 
 import android.content.Context
+import android.os.Environment
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -103,6 +104,7 @@ import com.abk.kernel.data.model.ModuleCatalogItem
 import com.abk.kernel.data.model.ModuleCatalogRepository
 import com.abk.kernel.data.model.RuntimeModuleCatalogItem
 import com.abk.kernel.data.model.RuntimeModuleRepository
+import com.abk.kernel.data.model.downloadFileName
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AppPageBackground
 import com.abk.kernel.ui.components.ObserveChildPageVisibility
@@ -263,7 +265,11 @@ fun ModuleRepositoryScreen(
                     runTitle = module.sources.firstOrNull().orEmpty().ifBlank {
                         runtimeRepoUnknownSourceLabel(context)
                     },
-                    downloadDirectoryPath = state.downloadDirectory
+                    downloadDirectoryPath = Environment.getExternalStoragePublicDirectory(
+                        Environment.DIRECTORY_DOWNLOADS
+                    ).absolutePath,
+                    storageSubdirectory = "",
+                    preserveDownloadedZip = true
                 )
             }
             val downloadedFile = downloadResult.artifacts.firstOrNull()?.filePath?.let(::File)
@@ -1670,14 +1676,6 @@ private fun RuntimeModuleCatalogItem.preferredOpenUrl(): String =
         ?: website.takeIf { it.isNotBlank() }
         ?: donate.takeIf { it.isNotBlank() }
         ?: zipUrl
-
-private fun RuntimeModuleCatalogItem.downloadFileName(): String {
-    val base = id.ifBlank { name }
-        .replace(Regex("""[^A-Za-z0-9._-]"""), "_")
-        .trim('_')
-        .ifBlank { "module" }
-    return if (base.endsWith(".zip", ignoreCase = true)) base else "${base}-module.zip"
-}
 
 private fun String.repoName(): String =
     trim()

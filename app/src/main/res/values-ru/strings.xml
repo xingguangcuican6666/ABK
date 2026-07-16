@@ -802,6 +802,13 @@
     <string name="runtime_enabled">Включён</string>
     <string name="runtime_disabled">Выключен</string>
     <string name="runtime_pending_update">Ожидает обновления</string>
+    <string name="runtime_update_available">Доступно обновление</string>
+    <string name="runtime_update_module">Обновить модуль</string>
+    <string name="runtime_update_version_change">Версия: %1$s → %2$s</string>
+    <string name="runtime_update_source">Источник: %1$s</string>
+    <string name="runtime_update_changelog">Журнал изменений</string>
+    <string name="runtime_confirm_update_module_desc">ZIP модуля будет загружен в общую папку Downloads. После установки обычно требуется перезагрузка.</string>
+    <string name="runtime_module_download_failed">Не удалось загрузить модуль</string>
     <string name="runtime_pending_remove">Ожидает удаления</string>
     <string name="runtime_readonly">Только чтение</string>
     <string name="runtime_controllable">Управляемый</string>

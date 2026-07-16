@@ -803,6 +803,13 @@
     <string name="runtime_enabled">Enabled</string>
     <string name="runtime_disabled">Disabled</string>
     <string name="runtime_pending_update">Pending update</string>
+    <string name="runtime_update_available">Update available</string>
+    <string name="runtime_update_module">Update module</string>
+    <string name="runtime_update_version_change">Version: %1$s → %2$s</string>
+    <string name="runtime_update_source">Source: %1$s</string>
+    <string name="runtime_update_changelog">Changelog</string>
+    <string name="runtime_confirm_update_module_desc">The module ZIP will be downloaded to the public Downloads directory. A reboot is usually required after installation.</string>
+    <string name="runtime_module_download_failed">Module download failed</string>
     <string name="runtime_pending_remove">Pending removal</string>
     <string name="runtime_readonly">Read-only</string>
     <string name="runtime_controllable">Controllable</string>

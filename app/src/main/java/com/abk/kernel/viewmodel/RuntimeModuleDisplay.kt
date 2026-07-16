@@ -4,7 +4,8 @@ import com.abk.kernel.data.model.AbkRuntimeModule
 
 internal fun sortRuntimeModulesForDisplay(modules: List<AbkRuntimeModule>): List<AbkRuntimeModule> =
     modules.sortedWith(
-        compareBy<AbkRuntimeModule> { it.runtimeTypeOrder() }
+        compareByDescending<AbkRuntimeModule> { it.metamodule && it.enabled }
+            .thenBy { it.runtimeTypeOrder() }
             .thenBy { !it.enabled }
             .thenBy { it.runtimeDisplayName().lowercase() }
     )

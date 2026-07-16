@@ -26,6 +26,105 @@ private const val OFFICIAL_RUNTIME_MODULE_REPOSITORY_URL =
 
 private data class RuntimeQuadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
+private val runtimeModuleHttpClient = okhttp3.OkHttpClient()
+
+internal data class RuntimeModuleUpdateTarget(
+    val module: AbkRuntimeModule,
+    val updateInfo: RuntimeModuleUpdateInfo,
+)
+
+internal data class RuntimeModuleUpdateInfo(
+    val version: String,
+    val versionCode: Long,
+    val zipUrl: String,
+    val changelog: String,
+)
+
+private fun fetchRuntimeModuleResponse(url: String): String? {
+    val cleanUrl = url.trim()
+    if (cleanUrl.isBlank()) return null
+    return runCatching {
+        val request = okhttp3.Request.Builder().url(cleanUrl).build()
+        val response = runtimeModuleHttpClient.newCall(request).execute()
+        if (!response.isSuccessful) return null
+        response.body?.string().orEmpty()
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+}
+
+internal fun fetchRuntimeModuleText(url: String): String? =
+    fetchRuntimeModuleResponse(url)?.trim()?.takeIf { it.isNotBlank() }
+
+internal fun resolveRuntimeModuleChangelog(changelog: String): String {
+    val value = changelog.trim()
+    if (value.isBlank()) return ""
+    if (!value.startsWith("https://") && !value.startsWith("http://")) return value
+    return fetchRuntimeModuleText(value) ?: ""
+}
+
+internal fun findRuntimeModuleUpdateTarget(
+    module: AbkRuntimeModule,
+): RuntimeModuleUpdateTarget? {
+    if (module.id.isBlank() || module.remove || module.update || !module.enabled || module.readonly || module.normalizedType() != "standard") {
+        return null
+    }
+    val updateJson = module.updateJson.trim()
+    if (updateJson.isBlank()) return null
+    val updateInfo = fetchRuntimeModuleUpdateInfo(updateJson) ?: return null
+    if (!isRuntimeModuleVersionNewer(
+            localVersion = module.version,
+            localVersionCode = module.versionCode,
+            remoteVersion = updateInfo.version,
+            remoteVersionCode = updateInfo.versionCode,
+        )
+    ) {
+        return null
+    }
+    return RuntimeModuleUpdateTarget(module, updateInfo)
+}
+
+internal fun fetchRuntimeModuleUpdateInfo(updateJson: String): RuntimeModuleUpdateInfo? {
+    val result = fetchRuntimeModuleResponse(updateJson).orEmpty()
+    if (result.isBlank()) return null
+    val json = runCatching { com.google.gson.JsonParser.parseString(result).asJsonObject }.getOrNull() ?: return null
+    val version = json.get("version")?.asString?.trim().orEmpty()
+    val versionCode = json.get("versionCode")?.takeIf { !it.isJsonNull }?.asLong ?: 0L
+    val zipUrl = json.get("zipUrl")?.asString?.trim().orEmpty()
+    val changelog = json.get("changelog")?.asString?.trim().orEmpty()
+    if (zipUrl.isBlank() || version.isBlank()) return null
+    return RuntimeModuleUpdateInfo(version = version, versionCode = versionCode, zipUrl = zipUrl, changelog = changelog)
+}
+
+internal fun isRuntimeModuleVersionNewer(
+    localVersion: String,
+    localVersionCode: Long,
+    remoteVersion: String,
+    remoteVersionCode: Long,
+): Boolean {
+    if (localVersionCode > 0L && remoteVersionCode > 0L) {
+        return remoteVersionCode > localVersionCode
+    }
+    val local = parseRuntimeVersion(localVersion) ?: return false
+    val remote = parseRuntimeVersion(remoteVersion) ?: return false
+    return compareRuntimeVersionParts(remote, local) > 0
+}
+
+private fun parseRuntimeVersion(value: String): List<Long>? {
+    val clean = value.trim().removePrefix("v").removePrefix("V")
+    if (clean.isBlank()) return null
+    val parts = clean.split('.', '-', '_')
+    if (parts.any { it.isBlank() || it.toLongOrNull() == null }) return null
+    return parts.map { it.toLong() }
+}
+
+private fun compareRuntimeVersionParts(left: List<Long>, right: List<Long>): Int {
+    val size = maxOf(left.size, right.size)
+    for (index in 0 until size) {
+        val comparison = (left.getOrNull(index) ?: 0L).compareTo(right.getOrNull(index) ?: 0L)
+        if (comparison != 0) return comparison
+    }
+    return 0
+}
+
 class RuntimeCoordinator(
     private val scope: CoroutineScope,
     private val app: Application,
@@ -398,6 +497,10 @@ class RuntimeCoordinator(
                 return@launch
             }
             val module = readState().abkRuntimeStatus?.modules?.firstOrNull { it.id == cleanId }
+            if (module?.update == true) {
+                updateState { it.copy(abkRuntimeError = text(R.string.runtime_operation_incomplete_retry)) }
+                return@launch
+            }
             updateState {
                 it.copy(
                     rootGranted = true,
