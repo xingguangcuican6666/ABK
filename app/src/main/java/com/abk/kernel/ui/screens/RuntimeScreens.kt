@@ -390,7 +390,7 @@ fun InstalledModulesScreen(
         scope.launch {
             val downloadDirectoryPath = state.downloadDirectory
             val downloadResult = withContext(Dispatchers.IO) {
-                DownloadUtils.downloadDirectAsset(
+                DownloadUtils.downloadRuntimeModuleAsset(
                     context = context,
                     token = null,
                     url = target.updateInfo.zipUrl,
@@ -398,9 +398,7 @@ fun InstalledModulesScreen(
                     sizeBytes = 0L,
                     runId = RUNTIME_MODULE_DOWNLOAD_RUN_ID,
                     runTitle = target.module.displayName(),
-                    downloadDirectoryPath = downloadDirectoryPath,
-                    storageSubdirectory = "",
-                    preserveDownloadedZip = true
+                    downloadDirectoryPath = downloadDirectoryPath
                 )
             }
             val downloadedFile = downloadResult.artifacts.firstOrNull()?.filePath?.let(::File)
@@ -695,8 +693,10 @@ fun InstalledModulesScreen(
     }
 
     updateTarget?.let { target ->
+        val currentDownloadDirectory = state.downloadDirectory
         RuntimeModuleUpdateConfirmDialog(
             target = target,
+            downloadDirectoryPath = currentDownloadDirectory,
             onDismiss = { updateTarget = null },
             onConfirm = {
                 updateTarget = null
@@ -1231,6 +1231,7 @@ private fun RuntimeModuleInstallConfirmDialog(
 @Composable
 private fun RuntimeModuleUpdateConfirmDialog(
     target: RuntimeModuleUpdateTarget,
+    downloadDirectoryPath: String,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
@@ -1277,7 +1278,7 @@ private fun RuntimeModuleUpdateConfirmDialog(
                     scrollState = changelogScroll
                 )
                 Text(
-                    text = stringResource(R.string.runtime_confirm_update_module_desc),
+                    text = stringResource(R.string.runtime_confirm_update_module_desc, downloadDirectoryPath),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

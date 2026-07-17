@@ -847,7 +847,7 @@
     <string name="runtime_update_source">来源：%1$s</string>
     <string name="runtime_update_changelog">更新日志</string>
     <string name="runtime_update_changelog_unavailable">无法获取更新日志</string>
-    <string name="runtime_confirm_update_module_desc">模块压缩包将下载到默认下载目录的 ABK 文件夹，安装完成通常需要重启后生效。</string>
+    <string name="runtime_confirm_update_module_desc">模块压缩包将下载到 %1$s，安装完成通常需要重启后生效。</string>
     <string name="runtime_module_download_failed">模块下载失败</string>
     <string name="runtime_module_checksum_mismatch">模块校验失败，请检查文件完整性后重试</string>
     <string name="runtime_pending_remove">待卸载</string>
