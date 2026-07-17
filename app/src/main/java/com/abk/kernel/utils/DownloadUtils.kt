@@ -29,6 +29,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.Locale
+import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
@@ -69,6 +70,45 @@ object DownloadUtils {
         val apkFile: File? = null,
         val errorMessage: String? = null
     )
+
+    suspend fun downloadRuntimeModuleAsset(
+        context: Context,
+        token: String?,
+        url: String,
+        name: String,
+        sizeBytes: Long = 0L,
+        runId: Long = -2000000001L,
+        runTitle: String,
+        downloadDirectoryPath: String? = null,
+        preserveDownloadedZip: Boolean = true,
+    ): DownloadResult {
+        return downloadDirectAsset(
+            context = context,
+            token = token,
+            url = url,
+            name = name,
+            sizeBytes = sizeBytes,
+            runId = runId,
+            runTitle = runTitle,
+            sourceAssetId = 0L,
+            downloadDirectoryPath = downloadDirectoryPath,
+            storageSubdirectory = "ABK",
+            preserveDownloadedZip = preserveDownloadedZip,
+            bundleWithNotices = false
+        )
+    }
+
+    fun fileSha256Hex(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(8192)
+            var read: Int
+            while (input.read(buffer).also { read = it } > 0) {
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
 
     private data class NoticeFiles(
         val license: File,

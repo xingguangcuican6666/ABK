@@ -98,7 +98,6 @@ import com.abk.kernel.viewmodel.RuntimeModuleUpdateTarget
 import com.abk.kernel.viewmodel.findRuntimeModuleUpdateTarget
 import com.abk.kernel.viewmodel.resolveRuntimeModuleChangelog
 import java.io.File
-import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -418,7 +417,7 @@ fun InstalledModulesScreen(
             installLog = installLog + "file: ${downloadedFile.absolutePath}"
             val expectedSha256 = target.updateInfo.sha256
             if (!expectedSha256.isNullOrBlank()) {
-                val actual = withContext(Dispatchers.IO) { fileSha256Hex(downloadedFile) }
+                val actual = withContext(Dispatchers.IO) { DownloadUtils.fileSha256Hex(downloadedFile) }
                 if (!actual.equals(expectedSha256.trim(), ignoreCase = true)) {
                     installRunning = false
                     installSuccess = false
@@ -1905,14 +1904,4 @@ private fun copyRuntimeModuleUriToCache(context: Context, uri: Uri): File {
     return target
 }
 
-private fun fileSha256Hex(file: File): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-    file.inputStream().use { input ->
-        val buffer = ByteArray(8192)
-        var read: Int
-        while (input.read(buffer).also { read = it } > 0) {
-            digest.update(buffer, 0, read)
-        }
-    }
-    return digest.digest().joinToString("") { "%02x".format(it) }
-}
+

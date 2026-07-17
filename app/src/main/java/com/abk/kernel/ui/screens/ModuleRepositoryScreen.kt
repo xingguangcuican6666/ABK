@@ -255,7 +255,7 @@ fun ModuleRepositoryScreen(
         scope.launch {
             val downloadName = module.module.downloadFileName()
             val downloadResult = withContext(Dispatchers.IO) {
-                DownloadUtils.downloadDirectAsset(
+                DownloadUtils.downloadRuntimeModuleAsset(
                     context = context,
                     token = null,
                     url = module.module.zipUrl,
@@ -265,9 +265,7 @@ fun ModuleRepositoryScreen(
                     runTitle = module.sources.firstOrNull().orEmpty().ifBlank {
                         runtimeRepoUnknownSourceLabel(context)
                     },
-                    downloadDirectoryPath = state.downloadDirectory,
-                    storageSubdirectory = "",
-                    preserveDownloadedZip = true
+                    downloadDirectoryPath = state.downloadDirectory
                 )
             }
             val downloadedFile = downloadResult.artifacts.firstOrNull()?.filePath?.let(::File)
