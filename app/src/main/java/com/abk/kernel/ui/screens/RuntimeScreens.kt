@@ -1226,11 +1226,17 @@ private fun RuntimeModuleUpdateConfirmDialog(
     val changelogScroll = rememberScrollState()
     var changelogText by remember(updateInfo.changelog) { mutableStateOf(updateInfo.changelog) }
 
+    val context = LocalContext.current
+
     LaunchedEffect(updateInfo.changelog) {
-        changelogText = if (updateInfo.changelog.isBlank()) {
-            ""
-        } else {
-            resolveRuntimeModuleChangelog(updateInfo.changelog)
+        changelogText = try {
+            if (updateInfo.changelog.isBlank()) {
+                ""
+            } else {
+                resolveRuntimeModuleChangelog(updateInfo.changelog)
+            }
+        } catch (_: Exception) {
+            context.getString(R.string.runtime_update_changelog_unavailable)
         }
     }
 

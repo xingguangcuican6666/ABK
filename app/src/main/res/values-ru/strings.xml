@@ -807,6 +807,7 @@
     <string name="runtime_update_version_change">Версия: %1$s → %2$s</string>
     <string name="runtime_update_source">Источник: %1$s</string>
     <string name="runtime_update_changelog">Журнал изменений</string>
+    <string name="runtime_update_changelog_unavailable">Журнал изменений недоступен</string>
     <string name="runtime_confirm_update_module_desc">ZIP модуля будет загружен в папку ABK в каталоге загрузок по умолчанию. После установки обычно требуется перезагрузка.</string>
     <string name="runtime_module_download_failed">Не удалось загрузить модуль</string>
     <string name="runtime_pending_remove">Ожидает удаления</string>
