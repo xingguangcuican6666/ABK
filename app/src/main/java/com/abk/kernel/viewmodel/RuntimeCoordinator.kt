@@ -14,6 +14,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.lang.reflect.Type
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -26,7 +27,12 @@ private const val OFFICIAL_RUNTIME_MODULE_REPOSITORY_URL =
 
 private data class RuntimeQuadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
-private val runtimeModuleHttpClient = okhttp3.OkHttpClient()
+private val runtimeModuleHttpClient = okhttp3.OkHttpClient.Builder()
+    .connectTimeout(20, TimeUnit.SECONDS)
+    .readTimeout(30, TimeUnit.SECONDS)
+    .writeTimeout(20, TimeUnit.SECONDS)
+    .callTimeout(30, TimeUnit.SECONDS)
+    .build()
 
 internal data class RuntimeModuleUpdateTarget(
     val module: AbkRuntimeModule,
@@ -111,9 +117,10 @@ internal fun isRuntimeModuleVersionNewer(
 private fun parseRuntimeVersion(value: String): List<Long>? {
     val clean = value.trim().removePrefix("v").removePrefix("V")
     if (clean.isBlank()) return null
-    val parts = clean.split('.', '-', '_')
-    if (parts.any { it.isBlank() || it.toLongOrNull() == null }) return null
-    return parts.map { it.toLong() }
+    val parts = Regex("""\d+""").findAll(clean)
+        .mapNotNull { it.value.toLongOrNull() }
+        .toList()
+    return parts.takeIf { it.isNotEmpty() }
 }
 
 private fun compareRuntimeVersionParts(left: List<Long>, right: List<Long>): Int {

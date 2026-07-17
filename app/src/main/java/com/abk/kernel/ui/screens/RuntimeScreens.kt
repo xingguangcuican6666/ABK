@@ -395,9 +395,7 @@ fun InstalledModulesScreen(
                     sizeBytes = 0L,
                     runId = RUNTIME_MODULE_DOWNLOAD_RUN_ID,
                     runTitle = target.module.displayName(),
-                    downloadDirectoryPath = Environment.getExternalStoragePublicDirectory(
-                        Environment.DIRECTORY_DOWNLOADS
-                    ).absolutePath,
+                    downloadDirectoryPath = state.downloadDirectory,
                     storageSubdirectory = "",
                     preserveDownloadedZip = true
                 )

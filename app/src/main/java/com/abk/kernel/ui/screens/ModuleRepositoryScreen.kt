@@ -265,9 +265,7 @@ fun ModuleRepositoryScreen(
                     runTitle = module.sources.firstOrNull().orEmpty().ifBlank {
                         runtimeRepoUnknownSourceLabel(context)
                     },
-                    downloadDirectoryPath = Environment.getExternalStoragePublicDirectory(
-                        Environment.DIRECTORY_DOWNLOADS
-                    ).absolutePath,
+                    downloadDirectoryPath = state.downloadDirectory,
                     storageSubdirectory = "",
                     preserveDownloadedZip = true
                 )
