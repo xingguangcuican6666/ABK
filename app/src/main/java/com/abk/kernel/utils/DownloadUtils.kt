@@ -1,6 +1,7 @@
 package com.abk.kernel.utils
 
 import android.content.Context
+import android.util.Log
 import com.abk.kernel.BuildConfig
 import com.abk.kernel.R
 import com.abk.kernel.data.model.APP_UPDATE_LINE_DEV
@@ -906,6 +907,15 @@ object DownloadUtils {
         return directory.takeIf { it.isDirectory && it.canWrite() }
     }
 
+    /**
+     * Resolve storage directory for direct asset downloads.
+     *
+     * If [storageSubdirectory] is null or blank, the downloads root is returned (i.e. files will be
+     * placed directly into the Downloads root). In that case the returned DirectAssetStorage
+     * will have downloadedFileIsRoot = true and DownloadUtils will avoid deleting that root.
+     *
+     * Use a non-empty storageSubdirectory to isolate asset files under a subdirectory.
+     */
     private fun resolveDirectAssetStorage(
         downloadDirectoryPath: String? = null,
         storageSubdirectory: String? = "prebuilt-gki",
@@ -920,6 +930,9 @@ object DownloadUtils {
             ?: downloadsRoot
         val usableAssetDir = assetDir.takeIf { it.exists() || it.mkdirs() }?.takeIf { it.isDirectory && it.canWrite() }
             ?: return null
+        if (storageSubdirectory.isNullOrBlank()) {
+            Log.w("DownloadUtils", "Saving direct asset into Downloads root; deletion of this directory will be suppressed.")
+        }
         return DirectAssetStorage(
             assetDir = usableAssetDir,
             preserveDownloadedZip = preserveDownloadedZip,
