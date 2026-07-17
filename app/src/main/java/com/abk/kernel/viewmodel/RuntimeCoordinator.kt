@@ -44,6 +44,8 @@ internal data class RuntimeModuleUpdateInfo(
     val versionCode: Long,
     val zipUrl: String,
     val changelog: String,
+    val sha256: String? = null,
+    val signature: String? = null,
 )
 
 internal fun isSecureRuntimeModuleUrl(url: String): Boolean =
@@ -101,8 +103,10 @@ internal suspend fun fetchRuntimeModuleUpdateInfo(updateJson: String): RuntimeMo
     val versionCode = json.get("versionCode")?.takeIf { it.isJsonPrimitive }?.let { runCatching { it.asLong }.getOrNull() } ?: 0L
     val zipUrl = json.get("zipUrl")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim().orEmpty()
     val changelog = json.get("changelog")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim().orEmpty()
+    val sha256 = json.get("sha256")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim()?.takeIf { it.isNotBlank() }
+    val signature = json.get("signature")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim()?.takeIf { it.isNotBlank() }
     if (zipUrl.isBlank() || version.isBlank() || !isSecureRuntimeModuleUrl(zipUrl)) return null
-    return RuntimeModuleUpdateInfo(version = version, versionCode = versionCode, zipUrl = zipUrl, changelog = changelog)
+    return RuntimeModuleUpdateInfo(version = version, versionCode = versionCode, zipUrl = zipUrl, changelog = changelog, sha256 = sha256, signature = signature)
 }
 
 internal fun isRuntimeModuleVersionNewer(

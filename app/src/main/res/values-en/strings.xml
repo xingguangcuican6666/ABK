@@ -811,6 +811,7 @@
     <string name="runtime_update_changelog_unavailable">Changelog unavailable</string>
     <string name="runtime_confirm_update_module_desc">The module ZIP will be downloaded to the ABK folder in the default download directory. A reboot is usually required after installation.</string>
     <string name="runtime_module_download_failed">Module download failed</string>
+    <string name="runtime_module_checksum_mismatch">Module checksum mismatch — the file may be corrupted, please retry</string>
     <string name="runtime_pending_remove">Pending removal</string>
     <string name="runtime_readonly">Read-only</string>
     <string name="runtime_controllable">Controllable</string>
