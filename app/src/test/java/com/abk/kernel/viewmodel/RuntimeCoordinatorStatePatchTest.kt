@@ -3,6 +3,7 @@ package com.abk.kernel.viewmodel
 import com.abk.kernel.data.model.AbkRuntimeModule
 import com.abk.kernel.data.model.AbkRuntimeStatus
 import com.abk.kernel.data.model.RootGrantApp
+import com.abk.kernel.data.model.MainUiState
 import com.abk.kernel.data.model.RootGrantProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
