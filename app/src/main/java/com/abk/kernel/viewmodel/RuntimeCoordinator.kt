@@ -49,29 +49,29 @@ internal data class RuntimeModuleUpdateInfo(
 internal fun isSecureRuntimeModuleUrl(url: String): Boolean =
     url.trim().startsWith("https://", ignoreCase = true)
 
-private fun fetchRuntimeModuleResponse(url: String): String? {
+private suspend fun fetchRuntimeModuleResponse(url: String): String? = withContext(Dispatchers.IO) {
     val cleanUrl = url.trim()
-    if (cleanUrl.isBlank() || !isSecureRuntimeModuleUrl(cleanUrl)) return null
-    return runCatching {
+    if (cleanUrl.isBlank() || !isSecureRuntimeModuleUrl(cleanUrl)) return@withContext null
+    runCatching {
         val request = okhttp3.Request.Builder().url(cleanUrl).build()
         runtimeModuleHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return null
+            if (!response.isSuccessful) return@withContext null
             response.body?.string().orEmpty()
         }
     }.getOrNull()?.takeIf { it.isNotBlank() }
 }
 
-internal fun fetchRuntimeModuleText(url: String): String? =
+internal suspend fun fetchRuntimeModuleText(url: String): String? =
     fetchRuntimeModuleResponse(url)?.trim()?.takeIf { it.isNotBlank() }
 
-internal fun resolveRuntimeModuleChangelog(changelog: String): String {
+internal suspend fun resolveRuntimeModuleChangelog(changelog: String): String {
     val value = changelog.trim()
     if (value.isBlank()) return ""
     if (!isSecureRuntimeModuleUrl(value)) return value
     return fetchRuntimeModuleText(value) ?: ""
 }
 
-internal fun findRuntimeModuleUpdateTarget(
+internal suspend fun findRuntimeModuleUpdateTarget(
     module: AbkRuntimeModule,
 ): RuntimeModuleUpdateTarget? {
     if (module.id.isBlank() || module.remove || module.update || !module.enabled || module.readonly || module.normalizedType() != "standard") {
@@ -92,7 +92,7 @@ internal fun findRuntimeModuleUpdateTarget(
     return RuntimeModuleUpdateTarget(module, updateInfo)
 }
 
-internal fun fetchRuntimeModuleUpdateInfo(updateJson: String): RuntimeModuleUpdateInfo? {
+internal suspend fun fetchRuntimeModuleUpdateInfo(updateJson: String): RuntimeModuleUpdateInfo? {
     if (!isSecureRuntimeModuleUrl(updateJson)) return null
     val result = fetchRuntimeModuleResponse(updateJson).orEmpty()
     if (result.isBlank()) return null

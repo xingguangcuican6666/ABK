@@ -295,11 +295,13 @@ fun InstalledModulesScreen(
     val runtimeModulesForUpdates = remember(state.abkRuntimeStatus?.modules) { state.abkRuntimeStatus?.modules.orEmpty() }
     LaunchedEffect(runtimeModulesForUpdates) {
         val targets = withContext(Dispatchers.IO) {
-            runtimeModulesForUpdates.mapNotNull { module ->
+            val targetsMap = mutableMapOf<String, RuntimeModuleUpdateTarget>()
+            for (module in runtimeModulesForUpdates) {
                 findRuntimeModuleUpdateTarget(module)?.let { target ->
-                    module.id to target
+                    targetsMap[module.id] = target
                 }
-            }.toMap()
+            }
+            targetsMap
         }
         runtimeUpdateCandidates = targets
         if (updateTarget?.let { it.module.id !in targets } == true) {
@@ -1228,9 +1230,7 @@ private fun RuntimeModuleUpdateConfirmDialog(
         changelogText = if (updateInfo.changelog.isBlank()) {
             ""
         } else {
-            withContext(Dispatchers.IO) {
-                resolveRuntimeModuleChangelog(updateInfo.changelog)
-            }
+            resolveRuntimeModuleChangelog(updateInfo.changelog)
         }
     }
 
