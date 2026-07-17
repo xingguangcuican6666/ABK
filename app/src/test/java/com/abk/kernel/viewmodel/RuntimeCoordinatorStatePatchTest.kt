@@ -30,6 +30,12 @@ class RuntimeCoordinatorStatePatchTest {
     fun `runtime module update info requires secure https urls`() {
         assertFalse(isSecureRuntimeModuleUrl("http://example.com/update.json"))
         assertTrue(isSecureRuntimeModuleUrl("https://example.com/update.json"))
+        assertTrue(isSecureRuntimeModuleUrl("HTTPS://example.com/update.json"))
+    }
+
+    @Test
+    fun `runtime module changelog keeps non secure urls as plain text`() {
+        assertEquals("http://example.com/changelog.md", resolveRuntimeModuleChangelog("http://example.com/changelog.md"))
     }
 
     @Test
