@@ -379,7 +379,7 @@ fun InstalledModulesScreen(
         installRunning = true
         installSuccess = null
         installLog = listOf(
-            "${'$'} module update",
+            "module update",
             "name: ${target.module.displayName()}",
             "version: ${target.updateInfo.version.ifBlank { "unknown" }}",
             "source: ${target.updateInfo.zipUrl}",
@@ -1236,7 +1236,7 @@ private fun RuntimeModuleUpdateConfirmDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Download, null) },
+        icon = { Icon(Icons.Default.Download, contentDescription = stringResource(R.string.runtime_update_module)) },
         title = { Text(stringResource(R.string.runtime_update_module)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1266,7 +1266,7 @@ private fun RuntimeModuleUpdateConfirmDialog(
         },
         confirmButton = {
             Button(onClick = onConfirm) {
-                Icon(Icons.Default.Download, null, modifier = Modifier.size(17.dp))
+                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(17.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(stringResource(R.string.runtime_update_module))
             }

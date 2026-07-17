@@ -1,7 +1,6 @@
 package com.abk.kernel.utils
 
 import android.content.Context
-import android.os.Environment
 import com.abk.kernel.BuildConfig
 import com.abk.kernel.R
 import com.abk.kernel.data.model.APP_UPDATE_LINE_DEV
@@ -436,36 +435,6 @@ object DownloadUtils {
             bundleWithNotices = bundleWithNotices,
         ) ?: return DownloadResult(
             errorMessage = downloadDirectoryErrorMessage(context, downloadDirectoryPath)
-        ),
-        onProgress = onProgress,
-    )
-
-    suspend fun downloadRuntimeModuleAsset(
-        context: Context,
-        url: String,
-        name: String,
-        runTitle: String,
-        onProgress: (Int) -> Unit = {}
-    ): DownloadResult = downloadDirectAsset(
-        context = context,
-        token = null,
-        url = url,
-        name = name,
-        sizeBytes = 0L,
-        runId = -2_000_000_001L,
-        runTitle = runTitle,
-        storage = resolveDirectAssetStorage(
-            downloadDirectoryPath = Environment.getExternalStoragePublicDirectory(
-                Environment.DIRECTORY_DOWNLOADS
-            ).absolutePath,
-            storageSubdirectory = "",
-            preserveDownloadedZip = true,
-            bundleWithNotices = false,
-        ) ?: return DownloadResult(
-            errorMessage = downloadDirectoryErrorMessage(
-                context,
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath,
-            )
         ),
         onProgress = onProgress,
     )
