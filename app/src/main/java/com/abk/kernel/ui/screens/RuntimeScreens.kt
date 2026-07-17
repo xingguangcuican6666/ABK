@@ -1112,7 +1112,10 @@ private fun InstalledRuntimeModuleCard(
                         ) {
                             Icon(
                                 if (module.remove) Icons.Default.RestartAlt else Icons.Default.Delete,
-                                null,
+                                contentDescription = stringResource(
+                                    if (module.remove) R.string.runtime_reboot
+                                    else R.string.runtime_uninstall
+                                ),
                                 modifier = Modifier.size(20.dp),
                                 tint = if (module.remove) {
                                     MaterialTheme.colorScheme.primary

@@ -67,7 +67,7 @@ internal fun fetchRuntimeModuleText(url: String): String? =
 internal fun resolveRuntimeModuleChangelog(changelog: String): String {
     val value = changelog.trim()
     if (value.isBlank()) return ""
-    if (!value.startsWith("https://") && !value.startsWith("http://")) return value
+    if (!value.startsWith("https://")) return value
     return fetchRuntimeModuleText(value) ?: ""
 }
 

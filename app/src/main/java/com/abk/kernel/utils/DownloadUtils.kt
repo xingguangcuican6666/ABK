@@ -430,8 +430,6 @@ object DownloadUtils {
         runTitle = runTitle,
         sourceAssetId = sourceAssetId,
         storage = resolveDirectAssetStorage(
-            context = context,
-            name = name,
             downloadDirectoryPath = downloadDirectoryPath,
             storageSubdirectory = storageSubdirectory,
             preserveDownloadedZip = preserveDownloadedZip,
@@ -457,7 +455,6 @@ object DownloadUtils {
         runId = -2_000_000_001L,
         runTitle = runTitle,
         storage = resolveDirectAssetStorage(
-            name = name,
             downloadDirectoryPath = Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOWNLOADS
             ).absolutePath,
@@ -941,8 +938,6 @@ object DownloadUtils {
     }
 
     private fun resolveDirectAssetStorage(
-        context: Context? = null,
-        name: String,
         downloadDirectoryPath: String? = null,
         storageSubdirectory: String? = "prebuilt-gki",
         preserveDownloadedZip: Boolean = false,
