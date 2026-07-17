@@ -100,7 +100,7 @@ internal fun parseKsuModules(gson: Gson, ksuModuleListType: Type, json: String?)
             description = item.runtimeString("description"),
             stage = "runtime",
             source = "ksud",
-            updateJson = item.runtimeString("updateJson"),
+            updateJson = item.runtimeString("update_json").ifBlank { item.runtimeString("updateJson") },
             moduleDir = "/data/adb/modules/$id",
             webRoot = "/data/adb/modules/$id/webroot",
             readonly = false,
