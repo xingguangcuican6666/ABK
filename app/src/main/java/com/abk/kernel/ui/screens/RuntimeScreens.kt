@@ -386,6 +386,7 @@ fun InstalledModulesScreen(
             ""
         )
         scope.launch {
+            val downloadDirectoryPath = state.downloadDirectory
             val downloadResult = withContext(Dispatchers.IO) {
                 DownloadUtils.downloadDirectAsset(
                     context = context,
@@ -395,7 +396,7 @@ fun InstalledModulesScreen(
                     sizeBytes = 0L,
                     runId = RUNTIME_MODULE_DOWNLOAD_RUN_ID,
                     runTitle = target.module.displayName(),
-                    downloadDirectoryPath = state.downloadDirectory,
+                    downloadDirectoryPath = downloadDirectoryPath,
                     storageSubdirectory = "",
                     preserveDownloadedZip = true
                 )
@@ -406,7 +407,8 @@ fun InstalledModulesScreen(
                 installSuccess = false
                 installLog = installLog + listOf(
                     "",
-                    downloadResult.errorMessage ?: context.getString(R.string.runtime_module_download_failed)
+                    downloadResult.errorMessage ?: context.getString(R.string.runtime_module_download_failed),
+                    context.getString(R.string.runtime_wait_root_shell)
                 )
                 return@launch
             }

@@ -46,14 +46,18 @@ internal data class RuntimeModuleUpdateInfo(
     val changelog: String,
 )
 
+internal fun isSecureRuntimeModuleUrl(url: String): Boolean =
+    url.trim().startsWith("https://", ignoreCase = true)
+
 private fun fetchRuntimeModuleResponse(url: String): String? {
     val cleanUrl = url.trim()
-    if (cleanUrl.isBlank()) return null
+    if (cleanUrl.isBlank() || !isSecureRuntimeModuleUrl(cleanUrl)) return null
     return runCatching {
         val request = okhttp3.Request.Builder().url(cleanUrl).build()
-        val response = runtimeModuleHttpClient.newCall(request).execute()
-        if (!response.isSuccessful) return null
-        response.body?.string().orEmpty()
+        runtimeModuleHttpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            response.body?.string().orEmpty()
+        }
     }.getOrNull()?.takeIf { it.isNotBlank() }
 }
 
@@ -89,6 +93,7 @@ internal fun findRuntimeModuleUpdateTarget(
 }
 
 internal fun fetchRuntimeModuleUpdateInfo(updateJson: String): RuntimeModuleUpdateInfo? {
+    if (!isSecureRuntimeModuleUrl(updateJson)) return null
     val result = fetchRuntimeModuleResponse(updateJson).orEmpty()
     if (result.isBlank()) return null
     val json = runCatching { com.google.gson.JsonParser.parseString(result).asJsonObject }.getOrNull() ?: return null
@@ -96,7 +101,7 @@ internal fun fetchRuntimeModuleUpdateInfo(updateJson: String): RuntimeModuleUpda
     val versionCode = json.get("versionCode")?.takeIf { !it.isJsonNull }?.asLong ?: 0L
     val zipUrl = json.get("zipUrl")?.asString?.trim().orEmpty()
     val changelog = json.get("changelog")?.asString?.trim().orEmpty()
-    if (zipUrl.isBlank() || version.isBlank()) return null
+    if (zipUrl.isBlank() || version.isBlank() || !isSecureRuntimeModuleUrl(zipUrl)) return null
     return RuntimeModuleUpdateInfo(version = version, versionCode = versionCode, zipUrl = zipUrl, changelog = changelog)
 }
 
