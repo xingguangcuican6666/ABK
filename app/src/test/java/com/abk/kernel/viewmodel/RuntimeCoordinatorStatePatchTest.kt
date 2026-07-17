@@ -15,9 +15,9 @@ class RuntimeCoordinatorStatePatchTest {
 
     @Test
     fun `parse runtime version extracts numeric tokens from mixed strings`() {
-        assertEquals(listOf(1L, 2L, 3L, 4L), parseRuntimeVersionForTest("v1.2.3-4"))
-        assertEquals(listOf(1L, 2L, 3L), parseRuntimeVersionForTest("1.2.3-beta"))
-        assertNull(parseRuntimeVersionForTest("beta"))
+        assertEquals(listOf(1L, 2L, 3L, 4L), parseRuntimeVersion("v1.2.3-4"))
+        assertEquals(listOf(1L, 2L, 3L), parseRuntimeVersion("1.2.3-beta"))
+        assertNull(parseRuntimeVersion("beta"))
     }
 
     @Test
@@ -192,12 +192,4 @@ class RuntimeCoordinatorStatePatchTest {
             else -> "ksud"
         }
     )
-}
-
-private fun parseRuntimeVersionForTest(value: String): List<Long>? {
-    val method = Class.forName("com.abk.kernel.viewmodel.RuntimeCoordinatorKt")
-        .getDeclaredMethod("parseRuntimeVersion", String::class.java)
-    method.isAccessible = true
-    @Suppress("UNCHECKED_CAST")
-    return method.invoke(null, value) as? List<Long>
 }

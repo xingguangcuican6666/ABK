@@ -119,7 +119,7 @@ internal fun isRuntimeModuleVersionNewer(
     return compareRuntimeVersionParts(remote, local) > 0
 }
 
-private fun parseRuntimeVersion(value: String): List<Long>? {
+internal fun parseRuntimeVersion(value: String): List<Long>? {
     val clean = value.trim().removePrefix("v").removePrefix("V")
     if (clean.isBlank()) return null
     val parts = Regex("""\d+""").findAll(clean)
@@ -128,7 +128,7 @@ private fun parseRuntimeVersion(value: String): List<Long>? {
     return parts.takeIf { it.isNotEmpty() }
 }
 
-private fun compareRuntimeVersionParts(left: List<Long>, right: List<Long>): Int {
+internal fun compareRuntimeVersionParts(left: List<Long>, right: List<Long>): Int {
     val size = maxOf(left.size, right.size)
     for (index in 0 until size) {
         val comparison = (left.getOrNull(index) ?: 0L).compareTo(right.getOrNull(index) ?: 0L)
