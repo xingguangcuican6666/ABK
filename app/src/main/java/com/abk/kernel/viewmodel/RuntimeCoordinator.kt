@@ -97,10 +97,10 @@ internal fun fetchRuntimeModuleUpdateInfo(updateJson: String): RuntimeModuleUpda
     val result = fetchRuntimeModuleResponse(updateJson).orEmpty()
     if (result.isBlank()) return null
     val json = runCatching { com.google.gson.JsonParser.parseString(result).asJsonObject }.getOrNull() ?: return null
-    val version = json.get("version")?.asString?.trim().orEmpty()
-    val versionCode = json.get("versionCode")?.takeIf { !it.isJsonNull }?.asLong ?: 0L
-    val zipUrl = json.get("zipUrl")?.asString?.trim().orEmpty()
-    val changelog = json.get("changelog")?.asString?.trim().orEmpty()
+    val version = json.get("version")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim().orEmpty()
+    val versionCode = json.get("versionCode")?.takeIf { it.isJsonPrimitive }?.let { runCatching { it.asLong }.getOrNull() } ?: 0L
+    val zipUrl = json.get("zipUrl")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim().orEmpty()
+    val changelog = json.get("changelog")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim().orEmpty()
     if (zipUrl.isBlank() || version.isBlank() || !isSecureRuntimeModuleUrl(zipUrl)) return null
     return RuntimeModuleUpdateInfo(version = version, versionCode = versionCode, zipUrl = zipUrl, changelog = changelog)
 }
