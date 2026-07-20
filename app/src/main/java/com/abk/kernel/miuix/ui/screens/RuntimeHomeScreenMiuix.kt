@@ -616,6 +616,7 @@ fun ManagerPatchScreenMiuix(
     backgroundUri: String?,
     backgroundImageEnabled: Boolean,
     onBack: () -> Unit,
+    onFeedback: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     AbkRootPatchScreenMiuix(
         rootGranted = rootGranted,
@@ -625,5 +626,6 @@ fun ManagerPatchScreenMiuix(
         backgroundImageEnabled = backgroundImageEnabled,
         onBack = onBack,
         onBackEnabledChange = {},
+        onFeedback = onFeedback,
     )
 }

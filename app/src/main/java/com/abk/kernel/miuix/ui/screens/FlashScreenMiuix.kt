@@ -3,9 +3,7 @@ package com.abk.kernel.miuix.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,21 +19,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.RunCircle
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
@@ -56,14 +48,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.abk.kernel.R
 import com.abk.kernel.data.model.ArtifactCategory
 import com.abk.kernel.data.model.ArtifactType
 import com.abk.kernel.data.model.BuildQueueItemStatus
-import com.abk.kernel.data.model.BuildStatus
 import com.abk.kernel.data.model.DownloadedArtifact
 import com.abk.kernel.data.model.PREBUILT_GKI_RUN_ID
 import com.abk.kernel.data.model.PrebuiltGkiRelease
@@ -101,7 +90,6 @@ import com.abk.kernel.miuix.ui.screens.flash.MiuixFlashConfirmDialog
 import com.abk.kernel.miuix.ui.screens.flash.MiuixInstallManagerConfirmDialog
 import com.abk.kernel.miuix.ui.screens.flash.MiuixLocalOnlyArtifactCard
 import com.abk.kernel.miuix.ui.screens.flash.MiuixPrebuiltParameterSummaryDialog
-import com.abk.kernel.miuix.ui.screens.flash.MiuixTagChip
 import com.abk.kernel.miuix.ui.screens.flash.MiuixWorkflowDownloadManagementCard
 import com.abk.kernel.miuix.ui.screens.flash.common.FlashTerminalParams
 import com.abk.kernel.miuix.ui.screens.flash.MiuixWorkflowRunCard
@@ -118,10 +106,8 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.CheckboxDefaults
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
@@ -130,9 +116,13 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.TabRow
+import top.yukonga.miuix.kmp.basic.TabRowDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -434,12 +424,12 @@ fun FlashScreenMiuix(
     fun copyDownloadedFilePath(item: DownloadedArtifact) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(item.name, item.filePath))
-        Toast.makeText(context, context.getString(R.string.flash_copy_path_done), Toast.LENGTH_SHORT).show()
+        vm.showSnackbar(context.getString(R.string.flash_copy_path_done))
     }
 
     fun installManager(item: DownloadedArtifact) {
         if (!rootGranted) {
-            Toast.makeText(context, context.getString(R.string.flash_root_unauthorized), Toast.LENGTH_SHORT).show()
+            vm.showSnackbar(context.getString(R.string.flash_root_unauthorized))
             return
         }
         navigator.push(Route.FlashTerminalLog(FlashTerminalParams(
@@ -458,7 +448,7 @@ fun FlashScreenMiuix(
         allowHighRiskFallback: Boolean = false
     ) {
         if (!rootGranted) {
-            Toast.makeText(context, context.getString(R.string.flash_root_unauthorized), Toast.LENGTH_SHORT).show()
+            vm.showSnackbar(context.getString(R.string.flash_root_unauthorized))
             return
         }
         navigator.push(Route.FlashTerminalLog(FlashTerminalParams(
@@ -632,7 +622,54 @@ fun FlashScreenMiuix(
                     color = barColor,
                     title = if (rootGranted) stringResource(R.string.flash_title)
                     else stringResource(R.string.flash_files_title),
-                    scrollBehavior = scrollBehavior
+                    scrollBehavior = scrollBehavior,
+                    actions = {
+                        IconButton(
+                            onClick = {
+                                if (currentContentTab == FlashContentTab.Workflows) {
+                                    vm.loadRecentRuns()
+                                } else {
+                                    vm.loadPrebuiltGkiReleases(force = true)
+                                }
+                            },
+                            enabled = if (currentContentTab == FlashContentTab.Workflows) {
+                                !state.isRefreshingRecentRuns
+                            } else {
+                                !state.isLoadingPrebuiltGkiReleases
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = stringResource(R.string.flash_refresh_artifacts),
+                            )
+                        }
+                        if (currentContentTab == FlashContentTab.Workflows) {
+                            IconButton(onClick = { filterMenuExpanded = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.FilterList,
+                                    contentDescription = stringResource(R.string.flash_filter_title),
+                                )
+                            }
+                        }
+                    },
+                    bottomContent = {
+                        if (state.prebuiltGkiEnabled && state.isLoggedIn) {
+                            Column(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 6.dp),
+                            ) {
+                                val tabs = FlashContentTab.entries
+                                TabRow(
+                                    tabs = tabs.map { stringResource(it.labelRes) },
+                                    selectedTabIndex = tabs.indexOf(activeContentTab).coerceAtLeast(0),
+                                    onTabSelected = { index -> activeContentTab = tabs[index] },
+                                    colors = TabRowDefaults.tabRowColors(backgroundColor = barColor),
+                                    height = 40.dp,
+                                )
+                            }
+                        }
+                    },
                 )
             }
         }
@@ -649,61 +686,22 @@ fun FlashScreenMiuix(
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .overScrollVertical()
                     .scrollEndHaptic(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(
-                    top = padding.calculateTopPadding() + 6.dp,
+                    top = padding.calculateTopPadding() + 8.dp,
                     start = 20.dp,
                     end = 20.dp,
                     bottom = 80.dp + outerPadding.calculateBottomPadding()
                 ),
                 overscrollEffect = null
             ) {
-            // ── Hero card ───────────────────────────────────────────────
-            item(key = "hero") {
-                MiuixFlashHeroCard(
-                    buildStatus = state.buildStatus,
-                    availableCount = remoteArtifacts.size,
-                    downloadedCount = workflowDownloadedArtifacts.size,
-                    rootGranted = rootGranted
-                )
-            }
-
-            // ── Tab switcher (only when both tabs available) ────────────
-            if (state.prebuiltGkiEnabled && state.isLoggedIn) {
-                item(key = "tabs") {
-                    MiuixFlashTabSwitcher(
-                        activeTab = activeContentTab,
-                        onTabSelected = { activeContentTab = it }
-                    )
-                }
-            }
-
             // ── Content area ────────────────────────────────────────────
             if (currentContentTab == FlashContentTab.Workflows) {
-                    // Refresh + Filter row
-                    item(key = "refresh-filter") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Button(
-                                onClick = { vm.loadRecentRuns() },
-                                modifier = Modifier.weight(1f),
-                                enabled = !state.isRefreshingRecentRuns,
-                                colors = ButtonDefaults.buttonColors()
-                            ) {
-                                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(17.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(stringResource(R.string.flash_refresh_artifacts))
-                            }
-                            IconButton(onClick = { filterMenuExpanded = true }) {
-                                Icon(
-                                    imageVector = Icons.Default.FilterList,
-                                    contentDescription = stringResource(R.string.flash_filter_title)
-                                )
-                            }
-                        }
+                    item(key = "workflow-header") {
+                        MiuixWorkflowListHeader(
+                            availableCount = remoteArtifacts.size,
+                            downloadedCount = workflowDownloadedArtifacts.size,
+                        )
                     }
 
                     // Active downloads card
@@ -819,8 +817,6 @@ fun FlashScreenMiuix(
                         item(key = "prebuilt-header") {
                             MiuixPrebuiltReleaseListHeader(
                                 releaseCount = state.prebuiltGkiReleases.size,
-                                isLoading = state.isLoadingPrebuiltGkiReleases,
-                                onRefresh = { vm.loadPrebuiltGkiReleases(force = true) }
                             )
                         }
 
@@ -901,137 +897,19 @@ fun FlashScreenMiuix(
 // Internal MIUIX components
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Hero card for the Flash/Files screen showing status summary.
- */
 @Composable
-private fun MiuixFlashHeroCard(
-    buildStatus: BuildStatus,
+private fun MiuixWorkflowListHeader(
     availableCount: Int,
     downloadedCount: Int,
-    rootGranted: Boolean
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Icon(
-                    imageVector = if (rootGranted) Icons.Default.FlashOn else Icons.Default.FolderOpen,
-                    contentDescription = null,
-                    tint = MiuixTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
-                )
-                Column {
-                    Text(
-                        text = if (rootGranted) stringResource(R.string.flash_artifact_center)
-                        else stringResource(R.string.flash_files_title),
-                        style = MiuixTheme.textStyles.title4,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = if (rootGranted) stringResource(R.string.flash_artifact_center_desc)
-                        else stringResource(R.string.flash_file_center_desc),
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                MiuixHeroBadge(
-                    label = stringResource(R.string.flash_source_artifacts_count, availableCount),
-                    icon = Icons.Default.CloudDownload,
-                    color = MiuixTheme.colorScheme.primary
-                )
-                MiuixHeroBadge(
-                    label = stringResource(R.string.flash_downloaded_count, downloadedCount),
-                    icon = Icons.Default.Archive,
-                    color = MiuixTheme.colorScheme.secondary
-                )
-                if (buildStatus !in setOf(BuildStatus.IN_PROGRESS, BuildStatus.QUEUED)) {
-                    val (statusLabel, statusColor) = when (buildStatus) {
-                        BuildStatus.SUCCESS -> stringResource(R.string.build_success_bang) to MiuixTheme.colorScheme.primary
-                        BuildStatus.FAILURE -> stringResource(R.string.build_failed) to MiuixTheme.colorScheme.error
-                        BuildStatus.CANCELLED -> stringResource(R.string.build_cancelled) to MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        else -> stringResource(R.string.flash_build_waiting) to MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    }
-                    MiuixHeroBadge(
-                        label = statusLabel,
-                        icon = Icons.Default.RunCircle,
-                        color = statusColor
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MiuixHeroBadge(
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    color: Color
-) {
-    Row(
-        modifier = Modifier
-            .padding(vertical = 2.dp)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = color,
-            modifier = Modifier.size(14.dp)
-        )
-        Text(
-            text = label,
-            style = MiuixTheme.textStyles.body2,
-            color = color,
-            fontSize = 12.sp
-        )
-    }
-}
-
-/**
- * Two-button tab switcher for Workflows / Prebuilt GKI tabs.
- */
-@Composable
-private fun MiuixFlashTabSwitcher(
-    activeTab: FlashContentTab,
-    onTabSelected: (FlashContentTab) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        FlashContentTab.entries.forEach { tab ->
-            val isActive = tab == activeTab
-            Button(
-                onClick = { onTabSelected(tab) },
-                modifier = Modifier.weight(1f),
-                colors = if (isActive) {
-                    ButtonDefaults.buttonColorsPrimary()
-                } else {
-                    ButtonDefaults.buttonColors()
-                }
-            ) {
-                Text(stringResource(tab.labelRes))
-            }
-        }
-    }
+    SmallTitle(
+        text = buildString {
+            append(stringResource(R.string.flash_tab_workflows))
+            append(" · ")
+            append(stringResource(R.string.flash_artifact_counts, availableCount, downloadedCount))
+        },
+        insideMargin = PaddingValues(start = 4.dp, top = 8.dp, end = 4.dp, bottom = 0.dp),
+    )
 }
 
 /**
@@ -1140,45 +1018,15 @@ private fun MiuixCategoryHeader(category: ArtifactCategory) {
 @Composable
 private fun MiuixPrebuiltReleaseListHeader(
     releaseCount: Int,
-    isLoading: Boolean,
-    onRefresh: () -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.CloudDownload,
-                contentDescription = null,
-                tint = MiuixTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-            Text(
-                text = stringResource(R.string.flash_prebuilt_gki),
-                style = MiuixTheme.textStyles.subtitle,
-                fontWeight = FontWeight.SemiBold,
-                color = MiuixTheme.colorScheme.onSurface
-            )
-            if (releaseCount > 0) {
-                Text(
-                    text = stringResource(R.string.flash_asset_count, releaseCount),
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
-            }
-        }
-        IconButton(onClick = onRefresh, enabled = !isLoading) {
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = stringResource(R.string.flash_refresh_artifacts)
-            )
-        }
-    }
+    SmallTitle(
+        text = if (releaseCount > 0) {
+            "${stringResource(R.string.flash_prebuilt_gki)} · ${stringResource(R.string.flash_asset_count, releaseCount)}"
+        } else {
+            stringResource(R.string.flash_prebuilt_gki)
+        },
+        insideMargin = PaddingValues(start = 4.dp, top = 8.dp, end = 4.dp, bottom = 0.dp),
+    )
 }
 
 /**
@@ -1190,71 +1038,33 @@ private fun MiuixPrebuiltReleaseCard(
     release: PrebuiltGkiRelease,
     onClick: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Title row
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        ArrowPreference(
+            title = release.name,
+            summary = "${release.tagName} · ${releaseDateLabel(
+                release.publishedAt,
+                stringResource(R.string.flash_unknown_date),
+            )}",
+            startAction = {
                 Icon(
                     imageVector = Icons.Default.CloudDownload,
                     contentDescription = null,
                     tint = MiuixTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(24.dp),
                 )
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
+            },
+            endActions = {
+                if (release.assetCount > 0) {
                     Text(
-                        text = release.name,
-                        style = MiuixTheme.textStyles.title4,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MiuixTheme.colorScheme.onSurface,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "${release.tagName} · ${releaseDateLabel(
-                            release.publishedAt,
-                            stringResource(R.string.flash_unknown_date)
-                        )}",
+                        text = stringResource(R.string.flash_asset_count, release.assetCount),
                         style = MiuixTheme.textStyles.body2,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
                     )
                 }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                if (release.assetCount > 0) {
-                    MiuixTagChip(
-                        label = stringResource(R.string.flash_asset_count, release.assetCount),
-                        primary = true
-                    )
-                }
-                MiuixTagChip(
-                    label = stringResource(R.string.flash_manual_download),
-                    primary = false
-                )
-            }
-        }
+            },
+            onClick = onClick,
+        )
     }
 }
 

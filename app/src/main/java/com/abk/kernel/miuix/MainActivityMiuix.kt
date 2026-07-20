@@ -1,11 +1,10 @@
 ﻿package com.abk.kernel.miuix
 
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -52,7 +51,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
@@ -115,11 +116,15 @@ import com.abk.kernel.miuix.viewmodel.MiuixSettingsViewModel
 import com.abk.kernel.ui.navigation3.LocalNavigator
 import com.abk.kernel.ui.navigation3.Navigator
 import com.abk.kernel.ui.navigation3.Route
-import com.abk.kernel.ui.navigation3.rememberNavigator
 import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.utils.findActivity
 import com.abk.kernel.viewmodel.MainViewModel
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.sin
+import kotlin.math.sqrt
 import top.yukonga.miuix.kmp.basic.NavigationBar as MiuixNavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem as MiuixNavigationBarItem
 import top.yukonga.miuix.kmp.basic.NavigationRail as MiuixNavigationRail
@@ -132,6 +137,23 @@ import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.MiuixPopupUtils
 
+private const val MIUIX_NAV_TRANSITION_DURATION_MS = 500
+private const val MIUIX_PARENT_SCENE_EXIT_FRACTION = 0.25f
+
+private val MiuixNavTransitionEasing = Easing { fraction ->
+    val response = 0.8f
+    val damping = 0.95f
+    val omega = 2.0 * PI / response
+    val k = omega * omega
+    val c = damping * 4.0 * PI / response
+    val w = (sqrt(4.0 * k - c * c) / 2.0).toFloat()
+    val r = (-c / 2.0).toFloat()
+    val c2 = r / w
+    val t = fraction.toDouble()
+    val decay = exp(r * t)
+    (decay * (-cos(w * t) + c2 * sin(w * t)) + 1.0).toFloat()
+}
+
 /**
  * Bridge composable for miuix UI mode.
  * Called from MainActivity.kt when [state.uiStyle] == "miuix".
@@ -142,12 +164,18 @@ fun AbkMiuixMainContent(
     miuixVm: MiuixSettingsViewModel,
     pendingModuleInstallUri: String?,
     onModuleInstallUriConsumed: () -> Unit,
+    openColorAppearanceRequest: Int = 0,
+    onColorAppearanceRequestConsumed: () -> Unit = {},
+    onUiStyleChangeFromAppearance: (String) -> Unit = { vm.setUiStyle(it) },
 ) {
     AbkMiuixMainScaffold(
         vm = vm,
         miuixVm = miuixVm,
         pendingModuleInstallUri = pendingModuleInstallUri,
         onModuleInstallUriConsumed = onModuleInstallUriConsumed,
+        openColorAppearanceRequest = openColorAppearanceRequest,
+        onColorAppearanceRequestConsumed = onColorAppearanceRequestConsumed,
+        onUiStyleChangeFromAppearance = onUiStyleChangeFromAppearance,
     )
 }
 
@@ -161,17 +189,31 @@ private fun AbkMiuixMainScaffold(
     miuixVm: MiuixSettingsViewModel,
     pendingModuleInstallUri: String? = null,
     onModuleInstallUriConsumed: () -> Unit = {},
+    openColorAppearanceRequest: Int = 0,
+    onColorAppearanceRequestConsumed: () -> Unit = {},
+    onUiStyleChangeFromAppearance: (String) -> Unit = { vm.setUiStyle(it) },
 ) {
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
-    val navigator = rememberNavigator()
+    val restoreColorAppearanceOnEntry = remember { openColorAppearanceRequest != 0 }
+    val navigator = rememberSaveable(saver = Navigator.Saver) {
+        Navigator(Route.Main).apply {
+            if (restoreColorAppearanceOnEntry) {
+                push(Route.ThemeSettings)
+            }
+        }
+    }
     val navIsOnSubPage = navigator.backStackSize() > 1
 
     LaunchedEffect(Unit) {
         vm.markMainUiEntered()
     }
 
-    var selectedTab by rememberSaveable { mutableStateOf(AbkTab.Status) }
+    var selectedTab by rememberSaveable {
+        mutableStateOf(
+            if (restoreColorAppearanceOnEntry) AbkTab.Settings else AbkTab.Status
+        )
+    }
     var flashDetailPageVisible by rememberSaveable { mutableStateOf(false) }
     var settingsChildPageVisible by rememberSaveable { mutableStateOf(false) }
     var buildPlanPageVisible by rememberSaveable { mutableStateOf(false) }
@@ -194,6 +236,15 @@ private fun AbkMiuixMainScaffold(
         }
     }
     val activeTab = if (selectedTab in visibleTabs) selectedTab else visibleTabs.first()
+    LaunchedEffect(openColorAppearanceRequest) {
+        if (openColorAppearanceRequest != 0) {
+            selectedTab = AbkTab.Settings
+            if (navigator.current() != Route.ThemeSettings) {
+                navigator.replaceAll(listOf(Route.Main, Route.ThemeSettings))
+            }
+            onColorAppearanceRequestConsumed()
+        }
+    }
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
     val isTabletLayout = configuration.smallestScreenWidthDp >= 600
@@ -318,7 +369,7 @@ private fun AbkMiuixMainScaffold(
             context.findActivity()?.finish()
         } else {
             lastBackAt = now
-            Toast.makeText(context, pressAgainExitLabel, Toast.LENGTH_SHORT).show()
+            vm.showSnackbar(pressAgainExitLabel)
         }
     }
 
@@ -334,7 +385,7 @@ private fun AbkMiuixMainScaffold(
     val blurEnabledForGlass = state.miuixFloatingBottomBarEnabled && state.miuixLiquidGlassEnabled
     val blurBackdrop = rememberBlurBackdrop(state.miuixBlurEnabled, surfaceColor)
 
-    // Bar slide offset (0f = visible, -1f = hidden left). Single LaunchedEffect drives it:
+    // Mirrors NavDisplay's parent scene slide: 0f = root position, -1f = -width / 4.
     val barSlideOffset = remember { Animatable(0f) }
     val lastGestureProgress = remember { mutableStateOf(0f) }
     val predictiveBackProgress by remember {
@@ -346,6 +397,8 @@ private fun AbkMiuixMainScaffold(
             } else 0f
         }
     }
+    val childPageSceneSettled =
+        childPageVisible && predictiveBackProgress <= 0f && barSlideOffset.value <= -0.999f
     val tabIcon: @Composable (AbkTab) -> ImageVector = { tab ->
         when (tab) {
             AbkTab.Status -> if (state.runtimeNavigationEnabled) Icons.Default.Memory else Icons.Default.Home
@@ -374,8 +427,8 @@ private fun AbkMiuixMainScaffold(
             if (!hasRail) {
                 LaunchedEffect(childPageVisible, predictiveBackProgress) {
                     if (predictiveBackProgress > 0f) {
-                        // Only show bar during predictive back when popping from first sub-page level
-                        // (backStackSize == 2) back to root. For deeper pages (>= 3) the bar stays hidden.
+                        // Only return the bar during predictive back when popping from the first
+                        // sub-page level. Deeper pages keep it parked with the parent scene.
                         if (navigator.backStackSize() <= 2) {
                             barSlideOffset.snapTo(-(1f - predictiveBackProgress))
                             lastGestureProgress.value = predictiveBackProgress
@@ -388,8 +441,8 @@ private fun AbkMiuixMainScaffold(
                         barSlideOffset.animateTo(
                             targetValue = target,
                             animationSpec = tween(
-                                durationMillis = if (fromGesture) 200 else 300,
-                                easing = FastOutSlowInEasing,
+                                durationMillis = MIUIX_NAV_TRANSITION_DURATION_MS,
+                                easing = MiuixNavTransitionEasing,
                             ),
                         )
                         if (fromGesture) lastGestureProgress.value = 0f
@@ -596,6 +649,7 @@ private fun AbkMiuixMainScaffold(
                                             vm = vm,
                                             miuixVm = miuixVm,
                                             onBack = popBack,
+                                            onUiStyleChange = onUiStyleChangeFromAppearance,
                                         )
                                     }
                                     entry<Route.AppProfileTemplates> {
@@ -611,7 +665,12 @@ private fun AbkMiuixMainScaffold(
                                         OpenSourceLicensesScreenMiuix(vm = vm)
                                     }
                                     entry<Route.ExtensionManager> {
-                                        ExtensionManagerScreenMiuix(onBack = popBack)
+                                        ExtensionManagerScreenMiuix(
+                                            onBack = popBack,
+                                            onFeedback = { message, longDuration ->
+                                                vm.showSnackbar(message, longDuration)
+                                            },
+                                        )
                                     }
                                     entry<Route.BuildPlanLibrary> {
                                         BuildPlanLibraryScreenMiuix(vm = vm)
@@ -662,6 +721,9 @@ private fun AbkMiuixMainScaffold(
                                             backgroundUri = state.customBackgroundUri,
                                             backgroundImageEnabled = state.backgroundImageEnabled,
                                             onBack = popBack,
+                                            onFeedback = { message, longDuration ->
+                                                vm.showSnackbar(message, longDuration)
+                                            },
                                         )
                                     }
                                     entry<Route.SusfsControl> {
@@ -748,23 +810,30 @@ private fun AbkMiuixMainScaffold(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .zIndex(2f)
-                    .graphicsLayer {
-                        if (!hasRail) {
-                            translationX = size.width * barSlideOffset.value
+                    .zIndex(if (childPageSceneSettled) 0f else 2f)
+                    .drawWithContent {
+                        val visibleWidth = size.width * (1f + barSlideOffset.value.coerceIn(-1f, 0f))
+                        clipRect(right = visibleWidth) {
+                            this@drawWithContent.drawContent()
                         }
                     },
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .graphicsLayer {
+                            if (!hasRail) {
+                                translationX = size.width * MIUIX_PARENT_SCENE_EXIT_FRACTION * barSlideOffset.value
+                            }
+                        }
                         .onSizeChanged { bottomBarHeightPx = it.height },
                 ) {
                     key(visibleTabs) {
                         when {
                             state.miuixFloatingBottomBarEnabled -> {
                                 MiuixFloatingBottomBar(
-                                    modifier = Modifier.align(Alignment.Center),
+                                    modifier = Modifier
+                                        .align(Alignment.Center),
                                     items = visibleTabs.map { tab ->
                                         FloatingTabItem(
                                             label = tabLabel(tab),
@@ -957,6 +1026,7 @@ private fun AbkMiuixMainScaffold(
                                         vm = vm,
                                         miuixVm = miuixVm,
                                         onBack = popBack,
+                                        onUiStyleChange = onUiStyleChangeFromAppearance,
                                     )
                                 }
                                 entry<Route.AppProfileTemplates> {
@@ -972,7 +1042,12 @@ private fun AbkMiuixMainScaffold(
                                     OpenSourceLicensesScreenMiuix(vm = vm)
                                 }
                                 entry<Route.ExtensionManager> {
-                                    ExtensionManagerScreenMiuix(onBack = popBack)
+                                    ExtensionManagerScreenMiuix(
+                                        onBack = popBack,
+                                        onFeedback = { message, longDuration ->
+                                            vm.showSnackbar(message, longDuration)
+                                        },
+                                    )
                                 }
                                 entry<Route.BuildPlanLibrary> {
                                     BuildPlanLibraryScreenMiuix(vm = vm)
@@ -1023,6 +1098,9 @@ private fun AbkMiuixMainScaffold(
                                         backgroundUri = state.customBackgroundUri,
                                         backgroundImageEnabled = state.backgroundImageEnabled,
                                         onBack = popBack,
+                                        onFeedback = { message, longDuration ->
+                                            vm.showSnackbar(message, longDuration)
+                                        },
                                     )
                                 }
                                 entry<Route.SusfsControl> {

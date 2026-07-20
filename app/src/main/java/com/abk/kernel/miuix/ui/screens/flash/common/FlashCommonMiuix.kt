@@ -3,7 +3,6 @@ package com.abk.kernel.miuix.ui.screens.flash.common
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -216,13 +215,10 @@ fun TerminalDialogFromState(
  */
 fun copyArtifactPath(
     context: Context,
-    artifact: DownloadedArtifact
+    artifact: DownloadedArtifact,
+    onFeedback: (String) -> Unit
 ) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText(artifact.name, artifact.filePath))
-    Toast.makeText(
-        context,
-        context.getString(R.string.flash_copy_path_done),
-        Toast.LENGTH_SHORT
-    ).show()
+    onFeedback(context.getString(R.string.flash_copy_path_done))
 }

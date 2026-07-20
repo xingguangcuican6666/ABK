@@ -104,14 +104,20 @@ fun SettingsScreen(
     vm: MainViewModel,
     outerPadding: PaddingValues = PaddingValues(0.dp),
     onChildPageVisibleChange: (Boolean) -> Unit = {},
-    onOpenInstalledModules: () -> Unit = {}
+    onOpenInstalledModules: () -> Unit = {},
+    openThemeSettingsRequest: Int = 0,
+    onOpenThemeSettingsRequestConsumed: () -> Unit = {},
+    onUiStyleChangeFromAppearance: (String) -> Unit = { vm.setUiStyle(it) },
 ) {
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showLogoutDialog by remember { mutableStateOf(false) }
     var exportingDiagnostics by remember { mutableStateOf(false) }
-    var showThemeSettings by rememberSaveable { mutableStateOf(false) }
+    val restoreThemeSettingsOnEntry = remember { openThemeSettingsRequest != 0 }
+    var showThemeSettings by rememberSaveable {
+        mutableStateOf(restoreThemeSettingsOnEntry)
+    }
     var showAppProfileTemplates by rememberSaveable { mutableStateOf(false) }
     var showManagerTools by rememberSaveable { mutableStateOf(false) }
     var showSusfsControl by rememberSaveable { mutableStateOf(false) }
@@ -179,6 +185,13 @@ fun SettingsScreen(
         showOpenSourceLicenses = false
         showExtensionManagerPage = false
         showThemeSettings = true
+    }
+
+    LaunchedEffect(openThemeSettingsRequest) {
+        if (openThemeSettingsRequest != 0) {
+            openThemeSettings()
+            onOpenThemeSettingsRequestConsumed()
+        }
     }
 
     fun openAppProfileTemplates() {
@@ -362,7 +375,7 @@ fun SettingsScreen(
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
-                            title = stringResource(R.string.settings_theme),
+                            title = stringResource(R.string.settings_color_appearance),
                             navigationIcon = {
                                 IconButton(onClick = childPageBack::requestDismiss) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
@@ -391,7 +404,7 @@ fun SettingsScreen(
                         onBackgroundImageEnabledChange = { enabled -> vm.setBackgroundImageEnabled(enabled) },
                         onUiSurfaceAlphaChange = { alpha -> vm.setUiSurfaceAlpha(alpha) },
                         uiStyle = state.uiStyle,
-                        onUiStyleChange = { style -> vm.setUiStyle(style) }
+                        onUiStyleChange = onUiStyleChangeFromAppearance
                     )
                 }
             }
@@ -1824,8 +1837,8 @@ private fun ThemeSettingsScreen(
             }
             val currentUiLabel = uiStyleLabels[uiStyle] ?: uiStyle
             ExpressiveListItem(
-                title = "MIUIX",
-                subtitle = stringResource(R.string.settings_ui_style_miuix_subtitle),
+                title = stringResource(R.string.settings_ui_style),
+                subtitle = currentUiLabel,
                 leadingIcon = Icons.Default.Style,
                 trailingContent = {
                     Box {

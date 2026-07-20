@@ -116,7 +116,9 @@ fun FlashPrebuiltDetailScreenMiuix(
     // ── Local helpers ────────────────────────────────────────────────────
 
     fun copyPath(item: DownloadedArtifact) {
-        copyArtifactPath(context, item)
+        copyArtifactPath(context, item) { message ->
+            vm.showSnackbar(message)
+        }
     }
 
     fun requestFlash(item: DownloadedArtifact) {

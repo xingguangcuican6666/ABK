@@ -3,7 +3,6 @@ package com.abk.kernel.miuix.ui.screens
 import android.content.Context
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -117,12 +116,14 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.squircle.squircleSurface
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import top.yukonga.miuix.kmp.window.WindowDialog
 
 private const val RUNTIME_MODULE_DOWNLOAD_RUN_ID = -2_000_000_001L
+private val MODULE_TAG_CHIP_CORNER_RADIUS = 8.dp
 
 private data class ModuleListComputation<T>(
     val items: List<T> = emptyList(),
@@ -165,26 +166,30 @@ private fun MiuixModuleTagChip(
     primary: Boolean = false,
     maxWidth: Dp = 140.dp
 ) {
+    val isDark = MiuixTheme.colorScheme.surface.luminance() < 0.5f
+    val primaryColors = ButtonDefaults.buttonColorsPrimary()
+    val secondaryColors = ButtonDefaults.buttonColors()
     val bgColor = if (primary) {
-        MiuixTheme.colorScheme.primary
+        if (isDark) Color(0xFF223452) else Color(0xFFE4F3FF)
     } else {
-        MiuixTheme.colorScheme.secondary
+        secondaryColors.color
     }
-    val contentColor = Color.White
+    val contentColor = if (primary) {
+        primaryColors.color
+    } else {
+        secondaryColors.contentColor
+    }
     Box(
         modifier = Modifier
             .widthIn(max = maxWidth)
-            .background(
-                color = bgColor.copy(alpha = if (primary) 0.88f else 0.78f),
-                shape = RoundedCornerShape(5.dp)
-            )
-            .padding(horizontal = 6.dp, vertical = 2.dp)
+            .squircleSurface(color = bgColor, cornerRadius = MODULE_TAG_CHIP_CORNER_RADIUS)
+            .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
         Text(
             text = label,
             style = MiuixTheme.textStyles.body2,
             color = contentColor,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -362,11 +367,7 @@ private fun BuildModuleRepositoryScreenMiuix(
                             pendingModuleSetMetadata = null
                             selectedModuleSetChildren = emptyList()
                             moduleSetStageSelections = emptyMap()
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.module_repo_added_to_build),
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            vm.showSnackbar(context.getString(R.string.module_repo_added_to_build))
                         }
                     }
                 )
@@ -402,11 +403,7 @@ private fun BuildModuleRepositoryScreenMiuix(
                 if (vm.addCustomExternalModulesFromUrl(module.repoUrl, selectedStages)) {
                     pendingCatalogModule = null
                     selectedCatalogModuleStages = emptyList()
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.module_repo_added_to_build),
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    vm.showSnackbar(context.getString(R.string.module_repo_added_to_build))
                 }
             },
             onAddAll = {
@@ -414,11 +411,7 @@ private fun BuildModuleRepositoryScreenMiuix(
                 if (vm.addCustomExternalModulesFromUrl(module.repoUrl, remainingStages)) {
                     pendingCatalogModule = null
                     selectedCatalogModuleStages = emptyList()
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.module_repo_added_to_build),
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    vm.showSnackbar(context.getString(R.string.module_repo_added_to_build))
                 }
             }
         )
@@ -496,8 +489,8 @@ private fun BuildModuleRepositoryScreenMiuix(
                         .scrollEndHaptic(),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(
-                        start = 20.dp,
-                        end = 20.dp,
+                        start = 12.dp,
+                        end = 12.dp,
                         bottom = 80.dp + outerPadding.calculateBottomPadding()
                     ),
                     overscrollEffect = null
@@ -528,11 +521,7 @@ private fun BuildModuleRepositoryScreenMiuix(
                                     val url = module.homepage.ifBlank { module.repoUrl }
                                     runCatching { uriHandler.openUri(url) }
                                         .onFailure {
-                                            Toast.makeText(
-                                                context,
-                                                context.getString(R.string.module_repo_open_failed),
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                            vm.showSnackbar(context.getString(R.string.module_repo_open_failed))
                                         }
                                 },
                                 onAdd = {
@@ -584,8 +573,8 @@ private fun BuildModuleRepositoryScreenMiuix(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(
                             top = innerPadding.calculateTopPadding() + 6.dp,
-                            start = 20.dp,
-                            end = 20.dp,
+                            start = 12.dp,
+                            end = 12.dp,
                             bottom = 80.dp + outerPadding.calculateBottomPadding()
                         ),
                         overscrollEffect = null
@@ -620,11 +609,7 @@ private fun BuildModuleRepositoryScreenMiuix(
                                         val url = module.homepage.ifBlank { module.repoUrl }
                                         runCatching { uriHandler.openUri(url) }
                                             .onFailure {
-                                                Toast.makeText(
-                                                    context,
-                                                    context.getString(R.string.module_repo_open_failed),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
+                                                vm.showSnackbar(context.getString(R.string.module_repo_open_failed))
                                             }
                                     },
                                     onAdd = {
@@ -720,8 +705,8 @@ private fun BuildModuleCardMiuix(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Title row
             Row(
@@ -782,7 +767,7 @@ private fun BuildModuleCardMiuix(
             // Tag chips
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 MiuixModuleTagChip(
                     label = module.repoUrl.repoName(),
@@ -1371,8 +1356,8 @@ private fun RuntimeModuleRepositoryScreenMiuix(
                         .scrollEndHaptic(),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(
-                        start = 20.dp,
-                        end = 20.dp,
+                        start = 12.dp,
+                        end = 12.dp,
                         bottom = 80.dp + outerPadding.calculateBottomPadding()
                     ),
                     overscrollEffect = null
@@ -1398,29 +1383,17 @@ private fun RuntimeModuleRepositoryScreenMiuix(
                                 onOpen = {
                                     val url = merged.module.preferredOpenUrl()
                                     if (url.isBlank()) {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.module_repo_open_failed),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        vm.showSnackbar(context.getString(R.string.module_repo_open_failed))
                                     } else {
                                         runCatching { uriHandler.openUri(url) }
                                             .onFailure {
-                                                Toast.makeText(
-                                                    context,
-                                                    context.getString(R.string.module_repo_open_failed),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
+                                                vm.showSnackbar(context.getString(R.string.module_repo_open_failed))
                                             }
                                     }
                                 },
                                 onInstall = {
                                     if (merged.module.zipUrl.isBlank()) {
-                                        Toast.makeText(
-                                            context,
-                                            runtimeRepoNoZipLabel(context),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        vm.showSnackbar(runtimeRepoNoZipLabel(context))
                                     } else {
                                         pendingInstallModule = merged
                                     }
@@ -1454,8 +1427,8 @@ private fun RuntimeModuleRepositoryScreenMiuix(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(
                             top = innerPadding.calculateTopPadding() + 6.dp,
-                            start = 20.dp,
-                            end = 20.dp,
+                            start = 12.dp,
+                            end = 12.dp,
                             bottom = 80.dp + outerPadding.calculateBottomPadding()
                         ),
                         overscrollEffect = null
@@ -1485,29 +1458,17 @@ private fun RuntimeModuleRepositoryScreenMiuix(
                                     onOpen = {
                                         val url = merged.module.preferredOpenUrl()
                                         if (url.isBlank()) {
-                                            Toast.makeText(
-                                                context,
-                                                context.getString(R.string.module_repo_open_failed),
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                            vm.showSnackbar(context.getString(R.string.module_repo_open_failed))
                                         } else {
                                             runCatching { uriHandler.openUri(url) }
                                                 .onFailure {
-                                                    Toast.makeText(
-                                                        context,
-                                                        context.getString(R.string.module_repo_open_failed),
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
+                                                    vm.showSnackbar(context.getString(R.string.module_repo_open_failed))
                                                 }
                                         }
                                     },
                                     onInstall = {
                                         if (merged.module.zipUrl.isBlank()) {
-                                            Toast.makeText(
-                                                context,
-                                                runtimeRepoNoZipLabel(context),
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                            vm.showSnackbar(runtimeRepoNoZipLabel(context))
                                         } else {
                                             pendingInstallModule = merged
                                         }
@@ -1583,8 +1544,8 @@ private fun RuntimeModuleCardMiuix(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Title row
             Row(
@@ -1645,7 +1606,7 @@ private fun RuntimeModuleCardMiuix(
             // Tag chips
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 MiuixModuleTagChip(
                     label = module.id.ifBlank { module.name },

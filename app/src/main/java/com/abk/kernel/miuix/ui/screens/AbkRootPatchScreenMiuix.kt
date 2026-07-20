@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -116,7 +115,8 @@ fun AbkRootPatchScreenMiuix(
     backgroundUri: String?,
     backgroundImageEnabled: Boolean,
     onBack: () -> Unit,
-    onBackEnabledChange: (Boolean) -> Unit = {}
+    onBackEnabledChange: (Boolean) -> Unit = {},
+    onFeedback: (String, Boolean) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -279,7 +279,7 @@ fun AbkRootPatchScreenMiuix(
     fun copyText(label: String, value: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
-        Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
+        onFeedback(copiedMessage, false)
     }
 
     val bootPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -298,7 +298,7 @@ fun AbkRootPatchScreenMiuix(
     val anyKernelPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         if (!isZipFile(context, uri)) {
-            Toast.makeText(context, context.getString(R.string.root_patch_only_anykernel_zip), Toast.LENGTH_SHORT).show()
+            onFeedback(context.getString(R.string.root_patch_only_anykernel_zip), false)
             return@rememberLauncherForActivityResult
         }
         scope.launch {
@@ -317,7 +317,7 @@ fun AbkRootPatchScreenMiuix(
     val localLkmPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         if (!isKoFile(context, uri)) {
-            Toast.makeText(context, context.getString(R.string.root_patch_only_ko_lkm), Toast.LENGTH_SHORT).show()
+            onFeedback(context.getString(R.string.root_patch_only_ko_lkm), false)
             return@rememberLauncherForActivityResult
         }
         scope.launch {

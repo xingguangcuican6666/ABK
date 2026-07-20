@@ -2,7 +2,6 @@ package com.abk.kernel.miuix.ui.screens
 
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -34,8 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -44,13 +40,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.abk.kernel.R
 import com.abk.kernel.data.model.RuntimeModuleRepository
+import com.abk.kernel.miuix.component.MiuixTextInputDialog
 import com.abk.kernel.ui.navigation3.LocalNavigator
 import com.abk.kernel.utils.LocaleHelper
 import com.abk.kernel.viewmodel.MainViewModel
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -60,6 +56,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -75,11 +72,30 @@ fun RuntimeModuleRepoSettingsScreenMiuix(vm: MainViewModel) {
     val navigator = LocalNavigator.current
     val scrollBehavior = MiuixScrollBehavior()
     var repositoryUrl by rememberSaveable { mutableStateOf("") }
+    var showAddRepositoryDialog by rememberSaveable { mutableStateOf(false) }
     var refreshingAll by remember { mutableStateOf(false) }
     LaunchedEffect(state.refreshingRuntimeModuleRepositoryIds) {
         if (refreshingAll && state.refreshingRuntimeModuleRepositoryIds.isEmpty()) {
             refreshingAll = false
         }
+    }
+
+    if (showAddRepositoryDialog) {
+        MiuixTextInputDialog(
+            show = true,
+            title = runtimeRepoCentralLabelMiuix(context),
+            message = runtimeRepoCentralDescLabelMiuix(context),
+            value = repositoryUrl,
+            cancelText = stringResource(android.R.string.cancel),
+            confirmText = stringResource(R.string.add),
+            confirmEnabled = { it.isNotBlank() },
+            onDismiss = { showAddRepositoryDialog = false },
+            onConfirm = { url ->
+                vm.addRuntimeModuleRepository(url.trim())
+                repositoryUrl = ""
+                showAddRepositoryDialog = false
+            },
+        )
     }
 
     Scaffold(
@@ -145,50 +161,21 @@ fun RuntimeModuleRepoSettingsScreenMiuix(vm: MainViewModel) {
                         }
                     }
 
-                    // URL input
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp),
-                        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surface)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                    ArrowPreference(
+                        title = runtimeRepoUrlLabelMiuix(context),
+                        summary = runtimeRepoCentralDescLabelMiuix(context),
+                        startAction = {
                             Icon(
                                 imageVector = Icons.Default.Link,
                                 contentDescription = null,
                                 tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                modifier = Modifier.size(18.dp)
                             )
-                            Spacer(Modifier.width(10.dp))
-                            Box(
-                                modifier = Modifier.weight(1f),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                if (repositoryUrl.isBlank()) {
-                                    Text(
-                                        text = "https://example.com/modules.json",
-                                        style = MiuixTheme.textStyles.body2,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                    )
-                                }
-                                BasicTextField(
-                                    value = repositoryUrl,
-                                    onValueChange = { repositoryUrl = it },
-                                    singleLine = true,
-                                    textStyle = MiuixTheme.textStyles.body2.copy(
-                                        color = MiuixTheme.colorScheme.onSurface
-                                    ),
-                                    cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    }
+                        },
+                        onClick = {
+                            repositoryUrl = ""
+                            showAddRepositoryDialog = true
+                        },
+                    )
 
                     // Action buttons
                     Row(
@@ -196,29 +183,12 @@ fun RuntimeModuleRepoSettingsScreenMiuix(vm: MainViewModel) {
                     ) {
                         Button(
                             onClick = {
-                                vm.addRuntimeModuleRepository(repositoryUrl)
-                                repositoryUrl = ""
-                            },
-                            enabled = repositoryUrl.isNotBlank(),
-                            colors = ButtonDefaults.buttonColorsPrimary(),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(17.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.add))
-                        }
-                        Button(
-                            onClick = {
                                 refreshingAll = true
                                 vm.refreshAllRuntimeModuleRepositories()
                             },
                             enabled = state.runtimeModuleRepositories.isNotEmpty() && !refreshingAll,
                             colors = ButtonDefaults.buttonColors(),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             if (refreshingAll) {
                                 CircularProgressIndicator(

@@ -1,9 +1,7 @@
 package com.abk.kernel.miuix.ui.screens
 
 import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dns
@@ -29,7 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -37,13 +33,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.abk.kernel.R
+import com.abk.kernel.miuix.component.MiuixTextInputDialog
 import com.abk.kernel.ui.navigation3.LocalNavigator
 import com.abk.kernel.utils.LocaleHelper
 import com.abk.kernel.viewmodel.MainViewModel
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -53,6 +49,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -70,6 +67,26 @@ fun BuildModuleRepoSettingsScreenMiuix(vm: MainViewModel) {
     val context = LocalContext.current
     val scrollBehavior = MiuixScrollBehavior()
     var repositoryUrl by rememberSaveable { mutableStateOf("") }
+    var showAddRepositoryDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showAddRepositoryDialog) {
+        MiuixTextInputDialog(
+            show = true,
+            title = buildRepoCentralLabelMiuix(context),
+            message = buildRepoCentralDescLabelMiuix(context),
+            value = repositoryUrl,
+            cancelText = stringResource(android.R.string.cancel),
+            confirmText = stringResource(R.string.add),
+            confirmEnabled = { it.isNotBlank() },
+            onDismiss = { showAddRepositoryDialog = false },
+            onConfirm = { url ->
+                vm.addBuildModuleRepository(url.trim())
+                repositoryUrl = ""
+                showAddRepositoryDialog = false
+                vm.showSnackbar(context.getString(R.string.add))
+            },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -129,76 +146,29 @@ fun BuildModuleRepoSettingsScreenMiuix(vm: MainViewModel) {
                         }
                     }
 
-                    // URL input field (same pattern as MiuixModuleSearchField)
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp),
-                        colors = CardDefaults.defaultColors(
-                            color = MiuixTheme.colorScheme.surface
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                    ArrowPreference(
+                        title = buildRepoUrlLabelMiuix(context),
+                        summary = buildRepoCentralDescLabelMiuix(context),
+                        startAction = {
                             Icon(
                                 imageVector = Icons.Default.Dns,
                                 contentDescription = null,
                                 tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                modifier = Modifier.size(18.dp)
                             )
-                            Spacer(Modifier.width(10.dp))
-                            Box(
-                                modifier = Modifier.weight(1f),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                if (repositoryUrl.isBlank()) {
-                                    Text(
-                                        text = buildRepoUrlLabelMiuix(context),
-                                        style = MiuixTheme.textStyles.body2,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                    )
-                                }
-                                BasicTextField(
-                                    value = repositoryUrl,
-                                    onValueChange = { repositoryUrl = it },
-                                    singleLine = true,
-                                    textStyle = MiuixTheme.textStyles.body2.copy(
-                                        color = MiuixTheme.colorScheme.onSurface
-                                    ),
-                                    cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    }
+                        },
+                        onClick = {
+                            repositoryUrl = ""
+                            showAddRepositoryDialog = true
+                        },
+                    )
 
                     // Action buttons row
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick = {
-                                if (repositoryUrl.isNotBlank()) {
-                                    vm.addBuildModuleRepository(repositoryUrl.trim())
-                                    repositoryUrl = ""
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.add),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            },
-                            enabled = repositoryUrl.isNotBlank(),
-                            colors = ButtonDefaults.buttonColorsPrimary()
-                        ) {
-                            Text(stringResource(R.string.add))
-                        }
-                        Button(
                             onClick = { vm.refreshAllBuildModuleRepositories() },
                             enabled = state.buildModuleRepositories.isNotEmpty(),
-                            colors = ButtonDefaults.buttonColors()
+                            colors = ButtonDefaults.buttonColors(),
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,

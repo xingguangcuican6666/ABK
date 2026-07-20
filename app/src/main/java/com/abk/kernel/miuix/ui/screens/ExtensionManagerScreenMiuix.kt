@@ -1,6 +1,5 @@
 package com.abk.kernel.miuix.ui.screens
 
-import android.widget.Toast
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -70,6 +69,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @Composable
 fun ExtensionManagerScreenMiuix(
     onBack: (() -> Unit)? = null,
+    onFeedback: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val navigator = LocalNavigator.current
@@ -110,11 +110,7 @@ fun ExtensionManagerScreenMiuix(
             return
         }
         if (!abkLaunchExtensionOobe(hostActivity, extension)) {
-            Toast.makeText(
-                hostActivity,
-                hostActivity.getString(R.string.extension_oobe_missing),
-                Toast.LENGTH_SHORT
-            ).show()
+            onFeedback(hostActivity.getString(R.string.extension_oobe_missing), false)
             requestRefresh()
         } else if (finishAfterLaunch) {
             onBack?.invoke() ?: navigator.pop()
@@ -128,11 +124,7 @@ fun ExtensionManagerScreenMiuix(
             return
         }
         if (!abkLaunchExtensionServiceActivity(hostActivity, extension)) {
-            Toast.makeText(
-                hostActivity,
-                hostActivity.getString(R.string.extension_launch_failed),
-                Toast.LENGTH_SHORT
-            ).show()
+            onFeedback(hostActivity.getString(R.string.extension_launch_failed), false)
             requestRefresh()
         } else if (finishAfterLaunch) {
             onBack?.invoke() ?: navigator.pop()
@@ -144,19 +136,16 @@ fun ExtensionManagerScreenMiuix(
             val installResult = withContext(Dispatchers.IO) {
                 installExtensionCompanion(context, extension)
             }
-            Toast.makeText(
-                context,
-                if (installResult.success) {
-                    context.getString(
-                        R.string.extension_install_success,
-                        extension.companionDisplayName.ifBlank { extension.name }
-                    )
-                } else {
-                    installResult.output.lastOrNull()
-                        ?: context.getString(R.string.extension_install_failed)
-                },
-                Toast.LENGTH_LONG
-            ).show()
+            val feedbackMessage = if (installResult.success) {
+                context.getString(
+                    R.string.extension_install_success,
+                    extension.companionDisplayName.ifBlank { extension.name }
+                )
+            } else {
+                installResult.output.lastOrNull()
+                    ?: context.getString(R.string.extension_install_failed)
+            }
+            onFeedback(feedbackMessage, true)
             if (!installResult.success) return@launch
 
             val refreshed = withContext(Dispatchers.IO) {

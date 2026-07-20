@@ -250,7 +250,9 @@ fun FlashWorkflowDetailScreenMiuix(
     // ── Operational callbacks ───────────────────────────────────────────
 
     fun copyDownloadedFilePath(item: DownloadedArtifact) {
-        copyArtifactPath(context, item)
+        copyArtifactPath(context, item) { message ->
+            vm.showSnackbar(message)
+        }
     }
 
     fun installManager(item: DownloadedArtifact) {

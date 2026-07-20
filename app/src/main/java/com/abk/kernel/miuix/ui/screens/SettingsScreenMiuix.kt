@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -78,6 +77,7 @@ import com.abk.kernel.data.model.ManagerSettingKind
 import com.abk.kernel.data.model.normalizeAppUpdateLine
 import com.abk.kernel.data.model.normalizeAppUpdateStability
 import com.abk.kernel.data.repository.PreferencesRepository
+import com.abk.kernel.miuix.component.MiuixTextInputDialog
 import com.abk.kernel.miuix.util.BlurredBar
 import com.abk.kernel.miuix.util.rememberBlurBackdrop
 import com.abk.kernel.utils.DownloadDirectoryUtils
@@ -98,6 +98,7 @@ import kotlin.text.Charsets
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.Alignment
 import com.abk.kernel.data.repository.Result
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
@@ -427,6 +428,7 @@ fun SettingsScreenMiuix(
                     DownloadDirectoryItem(
                         value = state.downloadDirectory,
                         onValueChange = { vm.setDownloadDirectory(it) },
+                        onFeedback = { vm.showSnackbar(it) },
                         leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null, tint = iconTint) }
                     )
                     // Mirror URL
@@ -772,7 +774,7 @@ fun SettingsScreenMiuix(
                 // ═══════════════════════════════════════════════════════════
                 SectionTitle(stringResource(R.string.settings_about))
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    ArrowPreference(
+                    BasicComponent(
                         title = stringResource(R.string.app_full_name),
                         summary = "${stringResource(R.string.app_full_name)} v${BuildConfig.VERSION_NAME}",
                         startAction = { Icon(Icons.Default.Info, contentDescription = null, tint = iconTint) }
@@ -831,10 +833,12 @@ private fun SectionTitle(title: String) {
 private fun DownloadDirectoryItem(
     value: String,
     onValueChange: (String) -> Unit,
+    onFeedback: (String) -> Unit,
     leadingIcon: @Composable (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val defaultDirectory = remember { DownloadDirectoryUtils.defaultDirectoryPath() }
+    var showEditor by remember { mutableStateOf(false) }
     val needsAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
         !Environment.isExternalStorageManager()
     val unsupportedTreeMessage = stringResource(R.string.settings_download_directory_tree_unsupported)
@@ -852,84 +856,86 @@ private fun DownloadDirectoryItem(
             }
             val selectedPath = DownloadDirectoryUtils.directoryPathFromTreeUri(uri)
             if (selectedPath == null) {
-                Toast.makeText(context, unsupportedTreeMessage, Toast.LENGTH_SHORT).show()
+                onFeedback(unsupportedTreeMessage)
             } else {
                 onValueChange(selectedPath)
+                showEditor = false
             }
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = androidx.compose.ui.Alignment.Top
+    if (showEditor) {
+        WindowDialog(
+            show = true,
+            title = stringResource(R.string.settings_download_directory),
+            onDismissRequest = { showEditor = false },
         ) {
-            if (leadingIcon != null) leadingIcon()
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                top.yukonga.miuix.kmp.basic.Text(
-                    text = stringResource(R.string.settings_download_directory),
-                    style = MiuixTheme.textStyles.main
-                )
-                top.yukonga.miuix.kmp.basic.Text(
+            Column(modifier = Modifier.fillMaxWidth()) {
+                MiuixText(
                     text = stringResource(R.string.settings_download_directory_desc),
                     style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = MiuixTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(17.dp)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = MiuixTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(17.dp)
+                        )
+                        .padding(horizontal = 20.dp, vertical = 14.dp)
+                ) {
+                    MiuixText(
+                        text = value.ifEmpty { defaultDirectory },
+                        style = MiuixTheme.textStyles.body1,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    MiuixTextButton(
+                        text = stringResource(R.string.settings_download_directory_choose),
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                        onClick = { folderPicker.launch(null) },
+                    )
+                    MiuixTextButton(
+                        text = stringResource(R.string.settings_download_directory_reset),
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            onValueChange(defaultDirectory)
+                            onFeedback(restoredMessage)
+                        },
+                    )
+                }
+                if (needsAllFilesAccess) {
+                    Spacer(Modifier.height(8.dp))
+                    MiuixTextButton(
+                        text = permissionNeededMessage,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { openAllFilesAccessSettings(context) },
+                    )
+                }
             }
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    color = MiuixTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(17.dp)
-                )
-                .border(
-                    width = 1.dp,
-                    color = MiuixTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(17.dp)
-                )
-                .padding(horizontal = 20.dp, vertical = 14.dp)
-        ) {
-            top.yukonga.miuix.kmp.basic.Text(
-                text = value.ifEmpty { defaultDirectory },
-                style = MiuixTheme.textStyles.body1,
-                color = MiuixTheme.colorScheme.onSurface,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            top.yukonga.miuix.kmp.basic.TextButton(
-                text = stringResource(R.string.settings_download_directory_choose),
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary(),
-                onClick = { folderPicker.launch(null) }
-            )
-            top.yukonga.miuix.kmp.basic.TextButton(
-                text = stringResource(R.string.settings_download_directory_reset),
-                modifier = Modifier.weight(1f),
-                onClick = {
-                    onValueChange(defaultDirectory)
-                    Toast.makeText(context, restoredMessage, Toast.LENGTH_SHORT).show()
-                }
-            )
-        }
-        AnimatedVisibility(visible = needsAllFilesAccess) {
-            top.yukonga.miuix.kmp.basic.TextButton(
-                text = permissionNeededMessage,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { openAllFilesAccessSettings(context) }
-            )
-        }
     }
+
+    ArrowPreference(
+        title = stringResource(R.string.settings_download_directory),
+        summary = value.ifEmpty { defaultDirectory },
+        startAction = leadingIcon,
+        onClick = { showEditor = true },
+    )
 }
 
 /** Mirror URL text field. */
@@ -939,67 +945,32 @@ private fun MirrorUrlItem(
     onValueChange: (String) -> Unit,
     leadingIcon: @Composable (() -> Unit)? = null
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = androidx.compose.ui.Alignment.Top
-        ) {
-            if (leadingIcon != null) leadingIcon()
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                top.yukonga.miuix.kmp.basic.Text(
-                    text = stringResource(R.string.settings_download_mirror),
-                    style = MiuixTheme.textStyles.main
-                )
-                top.yukonga.miuix.kmp.basic.Text(
-                    text = stringResource(R.string.settings_download_mirror_desc),
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
-            }
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    color = MiuixTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(17.dp)
-                )
-                .border(
-                    width = 1.dp,
-                    color = MiuixTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(17.dp)
-                )
-                .padding(horizontal = 20.dp, vertical = 14.dp)
-        ) {
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                textStyle = MiuixTheme.textStyles.body1.copy(
-                    color = MiuixTheme.colorScheme.onSurface
-                ),
-                cursorBrush = SolidColor(Color.White),
-                decorationBox = { innerTextField ->
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        if (value.isEmpty()) {
-                            top.yukonga.miuix.kmp.basic.Text(
-                                text = "https://hk.gh-proxy.org/",
-                                style = MiuixTheme.textStyles.body1,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
-                        }
-                        innerTextField()
-                    }
-                }
-            )
-        }
+    var showEditor by remember { mutableStateOf(false) }
+    val title = stringResource(R.string.settings_download_mirror)
+    val description = stringResource(R.string.settings_download_mirror_desc)
+
+    if (showEditor) {
+        MiuixTextInputDialog(
+            show = true,
+            title = title,
+            message = description,
+            value = value,
+            cancelText = stringResource(android.R.string.cancel),
+            confirmText = stringResource(R.string.confirm),
+            onDismiss = { showEditor = false },
+            onConfirm = { mirrorUrl ->
+                onValueChange(mirrorUrl.trim())
+                showEditor = false
+            },
+        )
     }
+
+    ArrowPreference(
+        title = title,
+        summary = value.ifBlank { description },
+        startAction = leadingIcon,
+        onClick = { showEditor = true },
+    )
 }
 
 

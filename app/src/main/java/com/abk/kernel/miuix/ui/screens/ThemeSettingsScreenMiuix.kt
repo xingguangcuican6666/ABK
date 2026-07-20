@@ -47,7 +47,8 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 fun ThemeSettingsScreenMiuix(
     vm: MainViewModel,
     miuixVm: MiuixSettingsViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onUiStyleChange: (String) -> Unit = { vm.setUiStyle(it) },
 ) {
     val state by vm.uiState.collectAsState()
     val miuixState by miuixVm.state.collectAsState()
@@ -87,7 +88,7 @@ fun ThemeSettingsScreenMiuix(
                     selectedIndex = uiStyleIndex,
                     renderInRootScaffold = true,
                     onSelectedIndexChange = { index ->
-                        vm.setUiStyle(uiStyleOptions[index].first)
+                        onUiStyleChange(uiStyleOptions[index].first)
                     }
                 )
             }
