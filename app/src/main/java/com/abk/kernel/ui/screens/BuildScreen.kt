@@ -261,6 +261,7 @@ fun BuildScreen(
         showPlanLibraryPage = false
         showBuildQueuePage = false
         showKernelOptionsPage = false
+        kernelOptionSearchQuery = ""
         showKernelOptionActionMenu = false
         showClearKernelOptionsDialog = false
         clearAllKernelOptions = false
@@ -282,6 +283,7 @@ fun BuildScreen(
         childPageBack.resetProgress()
         showPlanLibraryPage = false
         showKernelOptionsPage = false
+        kernelOptionSearchQuery = ""
         showBuildQueuePage = true
     }
 
@@ -289,6 +291,7 @@ fun BuildScreen(
         childPageBack.resetProgress()
         showPlanLibraryPage = false
         showBuildQueuePage = false
+        kernelOptionSearchQuery = ""
         showKernelOptionsPage = true
     }
 
@@ -1929,7 +1932,6 @@ fun BuildScreen(
                                 editingKernelOption = option
                             },
                             onDeleteOption = vm::removeCustomKernelOption,
-                            scrollBehavior = scrollBehavior,
                             bottomPadding = outerPadding.calculateBottomPadding()
                         )
                     } else {
@@ -2685,14 +2687,12 @@ private fun BuildKernelOptionsPage(
     onSearchQueryChange: (String) -> Unit,
     onEditOption: (Int, CustomKernelOption) -> Unit,
     onDeleteOption: (Int) -> Unit,
-    scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
     bottomPadding: Dp
 ) {
     LazyColumn(
         modifier = Modifier
             .padding(padding)
             .fillMaxSize()
-            .nestedScroll(scrollBehavior.nestedScrollConnection)
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(bottom = bottomPadding + 24.dp)
