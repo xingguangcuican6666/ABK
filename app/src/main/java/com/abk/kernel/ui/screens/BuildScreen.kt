@@ -224,7 +224,7 @@ fun BuildScreen(
     val filteredKernelOptions = config.customKernelOptions
         .mapIndexed { index, option -> IndexedValue(index, option) }
         .filter { indexed ->
-            val query = kernelOptionSearchQuery.trim().lowercase()
+            val query = kernelOptionSearchQuery.trim().lowercase(Locale.ROOT)
             query.isBlank() || buildCustomKernelOptionSearchText(
                 option = indexed.value,
                 enabledYLabel = kernelOptionModeEnabledYLabel,
