@@ -114,6 +114,7 @@ fun ExpressiveSectionCard(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     icon: ImageVector? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -155,6 +156,9 @@ fun ExpressiveSectionCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+                if (trailingContent != null) {
+                    trailingContent()
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp), content = content)

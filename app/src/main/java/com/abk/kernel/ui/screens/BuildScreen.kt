@@ -1505,7 +1505,14 @@ fun BuildScreen(
                 SectionCard(
                     section = BuildSection.CustomKernelOptions,
                     modifier = Modifier.clickable(onClick = ::openKernelOptionsPage),
-                    subtitle = buildCustomKernelOptionSummaryText(kernelOptionSummary)
+                    subtitle = buildCustomKernelOptionSummaryText(kernelOptionSummary),
+                    trailingContent = {
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 ) {
                     Text(
                         text = stringResource(R.string.build_section_kernel_options_desc),
@@ -3640,6 +3647,7 @@ private fun SectionCard(
     section: BuildSection,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
     ExpressiveSectionCard(
@@ -3674,6 +3682,7 @@ private fun SectionCard(
             BuildSection.CustomModules -> Icons.Default.Extension
             else -> Icons.Default.Edit
         },
+        trailingContent = trailingContent,
         content = content
     )
 }
