@@ -105,6 +105,13 @@ data class CustomKernelOptionsImportResult(
     val duplicateCount: Int
 )
 
+data class CustomKernelOptionSummary(
+    val total: Int,
+    val enabled: Int,
+    val disabled: Int,
+    val ignored: Int
+)
+
 data class MainUiState(
     val authStep: AuthStep = AuthStep.INTRO,
     val rootGranted: Boolean = false,
@@ -4502,6 +4509,20 @@ class MainViewModel @JvmOverloads constructor(
         updateBuildConfig(currentConfig.copy(customKernelOptions = updated))
     }
 
+    fun removeCustomKernelOptions(symbols: Collection<String>) {
+        val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
+        if (currentConfig.buildTarget == BUILD_TARGET_ONEPLUS) return
+        val updated = removeCustomKernelOptions(currentConfig.customKernelOptions, symbols)
+        if (updated == currentConfig.customKernelOptions) return
+        updateBuildConfig(currentConfig.copy(customKernelOptions = updated))
+    }
+
+    fun clearCustomKernelOptions() {
+        val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
+        if (currentConfig.buildTarget == BUILD_TARGET_ONEPLUS || currentConfig.customKernelOptions.isEmpty()) return
+        updateBuildConfig(currentConfig.copy(customKernelOptions = emptyList()))
+    }
+
     fun importCustomKernelOptions(text: String): CustomKernelOptionsImportResult {
         val currentConfig = KernelSupport.normalize(_uiState.value.buildConfig)
         val imported = parseCustomKernelOptionsText(text)
@@ -5762,6 +5783,41 @@ internal fun parseCustomKernelOptionsText(text: String): CustomKernelOptionsImpo
         skippedCount = skippedCount,
         duplicateCount = duplicateCount
     )
+}
+
+internal fun summarizeCustomKernelOptions(options: List<CustomKernelOption>): CustomKernelOptionSummary {
+    var enabled = 0
+    var disabled = 0
+    var ignored = 0
+    options.forEach { option ->
+        when (CustomKernelOptionMode.normalize(option.mode)) {
+            CustomKernelOptionMode.ENABLED_Y,
+            CustomKernelOptionMode.ENABLED_M,
+            CustomKernelOptionMode.RAW -> enabled += 1
+            CustomKernelOptionMode.DISABLED -> disabled += 1
+            else -> ignored += 1
+        }
+    }
+    return CustomKernelOptionSummary(
+        total = options.size,
+        enabled = enabled,
+        disabled = disabled,
+        ignored = ignored
+    )
+}
+
+internal fun removeCustomKernelOptions(
+    options: List<CustomKernelOption>,
+    symbols: Collection<String>
+): List<CustomKernelOption> {
+    if (options.isEmpty() || symbols.isEmpty()) return options
+    val normalizedTargets = symbols.mapNotNull { raw ->
+        KernelSupport.normalizeCustomKernelSymbol(raw).takeIf { it.isNotBlank() }?.lowercase()
+    }.toSet()
+    if (normalizedTargets.isEmpty()) return options
+    return options.filterNot { option ->
+        KernelSupport.normalizeCustomKernelSymbol(option.symbol).lowercase() in normalizedTargets
+    }
 }
 
 internal fun CustomKernelOption.toWorkflowLine(): String? {

@@ -317,4 +317,39 @@ class BuildPlanLogicTest {
         assertEquals("\"-abk\"", result.options.first { it.symbol == "CONFIG_LOCALVERSION" }.rawValue)
         assertEquals(CustomKernelOptionMode.IGNORE, result.options.first { it.symbol == "CONFIG_KEEP" }.mode)
     }
+
+    @Test
+    fun summarizeCustomKernelOptionsCountsRawAsEnabled() {
+        val summary = summarizeCustomKernelOptions(
+            listOf(
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
+                CustomKernelOption("CONFIG_NETFILTER", CustomKernelOptionMode.ENABLED_M),
+                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534"),
+                CustomKernelOption("CONFIG_FOO", CustomKernelOptionMode.DISABLED),
+                CustomKernelOption("CONFIG_KEEP", CustomKernelOptionMode.IGNORE)
+            )
+        )
+
+        assertEquals(5, summary.total)
+        assertEquals(3, summary.enabled)
+        assertEquals(1, summary.disabled)
+        assertEquals(1, summary.ignored)
+    }
+
+    @Test
+    fun removeCustomKernelOptionsDropsMatchingSymbolsCaseInsensitively() {
+        val remaining = removeCustomKernelOptions(
+            options = listOf(
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
+                CustomKernelOption("CONFIG_NETFILTER", CustomKernelOptionMode.ENABLED_M),
+                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534")
+            ),
+            symbols = listOf("config_tmpfs", "CONFIG_IP_SET_MAX")
+        )
+
+        assertEquals(
+            listOf(CustomKernelOption("CONFIG_NETFILTER", CustomKernelOptionMode.ENABLED_M)),
+            remaining
+        )
+    }
 }

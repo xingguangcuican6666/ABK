@@ -19,8 +19,11 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -94,8 +97,11 @@ import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.viewmodel.BuildPlanImportPreview
 import com.abk.kernel.viewmodel.BuildPlanShareScope
+import com.abk.kernel.viewmodel.CustomKernelOptionSummary
 import com.abk.kernel.viewmodel.CustomKernelOptionsImportResult
 import com.abk.kernel.viewmodel.MainViewModel
+import com.abk.kernel.viewmodel.summarizeCustomKernelOptions
+import com.abk.kernel.viewmodel.toWorkflowLine
 import coil.compose.AsyncImage
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
@@ -153,6 +159,7 @@ fun BuildScreen(
     var showImportPlanDialog by remember { mutableStateOf(false) }
     var showPlanLibraryPage by rememberSaveable { mutableStateOf(false) }
     var showBuildQueuePage by rememberSaveable { mutableStateOf(false) }
+    var showKernelOptionsPage by rememberSaveable { mutableStateOf(false) }
     var planToolsExpanded by rememberSaveable { mutableStateOf(false) }
     var savePlanName by remember { mutableStateOf("") }
     var importPlanCode by remember { mutableStateOf("") }
@@ -165,6 +172,10 @@ fun BuildScreen(
     var showKernelOptionEditorDialog by remember { mutableStateOf(false) }
     var editingKernelOptionIndex by remember { mutableStateOf<Int?>(null) }
     var editingKernelOption by remember { mutableStateOf(CustomKernelOption()) }
+    var kernelOptionSearchQuery by rememberSaveable { mutableStateOf("") }
+    var showKernelOptionActionMenu by remember { mutableStateOf(false) }
+    var showClearKernelOptionsDialog by remember { mutableStateOf(false) }
+    var clearAllKernelOptions by rememberSaveable { mutableStateOf(false) }
     var sharePlanTarget by remember { mutableStateOf<BuildPlan?>(null) }
     var renamePlanTarget by remember { mutableStateOf<BuildPlan?>(null) }
     var renamePlanName by remember { mutableStateOf("") }
@@ -203,7 +214,30 @@ fun BuildScreen(
     val customModuleGroups = remember(config.customExternalModules, catalogModuleByUrl) {
         groupBuildCustomExternalModules(config.customExternalModules, catalogModuleByUrl)
     }
-    val childPageVisible = showPlanLibraryPage || showBuildQueuePage
+    val kernelOptionSummary = summarizeCustomKernelOptions(config.customKernelOptions)
+    val kernelOptionModeEnabledYLabel = stringResource(R.string.build_kernel_option_mode_y)
+    val kernelOptionModeEnabledMLabel = stringResource(R.string.build_kernel_option_mode_m)
+    val kernelOptionModeDisabledLabel = stringResource(R.string.build_kernel_option_mode_disabled)
+    val kernelOptionModeIgnoreLabel = stringResource(R.string.build_kernel_option_mode_ignore)
+    val kernelOptionModeRawLabel = stringResource(R.string.build_kernel_option_mode_raw)
+    val filteredKernelOptions = config.customKernelOptions
+        .mapIndexed { index, option -> IndexedValue(index, option) }
+        .filter { indexed ->
+            val query = kernelOptionSearchQuery.trim().lowercase()
+            query.isBlank() || buildCustomKernelOptionSearchText(
+                option = indexed.value,
+                enabledYLabel = kernelOptionModeEnabledYLabel,
+                enabledMLabel = kernelOptionModeEnabledMLabel,
+                disabledLabel = kernelOptionModeDisabledLabel,
+                ignoreLabel = kernelOptionModeIgnoreLabel,
+                rawLabel = kernelOptionModeRawLabel
+            ).contains(query)
+        }
+    val filteredKernelOptionSymbols = filteredKernelOptions.map { it.value.symbol }
+    val canToggleKernelOptionClearAll = kernelOptionSearchQuery.isNotBlank() &&
+        filteredKernelOptions.size != config.customKernelOptions.size
+    val clearAllKernelOptionsTarget = !canToggleKernelOptionClearAll || clearAllKernelOptions
+    val childPageVisible = showPlanLibraryPage || showBuildQueuePage || showKernelOptionsPage
     val childPageTransition = rememberChildPageOverlayTransition(
         visible = childPageVisible,
         label = "build-child-page"
@@ -225,6 +259,10 @@ fun BuildScreen(
     fun closeChildPage() {
         showPlanLibraryPage = false
         showBuildQueuePage = false
+        showKernelOptionsPage = false
+        showKernelOptionActionMenu = false
+        showClearKernelOptionsDialog = false
+        clearAllKernelOptions = false
     }
 
     val childPageBack = rememberChildPageBackController(
@@ -242,7 +280,21 @@ fun BuildScreen(
     fun openBuildQueuePage() {
         childPageBack.resetProgress()
         showPlanLibraryPage = false
+        showKernelOptionsPage = false
         showBuildQueuePage = true
+    }
+
+    fun openKernelOptionsPage() {
+        childPageBack.resetProgress()
+        showPlanLibraryPage = false
+        showBuildQueuePage = false
+        showKernelOptionsPage = true
+    }
+
+    LaunchedEffect(isOnePlusBuild, showKernelOptionsPage) {
+        if (isOnePlusBuild && showKernelOptionsPage) {
+            closeChildPage()
+        }
     }
 
     ObserveChildPageVisibility(
@@ -534,6 +586,29 @@ fun BuildScreen(
                     .onFailure {
                         Toast.makeText(context, it.message ?: context.getString(R.string.build_kernel_option_save_failed), Toast.LENGTH_SHORT).show()
                     }
+            }
+        )
+    }
+
+    if (showClearKernelOptionsDialog) {
+        ClearCustomKernelOptionsDialog(
+            totalCount = config.customKernelOptions.size,
+            filteredCount = filteredKernelOptions.size,
+            canToggleClearAll = canToggleKernelOptionClearAll,
+            clearAll = clearAllKernelOptions,
+            onClearAllChange = { clearAllKernelOptions = it },
+            onDismiss = {
+                showClearKernelOptionsDialog = false
+                clearAllKernelOptions = false
+            },
+            onConfirm = {
+                if (clearAllKernelOptionsTarget) {
+                    vm.clearCustomKernelOptions()
+                } else {
+                    vm.removeCustomKernelOptions(filteredKernelOptionSymbols)
+                }
+                showClearKernelOptionsDialog = false
+                clearAllKernelOptions = false
             }
         )
     }
@@ -1423,64 +1498,16 @@ fun BuildScreen(
             }
 
             if (!isOnePlusBuild) {
-                SectionCard(section = BuildSection.CustomKernelOptions) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = {
-                                    showKernelOptionEditorDialog = true
-                                    editingKernelOptionIndex = null
-                                    editingKernelOption = CustomKernelOption()
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Default.Add, null, modifier = Modifier.size(17.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(stringResource(R.string.build_kernel_option_add))
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    showKernelOptionImportDialog = true
-                                    kernelOptionImportError = null
-                                    kernelOptionImportSummary = null
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Default.Download, null, modifier = Modifier.size(17.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(stringResource(R.string.build_import))
-                            }
-                        }
-                        if (config.customKernelOptions.isEmpty()) {
-                            Text(
-                                text = stringResource(R.string.build_kernel_option_empty),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            config.customKernelOptions.forEachIndexed { index, option ->
-                                ExpressiveListItem(
-                                    title = option.symbol,
-                                    subtitle = buildCustomKernelOptionSubtitle(option),
-                                    leadingIcon = Icons.Default.Tune,
-                                    trailingContent = {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                            IconButton(onClick = {
-                                                showKernelOptionEditorDialog = true
-                                                editingKernelOptionIndex = index
-                                                editingKernelOption = option
-                                            }) {
-                                                Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.build_apply_edit))
-                                            }
-                                            IconButton(onClick = { vm.removeCustomKernelOption(index) }) {
-                                                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete))
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
+                SectionCard(
+                    section = BuildSection.CustomKernelOptions,
+                    modifier = Modifier.clickable(onClick = ::openKernelOptionsPage),
+                    subtitle = buildCustomKernelOptionSummaryText(kernelOptionSummary)
+                ) {
+                    Text(
+                        text = stringResource(R.string.build_section_kernel_options_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
@@ -1809,14 +1836,63 @@ fun BuildScreen(
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
-                            title = if (showBuildQueuePage) {
-                                stringResource(R.string.build_queue_title)
-                            } else {
-                                stringResource(R.string.build_plan_library)
+                            title = when {
+                                showBuildQueuePage -> stringResource(R.string.build_queue_title)
+                                showKernelOptionsPage -> stringResource(R.string.build_kernel_options_title)
+                                else -> stringResource(R.string.build_plan_library)
                             },
                             navigationIcon = {
                                 IconButton(onClick = childPageBack::requestDismiss) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.build_back_to_config))
+                                }
+                            },
+                            actions = {
+                                if (showKernelOptionsPage) {
+                                    Box {
+                                        IconButton(onClick = { showKernelOptionActionMenu = true }) {
+                                            Icon(
+                                                Icons.Default.Add,
+                                                contentDescription = stringResource(R.string.build_kernel_option_menu)
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = showKernelOptionActionMenu,
+                                            onDismissRequest = { showKernelOptionActionMenu = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.build_kernel_option_add)) },
+                                                onClick = {
+                                                    showKernelOptionActionMenu = false
+                                                    showKernelOptionEditorDialog = true
+                                                    editingKernelOptionIndex = null
+                                                    editingKernelOption = CustomKernelOption()
+                                                },
+                                                leadingIcon = { Icon(Icons.Default.Add, null) }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.build_import)) },
+                                                onClick = {
+                                                    showKernelOptionActionMenu = false
+                                                    showKernelOptionImportDialog = true
+                                                    kernelOptionImportError = null
+                                                    kernelOptionImportSummary = null
+                                                },
+                                                leadingIcon = { Icon(Icons.Default.Download, null) }
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            clearAllKernelOptions = false
+                                            showClearKernelOptionsDialog = true
+                                        },
+                                        enabled = config.customKernelOptions.isNotEmpty()
+                                    ) {
+                                        Icon(
+                                            Icons.Default.DeleteSweep,
+                                            contentDescription = stringResource(R.string.build_kernel_option_clear)
+                                        )
+                                    }
                                 }
                             }
                         )
@@ -1838,6 +1914,22 @@ fun BuildScreen(
                             modifier = Modifier
                                 .padding(padding)
                                 .fillMaxSize()
+                        )
+                    } else if (showKernelOptionsPage) {
+                        BuildKernelOptionsPage(
+                            padding = padding,
+                            options = filteredKernelOptions,
+                            summary = kernelOptionSummary,
+                            searchQuery = kernelOptionSearchQuery,
+                            onSearchQueryChange = { kernelOptionSearchQuery = it },
+                            onEditOption = { index, option ->
+                                showKernelOptionEditorDialog = true
+                                editingKernelOptionIndex = index
+                                editingKernelOption = option
+                            },
+                            onDeleteOption = vm::removeCustomKernelOption,
+                            scrollBehavior = scrollBehavior,
+                            bottomPadding = outerPadding.calculateBottomPadding()
                         )
                     } else {
                         BuildPlanLibraryPage(
@@ -2584,6 +2676,223 @@ private fun formatCustomKernelImportSummary(context: Context, result: CustomKern
     )
 
 @Composable
+private fun BuildKernelOptionsPage(
+    padding: PaddingValues,
+    options: List<IndexedValue<CustomKernelOption>>,
+    summary: CustomKernelOptionSummary,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    onEditOption: (Int, CustomKernelOption) -> Unit,
+    onDeleteOption: (Int) -> Unit,
+    scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
+    bottomPadding: Dp
+) {
+    LazyColumn(
+        modifier = Modifier
+            .padding(padding)
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection)
+            .padding(horizontal = AbkScreenHorizontalPadding),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(bottom = bottomPadding + 24.dp)
+    ) {
+        item(key = "search") {
+            BuildKernelOptionSearchField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange
+            )
+        }
+        item(key = "summary") {
+            Text(
+                text = buildCustomKernelOptionSummaryText(summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (options.isEmpty()) {
+            item(key = "empty") {
+                BuildKernelOptionsEmptyState(
+                    hasQuery = searchQuery.isNotBlank()
+                )
+            }
+        } else {
+            items(
+                items = options,
+                key = { indexed -> indexed.value.symbol }
+            ) { indexed ->
+                ExpressiveListItem(
+                    title = indexed.value.symbol,
+                    subtitle = buildCustomKernelOptionSubtitle(indexed.value),
+                    leadingIcon = Icons.Default.Tune,
+                    trailingContent = {
+                        IconButton(onClick = { onDeleteOption(indexed.index) }) {
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete))
+                        }
+                    },
+                    onClick = { onEditOption(indexed.index, indexed.value) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BuildKernelOptionSearchField(
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        leadingIcon = { Icon(Icons.Default.Search, null) },
+        placeholder = { Text(stringResource(R.string.build_kernel_option_search)) },
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp)
+    )
+}
+
+@Composable
+private fun BuildKernelOptionsEmptyState(
+    hasQuery: Boolean
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = if (hasQuery) {
+                stringResource(R.string.build_kernel_option_no_matching)
+            } else {
+                stringResource(R.string.build_kernel_option_empty)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun ClearCustomKernelOptionsDialog(
+    totalCount: Int,
+    filteredCount: Int,
+    canToggleClearAll: Boolean,
+    clearAll: Boolean,
+    onClearAllChange: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val clearAllTarget = !canToggleClearAll || clearAll
+    val confirmEnabled = if (clearAllTarget) {
+        totalCount > 0
+    } else {
+        filteredCount > 0
+    }
+    val message = when {
+        clearAllTarget -> stringResource(R.string.build_kernel_option_clear_all_confirm, totalCount)
+        filteredCount > 0 -> stringResource(R.string.build_kernel_option_clear_filtered_confirm, filteredCount)
+        else -> stringResource(R.string.build_kernel_option_clear_no_matching, totalCount)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.DeleteSweep, null) },
+        title = { Text(stringResource(R.string.build_kernel_option_clear_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(message)
+                if (canToggleClearAll) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onClearAllChange(!clearAll) },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Checkbox(
+                            checked = clearAll,
+                            onCheckedChange = onClearAllChange
+                        )
+                        Text(
+                            text = stringResource(R.string.build_kernel_option_clear_toggle_all, totalCount),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = confirmEnabled,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                )
+            ) {
+                Text(
+                    stringResource(
+                        if (clearAllTarget) {
+                            R.string.build_kernel_option_clear_all_action
+                        } else {
+                            R.string.build_kernel_option_clear_filtered_action
+                        }
+                    )
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun buildCustomKernelOptionSummaryText(summary: CustomKernelOptionSummary): String =
+    stringResource(
+        R.string.build_kernel_options_summary,
+        summary.total,
+        summary.enabled,
+        summary.disabled,
+        summary.ignored
+    )
+
+private fun buildCustomKernelOptionSearchText(
+    option: CustomKernelOption,
+    enabledYLabel: String,
+    enabledMLabel: String,
+    disabledLabel: String,
+    ignoreLabel: String,
+    rawLabel: String
+): String {
+    val modeLabel = when (CustomKernelOptionMode.normalize(option.mode)) {
+        CustomKernelOptionMode.ENABLED_Y -> enabledYLabel
+        CustomKernelOptionMode.ENABLED_M -> enabledMLabel
+        CustomKernelOptionMode.DISABLED -> disabledLabel
+        CustomKernelOptionMode.RAW -> rawLabel
+        else -> ignoreLabel
+    }
+    return buildString {
+        append(KernelSupport.normalizeCustomKernelSymbol(option.symbol))
+        append(' ')
+        append(modeLabel)
+        if (option.rawValue.isNotBlank()) {
+            append(' ')
+            append(option.rawValue.trim())
+        }
+        option.toWorkflowLine()?.let { workflowLine ->
+            append(' ')
+            append(workflowLine)
+        }
+    }.lowercase(Locale.ROOT)
+}
+
+@Composable
 private fun customKernelOptionModeLabel(mode: String): String = when (CustomKernelOptionMode.normalize(mode)) {
     CustomKernelOptionMode.ENABLED_Y -> stringResource(R.string.build_kernel_option_mode_y)
     CustomKernelOptionMode.ENABLED_M -> stringResource(R.string.build_kernel_option_mode_m)
@@ -3326,8 +3635,14 @@ private enum class BuildSection {
 }
 
 @Composable
-private fun SectionCard(section: BuildSection, content: @Composable ColumnScope.() -> Unit) {
+private fun SectionCard(
+    section: BuildSection,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    content: @Composable ColumnScope.() -> Unit = {}
+) {
     ExpressiveSectionCard(
+        modifier = modifier,
         title = when (section) {
             BuildSection.KernelVersion -> stringResource(R.string.build_kernel_version_config)
             BuildSection.KernelSu -> stringResource(R.string.build_kernelsu_config)
@@ -3338,7 +3653,7 @@ private fun SectionCard(section: BuildSection, content: @Composable ColumnScope.
             BuildSection.CustomModules -> stringResource(R.string.build_custom_modules)
             BuildSection.OptionalConfig -> stringResource(R.string.build_optional_config)
         },
-        subtitle = when (section) {
+        subtitle = subtitle ?: when (section) {
             BuildSection.KernelVersion -> stringResource(R.string.build_section_kernel_desc)
             BuildSection.KernelSu -> stringResource(R.string.build_section_ksu_desc)
             BuildSection.Features -> stringResource(R.string.build_section_features_desc)
