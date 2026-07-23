@@ -337,18 +337,44 @@ class BuildPlanLogicTest {
     }
 
     @Test
-    fun removeCustomKernelOptionsDropsMatchingSymbolsCaseInsensitively() {
-        val remaining = removeCustomKernelOptions(
+    fun mergeCustomKernelOptionsLetsLaterEntriesOverrideEarlierOnes() {
+        val merged = mergeCustomKernelOptions(
             options = listOf(
                 CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
-                CustomKernelOption("CONFIG_NETFILTER", CustomKernelOptionMode.ENABLED_M),
-                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534")
+                CustomKernelOption("CONFIG_NETFILTER", CustomKernelOptionMode.ENABLED_M)
             ),
-            symbols = listOf("config_tmpfs", "CONFIG_IP_SET_MAX")
+            updates = listOf(
+                CustomKernelOption("config_tmpfs", CustomKernelOptionMode.DISABLED),
+                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534")
+            )
         )
 
         assertEquals(
-            listOf(CustomKernelOption("CONFIG_NETFILTER", CustomKernelOptionMode.ENABLED_M)),
+            listOf(
+                CustomKernelOption("CONFIG_NETFILTER", CustomKernelOptionMode.ENABLED_M),
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.DISABLED),
+                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534")
+            ),
+            merged
+        )
+    }
+
+    @Test
+    fun removeCustomKernelOptionsAtIndicesOnlyDropsSelectedRows() {
+        val remaining = removeCustomKernelOptionsAtIndices(
+            options = listOf(
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.DISABLED),
+                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534")
+            ),
+            indices = listOf(1)
+        )
+
+        assertEquals(
+            listOf(
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
+                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534")
+            ),
             remaining
         )
     }

@@ -234,7 +234,7 @@ fun BuildScreen(
                 rawLabel = kernelOptionModeRawLabel
             ).contains(query)
         }
-    val filteredKernelOptionSymbols = filteredKernelOptions.map { it.value.symbol }
+    val filteredKernelOptionIndices = filteredKernelOptions.map { it.index }
     val canToggleKernelOptionClearAll = kernelOptionSearchQuery.isNotBlank() &&
         filteredKernelOptions.size != config.customKernelOptions.size
     val clearAllKernelOptionsTarget = !canToggleKernelOptionClearAll || clearAllKernelOptions
@@ -609,7 +609,7 @@ fun BuildScreen(
                 if (clearAllKernelOptionsTarget) {
                     vm.clearCustomKernelOptions()
                 } else {
-                    vm.removeCustomKernelOptions(filteredKernelOptionSymbols)
+                    vm.removeCustomKernelOptions(filteredKernelOptionIndices)
                 }
                 showClearKernelOptionsDialog = false
                 clearAllKernelOptions = false
@@ -2726,7 +2726,7 @@ private fun BuildKernelOptionsPage(
         } else {
             items(
                 items = options,
-                key = { indexed -> indexed.value.symbol }
+                key = { indexed -> "${indexed.index}:${indexed.value.symbol}" }
             ) { indexed ->
                 ExpressiveListItem(
                     title = indexed.value.symbol,
