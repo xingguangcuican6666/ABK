@@ -23,8 +23,10 @@ object NetworkClient {
             .addInterceptor { chain ->
                 val original = chain.request()
                 val builder = original.newBuilder()
-                    .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
+                if (original.header("Accept").isNullOrBlank()) {
+                    builder.header("Accept", "application/vnd.github+json")
+                }
                 if (!token.isNullOrBlank()) {
                     builder.header("Authorization", "Bearer $token")
                 }
@@ -33,9 +35,12 @@ object NetworkClient {
             .build()
     }
 
-    fun createApiService(token: String? = null): GitHubApiService {
+    internal fun createApiService(
+        token: String? = null,
+        baseUrl: String = GITHUB_API_BASE
+    ): GitHubApiService {
         return Retrofit.Builder()
-            .baseUrl(GITHUB_API_BASE)
+            .baseUrl(baseUrl)
             .client(buildOkHttpClient(token))
             .addConverterFactory(GsonConverterFactory.create())
             .build()

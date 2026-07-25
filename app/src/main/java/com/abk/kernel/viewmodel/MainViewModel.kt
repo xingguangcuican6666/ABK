@@ -32,8 +32,11 @@ import com.abk.kernel.utils.ForkSigningImportError
 import com.abk.kernel.utils.ForkSigningImportException
 import com.abk.kernel.utils.ForkSigningMaterial
 import com.abk.kernel.utils.ForkSigningManager
+import com.abk.kernel.utils.ForkSigningPublicKeyResolver
+import com.abk.kernel.utils.ForkSigningPublicKeyValue
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.FailureLogExtractor
+import com.abk.kernel.utils.INVALID_FORK_SIGNING_PUBLIC_KEY_MESSAGE
 import com.abk.kernel.utils.NotificationUtils
 import com.abk.kernel.utils.WorkflowStepI18n
 import com.abk.kernel.utils.BUNDLED_SUSFS_VERSION
@@ -274,6 +277,10 @@ class MainViewModel @JvmOverloads constructor(
 
     private val prefs = PreferencesRepository(application)
     val github: GitHubRepository = github
+    private val forkSigningPublicKeyResolver = ForkSigningPublicKeyResolver(
+        assetName = FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME,
+        downloadReleaseAssetText = this.github::downloadReleaseAssetText
+    )
     private val gson = Gson()
     private val ksuModuleListType = object : TypeToken<List<Map<String, Any?>>>() {}.type
     private var hasSavedBuildConfig = false
@@ -1231,10 +1238,10 @@ class MainViewModel @JvmOverloads constructor(
         fork: GitHubRepo,
         release: GitHubRelease,
     ): String? {
-        ForkSigningManager.publicKeyPemFromStoredValue(prefs.forkArtifactSigningPublicKey.first())
-            ?.let { return it }
-        return when (val downloaded = github.downloadReleaseAssetText(owner, fork.name, release.id, FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME)) {
-            is Result.Success -> downloaded.data.trim().takeIf { it.isNotBlank() }
+        forkSigningPublicKeyResolver.parse(prefs.forkArtifactSigningPublicKey.first())
+            ?.let { return it.pem }
+        return when (val resolved = forkSigningPublicKeyResolver.download(owner, fork.name, release.id)) {
+            is Result.Success -> resolved.data.pem
             else -> null
         }
     }
@@ -1404,22 +1411,13 @@ class MainViewModel @JvmOverloads constructor(
             )
             Result.Loading -> return@withLock Result.Loading
         }
-        suspend fun readRemotePublicKey(): String? =
-            when (val result = github.downloadReleaseAssetText(
-                owner,
-                fork.name,
-                release.id,
-                FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME,
-            )) {
-                is Result.Success -> ForkSigningManager.publicKeyBase64FromStoredValue(
-                    result.data
-                )
-                else -> null
-            }
-        val firstPublicKeyBase64 = readRemotePublicKey()
-            ?: return@withLock Result.Error(
-                "Fork signing public key is unavailable or invalid"
-            )
+        suspend fun readRemotePublicKey(): Result<ForkSigningPublicKeyValue> =
+            forkSigningPublicKeyResolver.download(owner, fork.name, release.id)
+        val firstPublicKey = when (val result = readRemotePublicKey()) {
+            is Result.Success -> result.data
+            is Result.Error -> return@withLock Result.Error(result.message, result.code)
+            Result.Loading -> return@withLock Result.Loading
+        }
         val secretExists = when (val result = github.listRepositorySecrets(owner, fork.name)) {
             is Result.Success -> result.data.any { it.name == secretName }
             is Result.Error -> return@withLock Result.Error(
@@ -1430,17 +1428,18 @@ class MainViewModel @JvmOverloads constructor(
         if (!secretExists) {
             return@withLock Result.Error("Fork signing Secret is missing")
         }
-        val secondPublicKeyBase64 = readRemotePublicKey()
-            ?: return@withLock Result.Error(
-                "Fork signing public key is unavailable or invalid"
-            )
-        if (firstPublicKeyBase64 != secondPublicKeyBase64) {
+        val secondPublicKey = when (val result = readRemotePublicKey()) {
+            is Result.Success -> result.data
+            is Result.Error -> return@withLock Result.Error(result.message, result.code)
+            Result.Loading -> return@withLock Result.Loading
+        }
+        if (firstPublicKey.base64 != secondPublicKey.base64) {
             return@withLock Result.Error(
                 "Fork signing public key changed during refresh"
             )
         }
-        prefs.saveForkArtifactSigningState(firstPublicKeyBase64, secretName, releaseTag)
-        Result.Success(ForkSigningManager.publicKeyPemFromBase64(firstPublicKeyBase64))
+        prefs.saveForkArtifactSigningState(firstPublicKey.base64, secretName, releaseTag)
+        Result.Success(firstPublicKey.pem)
     }
 
     private suspend fun ensureForkArtifactSigningReady(owner: String, fork: GitHubRepo) {
@@ -1498,23 +1497,22 @@ class MainViewModel @JvmOverloads constructor(
             }
             val existingPublicKeyAsset = releaseAssets.firstOrNull { it.name == FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME }
             if (secretExists && existingPublicKeyAsset != null) {
-                when (val downloaded = github.downloadReleaseAssetText(owner, fork.name, release.id, FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME)) {
+                when (val resolved = forkSigningPublicKeyResolver.download(owner, fork.name, release.id)) {
                     is Result.Success -> {
-                        val base64 = ForkSigningManager.publicKeyBase64FromStoredValue(
-                            downloaded.data
+                        prefs.saveForkArtifactSigningState(
+                            resolved.data.base64,
+                            secretName,
+                            releaseTag
                         )
-                        if (base64 == null) {
-                            showSnackbar("Fork signing public key is invalid", longDuration = true)
-                            return
-                        }
-                        prefs.saveForkArtifactSigningState(base64, secretName, releaseTag)
                         return
                     }
                     is Result.Error -> {
-                        showSnackbar(
-                            "Fork signing public key refresh failed: ${downloaded.message}",
-                            longDuration = true
-                        )
+                        val message = if (resolved.message == INVALID_FORK_SIGNING_PUBLIC_KEY_MESSAGE) {
+                            "Fork signing public key is invalid"
+                        } else {
+                            "Fork signing public key refresh failed: ${resolved.message}"
+                        }
+                        showSnackbar(message, longDuration = true)
                         return
                     }
                     Result.Loading -> return
