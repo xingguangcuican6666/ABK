@@ -625,6 +625,7 @@
     <string name="settings_logout_desc">Выйти</string>
     <string name="settings_fork_repo">Fork-репозиторий</string>
     <string name="settings_not_logged_in">Не выполнен вход</string>
+    <string name="settings_login_hint">Нажмите, чтобы войти через GitHub</string>
     <string name="settings_auto_download_desc">Применяется только к следующей новой сборке. Если выключить, автозагрузки не будет.</string>
     <string name="settings_prebuilt_gki">Готовые сборки GKI</string>
     <string name="settings_prebuilt_gki_desc">Раздел готовых сборок GKI из Release репозитория. Скачивание вручную.</string>

@@ -727,7 +727,15 @@ private fun SettingsMainContent(
                 )
             } ?: ExpressiveListItem(
                 title = stringResource(R.string.settings_not_logged_in),
-                leadingIcon = Icons.Default.AccountCircle
+                subtitle = stringResource(R.string.settings_login_hint),
+                leadingIcon = Icons.Default.AccountCircle,
+                trailingContent = {
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        contentDescription = stringResource(R.string.settings_login_hint)
+                    )
+                },
+                onClick = { vm.openLoginOobe() }
             )
         }
 

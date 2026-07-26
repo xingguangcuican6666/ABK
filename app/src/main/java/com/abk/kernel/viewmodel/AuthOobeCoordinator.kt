@@ -35,7 +35,12 @@ class AuthOobeCoordinator(
         }
     }
 
-    fun openBuildOobe() {
+    fun openBuildOobe() = enterOobeFlow()
+
+    /** Settings account entry: jump back into the OOBE flow so the user can sign in again. */
+    fun openLoginOobe() = enterOobeFlow()
+
+    private fun enterOobeFlow() {
         val state = readState()
         val nextStep = if (state.isLoggedIn && state.user != null) AuthStep.FORK_CHECK else AuthStep.LOGIN
         updateState {

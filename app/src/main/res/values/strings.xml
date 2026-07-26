@@ -654,6 +654,7 @@
     <string name="settings_logout_desc">退出登录</string>
     <string name="settings_fork_repo">Fork 仓库</string>
     <string name="settings_not_logged_in">未登录</string>
+    <string name="settings_login_hint">点击前往登录 GitHub 账户</string>
     <string name="settings_auto_download_desc">仅对下一次新提交的构建生效，关闭后不会自动下载</string>
     <string name="settings_prebuilt_gki">预编译 GKI 获取与下载</string>
     <string name="settings_prebuilt_gki_desc">从本仓库 Release 获取预编译 GKI，下载需手动触发</string>

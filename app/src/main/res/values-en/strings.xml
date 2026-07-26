@@ -625,6 +625,7 @@
     <string name="settings_logout_desc">Sign out</string>
     <string name="settings_fork_repo">Fork repository</string>
     <string name="settings_not_logged_in">Not signed in</string>
+    <string name="settings_login_hint">Tap to sign in with GitHub</string>
     <string name="settings_auto_download_desc">Applies only to the next newly submitted build. Turning it off will not auto-download.</string>
     <string name="settings_prebuilt_gki">Prebuilt GKI fetch and download</string>
     <string name="settings_prebuilt_gki_desc">Fetch prebuilt GKI from this repository release. Downloads are manual.</string>
