@@ -3,12 +3,14 @@ package com.abk.kernel.utils
 import com.abk.kernel.data.model.ArtifactType
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
 import java.security.PublicKey
 import java.security.Signature
 import java.util.Base64
 import java.util.Locale
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 
 data class SignedBundleManifest(
@@ -41,6 +43,16 @@ object ArtifactVerification {
     const val MANIFEST_FILE_NAME: String = "ABK_BUNDLE_MANIFEST.json"
     const val SIGNATURE_FILE_NAME: String = "ABK_BUNDLE_MANIFEST.sig"
 
+    // Mirrors the CLI limits in cli/abk.py so both verifiers refuse the same
+    // oversized input instead of allocating it. These bound the read itself:
+    // the manifest and signature are read before the signature is checked, so
+    // an unbounded read here is reachable without any valid key.
+    const val MAX_MANIFEST_SIZE: Long = 1L * 1024 * 1024
+    const val MAX_SIGNATURE_SIZE: Long = 64L * 1024
+    const val MAX_PAYLOAD_SIZE: Long = 8L * 1024 * 1024 * 1024
+
+    private const val COPY_BUFFER_SIZE = 64 * 1024
+
     private val gson = Gson()
 
     fun requiresTrustedBundle(type: ArtifactType): Boolean = when (type) {
@@ -52,10 +64,12 @@ object ArtifactVerification {
     fun readBundleManifest(bundleFile: File): SignedBundleManifest? = runCatching {
         ZipFile(bundleFile).use { zip ->
             zip.getEntry(MANIFEST_FILE_NAME)?.let { manifestEntry ->
-                gson.fromJson(
-                    zip.getInputStream(manifestEntry).use { String(it.readBytes(), Charsets.UTF_8) },
-                    SignedBundleManifest::class.java
-                )
+                readEntryAtMost(zip, manifestEntry, MAX_MANIFEST_SIZE)?.let { manifestBytes ->
+                    gson.fromJson(
+                        String(manifestBytes, Charsets.UTF_8),
+                        SignedBundleManifest::class.java
+                    )
+                }
             }
         }
     }.getOrNull()
@@ -63,7 +77,8 @@ object ArtifactVerification {
     fun verifyBundleFile(
         bundleFile: File,
         expectedType: ArtifactType? = null,
-        publicKeyPem: String? = null
+        publicKeyPem: String? = null,
+        expectedRunId: Long? = null
     ): BundleVerificationResult {
         if (!bundleFile.isFile || !bundleFile.name.lowercase(Locale.ROOT).endsWith(".bundle.zip")) {
             return failureFor(
@@ -96,8 +111,20 @@ object ArtifactVerification {
                         "Missing $SIGNATURE_FILE_NAME",
                         BundleVerificationFailureReason.MISSING_SIGNATURE
                     )
-                val manifestBytes = zip.getInputStream(manifestEntry).use { it.readBytes() }
-                val signatureBytes = zip.getInputStream(signatureEntry).use { it.readBytes() }
+                val manifestBytes = readEntryAtMost(zip, manifestEntry, MAX_MANIFEST_SIZE)
+                    ?: return failureFor(
+                        bundleFile.name,
+                        expectedType,
+                        "$MANIFEST_FILE_NAME exceeds $MAX_MANIFEST_SIZE bytes",
+                        BundleVerificationFailureReason.OTHER
+                    )
+                val signatureBytes = readEntryAtMost(zip, signatureEntry, MAX_SIGNATURE_SIZE)
+                    ?: return failureFor(
+                        bundleFile.name,
+                        expectedType,
+                        "$SIGNATURE_FILE_NAME exceeds $MAX_SIGNATURE_SIZE bytes",
+                        BundleVerificationFailureReason.OTHER
+                    )
                 val manifest = gson.fromJson(String(manifestBytes, Charsets.UTF_8), SignedBundleManifest::class.java)
                 if (!verifyManifestSignature(publicKey, manifestBytes, signatureBytes)) {
                     return BundleVerificationResult(
@@ -114,13 +141,26 @@ object ArtifactVerification {
                 if (manifest.bundleName != bundleFile.name) {
                     return BundleVerificationResult(manifest, false, "Bundle filename mismatch")
                 }
+                // A signed bundle stays valid indefinitely unless it is bound to the run
+                // that produced it, so an older signed build can otherwise be replayed in
+                // place of a newer one. Sentinel ids (unknown, prebuilt) stay exempt.
+                if (expectedRunId != null && expectedRunId > 0L && manifest.runId != expectedRunId) {
+                    return BundleVerificationResult(manifest, false, "Bundle run id mismatch")
+                }
+                if (!isSafeZipMemberName(manifest.payloadName)) {
+                    return BundleVerificationResult(manifest, false, "Unsafe payload name ${manifest.payloadName}")
+                }
+                if (manifest.payloadSizeBytes < 0L || manifest.payloadSizeBytes > MAX_PAYLOAD_SIZE) {
+                    return BundleVerificationResult(manifest, false, "Payload size out of range")
+                }
                 val payloadEntry = zip.getEntry(manifest.payloadName)
                     ?: return BundleVerificationResult(manifest, false, "Missing payload entry ${manifest.payloadName}")
-                val payloadBytes = zip.getInputStream(payloadEntry).use { it.readBytes() }
-                if (payloadBytes.size.toLong() != manifest.payloadSizeBytes) {
+                val payload = digestEntry(zip, payloadEntry, MAX_PAYLOAD_SIZE)
+                    ?: return BundleVerificationResult(manifest, false, "Payload exceeds $MAX_PAYLOAD_SIZE bytes")
+                if (payload.size != manifest.payloadSizeBytes) {
                     return BundleVerificationResult(manifest, false, "Payload size mismatch")
                 }
-                if (sha256(payloadBytes) != normalizeDigest(manifest.payloadSha256)) {
+                if (payload.digest != normalizeDigest(manifest.payloadSha256)) {
                     return BundleVerificationResult(manifest, false, "Payload digest mismatch")
                 }
                 BundleVerificationResult(
@@ -141,6 +181,56 @@ object ArtifactVerification {
     }
 
     fun normalizeDigest(value: String): String = value.trim().lowercase(Locale.ROOT)
+
+    /** Rejects absolute paths, backslashes and traversal segments, as the CLI does. */
+    internal fun isSafeZipMemberName(name: String): Boolean {
+        if (name.isEmpty() || name.startsWith("/") || name.contains("\\")) return false
+        return name.split("/").none { it.isEmpty() || it == "." || it == ".." }
+    }
+
+    private data class EntryDigest(val digest: String, val size: Long)
+
+    /**
+     * Reads at most [limit] bytes from [entry], returning null past that. The declared
+     * size is only a hint, so the running total is what actually bounds the read.
+     */
+    private fun readEntryAtMost(zip: ZipFile, entry: ZipEntry, limit: Long): ByteArray? {
+        if (entry.size > limit) return null
+        val buffer = ByteArray(COPY_BUFFER_SIZE)
+        val collected = ByteArrayOutputStream()
+        zip.getInputStream(entry).use { input ->
+            var total = 0L
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                total += read
+                if (total > limit) return null
+                collected.write(buffer, 0, read)
+            }
+        }
+        return collected.toByteArray()
+    }
+
+    /** Digests [entry] in chunks so the payload never has to fit in memory at once. */
+    private fun digestEntry(zip: ZipFile, entry: ZipEntry, limit: Long): EntryDigest? {
+        if (entry.size > limit) return null
+        val digest = MessageDigest.getInstance("SHA-256")
+        val buffer = ByteArray(COPY_BUFFER_SIZE)
+        var total = 0L
+        zip.getInputStream(entry).use { input ->
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                total += read
+                if (total > limit) return null
+                digest.update(buffer, 0, read)
+            }
+        }
+        return EntryDigest(
+            digest = digest.digest().joinToString("") { "%02x".format(it) },
+            size = total
+        )
+    }
 
     private fun verifyManifestSignature(publicKey: PublicKey, manifestBytes: ByteArray, signatureBytes: ByteArray): Boolean {
         val verifier = Signature.getInstance("SHA256withRSA")
@@ -181,6 +271,3 @@ object ArtifactVerification {
         failureReason = failureReason,
     )
 }
-
-private fun sha256(bytes: ByteArray): String =
-    MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
