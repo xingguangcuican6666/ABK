@@ -60,6 +60,10 @@
     <string name="root_local_capability_desc">Root используется только при прошивке, установке модулей и проверке функций, связанных с root. Определение версии ядра не требует root.</string>
     <string name="root_after_auth_flow">После авторизации автоматически запустится вход в GitHub и проверка Fork.</string>
 
+    <!-- Local preferences recovery -->
+    <string name="preferences_reset_title">Локальные данные сброшены</string>
+    <string name="preferences_reset_message">ABK обнаружил повреждение локальных настроек и автоматически сбросил их. Сохранённые данные входа, конфигурацию сборки и другие локальные параметры может потребоваться настроить заново.</string>
+
     <!-- Auth -->
     <string name="login_title">Вход в GitHub</string>
     <string name="login_desc">ABK нужна авторизация GitHub, чтобы управлять Fork-репозиторием и запускать workflow-процессы сборки ядра.</string>

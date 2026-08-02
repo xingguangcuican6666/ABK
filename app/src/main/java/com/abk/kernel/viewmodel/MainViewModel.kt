@@ -124,6 +124,7 @@ data class MainUiState(
     val behindBy: Int = 0,
     val showSyncPrompt: Boolean = false,
     val showOobe: Boolean = false,
+    val showPreferencesResetNotice: Boolean = false,
     val oobeCompleted: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -547,6 +548,11 @@ class MainViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             prefs.oobeCompleted.collect { completed ->
                 _uiState.update { state -> state.copy(oobeCompleted = completed) }
+            }
+        }
+        viewModelScope.launch {
+            prefs.preferencesResetNoticePending.collect { pending ->
+                _uiState.update { state -> state.copy(showPreferencesResetNotice = pending) }
             }
         }
         viewModelScope.launch {
@@ -5249,6 +5255,13 @@ class MainViewModel @JvmOverloads constructor(
 
     fun clearSnackbar() = _uiState.update {
         it.copy(snackbarMessage = null, snackbarLongDuration = false)
+    }
+
+    fun dismissPreferencesResetNotice() {
+        _uiState.update { it.copy(showPreferencesResetNotice = false) }
+        viewModelScope.launch {
+            prefs.clearPreferencesResetNotice()
+        }
     }
 
     fun clearCustomExternalModuleError() = _uiState.update { it.copy(customExternalModuleError = null) }

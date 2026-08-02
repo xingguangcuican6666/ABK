@@ -60,6 +60,10 @@
     <string name="root_local_capability_desc">只在需要刷写、安装模块和检测 Root 相关能力时调用 Root。内核版本识别不依赖 Root。</string>
     <string name="root_after_auth_flow">授权后会自动进入 GitHub 登录和 fork 检查流程。</string>
 
+    <!-- Local preferences recovery -->
+    <string name="preferences_reset_title">本地数据已重置</string>
+    <string name="preferences_reset_message">检测到 ABK 本地配置数据库损坏，已自动重置。已保存的登录状态、构建配置和其他本地设置可能需要重新配置。</string>
+
     <!-- Auth -->
     <string name="login_title">登录 GitHub</string>
     <string name="login_desc">ABK 需要您的 GitHub 授权以管理 fork 仓库并触发内核构建工作流。</string>

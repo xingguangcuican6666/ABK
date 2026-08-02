@@ -60,6 +60,10 @@
     <string name="root_local_capability_desc">Root is used only when flashing, installing modules, or checking root-related capabilities. Kernel version detection does not require root.</string>
     <string name="root_after_auth_flow">After authorization, GitHub sign-in and fork checks start automatically.</string>
 
+    <!-- Local preferences recovery -->
+    <string name="preferences_reset_title">Local data was reset</string>
+    <string name="preferences_reset_message">ABK detected corrupted local preferences and reset them automatically. Your saved login state, build configuration, and other local settings may need to be configured again.</string>
+
     <!-- Auth -->
     <string name="login_title">Sign in to GitHub</string>
     <string name="login_desc">ABK needs GitHub authorization to manage the fork repository and trigger kernel build workflows.</string>

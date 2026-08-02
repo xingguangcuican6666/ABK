@@ -2,6 +2,7 @@ package com.abk.kernel.data.repository
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.abk.kernel.data.model.APP_UPDATE_LINE_NORMAL
@@ -16,7 +17,16 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "abk_prefs")
+private val KEY_PREFERENCES_RESET_NOTICE = booleanPreferencesKey("preferences_reset_notice")
+
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "abk_prefs",
+    corruptionHandler = ReplaceFileCorruptionHandler {
+        // Keep a marker in the replacement file so the next UI session can
+        // explain why the local preferences disappeared.
+        preferencesOf(KEY_PREFERENCES_RESET_NOTICE to true)
+    },
+)
 
 class PreferencesRepository(private val context: Context) {
 
@@ -179,6 +189,9 @@ class PreferencesRepository(private val context: Context) {
             ?.toSet()
             .orEmpty()
     }
+    val preferencesResetNoticePending: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_PREFERENCES_RESET_NOTICE] ?: false
+    }
 
     suspend fun saveToken(token: String) = context.dataStore.edit { it[KEY_ACCESS_TOKEN] = token }
     suspend fun saveUsername(name: String) = context.dataStore.edit { it[KEY_USERNAME] = name }
@@ -331,6 +344,9 @@ class PreferencesRepository(private val context: Context) {
         preferences[KEY_ROOT_GRANT_PROFILE_READ_BLOCKED_PACKAGES] = current + cleanPackage
     }
     suspend fun clearPendingAutoDownloadRunId() = context.dataStore.edit { it.remove(KEY_PENDING_AUTO_DOWNLOAD_RUN_ID) }
+    suspend fun clearPreferencesResetNotice() = context.dataStore.edit {
+        it.remove(KEY_PREFERENCES_RESET_NOTICE)
+    }
 
     private fun workflowStepsVersionKey(lang: String) = intPreferencesKey("workflow_steps_version_$lang")
 

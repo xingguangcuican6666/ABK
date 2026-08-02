@@ -168,6 +168,9 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxSize(),
                             color = MaterialTheme.colorScheme.surface
                         ) {}
+                        state.showPreferencesResetNotice -> PreferencesResetDialog(
+                            onDismiss = vm::dismissPreferencesResetNotice
+                        )
                         !state.termsAccepted -> TermsAgreementDialog(
                             onAccept = vm::acceptTerms,
                             onDecline = { finishAffinity() }
@@ -178,19 +181,21 @@ class MainActivity : ComponentActivity() {
                                 pendingModuleInstallUri = pendingModuleInstallUri,
                                 onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
                             )
-                            val rootGrantRecoveryNotice = state.rootGrantRecoveryNotice
-                            if (rootGrantRecoveryNotice != null && !state.showOobe) {
-                                RootGrantRecoveryDialog(
-                                    title = rootGrantRecoveryNotice.title,
-                                    message = rootGrantRecoveryNotice.message,
-                                    onDismiss = vm::dismissRootGrantRecoveryNotice
-                                )
-                            } else if (state.showSyncPrompt && !state.showOobe) {
-                                SyncPromptDialog(
-                                    behindBy = state.behindBy,
-                                    onSync = vm::syncFork,
-                                    onDismiss = vm::dismissSyncPrompt
-                                )
+                            if (!state.showOobe) {
+                                val rootGrantRecoveryNotice = state.rootGrantRecoveryNotice
+                                if (rootGrantRecoveryNotice != null) {
+                                    RootGrantRecoveryDialog(
+                                        title = rootGrantRecoveryNotice.title,
+                                        message = rootGrantRecoveryNotice.message,
+                                        onDismiss = vm::dismissRootGrantRecoveryNotice
+                                    )
+                                } else if (state.showSyncPrompt) {
+                                    SyncPromptDialog(
+                                        behindBy = state.behindBy,
+                                        onSync = vm::syncFork,
+                                        onDismiss = vm::dismissSyncPrompt
+                                    )
+                                }
                             }
                             if (state.showOobe) {
                                 CompositionLocalProvider(LocalUiSurfaceAlpha provides 1f) {
@@ -216,6 +221,22 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         pendingModuleInstallUri = extractModuleInstallUri(intent)?.toString()
     }
+}
+
+@Composable
+private fun PreferencesResetDialog(
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.preferences_reset_title)) },
+        text = { Text(stringResource(R.string.preferences_reset_message)) },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text(text = stringResource(android.R.string.ok))
+            }
+        }
+    )
 }
 
 @Composable
