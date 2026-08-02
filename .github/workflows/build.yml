@@ -3466,7 +3466,18 @@ jobs:
           from pathlib import Path
 
           defconfig = Path(os.environ["DEFCONFIG"])
-          text = defconfig.read_text()
+          config_files = [defconfig]
+          stock_defconfig = defconfig.parent / "stock_defconfig"
+          if stock_defconfig.is_file():
+              # config_data 指向 stock_defconfig 时，用户配置也必须写入这份
+              # 配置，否则 /proc/config.gz 仍会显示 stock 中的旧值。
+              config_files.append(stock_defconfig)
+              print(f"将用户配置覆盖到 stock_defconfig: {stock_defconfig}")
+
+          text_by_path = {
+              path: path.read_text().splitlines()
+              for path in config_files
+          }
           lines = os.environ["CUSTOM_KERNEL_OPTIONS"].replace("\r", "").splitlines()
 
           parsed = []
@@ -3496,7 +3507,7 @@ jobs:
               )
               return result.returncode == 0
 
-          def set_config_value(symbol: str, mode: str, value: str = ""):
+          def set_config_value(text_lines, symbol: str, mode: str, value: str = ""):
               clean = symbol.removeprefix("CONFIG_")
               filtered = []
               for line in text_lines:
@@ -3550,7 +3561,6 @@ jobs:
               deduped.append((symbol, mode, value))
           deduped.reverse()
 
-          text_lines = text.splitlines()
           applied = 0
           skipped = 0
           for symbol, mode, value in deduped:
@@ -3558,7 +3568,10 @@ jobs:
                   print(f"::warning::{symbol} 未在 Kconfig 中定义，已跳过")
                   skipped += 1
                   continue
-              text_lines = set_config_value(symbol, mode, value)
+              for path in config_files:
+                  text_by_path[path] = set_config_value(
+                      text_by_path[path], symbol, mode, value
+                  )
               applied += 1
               if mode == "raw":
                   print(f"Applied custom kernel option: {symbol}={value}")
@@ -3567,8 +3580,12 @@ jobs:
               else:
                   print(f"Applied custom kernel option: {symbol}={mode}")
 
-          defconfig.write_text("\n".join(text_lines) + "\n")
-          print(f"自定义内核选项: 应用 {applied} 条，跳过 {skipped} 条")
+          for path, text_lines in text_by_path.items():
+              path.write_text("\n".join(text_lines) + "\n")
+          print(
+              f"自定义内核选项: 应用 {applied} 条，跳过 {skipped} 条，"
+              f"目标配置: {', '.join(path.name for path in config_files)}"
+          )
           PY
 
       - name: 修复 Official SUSFS 源码兼容
