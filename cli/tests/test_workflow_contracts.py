@@ -128,6 +128,45 @@ class WorkflowContractTests(unittest.TestCase):
             all_managers,
         )
 
+    def test_oneplus_15_catalog_matches_workflow_and_matrix_contracts(self):
+        expected = {
+            "oneplus_15": {
+                "name": "OnePlus 15",
+                "cpu": "sm8850",
+                "android": "android16",
+                "kernel": "6.12",
+            },
+            "oneplus_15t": {
+                "name": "OnePlus 15T",
+                "cpu": "sm8850",
+                "android": "android16",
+                "kernel": "6.12",
+            },
+        }
+        custom_workflow = (
+            REPO_ROOT / ".github" / "workflows" / "oneplus-custom.yml"
+        ).read_text(encoding="utf-8")
+        build_workflow = (
+            REPO_ROOT / ".github" / "workflows" / "oneplus-build.yml"
+        ).read_text(encoding="utf-8")
+        matrix_workflow = (
+            REPO_ROOT / ".github" / "workflows" / "oneplus-full-feature-matrix.yml"
+        ).read_text(encoding="utf-8")
+
+        for manifest, profile in expected.items():
+            with self.subTest(manifest=manifest):
+                self.assertEqual(profile, abk.ONEPLUS_DEVICES[manifest])
+                self.assertIn(f"- {manifest}", custom_workflow)
+                self.assertIn(f'{manifest}) device_name="{profile["name"]}"', build_workflow)
+                self.assertIn(f'"{manifest}"', matrix_workflow)
+
+        self.assertIn("- sm8850", custom_workflow)
+        self.assertIn('- "6.12"', custom_workflow)
+        self.assertIn('"5": ("android16", "6.12")', matrix_workflow)
+        self.assertIn("clang-r536225", build_workflow)
+        self.assertIn("prebuilts/rust/linux-x86/1.82.0/bin/rustc", build_workflow)
+        self.assertIn(("android16", "6.12"), abk.ONEPLUS_SUSFS_SUPPORTED)
+
     def test_kpm_support_matches_the_selected_ksu_source(self):
         cases = (
             ("SukiSU", "Stable", False, True),

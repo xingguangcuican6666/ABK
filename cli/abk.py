@@ -217,6 +217,8 @@ def selected_manager_variants(value):
 VIRT_OPTIONS = ["off", "on", "678", "123", "345"]
 
 ONEPLUS_DEVICES = {
+    "oneplus_15": {"name": "OnePlus 15", "cpu": "sm8850", "android": "android16", "kernel": "6.12"},
+    "oneplus_15t": {"name": "OnePlus 15T", "cpu": "sm8850", "android": "android16", "kernel": "6.12"},
     "oneplus_13_b": {"name": "OnePlus 13", "cpu": "sm8750", "android": "android15", "kernel": "6.6"},
     "oneplus_13s_b": {"name": "OnePlus 13s", "cpu": "sm8750", "android": "android15", "kernel": "6.6"},
     "oneplus_13t_b": {"name": "OnePlus 13T", "cpu": "sm8750", "android": "android15", "kernel": "6.6"},
@@ -254,6 +256,7 @@ ONEPLUS_DEVICES = {
 ONEPLUS_SUSFS_SUPPORTED = {
     ("android14", "6.1"),
     ("android15", "6.6"),
+    ("android16", "6.12"),
 }
 
 UNSAFE_WORKFLOW_TEXT_CHARS = frozenset(('"', "'", "`", "$", "\\"))

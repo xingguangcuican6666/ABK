@@ -132,6 +132,29 @@ class KernelSupportTest {
     }
 
     @Test
+    fun normalizeOnePlus15tUsesSm8850Android16Profile() {
+        val normalized = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_ONEPLUS,
+                kernelsuVariant = KSU_VARIANT_SUKISU,
+                cancelSusfs = false,
+                onePlusDeviceManifest = "oneplus_15t",
+                onePlusUseLz4kd = true
+            )
+        )
+
+        assertEquals("sm8850", normalized.onePlusCpu)
+        assertEquals("android16", normalized.androidVersion)
+        assertEquals("6.12", normalized.kernelVersion)
+        assertFalse(normalized.cancelSusfs)
+        assertFalse(normalized.onePlusUseLz4kd)
+        assertEquals(
+            "OnePlus 15T · ColorOS/OxygenOS 16 · android16/6.12 · sm8850",
+            KernelSupport.onePlusDeviceLabel(normalized.onePlusDeviceManifest)
+        )
+    }
+
+    @Test
     fun normalizeDisablesKpmForResukisuDevAndLatest() {
         val dev = KernelSupport.normalize(
             KernelBuildConfig(

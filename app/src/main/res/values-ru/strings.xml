@@ -209,10 +209,11 @@
     <string name="build_kernel_option_clear_all_action">Очистить всё</string>
     <string name="build_enable_oneplus_8e">Включить поддержку OnePlus 8E</string>
     <string name="build_oneplus_lz4kd">Включить lz4kd</string>
+    <string name="build_oneplus_lz4kd_unsupported">Ядро 6.12 использует новый backend ZRAM и не поддерживает устаревший патч lz4kd.</string>
     <string name="build_oneplus_bbr">Включить BBR</string>
     <string name="build_oneplus_proxy_optimization">Включить оптимизацию прокси</string>
     <string name="build_oneplus_proxy_mtk_disabled">Для веток MTK оптимизация прокси принудительно отключена.</string>
-    <string name="build_oneplus_susfs_unsupported">Для текущего KMI OnePlus нет доступной ветки SUSFS upstream. Поддерживаются только android14/6.1 и android15/6.6; android12/5.10 и android13/5.15 отключаются автоматически.</string>
+    <string name="build_oneplus_susfs_unsupported">Для текущего KMI OnePlus нет доступной ветки SUSFS upstream. android12/5.10 и android13/5.15 отключаются автоматически.</string>
     <string name="build_oneplus_unicode_bypass">Включить исправление обхода нулевой ширины Unicode</string>
     <string name="build_oneplus_proxy_short">Оптимизация прокси</string>
     <string name="build_oneplus_unicode_short">Обход Unicode</string>

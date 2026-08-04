@@ -12,6 +12,7 @@ on:
         required: true
         type: choice
         options:
+          - sm8850
           - sm8750
           - sm8735
           - mt6991
@@ -31,6 +32,8 @@ on:
         required: true
         type: choice
         options:
+          - oneplus_15
+          - oneplus_15t
           - oneplus_13_b
           - oneplus_13s_b
           - oneplus_13t_b
@@ -69,6 +72,7 @@ on:
         required: true
         type: choice
         options:
+          - android16
           - android15
           - android14
           - android13
@@ -79,6 +83,7 @@ on:
         required: true
         type: choice
         options:
+          - "6.12"
           - "6.6"
           - "6.1"
           - "5.15"
@@ -95,7 +100,7 @@ on:
           - None
         default: SukiSU
       enable_susfs:
-        description: "启用 SUSFS（仅 android14/6.1 与 android15/6.6 生效，5.10/5.15 自动关闭）"
+        description: "启用 SUSFS（android14/6.1、android15/6.6、android16/6.12）"
         required: false
         type: boolean
         default: false

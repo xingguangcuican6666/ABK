@@ -1421,6 +1421,7 @@ fun BuildScreen(
                 if (isOnePlusBuild) {
                     val proxyAllowed = !config.onePlusCpu.startsWith("mt")
                     val onePlusSusfsSupported = KernelSupport.onePlusSusfsSupported(config.androidVersion, config.kernelVersion)
+                    val onePlusLz4kdSupported = KernelSupport.onePlusLz4kdSupported(config.kernelVersion)
                     SwitchRow(
                         stringResource(R.string.build_enable_susfs),
                         !config.cancelSusfs && onePlusSusfsSupported,
@@ -1438,8 +1439,19 @@ fun BuildScreen(
                     SwitchRow(stringResource(R.string.build_enable_kpm), config.useKpm, enabled = kpmSupported && !noRootScheme) {
                         vm.updateBuildConfig(KernelSupport.normalize(config.copy(useKpm = it)))
                     }
-                    SwitchRow(stringResource(R.string.build_oneplus_lz4kd), config.onePlusUseLz4kd) {
-                        vm.updateBuildConfig(config.copy(onePlusUseLz4kd = it))
+                    SwitchRow(
+                        stringResource(R.string.build_oneplus_lz4kd),
+                        config.onePlusUseLz4kd && onePlusLz4kdSupported,
+                        enabled = onePlusLz4kdSupported
+                    ) {
+                        vm.updateBuildConfig(KernelSupport.normalize(config.copy(onePlusUseLz4kd = it)))
+                    }
+                    if (!onePlusLz4kdSupported) {
+                        Text(
+                            text = stringResource(R.string.build_oneplus_lz4kd_unsupported),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     SwitchRow(stringResource(R.string.build_enable_bbg), config.useBbg) {
                         vm.updateBuildConfig(config.copy(useBbg = it))

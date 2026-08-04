@@ -437,6 +437,24 @@ class CommandBehaviorTests(unittest.TestCase):
         self.assertIn('"use_kpm": "true"', output)
         self.assertIn("ReSukiSU", output)
 
+    def test_oneplus_15t_dry_run_dispatches_sm8850_android16(self):
+        client = RecordingGitHubClient(fork=None)
+
+        result, output = self._run_build(
+            client,
+            oneplus=True,
+            device="oneplus_15t",
+            ksu_variant="SukiSU",
+            susfs=True,
+            dry_run=True,
+        )
+
+        self.assertEqual(0, result, output)
+        self.assertIn('"cpu": "sm8850"', output)
+        self.assertIn('"android_version": "android16"', output)
+        self.assertIn('"kernel_version": "6.12"', output)
+        self.assertIn('"enable_susfs": "true"', output)
+
     def test_none_dry_runs_disable_susfs_for_direct_build_modes(self):
         cases = (
             ({"ksu_variant": "None", "dry_run": True}, '"cancel_susfs": "true"'),

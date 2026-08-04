@@ -38,10 +38,12 @@ object KernelSupport {
         KernelVersionLine("android12", "5.10"),
         KernelVersionLine("android13", "5.15"),
         KernelVersionLine("android14", "6.1"),
-        KernelVersionLine("android15", "6.6")
+        KernelVersionLine("android15", "6.6"),
+        KernelVersionLine("android16", "6.12")
     )
 
     val onePlusCpuOptions = listOf(
+        "sm8850",
         "sm8750",
         "sm8735",
         "mt6991",
@@ -58,6 +60,8 @@ object KernelSupport {
     )
 
     val onePlusDeviceProfiles = listOf(
+        OnePlusDeviceProfile("oneplus_15", "OnePlus 15", "ColorOS/OxygenOS 16", "sm8850", "android16", "6.12"),
+        OnePlusDeviceProfile("oneplus_15t", "OnePlus 15T", "ColorOS/OxygenOS 16", "sm8850", "android16", "6.12"),
         OnePlusDeviceProfile("oneplus_13_b", "OnePlus 13", "ColorOS/OxygenOS 16", "sm8750", "android15", "6.6"),
         OnePlusDeviceProfile("oneplus_13s_b", "OnePlus 13s", "ColorOS/OxygenOS 16", "sm8750", "android15", "6.6"),
         OnePlusDeviceProfile("oneplus_13t_b", "OnePlus 13T", "ColorOS/OxygenOS 16", "sm8750", "android15", "6.6"),
@@ -242,7 +246,9 @@ object KernelSupport {
             ?: onePlusLines.first().androidVersion
 
     fun onePlusSusfsSupported(androidVersion: String, kernelVersion: String): Boolean =
-        "$androidVersion/$kernelVersion" in setOf("android14/6.1", "android15/6.6")
+        "$androidVersion/$kernelVersion" in setOf("android14/6.1", "android15/6.6", "android16/6.12")
+
+    fun onePlusLz4kdSupported(kernelVersion: String): Boolean = kernelVersion != "6.12"
 
     fun normalize(config: KernelBuildConfig): KernelBuildConfig {
         val target = normalizeBuildTarget(config.buildTarget)
@@ -284,6 +290,7 @@ object KernelSupport {
         val gkiKpmSupported = isKpmSupported(BUILD_TARGET_GKI, ksuVariant, normalizedKsuBranch)
         val onePlusProxyAllowed = !onePlusCpu.startsWith("mt")
         val onePlusSusfsEnabled = onePlusSusfsSupported(line.androidVersion, line.kernelVersion)
+        val onePlusLz4kdEnabled = onePlusLz4kdSupported(line.kernelVersion)
         return config.copy(
             buildTarget = target,
             androidVersion = line.androidVersion,
@@ -353,7 +360,7 @@ object KernelSupport {
             },
             onePlusCpu = if (isOnePlus) onePlusCpu else "sm8650",
             onePlusDeviceManifest = if (isOnePlus) onePlusDeviceManifest else "oneplus_12_b",
-            onePlusUseLz4kd = if (isOnePlus) config.onePlusUseLz4kd else false,
+            onePlusUseLz4kd = if (isOnePlus) onePlusLz4kdEnabled && config.onePlusUseLz4kd else false,
             onePlusUseBbr = if (isOnePlus) config.onePlusUseBbr else false,
             onePlusUseProxyOptimization = if (isOnePlus) {
                 onePlusProxyAllowed && config.onePlusUseProxyOptimization

@@ -209,10 +209,11 @@
     <string name="build_kernel_option_clear_all_action">Clear all</string>
     <string name="build_enable_oneplus_8e">Enable OnePlus 8E support</string>
     <string name="build_oneplus_lz4kd">Enable lz4kd</string>
+    <string name="build_oneplus_lz4kd_unsupported">Kernel 6.12 uses the new ZRAM backend and does not support the legacy lz4kd patch.</string>
     <string name="build_oneplus_bbr">Enable BBR</string>
     <string name="build_oneplus_proxy_optimization">Enable proxy optimization</string>
     <string name="build_oneplus_proxy_mtk_disabled">Proxy optimization is forced off for MTK branches.</string>
-    <string name="build_oneplus_susfs_unsupported">The current OnePlus KMI has no available SUSFS upstream branch. Only android14/6.1 and android15/6.6 are supported; android12/5.10 and android13/5.15 are disabled automatically.</string>
+    <string name="build_oneplus_susfs_unsupported">The current OnePlus KMI has no available SUSFS upstream branch. android12/5.10 and android13/5.15 are disabled automatically.</string>
     <string name="build_oneplus_unicode_bypass">Enable Unicode zero-width bypass fix</string>
     <string name="build_oneplus_proxy_short">Proxy optimization</string>
     <string name="build_oneplus_unicode_short">Unicode bypass</string>
