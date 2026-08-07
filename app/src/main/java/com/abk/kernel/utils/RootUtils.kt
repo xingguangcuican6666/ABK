@@ -12,6 +12,7 @@ import android.util.Base64
 import android.util.Log
 import com.abk.kernel.data.model.SusfsConfig
 import com.abk.kernel.data.model.SusfsRuntimeStatus
+import com.abk.kernel.data.model.KernelTcpCongestionControlState
 import com.abk.kernel.data.model.RootGrantApp
 import com.abk.kernel.data.model.ROOT_PROFILE_FLAG_NO_NEW_PRIVS
 import com.abk.kernel.data.model.RootGrantProfile
@@ -49,9 +50,31 @@ object RootUtils {
     private const val ABK_META_MOUNT_WEB_ROOT = "/data/adb/modules/meta-abk-mount/webroot"
     private const val ABK_META_MOUNT_SYSFS_ENABLED = "/sys/kernel/abk_meta_mount/enabled"
     private const val ABK_META_MOUNT_SYSFS_PREPARE = "/sys/kernel/abk_meta_mount/prepare"
+    private const val TCP_AVAILABLE_CONGESTION_CONTROL = "/proc/sys/net/ipv4/tcp_available_congestion_control"
+    private const val TCP_ALLOWED_CONGESTION_CONTROL = "/proc/sys/net/ipv4/tcp_allowed_congestion_control"
+    private const val TCP_CONGESTION_CONTROL = "/proc/sys/net/ipv4/tcp_congestion_control"
     private const val ABK_EXTENSION_STATE_DIR = "/data/adb/abk/extensions"
     private val BOOT_PATCH_PARTITIONS = listOf("init_boot", "boot", "vendor_boot")
     private val KSU_FEATURE_NAME_REGEX = Regex("^[a-z0-9_]+$")
+    private val TCP_CONGESTION_ALGORITHM_REGEX = Regex("^[A-Za-z0-9_-]+$")
+    private val EXTRA_TCP_CONGESTION_ALGORITHMS = setOf(
+        "bbr",
+        "bbr2",
+        "bic",
+        "cdg",
+        "dctcp",
+        "highspeed",
+        "htcp",
+        "hybla",
+        "illinois",
+        "lp",
+        "nv",
+        "scalable",
+        "vegas",
+        "veno",
+        "westwood",
+        "yeah"
+    )
     private val SAFE_EXTENSION_ID = Regex("^[A-Za-z0-9._-]+$")
     private var appContext: Context? = null
     private val bundledKsudLock = Any()
@@ -889,6 +912,83 @@ object RootUtils {
         return AbkKsuNative.setDefaultUmountModules(enabled)
     }
 
+    fun readTcpCongestionControl(): KernelTcpCongestionControlState? {
+        val script = """
+            available=${'$'}(cat ${shellQuote(TCP_AVAILABLE_CONGESTION_CONTROL)} 2>/dev/null || true)
+            current=${'$'}(cat ${shellQuote(TCP_CONGESTION_CONTROL)} 2>/dev/null || true)
+            allowed=${'$'}(cat ${shellQuote(TCP_ALLOWED_CONGESTION_CONTROL)} 2>/dev/null || true)
+            [ -n "${'$'}available${'$'}current" ] || exit 2
+            printf 'available=%s\n' "${'$'}available"
+            printf 'current=%s\n' "${'$'}current"
+            printf 'allowed=%s\n' "${'$'}allowed"
+        """.trimIndent()
+        val result = execRootScript(script, timeoutSeconds = 10L)
+        if (!result.success) return null
+        val values = result.output
+            .mapNotNull { line ->
+                val key = line.substringBefore("=", missingDelimiterValue = "").trim()
+                val value = line.substringAfter("=", missingDelimiterValue = "").trim()
+                if (key.isBlank()) null else key to value
+            }
+            .toMap()
+        val available = parseTcpCongestionAlgorithms(values["available"].orEmpty())
+        val current = parseTcpCongestionAlgorithms(values["current"].orEmpty()).firstOrNull().orEmpty()
+        val allowed = parseTcpCongestionAlgorithms(values["allowed"].orEmpty())
+        val allAvailable = (available + current)
+            .filter { it.isNotBlank() }
+            .distinct()
+        if (allAvailable.isEmpty()) return null
+        return KernelTcpCongestionControlState(
+            currentAlgorithm = current,
+            availableAlgorithms = allAvailable,
+            allowedAlgorithms = allowed
+        )
+    }
+
+    fun hasManageableTcpCongestionControl(state: KernelTcpCongestionControlState?): Boolean {
+        state ?: return false
+        if (!state.available) return false
+        return state.availableAlgorithms.size > 1 ||
+            state.allowedAlgorithms.any { it.lowercase() in EXTRA_TCP_CONGESTION_ALGORITHMS }
+    }
+
+    fun setTcpCongestionControl(algorithm: String): ShellResult {
+        val clean = algorithm.trim()
+        if (!clean.matches(TCP_CONGESTION_ALGORITHM_REGEX)) {
+            return ShellResult(false, listOf(tr(R.string.ru_tcp_congestion_invalid_algorithm)))
+        }
+        val script = """
+            set -e
+            available_file=${shellQuote(TCP_AVAILABLE_CONGESTION_CONTROL)}
+            current_file=${shellQuote(TCP_CONGESTION_CONTROL)}
+            algo=${shellQuote(clean)}
+            write_failed=${shellQuote(tr(R.string.ru_tcp_congestion_write_failed))}
+            [ -r "${'$'}available_file" ] && [ -w "${'$'}current_file" ] || {
+                echo ${shellQuote(tr(R.string.ru_tcp_congestion_unavailable))}
+                exit 2
+            }
+            available=${'$'}(cat "${'$'}available_file" 2>/dev/null || true)
+            case " ${'$'}available " in
+                *" ${'$'}algo "*) ;;
+                *)
+                    echo ${shellQuote(tr(R.string.ru_tcp_congestion_unsupported_algorithm))}
+                    exit 3
+                    ;;
+            esac
+            if ! printf '%s\n' "${'$'}algo" > "${'$'}current_file" 2>/dev/null; then
+                echo "${'$'}write_failed"
+                exit 4
+            fi
+            current=${'$'}(cat "${'$'}current_file" 2>/dev/null || true)
+            [ "${'$'}current" = "${'$'}algo" ] || {
+                echo "${'$'}write_failed: ${'$'}current"
+                exit 5
+            }
+            printf 'current=%s\n' "${'$'}current"
+        """.trimIndent()
+        return execRootScript(script, timeoutSeconds = 10L)
+    }
+
     fun listAppProfileTemplates(): ShellResult {
         if (!isNativeManagerActive()) return nativeManagerPermissionDeniedResult()
         return runKsudCommand("profile list-templates", timeoutSeconds = 30L)
@@ -1719,6 +1819,12 @@ object RootUtils {
         val clean = featureName.trim().lowercase()
         return clean.takeIf { it.matches(KSU_FEATURE_NAME_REGEX) }
     }
+
+    private fun parseTcpCongestionAlgorithms(text: String): List<String> =
+        text.split(Regex("""\s+"""))
+            .map { it.trim() }
+            .filter { it.matches(TCP_CONGESTION_ALGORITHM_REGEX) }
+            .distinct()
 
     private fun isSafeTemplateId(id: String): Boolean {
         val clean = id.trim()

@@ -958,6 +958,15 @@
     <string name="settings_tools_desc">More advanced features</string>
     <string name="settings_manager_settings">Manager settings</string>
     <string name="settings_kernel_capabilities">Kernel capabilities</string>
+    <string name="settings_kernel_capabilities_summary">TCP current %1$s · %2$d algorithms</string>
+    <string name="settings_kernel_capabilities_refreshing">Refreshing kernel capabilities</string>
+    <string name="settings_kernel_capabilities_unavailable">No manageable kernel capabilities detected</string>
+    <string name="settings_kernel_capabilities_unavailable_desc">The current kernel does not expose additional features ABK can manage.</string>
+    <string name="settings_tcp_congestion_control">TCP congestion control</string>
+    <string name="settings_tcp_congestion_current">Current algorithm</string>
+    <string name="settings_tcp_congestion_available">Available algorithm</string>
+    <string name="settings_tcp_congestion_selected">Currently active</string>
+    <string name="settings_tcp_congestion_change_failed">Failed to change TCP algorithm</string>
     <string name="settings_susfs_control">SUSFS control</string>
     <string name="settings_manager_loading_title">Reading backend settings</string>
     <string name="settings_manager_loading_desc">Loading available features from the current KSU backend</string>
@@ -1222,6 +1231,10 @@
     <string name="ru_unknown_su_compat">Unknown su compatibility mode</string>
     <string name="ru_unknown_feature">Unknown feature</string>
     <string name="ru_invalid_template_name">Invalid template name</string>
+    <string name="ru_tcp_congestion_invalid_algorithm">Invalid TCP algorithm name</string>
+    <string name="ru_tcp_congestion_unavailable">The current kernel does not expose TCP congestion control</string>
+    <string name="ru_tcp_congestion_unsupported_algorithm">The current kernel does not support this TCP algorithm</string>
+    <string name="ru_tcp_congestion_write_failed">Failed to write TCP algorithm</string>
     <string name="ru_ksud_args_empty">ksud arguments are empty</string>
     <string name="ru_legacy_su_toggle_failed">Failed to toggle legacy su command support</string>
     <string name="ru_hide_selinux_toggle_failed">Failed to toggle hide-SELinux-modifications: %1$d</string>

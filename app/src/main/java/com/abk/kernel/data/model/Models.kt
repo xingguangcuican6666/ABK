@@ -751,6 +751,15 @@ data class ManagerSettingItem(
     val status: ManagerSettingStatus = ManagerSettingStatus.SUPPORTED
 )
 
+data class KernelTcpCongestionControlState(
+    val currentAlgorithm: String = "",
+    val availableAlgorithms: List<String> = emptyList(),
+    val allowedAlgorithms: List<String> = emptyList()
+) {
+    val available: Boolean
+        get() = availableAlgorithms.isNotEmpty()
+}
+
 data class AppProfileTemplateItem(
     val id: String = "",
     val content: String = ""

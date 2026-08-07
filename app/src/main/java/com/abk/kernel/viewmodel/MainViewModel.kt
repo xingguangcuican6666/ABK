@@ -237,6 +237,10 @@ data class MainUiState(
     val managerSettingsLoading: Boolean = false,
     val managerSettingsError: String? = null,
     val managerSettingActionId: String? = null,
+    val kernelTcpCongestionControl: KernelTcpCongestionControlState? = null,
+    val kernelCapabilitiesLoading: Boolean = false,
+    val kernelCapabilitiesError: String? = null,
+    val kernelCapabilityActionId: String? = null,
     val susfsRuntimeStatus: SusfsRuntimeStatus? = null,
     val susfsConfig: SusfsConfig = defaultSusfsConfig(),
     val susfsLoading: Boolean = false,
@@ -3643,6 +3647,77 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
+    fun refreshKernelCapabilities(force: Boolean = false) {
+        if (!force && _uiState.value.kernelCapabilitiesLoading) return
+        viewModelScope.launch {
+            val rootGranted = _uiState.value.rootGranted
+            _uiState.update { it.copy(kernelCapabilitiesLoading = true, kernelCapabilitiesError = null) }
+            val access = withContext(Dispatchers.IO) { resolveManagerAccess(rootGranted) }
+            if (access.kind == RootUtils.ManagerAccessKind.NO_ROOT) {
+                val message = managerAccessErrorMessage(access, rootGranted)
+                _uiState.update {
+                    it.copy(
+                        managerAccessState = access.toUiState(),
+                        managerAccessError = message,
+                        hasNativeManagerPermission = false,
+                        kernelTcpCongestionControl = null,
+                        kernelCapabilitiesLoading = false,
+                        kernelCapabilitiesError = message,
+                        kernelCapabilityActionId = null
+                    )
+                }
+                return@launch
+            }
+            val tcp = withContext(Dispatchers.IO) { RootUtils.readTcpCongestionControl() }
+            _uiState.update {
+                it.copy(
+                    managerAccessState = access.toUiState(),
+                    managerAccessError = null,
+                    hasNativeManagerPermission = access.hasNativeManagerPermission,
+                    kernelTcpCongestionControl = tcp,
+                    kernelCapabilitiesLoading = false,
+                    kernelCapabilitiesError = if (tcp?.available == true) {
+                        null
+                    } else {
+                        text(R.string.settings_kernel_capabilities_unavailable)
+                    },
+                    kernelCapabilityActionId = null
+                )
+            }
+        }
+    }
+
+    fun setTcpCongestionControlAlgorithm(algorithm: String) {
+        val clean = algorithm.trim()
+        if (clean.isBlank() || _uiState.value.kernelCapabilityActionId != null) return
+        viewModelScope.launch {
+            val actionId = "$KERNEL_CAPABILITY_TCP_CONGESTION:$clean"
+            _uiState.update {
+                it.copy(kernelCapabilityActionId = actionId, kernelCapabilitiesError = null)
+            }
+            val rootGranted = _uiState.value.rootGranted
+            val result = withContext(Dispatchers.IO) {
+                val access = resolveManagerAccess(rootGranted)
+                if (access.kind == RootUtils.ManagerAccessKind.NO_ROOT) {
+                    RootUtils.ShellResult(false, listOf(managerAccessErrorMessage(access, rootGranted)))
+                } else {
+                    RootUtils.setTcpCongestionControl(clean)
+                }
+            }
+            if (result.success) {
+                refreshKernelCapabilities(force = true)
+            } else {
+                _uiState.update {
+                    it.copy(
+                        kernelCapabilityActionId = null,
+                        kernelCapabilitiesError = result.output.lastOrNull()?.takeIf { line -> line.isNotBlank() }
+                            ?: text(R.string.settings_tcp_congestion_change_failed)
+                    )
+                }
+            }
+        }
+    }
+
     fun refreshManagerTools(force: Boolean = false) {
         if (!force && _uiState.value.managerToolsLoading) return
         viewModelScope.launch {
@@ -3944,6 +4019,11 @@ class MainViewModel @JvmOverloads constructor(
         rootGranted: Boolean
     ): ManagerSettingsLoad =
         runCatching {
+            val kernelCapabilitiesItem = if (rootGranted || access.hasNativeManagerPermission) {
+                buildKernelCapabilitiesManagerSetting()
+            } else {
+                null
+            }
             val susfsItem = if (rootGranted) {
                 buildSusfsManagerSetting(RootUtils.readSusfsRuntimeStatus())
             } else {
@@ -3951,13 +4031,15 @@ class MainViewModel @JvmOverloads constructor(
             }
 
             if (!access.hasNativeManagerPermission || !RootUtils.isNativeManagerActive()) {
-                if (susfsItem == null) {
+                val items = listOfNotNull(kernelCapabilitiesItem, susfsItem)
+                if (items.isEmpty()) {
                     ManagerSettingsLoad()
                 } else {
+                    val manager = access.runtime?.normalizedForManagerSettings()
                     ManagerSettingsLoad(
-                        backend = "susfs",
-                        title = text(R.string.settings_manager_settings),
-                        items = listOf(susfsItem)
+                        backend = manager?.backend?.takeIf { it.isNotBlank() } ?: "kernel",
+                        title = manager?.let { managerSettingsTitle(it) } ?: text(R.string.settings_kernel_capabilities),
+                        items = items
                     )
                 }
             } else {
@@ -3989,17 +4071,45 @@ class MainViewModel @JvmOverloads constructor(
                     )
                 }
                 }
-                if (susfsItem == null) {
-                    base
-                } else {
-                    base.copy(items = base.items + susfsItem)
-                }
+                base.copy(
+                    items = mergeManagerNavigationItems(
+                        baseItems = base.items,
+                        kernelCapabilitiesItem = kernelCapabilitiesItem,
+                        susfsItem = susfsItem
+                    )
+                )
             }
         }.getOrElse { error ->
             ManagerSettingsLoad(
                 error = error.message?.takeIf { it.isNotBlank() } ?: text(R.string.settings_manager_load_failed)
             )
         }
+
+    private fun buildKernelCapabilitiesManagerSetting(): ManagerSettingItem? {
+        val tcp = RootUtils.readTcpCongestionControl()
+            ?.takeIf { RootUtils.hasManageableTcpCongestionControl(it) }
+            ?: return null
+        val current = tcp.currentAlgorithm.ifBlank { text(R.string.settings_unknown) }
+        return ManagerSettingItem(
+            id = MANAGER_SETTING_KERNEL_CAPABILITIES,
+            title = text(R.string.settings_kernel_capabilities),
+            subtitle = text(R.string.settings_kernel_capabilities_summary, current, tcp.availableAlgorithms.size),
+            kind = ManagerSettingKind.NAVIGATION
+        )
+    }
+
+    private fun mergeManagerNavigationItems(
+        baseItems: List<ManagerSettingItem>,
+        kernelCapabilitiesItem: ManagerSettingItem?,
+        susfsItem: ManagerSettingItem?
+    ): List<ManagerSettingItem> {
+        val extraItems = listOfNotNull(kernelCapabilitiesItem, susfsItem)
+        if (extraItems.isEmpty()) return baseItems
+        val insertIndex = baseItems.indexOfFirst { it.kind != ManagerSettingKind.NAVIGATION }
+            .takeIf { it >= 0 }
+            ?: baseItems.size
+        return baseItems.take(insertIndex) + extraItems + baseItems.drop(insertIndex)
+    }
 
     private fun buildSusfsManagerSetting(status: SusfsRuntimeStatus): ManagerSettingItem? {
         if (!status.available) return null
@@ -6259,6 +6369,8 @@ private const val MANAGER_SETTING_SELINUX_HIDE = "selinux_hide"
 private const val MANAGER_SETTING_DEFAULT_UMOUNT = "default_umount_modules"
 private const val MANAGER_SETTING_WEBVIEW_DEBUG = "webview_debug"
 private const val MANAGER_SETTING_SUSFS = "susfs_control"
+private const val MANAGER_SETTING_KERNEL_CAPABILITIES = "kernel_capabilities"
+private const val KERNEL_CAPABILITY_TCP_CONGESTION = "tcp_congestion"
 private const val MANAGER_TOOL_SELINUX_MODE = "selinux_mode"
 private const val MANAGER_TOOL_BACKUP_ALLOWLIST = "backup_allowlist"
 private const val MANAGER_TOOL_RESTORE_ALLOWLIST = "restore_allowlist"

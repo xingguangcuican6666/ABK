@@ -728,6 +728,7 @@
     <string name="settings_group_about_desc">Версия приложения и сведения об исходном коде.</string>
     <string name="settings_group_backend_desc">Динамическая загрузка возможностей текущего %1$s-бэкенда.</string>
     <string name="settings_group_manager_settings_desc">Динамическая загрузка возможностей текущего KSU-бэкенда.</string>
+    <string name="settings_group_kernel_capabilities_desc">Динамическая загрузка по root-доступу и встроенным возможностям ядра.</string>
     <string name="settings_group_system_tools_desc">Инструменты для SELinux и путей размонтирования модулей.</string>
     <string name="settings_group_allowlist_desc">Экспорт или импорт текущего списка авторизации root.</string>
     <string name="settings_group_tool_status_desc">Результат последней операции с инструментами.</string>
@@ -956,6 +957,16 @@
     <string name="settings_tools">Инструменты</string>
     <string name="settings_tools_desc">Больше расширенных функций</string>
     <string name="settings_manager_settings">Настройки менеджера</string>
+    <string name="settings_kernel_capabilities">Возможности ядра</string>
+    <string name="settings_kernel_capabilities_summary">TCP сейчас %1$s · алгоритмов: %2$d</string>
+    <string name="settings_kernel_capabilities_refreshing">Обновление возможностей ядра</string>
+    <string name="settings_kernel_capabilities_unavailable">Управляемые возможности ядра не обнаружены</string>
+    <string name="settings_kernel_capabilities_unavailable_desc">Текущее ядро не предоставляет дополнительных функций, которыми ABK может управлять.</string>
+    <string name="settings_tcp_congestion_control">TCP congestion control</string>
+    <string name="settings_tcp_congestion_current">Текущий алгоритм</string>
+    <string name="settings_tcp_congestion_available">Доступный алгоритм</string>
+    <string name="settings_tcp_congestion_selected">Используется сейчас</string>
+    <string name="settings_tcp_congestion_change_failed">Не удалось изменить TCP-алгоритм</string>
     <string name="settings_manager_loading_title">Чтение настроек бэкенда</string>
     <string name="settings_manager_loading_desc">Загрузка доступных функций из текущего KSU-бэкенда</string>
     <string name="settings_manager_load_failed">Не удалось прочитать настройки бэкенда</string>
@@ -1219,6 +1230,10 @@
     <string name="ru_unknown_su_compat">Неизвестный режим совместимости su</string>
     <string name="ru_unknown_feature">Неизвестная функция</string>
     <string name="ru_invalid_template_name">Недопустимое имя шаблона</string>
+    <string name="ru_tcp_congestion_invalid_algorithm">Недопустимое имя TCP-алгоритма</string>
+    <string name="ru_tcp_congestion_unavailable">Текущее ядро не предоставляет TCP congestion control</string>
+    <string name="ru_tcp_congestion_unsupported_algorithm">Текущее ядро не поддерживает этот TCP-алгоритм</string>
+    <string name="ru_tcp_congestion_write_failed">Не удалось записать TCP-алгоритм</string>
     <string name="ru_ksud_args_empty">Аргументы ksud пусты</string>
     <string name="ru_legacy_su_toggle_failed">Не удалось переключить поддержку устаревшей команды su</string>
     <string name="ru_hide_selinux_toggle_failed">Не удалось переключить «Скрывать изменения SELinux»: %1$d</string>
