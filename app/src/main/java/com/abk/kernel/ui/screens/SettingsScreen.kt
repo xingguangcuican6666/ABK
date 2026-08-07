@@ -1432,14 +1432,8 @@ private fun KernelCapabilitiesSettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (tcp != null && tcp.available) {
                         SettingsGroup(title = stringResource(R.string.settings_tcp_congestion_control)) {
-                            val current = tcp.currentAlgorithm.ifBlank { stringResource(R.string.settings_unknown) }
                             val actionId = state.kernelCapabilityActionId
                             val actionRunning = actionId != null
-                            ExpressiveListItem(
-                                title = stringResource(R.string.settings_tcp_congestion_current),
-                                subtitle = current,
-                                leadingIcon = Icons.Default.Tune
-                            )
                             tcp.availableAlgorithms.forEach { algorithm ->
                                 val selected = algorithm == tcp.currentAlgorithm
                                 val itemActionId = "tcp_congestion:$algorithm"
@@ -2804,6 +2798,7 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
             "KernelSU" -> stringResource(R.string.settings_group_backend_desc, "KernelSU")
             stringResource(R.string.settings_manager_settings) -> stringResource(R.string.settings_group_manager_settings_desc)
             stringResource(R.string.settings_kernel_capabilities) -> stringResource(R.string.settings_group_kernel_capabilities_desc)
+            stringResource(R.string.settings_tcp_congestion_control) -> stringResource(R.string.settings_group_tcp_congestion_control_desc)
             stringResource(R.string.settings_system_tools) -> stringResource(R.string.settings_group_system_tools_desc)
             stringResource(R.string.settings_allowlist) -> stringResource(R.string.settings_group_allowlist_desc)
             stringResource(R.string.settings_tool_status) -> stringResource(R.string.settings_group_tool_status_desc)
@@ -2828,6 +2823,7 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
             "ReSukiSU", "SukiSU", "KernelSU" -> Icons.Default.AdminPanelSettings
             stringResource(R.string.settings_manager_settings) -> Icons.Default.AdminPanelSettings
             stringResource(R.string.settings_kernel_capabilities) -> Icons.Default.Tune
+            stringResource(R.string.settings_tcp_congestion_control) -> Icons.Default.Tune
             stringResource(R.string.settings_system_tools) -> Icons.Default.Build
             stringResource(R.string.settings_allowlist) -> Icons.Default.VerifiedUser
             stringResource(R.string.settings_tool_status) -> Icons.Default.Info

@@ -760,6 +760,7 @@
     <string name="settings_group_backend_desc">按当前 %1$s 后端能力动态加载。</string>
     <string name="settings_group_manager_settings_desc">按当前 KSU 后端能力动态加载。</string>
     <string name="settings_group_kernel_capabilities_desc">按 root 与内核内置能力动态加载。</string>
+    <string name="settings_group_tcp_congestion_control_desc">按内核暴露的 TCP 拥塞控制能力动态加载。</string>
     <string name="settings_group_system_tools_desc">SELinux 和模块卸载路径相关工具。</string>
     <string name="settings_group_allowlist_desc">导出或导入当前 Root 授权列表。</string>
     <string name="settings_group_tool_status_desc">最近一次工具操作的执行结果。</string>

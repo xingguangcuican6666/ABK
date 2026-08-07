@@ -974,6 +974,7 @@
     <string name="settings_kernel_capabilities_refreshing">正在刷新内核能力</string>
     <string name="settings_kernel_capabilities_unavailable">未检测到可管理的内核能力</string>
     <string name="settings_kernel_capabilities_unavailable_desc">当前内核没有暴露 ABK 可管理的附加功能。</string>
+    <string name="settings_group_tcp_congestion_control_desc">按内核暴露的 TCP 拥塞控制能力动态加载。</string>
     <string name="settings_tcp_congestion_control">TCP 拥塞控制</string>
     <string name="settings_tcp_congestion_current">当前算法</string>
     <string name="settings_tcp_congestion_available">可用算法</string>

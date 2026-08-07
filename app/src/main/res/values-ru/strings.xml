@@ -729,6 +729,7 @@
     <string name="settings_group_backend_desc">Динамическая загрузка возможностей текущего %1$s-бэкенда.</string>
     <string name="settings_group_manager_settings_desc">Динамическая загрузка возможностей текущего KSU-бэкенда.</string>
     <string name="settings_group_kernel_capabilities_desc">Динамическая загрузка по root-доступу и встроенным возможностям ядра.</string>
+    <string name="settings_group_tcp_congestion_control_desc">Динамическая загрузка по возможностям TCP congestion control, предоставленным ядром.</string>
     <string name="settings_group_system_tools_desc">Инструменты для SELinux и путей размонтирования модулей.</string>
     <string name="settings_group_allowlist_desc">Экспорт или импорт текущего списка авторизации root.</string>
     <string name="settings_group_tool_status_desc">Результат последней операции с инструментами.</string>

@@ -729,6 +729,7 @@
     <string name="settings_group_backend_desc">Load dynamically from current %1$s backend capabilities.</string>
     <string name="settings_group_manager_settings_desc">Load dynamically from current KSU backend capabilities.</string>
     <string name="settings_group_kernel_capabilities_desc">Load dynamically from root access and built-in kernel capabilities.</string>
+    <string name="settings_group_tcp_congestion_control_desc">Load dynamically from TCP congestion control capabilities exposed by the kernel.</string>
     <string name="settings_group_system_tools_desc">Tools for SELinux and module umount paths.</string>
     <string name="settings_group_allowlist_desc">Export or import the current root authorization list.</string>
     <string name="settings_group_tool_status_desc">Result of the most recent tool operation.</string>
