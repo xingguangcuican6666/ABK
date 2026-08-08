@@ -288,6 +288,15 @@ jobs:
             -b "refs/heads/oneplus/${CPU}" \
             -m "${DEVICE_MANIFEST}.xml" \
             --depth=1
+          case "$DEVICE_MANIFEST" in
+            oneplus_15|oneplus_15t)
+              manifest_path=".repo/manifests/${DEVICE_MANIFEST}.xml"
+              if [ ! -f "$manifest_path" ]; then
+                manifest_path=".repo/manifest.xml"
+              fi
+              python3 "$GITHUB_WORKSPACE/.github/scripts/sanitize-oneplus-manifest.py" "$manifest_path"
+              ;;
+          esac
           repo sync -c -j"$(nproc --all)" --no-tags --no-clone-bundle --force-sync
 
       - name: 准备 KernelSU 和补丁
