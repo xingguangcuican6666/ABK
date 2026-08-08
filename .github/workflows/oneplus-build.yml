@@ -76,9 +76,6 @@ jobs:
       CCACHE_MAXSIZE: 8G
 
     steps:
-      - name: 检出 ABK 补丁仓库
-        uses: actions/checkout@v6
-
       - name: 构建信息摘要
         shell: bash
         run: |
@@ -225,6 +222,9 @@ jobs:
           remove-android: "true"
           remove-haskell: "true"
           remove-codeql: "true"
+
+      - name: 检出 ABK 补丁仓库
+        uses: actions/checkout@v6
 
       - name: 安装依赖
         shell: bash

@@ -213,6 +213,16 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn("kernel_platform/prebuilts/tradefed", remaining_paths)
         self.assertIn("kernel_platform/common", remaining_paths)
 
+    def test_oneplus_checkout_runs_after_build_space_mount(self):
+        build_workflow = (
+            REPO_ROOT / ".github" / "workflows" / "oneplus-build.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertLess(
+            build_workflow.index("easimon/maximize-build-space@master"),
+            build_workflow.index("actions/checkout@v6"),
+        )
+
     def test_kpm_support_matches_the_selected_ksu_source(self):
         cases = (
             ("SukiSU", "Stable", False, True),
