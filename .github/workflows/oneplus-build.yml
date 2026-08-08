@@ -247,7 +247,7 @@ jobs:
 
           apt_update_retry
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-            python3 git curl ccache libelf-dev build-essential flex bison libssl-dev \
+            python3 git curl ccache libelf-dev libdw-dev build-essential flex bison libssl-dev \
             libncurses-dev liblz4-tool zlib1g-dev libxml2-utils rsync unzip gawk \
             dos2unix zip gcc-aarch64-linux-gnu
           if ! command -v repo >/dev/null 2>&1; then

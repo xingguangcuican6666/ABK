@@ -223,6 +223,18 @@ class WorkflowContractTests(unittest.TestCase):
             build_workflow.index("actions/checkout@v6"),
         )
 
+    def test_oneplus_build_installs_gendwarfksyms_dependencies(self):
+        build_workflow = (
+            REPO_ROOT / ".github" / "workflows" / "oneplus-build.yml"
+        ).read_text(encoding="utf-8")
+        install_start = build_workflow.index("apt-get install")
+        install_end = build_workflow.index("if ! command -v repo", install_start)
+        dependency_block = build_workflow[install_start:install_end]
+
+        self.assertIn("libelf-dev", dependency_block)
+        self.assertIn("libdw-dev", dependency_block)
+        self.assertIn("zlib1g-dev", dependency_block)
+
     def test_kpm_support_matches_the_selected_ksu_source(self):
         cases = (
             ("SukiSU", "Stable", False, True),
