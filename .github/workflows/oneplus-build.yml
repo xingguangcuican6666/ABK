@@ -334,6 +334,9 @@ jobs:
                 exit 1
                 ;;
             esac
+            if [ "$KSU_VARIANT" = "Official" ]; then
+              bash "$GITHUB_WORKSPACE/.github/scripts/ensure-kernelsu-uapi.sh" "$KERNEL_ROOT"
+            fi
           fi
 
           cd "$WORKSPACE"
