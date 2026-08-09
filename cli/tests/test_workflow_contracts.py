@@ -251,6 +251,13 @@ class WorkflowContractTests(unittest.TestCase):
             build_workflow.index("setup.sh"),
             build_workflow.index("ensure-kernelsu-uapi.sh"),
         )
+        compile_start = build_workflow.index("- name: 编译内核")
+        compile_block = build_workflow[compile_start:]
+        self.assertIn(
+            'KSU_KCFLAGS=("KCFLAGS+=-I$KERNEL_ROOT/KernelSU")',
+            compile_block,
+        )
+        self.assertIn('"${KSU_KCFLAGS[@]}"', compile_block)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             kernel_root = Path(tmpdir) / "kernel_platform"
