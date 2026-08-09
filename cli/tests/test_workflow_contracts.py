@@ -275,7 +275,7 @@ class WorkflowContractTests(unittest.TestCase):
             include_dir.write_text("../../uapi", encoding="utf-8")
 
             result = subprocess.run(
-                ["bash", str(script), str(kernel_root)],
+                ["bash", str(script), kernel_root.as_posix()],
                 check=True,
                 capture_output=True,
                 text=True,
