@@ -253,10 +253,12 @@ class WorkflowContractTests(unittest.TestCase):
         )
         compile_start = build_workflow.index("- name: 编译内核")
         compile_block = build_workflow[compile_start:]
-        self.assertIn(
-            'KSU_KCFLAGS=("KCFLAGS+=-I$KERNEL_ROOT/KernelSU")',
-            compile_block,
-        )
+        for include_root in (
+            "$KERNEL_ROOT/KernelSU",
+            "$KERNEL_ROOT/KernelSU/kernel",
+            "$KERNEL_ROOT/KernelSU/kernel/include",
+        ):
+            self.assertIn(f'"KCFLAGS+=-I{include_root}"', compile_block)
         self.assertIn('"${KSU_KCFLAGS[@]}"', compile_block)
 
         with tempfile.TemporaryDirectory() as tmpdir:

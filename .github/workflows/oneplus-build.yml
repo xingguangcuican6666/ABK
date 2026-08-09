@@ -957,7 +957,11 @@ jobs:
 
           KSU_KCFLAGS=()
           if [ "$KSU_VARIANT" = "Official" ] && [ -d "$KERNEL_ROOT/KernelSU/uapi" ]; then
-            KSU_KCFLAGS=("KCFLAGS+=-I$KERNEL_ROOT/KernelSU")
+            KSU_KCFLAGS=(
+              "KCFLAGS+=-I$KERNEL_ROOT/KernelSU"
+              "KCFLAGS+=-I$KERNEL_ROOT/KernelSU/kernel"
+              "KCFLAGS+=-I$KERNEL_ROOT/KernelSU/kernel/include"
+            )
           fi
           MAKE_COMMON=(make -j"$(nproc --all)" LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" PAHOLE=../../prebuilts/kernel-build-tools/linux-x86/bin/pahole LD=ld.lld HOSTLD=ld.lld O=out "${KSU_KCFLAGS[@]}")
           case "$KERNEL_VERSION" in
