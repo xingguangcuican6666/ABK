@@ -35,7 +35,7 @@ class GitHubRepositoryNetworkTest {
     }
 
     @Test
-    fun getRepo_usesGitHubJsonAcceptByDefault() {
+    fun getRepo_usesGitHubJsonAcceptByDefault() = runBlocking {
         server.enqueue(
             MockResponse()
                 .setResponseCode(200)

@@ -261,6 +261,9 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn(f'"KCFLAGS+=-I{include_root}"', compile_block)
         self.assertIn('"${KSU_KCFLAGS[@]}"', compile_block)
 
+        if sys.platform == "win32":
+            self.skipTest("Kernel workflow Bash integration runs on Linux only")
+
         with tempfile.TemporaryDirectory() as tmpdir:
             kernel_root = Path(tmpdir) / "kernel_platform"
             source_dir = kernel_root / "KernelSU" / "uapi"
