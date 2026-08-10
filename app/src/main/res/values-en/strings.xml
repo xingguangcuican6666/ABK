@@ -1224,6 +1224,7 @@
     <string name="ru_lkm_module_not_bundled">No bundled LKM module for %1$s / %2$s</string>
     <string name="ru_log_using_bundled_lkm">[ABK] Using APK-bundled LKM: %1$s · %2$s</string>
     <string name="ru_log_using_local_lkm">[ABK] Using local LKM: %1$s</string>
+    <string name="ru_log_output_dir">[ABK] Output directory: %1$s</string>
     <string name="ru_log_no_root_shell_local_patch">[ABK] Root shell unavailable; falling back to APK-bundled SukiSU-Ultra ksud to patch the local boot image only</string>
     <string name="ru_no_embedded_ksud">No runnable APK-bundled SukiSU-Ultra ksud found; without root you can only generate a patched image after selecting boot.img.</string>
     <string name="ru_install_requires_root">This installation method requires root permission.</string>

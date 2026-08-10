@@ -1223,6 +1223,7 @@
     <string name="ru_lkm_module_not_bundled">Нет встроенного LKM-модуля для %1$s / %2$s</string>
     <string name="ru_log_using_bundled_lkm">[ABK] Используется встроенный в APK LKM: %1$s · %2$s</string>
     <string name="ru_log_using_local_lkm">[ABK] Используется локальный LKM: %1$s</string>
+    <string name="ru_log_output_dir">[ABK] Каталог вывода: %1$s</string>
     <string name="ru_log_no_root_shell_local_patch">[ABK] Root shell недоступен — переходим на встроенный в APK SukiSU-Ultra ksud для патча только локального образа boot</string>
     <string name="ru_no_embedded_ksud">Исполняемый встроенный в APK SukiSU-Ultra ksud не найден; без root можно только сгенерировать пропатченный образ после выбора boot.img.</string>
     <string name="ru_install_requires_root">Этот способ установки требует прав root.</string>

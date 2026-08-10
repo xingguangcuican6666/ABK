@@ -476,7 +476,8 @@ object RootUtils {
         allowShell: Boolean = false,
         enableAdb: Boolean = false,
         localModulePath: String? = null,
-        onOutput: ((String) -> Unit)? = null
+        onOutput: ((String) -> Unit)? = null,
+        downloadDirectory: String? = null
     ): BootPatchResult {
         val sourceBoot = bootImagePath
             ?.takeIf { it.isNotBlank() }
@@ -511,10 +512,16 @@ object RootUtils {
                 stageBundledAbkLkmAsset(context, workDir, checkNotNull(asset))
             }
 
-            val outputDir = File(
-                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir,
-                "abk-patched"
-            ).apply { mkdirs() }
+            val outputDir = resolvePatchOutputDir(downloadDirectory)
+                ?: File(
+                    context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir,
+                    "abk-patched"
+                ).apply { mkdirs() }
+            // Flash-only modes (Direct Install/OTA) patch the partition in place and don't hand
+            // the user a patched image, so the output-dir line would be noise there.
+            if (!flash) {
+                onOutput?.invoke(tr(R.string.ru_log_output_dir, outputDir.absolutePath))
+            }
             val moduleName = (asset?.let { "${it.variantId}-${it.kmi}" } ?: moduleFile.nameWithoutExtension)
                 .replace(Regex("""[^A-Za-z0-9._-]"""), "_")
             val outputName = "abk-${moduleName}-patched-${System.currentTimeMillis()}.img"
@@ -2264,6 +2271,23 @@ object RootUtils {
         target.setReadable(true, false)
         target.setWritable(true, true)
         return target
+    }
+
+    /**
+     * Resolve the directory where patched boot images are written.
+     *
+     * Prefers the user-configured public download directory (Download/ABK/abk-patched),
+     * mirroring DownloadUtils.resolveDownloadsRoot semantics: normalize, create, then verify
+     * isDirectory && canWrite. Returns null when the public directory can't be created or isn't
+     * writable, so the caller falls back to app-scoped storage.
+     */
+    internal fun resolvePatchOutputDir(downloadDirectory: String?): File? {
+        val root = File(DownloadDirectoryUtils.normalizeDirectoryPath(downloadDirectory))
+        val rootReady = root.exists() || root.mkdirs()
+        if (!rootReady || !root.isDirectory || !root.canWrite()) return null
+        val subDir = File(root, "abk-patched")
+        if (!subDir.exists() && !subDir.mkdirs()) return null
+        return subDir.takeIf { it.isDirectory && it.canWrite() }
     }
 
     private fun buildBootPatchArgs(

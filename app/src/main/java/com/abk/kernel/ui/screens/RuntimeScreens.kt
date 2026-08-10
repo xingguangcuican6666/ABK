@@ -260,6 +260,7 @@ fun RuntimeHomeScreen(
                     runtimeVariant = state.abkRuntimeStatus?.manager?.variant.orEmpty(),
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled,
+                    downloadDirectory = state.downloadDirectory,
                     onBack = childPageBack::requestDismiss,
                     onBackEnabledChange = { managerPatchBackEnabled = it }
                 )

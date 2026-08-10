@@ -1296,6 +1296,7 @@
     <string name="ru_lkm_module_not_bundled">未内置 %1$s / %2$s 的 LKM 模块</string>
     <string name="ru_log_using_bundled_lkm">[ABK] 使用 APK 内置 LKM: %1$s · %2$s</string>
     <string name="ru_log_using_local_lkm">[ABK] 使用本地 LKM: %1$s</string>
+    <string name="ru_log_output_dir">[ABK] 输出目录: %1$s</string>
     <string name="ru_log_no_root_shell_local_patch">[ABK] Root shell 不可用，改用 APK 内置 SukiSU-Ultra ksud 仅修补本地 boot 镜像</string>
     <string name="ru_no_embedded_ksud">未找到可执行的 APK 内置 SukiSU-Ultra ksud；无 Root 时只能在选择 boot.img 后生成 patched 镜像。</string>
     <string name="ru_install_requires_root">该安装方式需要 Root 权限。</string>

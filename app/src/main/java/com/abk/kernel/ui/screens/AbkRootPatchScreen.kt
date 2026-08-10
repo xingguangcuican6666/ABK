@@ -121,7 +121,8 @@ fun AbkRootPatchScreen(
     backgroundUri: String?,
     backgroundImageEnabled: Boolean,
     onBack: () -> Unit,
-    onBackEnabledChange: (Boolean) -> Unit = {}
+    onBackEnabledChange: (Boolean) -> Unit = {},
+    downloadDirectory: String? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -377,7 +378,8 @@ fun AbkRootPatchScreen(
                     allowShell = allowShell,
                     enableAdb = enableAdb,
                     localModulePath = modulePath,
-                    onOutput = ::appendLog
+                    onOutput = ::appendLog,
+                    downloadDirectory = downloadDirectory
                 )
             }
             finishPatchResult(result)
@@ -409,7 +411,8 @@ fun AbkRootPatchScreen(
                     allowShell = allowShell,
                     enableAdb = enableAdb,
                     localModulePath = modulePath,
-                    onOutput = ::appendLog
+                    onOutput = ::appendLog,
+                    downloadDirectory = downloadDirectory
                 )
             }
             finishPatchResult(result)
