@@ -21,6 +21,7 @@ import com.topjohnwu.superuser.CallbackList
 import com.topjohnwu.superuser.Shell
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import java.util.Collections
 import java.util.Properties
 import java.security.MessageDigest
@@ -512,11 +513,16 @@ object RootUtils {
                 stageBundledAbkLkmAsset(context, workDir, checkNotNull(asset))
             }
 
-            val outputDir = resolvePatchOutputDir(downloadDirectory)
-                ?: File(
-                    context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir,
-                    "abk-patched"
-                ).apply { mkdirs() }
+            val appScopedOutputCandidates = listOfNotNull(
+                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                    ?.let { File(it, "abk-patched") },
+                File(context.filesDir, "abk-patched")
+            )
+            val outputDir = (if (flash) null else resolvePatchOutputDir(downloadDirectory))
+                ?: appScopedOutputCandidates.firstNotNullOfOrNull(::prepareWritableDirectory)
+                ?: throw IOException(
+                    tr(R.string.download_directory_create_failed, context.filesDir.absolutePath)
+                )
             // Flash-only modes (Direct Install/OTA) patch the partition in place and don't hand
             // the user a patched image, so the output-dir line would be noise there.
             if (!flash) {
@@ -2282,12 +2288,15 @@ object RootUtils {
      * writable, so the caller falls back to app-scoped storage.
      */
     internal fun resolvePatchOutputDir(downloadDirectory: String?): File? {
-        val root = File(DownloadDirectoryUtils.normalizeDirectoryPath(downloadDirectory))
-        val rootReady = root.exists() || root.mkdirs()
-        if (!rootReady || !root.isDirectory || !root.canWrite()) return null
-        val subDir = File(root, "abk-patched")
-        if (!subDir.exists() && !subDir.mkdirs()) return null
-        return subDir.takeIf { it.isDirectory && it.canWrite() }
+        val root = prepareWritableDirectory(
+            File(DownloadDirectoryUtils.normalizeDirectoryPath(downloadDirectory))
+        ) ?: return null
+        return prepareWritableDirectory(File(root, "abk-patched"))
+    }
+
+    private fun prepareWritableDirectory(directory: File): File? {
+        if (!directory.exists() && !directory.mkdirs()) return null
+        return directory.takeIf { it.isDirectory && it.canWrite() }
     }
 
     private fun buildBootPatchArgs(
