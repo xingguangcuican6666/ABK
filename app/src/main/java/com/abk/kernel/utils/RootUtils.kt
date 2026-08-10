@@ -21,6 +21,7 @@ import com.topjohnwu.superuser.CallbackList
 import com.topjohnwu.superuser.Shell
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.util.Collections
 import java.util.Properties
 import java.security.MessageDigest
@@ -150,6 +151,25 @@ object RootUtils {
         } catch (e: Exception) {
             false
         }
+    }
+
+    fun readSelinuxModeRaw(): String {
+        return runCatching {
+            val process = ProcessBuilder("getenforce")
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().use { reader ->
+                reader.readText().trim()
+            }
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                return@runCatching ""
+            }
+            when (output) {
+                "Enforcing", "Permissive", "Disabled" -> output
+                else -> ""
+            }
+        }.getOrDefault("")
     }
 
     fun flashImage(
@@ -383,6 +403,50 @@ object RootUtils {
                     )
                 }
         }.sortedWith(compareBy<AbkLkmAsset> { it.variantId }.thenBy { it.kmi })
+    }
+
+    fun listBundledAbkLkmKmIs(context: Context, variantId: String): List<String> {
+        return listBundledAbkLkmAssets(context)
+            .asSequence()
+            .filter { it.variantId == variantId }
+            .map { it.kmi }
+            .distinct()
+            .sorted()
+            .toList()
+    }
+
+    fun stageMagicaJailbreakModule(
+        context: Context,
+        variantId: String,
+        kmi: String
+    ): File? {
+        val asset = listBundledAbkLkmAssets(context).firstOrNull {
+            it.variantId == variantId && it.kmi == kmi
+        } ?: return null
+        val stageContext = context.createDeviceProtectedStorageContext()
+        val stageDir = File(stageContext.filesDir, "magica-jailbreak").apply { mkdirs() }
+        val target = File(stageDir, "${asset.variantId}_${asset.kmi}_kernelsu.ko")
+        stageContext.assets.open(asset.assetPath).use { input ->
+            FileOutputStream(target).use { output -> input.copyTo(output) }
+        }
+        target.setReadable(true, true)
+        target.setWritable(true, true)
+        target.setExecutable(false, false)
+        writeMagicaJailbreakRequest(stageDir, target)
+        return target
+    }
+
+    private fun writeMagicaJailbreakRequest(stageDir: File, moduleFile: File) {
+        val request = File(stageDir, "request.properties")
+        val properties = Properties().apply {
+            setProperty("modulePath", moduleFile.absolutePath)
+        }
+        FileOutputStream(request).use { output ->
+            properties.store(output, "ABK magica jailbreak request")
+        }
+        request.setReadable(true, true)
+        request.setWritable(true, true)
+        request.setExecutable(false, false)
     }
 
     fun detectCurrentKmi(): String? {

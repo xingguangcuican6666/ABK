@@ -792,13 +792,16 @@ class MainViewModel @JvmOverloads constructor(
     fun checkRoot() {
         viewModelScope.launch {
             val granted = RootUtils.isRootAvailable()
+            val selinuxMode = withContext(Dispatchers.IO) { RootUtils.readSelinuxModeRaw() }
             val recommended = detectRecommendedBuildConfig()
             val initialConfig = applyInitialBuildConfigIfNeeded(recommended)
             _uiState.update {
                 it.copy(
                     rootGranted = granted,
                     recommendedBuildConfig = recommended,
-                    buildConfig = initialConfig ?: it.buildConfig
+                    buildConfig = initialConfig ?: it.buildConfig,
+                    selinuxModeText = selinuxMode.ifBlank { text(R.string.settings_unknown) },
+                    selinuxEnforcing = selinuxMode.equals("Enforcing", ignoreCase = true)
                 )
             }
             runtime.handlePendingRootGrantProfileRecovery()
@@ -809,6 +812,7 @@ class MainViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val granted = RootUtils.requestRoot()
+            val selinuxMode = withContext(Dispatchers.IO) { RootUtils.readSelinuxModeRaw() }
             val recommended = detectRecommendedBuildConfig()
             val initialConfig = applyInitialBuildConfigIfNeeded(recommended)
             _uiState.update {
@@ -816,7 +820,9 @@ class MainViewModel @JvmOverloads constructor(
                     rootGranted = granted,
                     isLoading = false,
                     recommendedBuildConfig = recommended,
-                    buildConfig = initialConfig ?: it.buildConfig
+                    buildConfig = initialConfig ?: it.buildConfig,
+                    selinuxModeText = selinuxMode.ifBlank { text(R.string.settings_unknown) },
+                    selinuxEnforcing = selinuxMode.equals("Enforcing", ignoreCase = true)
                 )
             }
             runtime.handlePendingRootGrantProfileRecovery()

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.abk.kernel.BuildConfig
 import com.abk.kernel.R
+import com.abk.kernel.magica.MagicaService
 import com.abk.kernel.data.model.BuildStatus
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
@@ -39,6 +41,10 @@ import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.utils.RootUtils
 import com.abk.kernel.viewmodel.MainViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -50,7 +56,12 @@ fun StatusScreen(
 ) {
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val jailbreakAssets = remember(context) { RootUtils.listBundledAbkLkmAssets(context) }
+    var showJailbreakDialog by rememberSaveable { mutableStateOf(false) }
+    var jailbreakLaunching by rememberSaveable { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val jailbreakAvailable = state.selinuxModeText.equals("Permissive", ignoreCase = true)
 
     LaunchedEffect(Unit) { vm.loadRecentRuns() }
 
@@ -134,6 +145,68 @@ fun StatusScreen(
                         }
                     }
                 }
+                if (jailbreakAvailable) {
+                    Spacer(Modifier.height(10.dp))
+                    FilledTonalButton(
+                        onClick = { showJailbreakDialog = true },
+                        enabled = !jailbreakLaunching,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (jailbreakLaunching) {
+                            LoadingIndicator(Modifier.size(24.dp))
+                        } else {
+                            Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(17.dp))
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.status_jailbreak_mode))
+                    }
+                }
+            }
+
+            if (showJailbreakDialog) {
+                JailbreakModeDialog(
+                    assets = jailbreakAssets,
+                    launching = jailbreakLaunching,
+                    onDismiss = { if (!jailbreakLaunching) showJailbreakDialog = false },
+                    onLaunch = { variantId, kmi ->
+                        scope.launch {
+                            jailbreakLaunching = true
+                            try {
+                                val stagedModule = withContext(Dispatchers.IO) {
+                                    RootUtils.stageMagicaJailbreakModule(context, variantId, kmi)
+                                } ?: run {
+                                    vm.showSnackbar(
+                                        context.getString(R.string.status_jailbreak_module_missing),
+                                        longDuration = true
+                                    )
+                                    return@launch
+                                }
+                                context.startService(
+                                    Intent(context, MagicaService::class.java)
+                                )
+                                showJailbreakDialog = false
+                                vm.showSnackbar(
+                                    context.getString(
+                                        R.string.status_jailbreak_started,
+                                        stagedModule.name
+                                    )
+                                )
+                                delay(30_000)
+                                vm.showSnackbar(
+                                    context.getString(R.string.jailbreak_timeout),
+                                    longDuration = true
+                                )
+                            } catch (error: Throwable) {
+                                vm.showSnackbar(
+                                    error.message ?: context.getString(R.string.status_jailbreak_failed),
+                                    longDuration = true
+                                )
+                            } finally {
+                                jailbreakLaunching = false
+                            }
+                        }
+                    }
+                )
             }
 
             StatusMetricGrid(
@@ -488,6 +561,108 @@ private fun AccountRepositoryRow(
             )
         }
     }
+}
+
+@Composable
+private fun JailbreakModeDialog(
+    assets: List<RootUtils.AbkLkmAsset>,
+    launching: Boolean,
+    onDismiss: () -> Unit,
+    onLaunch: (String, String) -> Unit
+) {
+    val variants = remember { RootUtils.ABK_LKM_VARIANTS }
+    val variantIds = remember(variants) { variants.map { it.id } }
+    val variantLabels = remember(variants) { variants.associate { it.id to it.label } }
+    val defaultVariant = remember(assets, variantIds) {
+        assets.firstOrNull()?.variantId ?: variantIds.firstOrNull().orEmpty()
+    }
+    var selectedVariant by rememberSaveable { mutableStateOf(defaultVariant) }
+    val kmiOptions = remember(assets, selectedVariant) {
+        assets.asSequence()
+            .filter { it.variantId == selectedVariant }
+            .map { it.kmi }
+            .distinct()
+            .sorted()
+            .toList()
+    }
+    var selectedKmi by rememberSaveable { mutableStateOf("") }
+
+    LaunchedEffect(defaultVariant, variantIds) {
+        if (selectedVariant !in variantIds) {
+            selectedVariant = defaultVariant
+        }
+    }
+    LaunchedEffect(selectedVariant, kmiOptions) {
+        if (selectedKmi !in kmiOptions) {
+            selectedKmi = kmiOptions.firstOrNull().orEmpty()
+        }
+    }
+
+    val canLaunch = !launching && selectedVariant.isNotBlank() && selectedKmi.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = { if (!launching) onDismiss() },
+        icon = { Icon(Icons.Default.PlayArrow, null) },
+        title = { Text(stringResource(R.string.status_jailbreak_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.status_jailbreak_dialog_desc),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                DropdownField(
+                    label = stringResource(R.string.status_jailbreak_variant),
+                    value = selectedVariant,
+                    options = variantIds,
+                    optionLabel = { variantLabels[it] ?: it },
+                    onSelect = { selectedVariant = it }
+                )
+                if (kmiOptions.isEmpty()) {
+                    OutlinedTextField(
+                        value = stringResource(R.string.status_jailbreak_no_kmi),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(stringResource(R.string.status_jailbreak_kmi)) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    DropdownField(
+                        label = stringResource(R.string.status_jailbreak_kmi),
+                        value = selectedKmi,
+                        options = kmiOptions,
+                        onSelect = { selectedKmi = it }
+                    )
+                }
+                if (assets.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.status_jailbreak_no_assets),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onLaunch(selectedVariant, selectedKmi) },
+                enabled = canLaunch
+            ) {
+                if (launching) {
+                    LoadingIndicator(Modifier.size(18.dp))
+                } else {
+                    Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(17.dp))
+                }
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.status_jailbreak_launch))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !launching) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
 }
 
 @Composable

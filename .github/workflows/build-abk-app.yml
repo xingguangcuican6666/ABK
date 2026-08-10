@@ -12,6 +12,7 @@ on:
       - ".github/workflows/build-abk-app.yml"
       - ".github/actions/prepare-abk-app-inputs/**"
       - ".github/scripts/patch-ksud-uapi-compat.py"
+      - ".github/scripts/patch-ksud-external-lkm.py"
   pull_request:
     paths:
       - "app/**"
@@ -22,6 +23,7 @@ on:
       - ".github/workflows/build-abk-app.yml"
       - ".github/actions/prepare-abk-app-inputs/**"
       - ".github/scripts/patch-ksud-uapi-compat.py"
+      - ".github/scripts/patch-ksud-external-lkm.py"
 
 jobs:
   build:
@@ -142,6 +144,8 @@ jobs:
           commit="$(git -C "$source_dir" rev-parse HEAD)"
           python3 .github/scripts/patch-ksud-uapi-compat.py "$source_dir"
           grep -q "ABK legacy uapi=0 compatibility" "$source_dir/userspace/ksud/src/ksucalls.rs"
+          python3 .github/scripts/patch-ksud-external-lkm.py "$source_dir"
+          grep -q "ABK external late-load module support" "$source_dir/userspace/ksud/src/late_load.rs"
           mkdir -p "$target_dir" "$jni_target_dir"
 
           setup_rust_build() {
@@ -242,7 +246,7 @@ jobs:
             echo "ref=$SUKISU_ULTRA_REF"
             echo "commit=$commit"
             echo "abis=$SUKISU_KSUD_ABIS"
-            echo "patches=legacy_uapi_zero_compat"
+            echo "patches=legacy_uapi_zero_compat,external_late_load_module"
             echo "built_by=.github/workflows/build-abk-app.yml"
           } > "$target_dir/source.properties"
 
@@ -316,7 +320,7 @@ jobs:
             echo "- ABIs: $SUKISU_KSUD_ABIS"
             echo "- Embedded ksuinit: aarch64-unknown-linux-musl, x86_64-unknown-linux-musl"
             echo "- magiskboot: removed upstream (ksud uses bootimg crate)"
-            echo "- Patch: allow legacy kernel uapi=0 for bundled ksud"
+            echo "- Patches: allow legacy kernel uapi=0; support external late-load LKM"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cache LKM assets

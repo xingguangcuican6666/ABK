@@ -488,6 +488,95 @@ Java_com_abk_kernel_utils_AbkKsuNative_runControlCommand(JNIEnv *env, jobject th
     return ok;
 }
 
+static int fork_dont_care_and_exec_ksud(const char *path, const char *pkg, const char *module) {
+    int pid = fork();
+    if (pid < 0) {
+        PLOGE("fork");
+        return pid;
+    } else if (pid > 0) {
+        int status = 0;
+        if (TEMP_FAILURE_RETRY(waitpid(pid, &status, 0)) < 0) {
+            PLOGE("waitpid");
+            return -1;
+        }
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+            LOGE("magica bootstrap child failed, status=%d", status);
+        }
+        return pid;
+    }
+
+    if (setuid(0) != 0) {
+        PLOGE("setuid");
+        _exit(1);
+    }
+
+    pid = fork();
+    if (pid < 0) {
+        PLOGE("fork 2");
+        _exit(1);
+    } else if (pid > 0) {
+        _exit(0);
+    }
+
+    if (module && module[0] != '\0') {
+        execl(
+            path,
+            "ksud",
+            "late-load",
+            "--magica",
+            "5555",
+            "--package-name",
+            pkg,
+            "--module",
+            module,
+            nullptr
+        );
+    } else {
+        execl(
+            path,
+            "ksud",
+            "late-load",
+            "--magica",
+            "5555",
+            "--package-name",
+            pkg,
+            nullptr
+        );
+    }
+    PLOGE("exec magica");
+    _exit(1);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_abk_kernel_magica_AppZygotePreload_forkDontCareAndExecKsud(
+    JNIEnv *env,
+    jclass,
+    jstring ksud_path,
+    jstring package_name,
+    jstring module_path
+) {
+    if (!ksud_path || !package_name || !module_path) {
+        return;
+    }
+    const char *path = env->GetStringUTFChars(ksud_path, nullptr);
+    const char *pkg = env->GetStringUTFChars(package_name, nullptr);
+    const char *module = env->GetStringUTFChars(module_path, nullptr);
+    if (path && pkg && module) {
+        LOGD("executing magica %s (pkg %s, module %s)", path, pkg, module);
+        fork_dont_care_and_exec_ksud(path, pkg, module);
+    }
+    if (module) {
+        env->ReleaseStringUTFChars(module_path, module);
+    }
+    if (pkg) {
+        env->ReleaseStringUTFChars(package_name, pkg);
+    }
+    if (path) {
+        env->ReleaseStringUTFChars(ksud_path, path);
+    }
+}
+
 extern "C"
 JNIEXPORT jstring JNICALL
 Java_com_abk_kernel_utils_AbkKsuNative_getFullVersion(JNIEnv *env, jobject thiz) {
