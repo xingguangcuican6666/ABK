@@ -523,8 +523,6 @@ object RootUtils {
                 ?: throw IOException(
                     tr(R.string.download_directory_create_failed, context.filesDir.absolutePath)
                 )
-            // Flash-only modes (Direct Install/OTA) patch the partition in place and don't hand
-            // the user a patched image, so the output-dir line would be noise there.
             if (!flash) {
                 onOutput?.invoke(tr(R.string.ru_log_output_dir, outputDir.absolutePath))
             }
@@ -2279,14 +2277,6 @@ object RootUtils {
         return target
     }
 
-    /**
-     * Resolve the directory where patched boot images are written.
-     *
-     * Prefers the user-configured public download directory (Download/ABK/abk-patched),
-     * mirroring DownloadUtils.resolveDownloadsRoot semantics: normalize, create, then verify
-     * isDirectory && canWrite. Returns null when the public directory can't be created or isn't
-     * writable, so the caller falls back to app-scoped storage.
-     */
     internal fun resolvePatchOutputDir(downloadDirectory: String?): File? {
         val root = prepareWritableDirectory(
             File(DownloadDirectoryUtils.normalizeDirectoryPath(downloadDirectory))
