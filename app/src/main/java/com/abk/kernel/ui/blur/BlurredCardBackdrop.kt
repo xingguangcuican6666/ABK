@@ -59,7 +59,9 @@ fun rememberBlurredCardBackground(
     val viewportSize = LocalBlurBackgroundAnchor.current?.size
     val widthPx = viewportSize?.width ?: 0
     val heightPx = viewportSize?.height ?: 0
-    if (!enabled || uri.isNullOrBlank() || !isBlurCapableDevice() || widthPx <= 0 || heightPx <= 0) {
+    if (!enabled || uri.isNullOrBlank() || widthPx <= 0 || heightPx <= 0) {
+        return null
+    }
         return null
     }
     val context = LocalContext.current
