@@ -24,15 +24,7 @@ import kotlin.math.max
 internal const val AbkBlurRadius = 25f
 internal const val AbkBlurBackgroundDim = 0.35f
 
-/**
- * Creates a [LayerBackdrop] capturing the content drawn beneath the blurred bars.
- *
- * The draw callback first paints an optional background [Painter] (the custom
- * background image, when enabled), then a dimmed surface base for contrast, then the
- * content that will be captured as the blur source. Returns `null` when blur is
- * disabled or the device cannot run the frosted-glass shader (API < 33), in which
- * case the app falls back to opaque surfaces.
- */
+/** Creates a [LayerBackdrop] capturing content drawn beneath blurred bars. */
 @Composable
 fun rememberBlurBackdrop(
     enableBlur: Boolean,
@@ -74,12 +66,7 @@ private fun ContentDrawScope.drawCroppedPainter(painter: Painter) {
     }
 }
 
-/**
- * Marks content as the blur source for the active backdrop.
- *
- * Attach to the page content box (inside the Scaffold body, not the bar itself) so
- * that content scrolling beneath the bars is captured and blurred.
- */
+/** Marks content as the blur source for the active backdrop. */
 @Composable
 fun Modifier.blurSource(): Modifier {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return this
@@ -88,16 +75,7 @@ fun Modifier.blurSource(): Modifier {
     } ?: this
 }
 
-/**
- * Applies a frosted-glass effect to a bar using the active backdrop.
- *
- * Attach to a top/bottom bar whose container color is [Color.Transparent] when the
- * backdrop is active, so the blurred content shows through.
- *
- * @param blendColor Optional tint blended over the blurred content. Defaults to the
- * theme's surfaceContainer using the live "界面不透明度" value directly, matching
- * the card tint and ReSukiSU's card-alpha behavior.
- */
+/** Applies a frosted-glass effect using the active backdrop. */
 @Composable
 fun Modifier.blurEffect(blendColor: Color = Color.Unspecified): Modifier {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return this

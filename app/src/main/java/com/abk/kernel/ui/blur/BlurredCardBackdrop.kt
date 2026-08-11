@@ -39,14 +39,7 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-/**
- * Viewport-aligned pre-blurred copy of the custom background shared by cards and tiles
- * while "将自定义背景渲染到模糊" is enabled.
- *
- * Cards sample the rectangle directly beneath them in the shared background
- * coordinate space. The blur is computed once, while layout callbacks update the
- * sampled rectangle when cards move.
- */
+/** Viewport-aligned pre-blurred custom background copy. */
 data class BlurredCardBackground(
     val image: ImageBitmap,
     val viewportSize: IntSize,
@@ -92,20 +85,12 @@ fun rememberBlurredCardBackground(
     return bitmap
 }
 
-/**
- * Surface tint used by cards/tiles. The live "界面不透明度" value is applied
- * directly, as ReSukiSU applies its card opacity without a separate hard cap.
- */
 @Composable
+/** Surface tint used by cards/tiles. */
 fun blurredCardSurfaceColor(color: Color): Color = uiSurfaceColor(color)
 
-/**
- * Draws the shared full-screen blurred custom background underneath this surface.
- * Every card or tile samples its own current screen-space rectangle, so adjacent
- * and nested surfaces use the same blur strength without inheriting or re-blurring
- * their parent's pixels.
- */
 @Composable
+/** Draws shared blurred custom background underneath this surface. */
 fun Modifier.blurredCardBackground(
     shape: Shape,
     enabled: Boolean = true,
@@ -233,10 +218,6 @@ private fun LayoutCoordinates.localBoundsInWindowNow(): Rect? {
     )
 }
 
-/**
- * Cover-crops [source] to the viewport and applies the same software blur fallback
- * used by ReSukiSU for bitmap-backed canvases.
- */
 private fun blurCoverBitmap(source: Bitmap, radiusPx: Float, viewportW: Int, viewportH: Int): Bitmap? {
     if (source.isRecycled || viewportW <= 0 || viewportH <= 0) return null
     val sampleWidth = (viewportW / AbkCardBlurDownsample.toFloat()).roundToInt().coerceAtLeast(1)
@@ -256,10 +237,6 @@ private fun blurCoverBitmap(source: Bitmap, radiusPx: Float, viewportW: Int, vie
     return blurred
 }
 
-/**
- * StackBlur (Gaussian approximation) ported from ReSukiSU / Mario Klingemann's
- * classic StackBlur. Works in pure software, no API-level dependencies.
- */
 private fun Bitmap.softwareFastBlur(radius: Int): Bitmap {
     if (radius < 1) return this
 
