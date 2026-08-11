@@ -62,8 +62,6 @@ fun rememberBlurredCardBackground(
     if (!enabled || uri.isNullOrBlank() || widthPx <= 0 || heightPx <= 0) {
         return null
     }
-        return null
-    }
     val context = LocalContext.current
     var bitmap by remember(uri, widthPx, heightPx) { mutableStateOf<BlurredCardBackground?>(null) }
     LaunchedEffect(uri, widthPx, heightPx) {
