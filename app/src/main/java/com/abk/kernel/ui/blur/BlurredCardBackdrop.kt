@@ -69,7 +69,14 @@ fun rememberBlurredCardBackground(
             runCatching {
                 val loader = context.imageLoader
                 val result = loader.execute(
-                    ImageRequest.Builder(context).data(uri).allowHardware(false).build()
+                    ImageRequest.Builder(context)
+                        .data(uri)
+                        .size(
+                            (widthPx / AbkCardBlurDownsample).coerceAtLeast(1),
+                            (heightPx / AbkCardBlurDownsample).coerceAtLeast(1),
+                        )
+                        .allowHardware(false)
+                        .build()
                 )
                 val source = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
                     ?: return@withContext null
