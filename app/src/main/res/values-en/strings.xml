@@ -677,6 +677,10 @@
     <string name="settings_remove_background_desc">Restore the solid Material theme background</string>
     <string name="settings_ui_opacity">UI opacity</string>
     <string name="settings_ui_opacity_desc">Lower values let cards, top bars, and bottom bars reveal the background.</string>
+    <string name="settings_blur">Blur</string>
+    <string name="settings_blur_desc">Enable frosted-glass on top and bottom bars</string>
+    <string name="settings_blur_background">Render custom background into blur</string>
+    <string name="settings_blur_background_desc">When enabled, top bars, bottom bars, cards, and tiles blur the custom background image</string>
     <string name="settings_current_color">Current</string>
     <string name="settings_color_green">Green</string>
     <string name="settings_color_blue">Blue</string>

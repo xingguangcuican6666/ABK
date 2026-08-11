@@ -106,7 +106,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -188,6 +187,7 @@ import com.abk.kernel.utils.FlashFilterManagerKind
 import com.abk.kernel.utils.FlashFilterWorkflowState
 import com.abk.kernel.utils.FlashWorkflowFilter
 import com.abk.kernel.utils.WorkflowPrimary
+import com.abk.kernel.ui.blur.BlurScreenScaffold
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
 import com.abk.kernel.ui.components.ObserveChildPageVisibility
@@ -1120,24 +1120,25 @@ fun FlashScreen(
         )
         val showPrebuiltReleaseRefreshLoading =
             prebuiltReleaseRefreshPresentation.showLoading && state.prebuiltGkiReleases.isNotEmpty()
-        Scaffold(
+        BlurScreenScaffold(
+            blurConfig = state.blurConfig,
             containerColor = Color.Transparent,
             topBar = {
                 ExpressiveTopBar(
                     title = if (rootGranted) stringResource(R.string.flash_title) else stringResource(R.string.flash_files_title),
-                    scrollBehavior = scrollBehavior
+                    scrollBehavior = scrollBehavior,
+                    enableBlur = state.blurEnabled
                 )
             }
-        ) { padding ->
+        ) { topBarHeight ->
             LazyColumn(
                 state = listScrollState,
                 modifier = Modifier
-                    .padding(padding)
                     .fillMaxSize()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .padding(horizontal = AbkScreenHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 96.dp + outerPadding.calculateBottomPadding())
+                contentPadding = PaddingValues(top = topBarHeight + 16.dp, bottom = 96.dp + outerPadding.calculateBottomPadding())
             ) {
                 item {
                     FlashHero(

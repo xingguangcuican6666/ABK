@@ -206,6 +206,8 @@ import com.abk.kernel.ui.components.MinuteHandPhase
 import com.abk.kernel.ui.components.ExpressiveEmptyState
 import com.abk.kernel.ui.components.ExpressiveHeroCard
 import com.abk.kernel.ui.components.ExpressiveSectionCard
+import com.abk.kernel.ui.blur.blurredCardBackground
+import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.ui.theme.uiSurfaceColor
@@ -258,13 +260,16 @@ internal fun WorkflowRunCard(
     val dateLabel = group.runCreatedAt.take(10)
     val colorScheme = MaterialTheme.colorScheme
     val cardContainer = when {
-        failedGhost -> uiSurfaceColor(lerp(colorScheme.surfaceContainer, colorScheme.errorContainer, 0.48f))
-        else -> uiSurfaceColor(colorScheme.surfaceContainer)
+        failedGhost -> blurredCardSurfaceColor(lerp(colorScheme.surfaceContainer, colorScheme.errorContainer, 0.48f))
+        else -> blurredCardSurfaceColor(colorScheme.surfaceContainer)
     }
+    val shape = MaterialTheme.shapes.medium
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .blurredCardBackground(shape)
             .clickable(onClick = onClick),
+        shape = shape,
         colors = CardDefaults.cardColors(containerColor = cardContainer),
         border = if (failedGhost) {
             BorderStroke(1.dp, colorScheme.error.copy(alpha = 0.28f))
@@ -466,9 +471,11 @@ internal fun BuildErrorLogPanel(text: String) {
     val logScrollState = rememberScrollState()
     val edgeLock = rememberBuildErrorLogEdgeLock(logScrollState)
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(RoundedCornerShape(12.dp)),
         shape = RoundedCornerShape(12.dp),
-        color = uiSurfaceColor(colorScheme.surfaceContainerHighest),
+        color = blurredCardSurfaceColor(colorScheme.surfaceContainerHighest),
     ) {
         SelectionContainer {
             Text(
@@ -1048,10 +1055,14 @@ internal fun parseIsoMillis(value: String): Long = runCatching {
 
 @Composable
 internal fun CategoryProgressCard(progress: BuildProgress?) {
+    val shape = MaterialTheme.shapes.medium
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
         )
     ) {
         Column(

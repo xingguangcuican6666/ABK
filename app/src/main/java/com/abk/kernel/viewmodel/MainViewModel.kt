@@ -23,6 +23,7 @@ import com.abk.kernel.data.model.*
 import com.abk.kernel.data.repository.GitHubRepository
 import com.abk.kernel.data.repository.PreferencesRepository
 import com.abk.kernel.data.repository.Result
+import com.abk.kernel.ui.blur.BlurConfig
 import com.abk.kernel.utils.BuildMonitorService
 import com.abk.kernel.utils.BuildProgressUtils
 import com.abk.kernel.utils.buildDisplaySnapshot
@@ -205,6 +206,8 @@ data class MainUiState(
     val customBackgroundUri: String? = null,
     val backgroundImageEnabled: Boolean = false,
     val uiSurfaceAlpha: Float = 1f,
+    val blurEnabled: Boolean = true,
+    val blurBackgroundExpEnabled: Boolean = false,
     val downloadDirectory: String = DownloadDirectoryUtils.defaultDirectoryPath(),
     val downloadMirrorBaseUrl: String = "",
     val prebuiltGkiEnabled: Boolean = true,
@@ -271,6 +274,15 @@ data class MainUiState(
 ) {
     val isDownloading: Boolean
         get() = activeDownloadTasks.isNotEmpty() || downloadProgress.isNotEmpty()
+
+    /** Blur preferences snapshot for [BlurScreenScaffold]. */
+    val blurConfig: BlurConfig
+        get() = BlurConfig(
+            blurEnabled = blurEnabled,
+            backgroundExpEnabled = blurBackgroundExpEnabled,
+            backgroundUri = customBackgroundUri,
+            backgroundImageEnabled = backgroundImageEnabled,
+        )
 }
 
 class MainViewModel @JvmOverloads constructor(
@@ -321,6 +333,10 @@ class MainViewModel @JvmOverloads constructor(
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
+
+    private val _uiSurfaceAlphaPreview = MutableStateFlow(1f)
+    val uiSurfaceAlphaPreview: StateFlow<Float> = _uiSurfaceAlphaPreview.asStateFlow()
+    private var uiSurfaceAlphaPreviewDirty = false
 
     private fun text(@StringRes resId: Int, vararg args: Any): String =
         LocaleHelper.str(resId, *args)
@@ -596,6 +612,9 @@ class MainViewModel @JvmOverloads constructor(
             ) { uri, enabled, alpha ->
                 BackgroundPreferences(uri, enabled, alpha)
             }.collect { backgroundPrefs ->
+                if (!uiSurfaceAlphaPreviewDirty) {
+                    _uiSurfaceAlphaPreview.value = backgroundPrefs.alpha
+                }
                 _uiState.update {
                     it.copy(
                         customBackgroundUri = backgroundPrefs.uri,
@@ -603,6 +622,16 @@ class MainViewModel @JvmOverloads constructor(
                         uiSurfaceAlpha = backgroundPrefs.alpha
                     )
                 }
+            }
+        }
+        viewModelScope.launch {
+            prefs.blurEnabled.collect { enabled ->
+                _uiState.update { it.copy(blurEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            prefs.blurBackgroundExpEnabled.collect { enabled ->
+                _uiState.update { it.copy(blurBackgroundExpEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -939,6 +968,8 @@ class MainViewModel @JvmOverloads constructor(
                     customBackgroundUri = it.customBackgroundUri,
                     backgroundImageEnabled = it.backgroundImageEnabled,
                     uiSurfaceAlpha = it.uiSurfaceAlpha,
+                    blurEnabled = it.blurEnabled,
+                    blurBackgroundExpEnabled = it.blurBackgroundExpEnabled,
                     downloadDirectory = it.downloadDirectory,
                     downloadMirrorBaseUrl = it.downloadMirrorBaseUrl,
                     prebuiltGkiEnabled = it.prebuiltGkiEnabled,
@@ -3255,7 +3286,27 @@ class MainViewModel @JvmOverloads constructor(
     }
     fun setBackgroundImageUri(uri: String?) = viewModelScope.launch { prefs.setBackgroundImageUri(uri) }
     fun setBackgroundImageEnabled(v: Boolean) = viewModelScope.launch { prefs.setBackgroundImageEnabled(v) }
-    fun setUiSurfaceAlpha(alpha: Float) = viewModelScope.launch { prefs.setUiSurfaceAlpha(alpha) }
+    fun setUiSurfaceAlpha(alpha: Float) {
+        val normalized = alpha.coerceIn(0f, 1f)
+        uiSurfaceAlphaPreviewDirty = false
+        _uiSurfaceAlphaPreview.value = normalized
+        viewModelScope.launch { prefs.setUiSurfaceAlpha(normalized) }
+    }
+
+    /**
+     * In-memory preview while the slider is being dragged. Persisted on drag end via
+     * [setUiSurfaceAlpha]; no DataStore write happens per drag tick.
+     */
+    fun setUiSurfaceAlphaPreview(alpha: Float) {
+        uiSurfaceAlphaPreviewDirty = true
+        _uiSurfaceAlphaPreview.value = alpha.coerceIn(0f, 1f)
+    }
+    fun setBlurEnabled(v: Boolean) = viewModelScope.launch {
+        prefs.setBlurEnabled(v)
+    }
+    fun setBlurBackgroundExpEnabled(v: Boolean) = viewModelScope.launch {
+        prefs.setBlurBackgroundExpEnabled(v)
+    }
     fun acceptTerms() = viewModelScope.launch { prefs.acceptCurrentTerms() }
     suspend fun loadFlashFilterJson(): String? = prefs.flashFilterJson.first()
     fun saveFlashFilterJson(json: String) = viewModelScope.launch { prefs.saveFlashFilterJson(json) }

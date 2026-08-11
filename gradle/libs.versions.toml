@@ -23,6 +23,7 @@ gson = "2.11.0"
 robolectric = "4.14.1"
 coroutines = "1.10.2"
 androidxTestCore = "1.6.1"
+miuix = "0.9.2"
 nanohttpd = "2.3.1"
 
 [libraries]
@@ -60,6 +61,7 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
+miuix-blur = { group = "top.yukonga.miuix.kmp", name = "miuix-blur-android", version.ref = "miuix" }
 nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
 
 [plugins]

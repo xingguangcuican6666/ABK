@@ -69,7 +69,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -95,11 +94,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.abk.kernel.R
+import com.abk.kernel.ui.blur.BlurConfig
+import com.abk.kernel.ui.blur.BlurScreenScaffold
+import com.abk.kernel.ui.blur.blurredCardBackground
+import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AppPageBackground
 import com.abk.kernel.ui.components.ExpressiveListItem
 import com.abk.kernel.ui.components.ExpressiveTopBar
-import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.utils.RootUtils
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -120,6 +122,8 @@ fun AbkRootPatchScreen(
     runtimeVariant: String,
     backgroundUri: String?,
     backgroundImageEnabled: Boolean,
+    blurEnabled: Boolean,
+    blurBackgroundExpEnabled: Boolean,
     onBack: () -> Unit,
     onBackEnabledChange: (Boolean) -> Unit = {},
     downloadDirectory: String? = null
@@ -488,7 +492,13 @@ fun AbkRootPatchScreen(
             backgroundUri = backgroundUri,
             backgroundImageEnabled = backgroundImageEnabled
         )
-        Scaffold(
+        BlurScreenScaffold(
+            blurConfig = BlurConfig(
+                blurEnabled = blurEnabled,
+                backgroundExpEnabled = blurBackgroundExpEnabled,
+                backgroundUri = backgroundUri,
+                backgroundImageEnabled = backgroundImageEnabled,
+            ),
             containerColor = Color.Transparent,
             topBar = {
                 ExpressiveTopBar(
@@ -497,19 +507,19 @@ fun AbkRootPatchScreen(
                         IconButton(onClick = onBack, enabled = !running) {
                             Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
                         }
-                    }
+                    },
+                    enableBlur = blurEnabled
                 )
             }
-        ) { padding ->
+        ) { topBarHeight ->
             Column(
                 modifier = Modifier
-                    .padding(padding)
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = AbkScreenHorizontalPadding)
-                    .padding(top = 12.dp),
+                    .padding(horizontal = AbkScreenHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+            Spacer(Modifier.height(topBarHeight + 16.dp))
             PatchGroupCard {
                 PatchModeRow(
                     title = stringResource(R.string.root_patch_select_file),
@@ -850,10 +860,14 @@ private fun LkmPatchPageBackground(
 
 @Composable
 private fun PatchGroupCard(content: @Composable ColumnScope.() -> Unit) {
+    val shape = MaterialTheme.shapes.medium
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
@@ -938,12 +952,16 @@ private fun PatchedImageCard(
     onCopy: () -> Unit,
     onFlash: () -> Unit
 ) {
+    val shape = MaterialTheme.shapes.medium
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -985,10 +1003,14 @@ private fun PatchLogCard(
     canReboot: Boolean,
     onReboot: () -> Unit
 ) {
+    val shape = MaterialTheme.shapes.medium
     Card(
-        colors = CardDefaults.cardColors(containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
+        colors = CardDefaults.cardColors(containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

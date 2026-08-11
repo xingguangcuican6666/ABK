@@ -28,6 +28,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,7 +45,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.abk.kernel.R
+import com.abk.kernel.ui.blur.LocalBlurredCardBackground
+import com.abk.kernel.ui.blur.blurredCardBackground
+import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
+
+private val LocalBlurredSurfaceDepth = compositionLocalOf { 0 }
 
 @Composable
 fun ExpressiveHeroCard(
@@ -52,58 +63,66 @@ fun ExpressiveHeroCard(
     badge: (@Composable RowScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
+    val blurDepth = LocalBlurredSurfaceDepth.current
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .blurredCardBackground(
+                shape = MaterialTheme.shapes.medium,
+                enabled = true,
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(containerColor),
+            containerColor = blurredCardSurfaceColor(containerColor),
             contentColor = contentColor
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .animateContentSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+        CompositionLocalProvider(LocalBlurredSurfaceDepth provides blurDepth + 1) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .animateContentSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(22.dp)
-                )
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = contentColor,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.size(22.dp)
                     )
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = contentColor.copy(alpha = 0.76f)
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = contentColor,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.76f)
+                        )
+                    }
+                }
+                if (badge != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        content = badge
                     )
                 }
+                content()
             }
-            if (badge != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    content = badge
-                )
-            }
-            content()
         }
     }
 }
@@ -118,50 +137,58 @@ fun ExpressiveSectionCard(
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val blurDepth = LocalBlurredSurfaceDepth.current
     Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = uiSurfaceColor(containerColor)),
+        modifier = modifier
+            .fillMaxWidth()
+            .blurredCardBackground(
+                shape = MaterialTheme.shapes.large,
+                enabled = true,
+            ),
+        colors = CardDefaults.cardColors(containerColor = blurredCardSurfaceColor(containerColor)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp)
-                .animateContentSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+        CompositionLocalProvider(LocalBlurredSurfaceDepth provides blurDepth + 1) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp)
+                    .animateContentSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                if (icon != null) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    if (subtitle != null) {
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (icon != null) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (subtitle != null) {
+                            Text(
+                                text = subtitle,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (trailingContent != null) {
+                        trailingContent()
+                    }
                 }
-                if (trailingContent != null) {
-                    trailingContent()
-                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp), content = content)
             }
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp), content = content)
         }
     }
 }
@@ -179,8 +206,11 @@ fun ExpressiveListItem(
     onClick: (() -> Unit)? = null
 ) {
     val colors = MaterialTheme.colorScheme
+    val blurDepth = LocalBlurredSurfaceDepth.current
+    val drawsOwnBlurSurface = LocalBlurredCardBackground.current != null
     val containerColor = when {
-        selected -> uiSurfaceColor(colors.primaryContainer)
+        selected -> blurredCardSurfaceColor(colors.primaryContainer)
+        drawsOwnBlurSurface -> blurredCardSurfaceColor(colors.surfaceContainer)
         else -> Color.Transparent
     }
     val titleColor = when {
@@ -207,6 +237,10 @@ fun ExpressiveListItem(
         modifier = modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
+            .blurredCardBackground(
+                shape = MaterialTheme.shapes.large,
+                enabled = true,
+            )
             .then(clickableModifier),
         headlineContent = {
             Text(
