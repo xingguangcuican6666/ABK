@@ -57,7 +57,8 @@ fun AppBackgroundHost(
                 uri = backgroundUri,
                 enabled = blurBackgroundEnabled && hasBackground,
             )
-            CompositionLocalProvider(
+                LocalUiSurfaceAlpha provides if (hasBackground) uiSurfaceAlpha.coerceIn(0f, 1f) else 1f,
+                LocalAppBackgroundEnabled provides hasBackground,
                 LocalBlurredCardBackground provides blurredCardBackground,
                 LocalUiSurfaceAlpha provides uiSurfaceAlpha.coerceIn(0f, 1f),
                 LocalAppBackgroundEnabled provides hasBackground,
