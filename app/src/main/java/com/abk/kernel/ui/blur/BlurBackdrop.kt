@@ -1,6 +1,5 @@
 package com.abk.kernel.ui.blur
 
-import android.os.Build
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.geometry.Size
@@ -23,6 +22,13 @@ import kotlin.math.max
 
 internal const val AbkBlurRadius = 25f
 internal const val AbkBlurBackgroundDim = 0.35f
+
+/**
+ * Caps the surface tint applied over the frosted-glass backdrop. Keeping this below
+ * 1 keeps the blur visible even when [LocalUiSurfaceAlpha] is at its default 1f
+ * (no custom background, or background at 100% opacity).
+ */
+internal const val AbkBlurTintAlpha = 0.85f
 
 /** Creates a [LayerBackdrop] capturing content drawn beneath blurred bars. */
 @Composable
@@ -69,7 +75,9 @@ private fun ContentDrawScope.drawCroppedPainter(painter: Painter) {
 /** Marks content as the blur source for the active backdrop. */
 @Composable
 fun Modifier.blurSource(): Modifier {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return this
+    // layerBackdrop needs AGSL runtime shaders (API 33+). Gating on the real
+    // capability instead of a lower SDK constant keeps the fallback accurate.
+    if (!isBlurCapableDevice()) return this
     return LocalBlurState.current?.let { backdrop ->
         this.then(Modifier.layerBackdrop(backdrop))
     } ?: this
@@ -78,11 +86,14 @@ fun Modifier.blurSource(): Modifier {
 /** Applies a frosted-glass effect using the active backdrop. */
 @Composable
 fun Modifier.blurEffect(blendColor: Color = Color.Unspecified): Modifier {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return this
+    // textureBlur needs AGSL runtime shaders (API 33+).
+    if (!isBlurCapableDevice()) return this
     return LocalBlurState.current?.let { backdrop ->
         val effective = if (blendColor == Color.Unspecified) {
             MaterialTheme.colorScheme.surfaceContainer.copy(
-                alpha = LocalUiSurfaceAlpha.current.coerceIn(0f, 1f)
+                // Decoupled from LocalUiSurfaceAlpha so the frosted glass stays
+                // visible at the default opaque surface alpha (see AbkBlurTintAlpha).
+                alpha = (LocalUiSurfaceAlpha.current * AbkBlurTintAlpha).coerceIn(0f, 1f)
             )
         } else {
             blendColor

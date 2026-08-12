@@ -1,5 +1,6 @@
 package com.abk.kernel.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,7 +16,9 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.material3.MaterialTheme
 import coil.compose.AsyncImage
+import coil.compose.rememberAsyncImagePainter
 import com.abk.kernel.ui.blur.LocalBlurBackgroundAnchor
+import com.abk.kernel.ui.blur.LocalBlurredBackgroundPainter
 import com.abk.kernel.ui.blur.LocalBlurredCardBackground
 import com.abk.kernel.ui.blur.rememberBlurredCardBackground
 import com.abk.kernel.ui.theme.LocalAppBackgroundEnabled
@@ -32,6 +35,15 @@ fun AppBackgroundHost(
     val hasBackground = backgroundEnabled && !backgroundUri.isNullOrBlank()
     val colorScheme = MaterialTheme.colorScheme
     var backgroundCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    // One shared painter for the visible background image and every blur backdrop.
+    val backgroundPainter = if (hasBackground) {
+        rememberAsyncImagePainter(
+            model = backgroundUri,
+            contentScale = ContentScale.Crop,
+        )
+    } else {
+        null
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -42,16 +54,16 @@ fun AppBackgroundHost(
             }
             .background(colorScheme.surface)
     ) {
-        if (hasBackground) {
-            AsyncImage(
-                model = backgroundUri,
+        if (backgroundPainter != null) {
+            Image(
+                painter = backgroundPainter,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
         }
         CompositionLocalProvider(
             LocalBlurBackgroundAnchor provides backgroundCoordinates,
+            LocalBlurredBackgroundPainter provides backgroundPainter,
         ) {
             val blurredCardBackground = rememberBlurredCardBackground(
                 uri = backgroundUri,

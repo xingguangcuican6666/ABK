@@ -15,10 +15,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -428,7 +426,8 @@ fun SettingsScreen(
                         onUiSurfaceAlphaChange = { alpha -> vm.setUiSurfaceAlpha(alpha) },
                         onUiSurfaceAlphaPreviewChange = { alpha -> vm.setUiSurfaceAlphaPreview(alpha) },
                         onBlurEnabledChange = vm::setBlurEnabled,
-                        onBlurBackgroundExpEnabledChange = vm::setBlurBackgroundExpEnabled
+                        onBlurBackgroundExpEnabledChange = vm::setBlurBackgroundExpEnabled,
+                        onUiSurfaceAlphaSync = vm::syncUiSurfaceAlphaPreview
                     )
                 }
             }
@@ -2004,8 +2003,16 @@ private fun ThemeSettingsScreen(
     onUiSurfaceAlphaChange: (Float) -> Unit,
     onUiSurfaceAlphaPreviewChange: (Float) -> Unit,
     onBlurEnabledChange: (Boolean) -> Unit,
-    onBlurBackgroundExpEnabledChange: (Boolean) -> Unit
+    onBlurBackgroundExpEnabledChange: (Boolean) -> Unit,
+    onUiSurfaceAlphaSync: () -> Unit
 ) {
+    // An interrupted slider drag (back gesture / backgrounding / the slider being
+    // disabled mid-drag) never fires onValueChangeFinished, so the in-memory preview
+    // would stay stuck on an un-persisted alpha for the whole session. Restore it from
+    // prefs when the settings page goes away.
+    DisposableEffect(Unit) {
+        onDispose(onUiSurfaceAlphaSync)
+    }
     val context = LocalContext.current
     val dynamicColorAvailable = isDynamicColorAvailable()
     val effectiveDynamicColorEnabled = dynamicColorAvailable && dynamicColorEnabled
@@ -2056,10 +2063,11 @@ private fun ThemeSettingsScreen(
             }
         }
 
-        // Real frosted-glass needs runtime shaders (API 33+); on older devices the
-        // settings are hidden entirely and the UI keeps its opaque fallback.
-        if (isBlurCapableDevice()) {
-            SettingsGroup(title = stringResource(R.string.settings_blur)) {
+        SettingsGroup(title = stringResource(R.string.settings_blur)) {
+            // Real frosted-glass top/bottom bars need AGSL runtime shaders (API 33+);
+            // on older devices that toggle is hidden and the bars keep their opaque
+            // fallback.
+            if (isBlurCapableDevice()) {
                 ExpressiveSwitchItem(
                     title = stringResource(R.string.settings_blur),
                     subtitle = stringResource(R.string.settings_blur_desc),
@@ -2067,22 +2075,19 @@ private fun ThemeSettingsScreen(
                     checked = blurEnabled,
                     onCheckedChange = onBlurEnabledChange
                 )
-                // The nested "render custom background into blur" item expands out
-                // from below the toggle when blur is enabled.
-                AnimatedVisibility(
-                    visible = blurEnabled,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {
-                    ExpressiveSwitchItem(
-                        title = stringResource(R.string.settings_blur_background),
-                        subtitle = stringResource(R.string.settings_blur_background_desc),
-                        icon = Icons.Default.Image,
-                        checked = blurBackgroundExpEnabled,
-                        onCheckedChange = onBlurBackgroundExpEnabledChange
-                    )
-                }
             }
+            // The software StackBlur card path works on every API level, so its toggle
+            // is exposed regardless of runtime-shader support. It is a no-op until a
+            // custom background image is configured, so it is disabled until then.
+            val backgroundConfigured = backgroundImageEnabled && !backgroundUri.isNullOrBlank()
+            ExpressiveSwitchItem(
+                title = stringResource(R.string.settings_blur_background),
+                subtitle = stringResource(R.string.settings_blur_background_desc),
+                icon = Icons.Default.Image,
+                checked = blurBackgroundExpEnabled,
+                enabled = backgroundConfigured,
+                onCheckedChange = onBlurBackgroundExpEnabledChange
+            )
         }
 
         SettingsGroup(title = stringResource(R.string.settings_color_source)) {

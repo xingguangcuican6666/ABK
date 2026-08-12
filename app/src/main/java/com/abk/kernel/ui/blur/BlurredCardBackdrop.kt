@@ -30,8 +30,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import coil.imageLoader
 import coil.request.ImageRequest
+import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -51,6 +53,9 @@ val LocalBlurBackgroundAnchor = compositionLocalOf<LayoutCoordinates?> { null }
 internal const val AbkCardBlurRadius = 45f
 private const val AbkCardBlurDownsample = 4
 
+/** Debounce before re-running the full decode + StackBlur pass on viewport changes. */
+private const val AbkCardBlurLoadDebounceMs = 200L
+
 @Composable
 fun rememberBlurredCardBackground(
     uri: String?,
@@ -63,8 +68,16 @@ fun rememberBlurredCardBackground(
         return null
     }
     val context = LocalContext.current
-    var bitmap by remember(uri, widthPx, heightPx) { mutableStateOf<BlurredCardBackground?>(null) }
-    LaunchedEffect(uri, widthPx, heightPx) {
+    var bitmap by remember(uri, enabled) { mutableStateOf<BlurredCardBackground?>(null) }
+    // Restarting this effect on every size change cancels the in-flight debounce, so a
+    // rotation / split-screen resize only runs the final decode + StackBlur pass once the
+    // viewport settles (previously it re-ran for every intermediate size).
+    LaunchedEffect(uri, enabled, widthPx, heightPx) {
+        bitmap = null
+        delay(AbkCardBlurLoadDebounceMs)
+        if (widthPx <= 0 || heightPx <= 0) return@LaunchedEffect
+        val targetWidth = widthPx
+        val targetHeight = heightPx
         bitmap = withContext(Dispatchers.Default) {
             runCatching {
                 val loader = context.imageLoader
@@ -72,20 +85,21 @@ fun rememberBlurredCardBackground(
                     ImageRequest.Builder(context)
                         .data(uri)
                         .size(
-                            (widthPx / AbkCardBlurDownsample).coerceAtLeast(1),
-                            (heightPx / AbkCardBlurDownsample).coerceAtLeast(1),
+                            (targetWidth / AbkCardBlurDownsample).coerceAtLeast(1),
+                            (targetHeight / AbkCardBlurDownsample).coerceAtLeast(1),
                         )
                         .allowHardware(false)
                         .build()
                 )
                 val source = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
                     ?: return@withContext null
-                blurCoverBitmap(source, AbkCardBlurRadius, widthPx, heightPx)?.let { blurredBitmap ->
-                    BlurredCardBackground(
-                        image = blurredBitmap.asImageBitmap(),
-                        viewportSize = IntSize(widthPx, heightPx),
-                    )
-                }
+                blurCoverBitmap(source, AbkCardBlurRadius, targetWidth, targetHeight)
+                    ?.let { blurredBitmap ->
+                        BlurredCardBackground(
+                            image = blurredBitmap.asImageBitmap(),
+                            viewportSize = IntSize(targetWidth, targetHeight),
+                        )
+                    }
             }.getOrNull()
         }
     }
@@ -93,8 +107,17 @@ fun rememberBlurredCardBackground(
 }
 
 @Composable
-/** Surface tint used by cards/tiles. */
-fun blurredCardSurfaceColor(color: Color): Color = uiSurfaceColor(color)
+/**
+ * Surface tint used by cards/tiles. When a pre-blurred custom background is present the
+ * tint stays translucent (capped by [AbkBlurTintAlpha]) so the frosted backdrop shows
+ * through even at the default opaque surface alpha; otherwise it follows the regular
+ * [uiSurfaceColor] opacity rule.
+ */
+fun blurredCardSurfaceColor(color: Color): Color {
+    if (LocalBlurredCardBackground.current == null) return uiSurfaceColor(color)
+    val alpha = (LocalUiSurfaceAlpha.current * AbkBlurTintAlpha).coerceIn(0f, 1f)
+    return if (alpha >= 0.995f) color else color.copy(alpha = color.alpha * alpha)
+}
 
 @Composable
 /** Draws shared blurred custom background underneath this surface. */
@@ -184,19 +207,14 @@ private fun LayoutCoordinates.boundsInBackgroundNow(
 private fun LayoutCoordinates.boundsInCoordinatesNow(
     targetCoordinates: LayoutCoordinates,
 ): Rect? {
-    fun localToTarget(point: Offset): Offset {
-        val screenPoint = localToScreen(point)
-        if (!screenPoint.x.isFinite() || !screenPoint.y.isFinite()) return Offset.Unspecified
-        return targetCoordinates.screenToLocal(screenPoint)
-    }
-
     val width = size.width.toFloat()
     val height = size.height.toFloat()
+    // Single coordinate-space hop (no screen round-trip) per corner.
     val points = listOf(
-        localToTarget(Offset.Zero),
-        localToTarget(Offset(width, 0f)),
-        localToTarget(Offset(0f, height)),
-        localToTarget(Offset(width, height)),
+        targetCoordinates.localPositionOf(this, Offset.Zero),
+        targetCoordinates.localPositionOf(this, Offset(width, 0f)),
+        targetCoordinates.localPositionOf(this, Offset(0f, height)),
+        targetCoordinates.localPositionOf(this, Offset(width, height)),
     )
     if (points.any { !it.x.isFinite() || !it.y.isFinite() }) return null
     return Rect(

@@ -593,10 +593,19 @@ private fun AbkMainScaffold(
 
     // The bottom NavigationBar/NavigationRail live outside every screen's
     // BlurScreenScaffold, so they keep their own backdrop as the blur source.
+    // When a child page hides the bar (navProgress reaches 1) or the opaque OOBE
+    // overlay covers everything, neither the backdrop nor its blur pipeline has a
+    // visible consumer, so they are switched off to avoid an invisible full-screen
+    // recordLayer + AGSL blur pass every frame.
+    val barBlurOnScreen = !state.showOobe && navProgress < 1f
     val blurBackdrop = rememberBlurBackdrop(
-        enableBlur = state.blurConfig.blurEnabled,
+        enableBlur = state.blurConfig.blurEnabled && barBlurOnScreen,
         surfaceColor = MaterialTheme.colorScheme.surfaceContainer,
-        backgroundPainter = rememberBlurBackgroundPainter(state.blurConfig),
+        backgroundPainter = if (barBlurOnScreen) {
+            rememberBlurBackgroundPainter(state.blurConfig)
+        } else {
+            null
+        },
     )
 
     CompositionLocalProvider(
@@ -604,7 +613,7 @@ private fun AbkMainScaffold(
     ) {
         // Gate bar transparency on the frosted effect actually rendering (API >= 33),
         // so pre-Android-13 devices fall back to the opaque surface color.
-        val blurActive = isBlurActive(state.blurEnabled)
+        val blurActive = isBlurActive(state.blurEnabled && barBlurOnScreen)
 
     Box(
         modifier = Modifier

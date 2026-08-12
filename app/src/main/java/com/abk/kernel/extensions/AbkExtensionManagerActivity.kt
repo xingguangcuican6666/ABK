@@ -95,6 +95,19 @@ class AbkExtensionManagerActivity : ComponentActivity() {
             val uiSurfaceAlpha by prefs.uiSurfaceAlpha.collectAsState(initial = 1f)
             val blurEnabled by prefs.blurEnabled.collectAsState(initial = true)
             val blurBackgroundExpEnabled by prefs.blurBackgroundExpEnabled.collectAsState(initial = false)
+            val blurConfig = remember(
+                customBackgroundUri,
+                backgroundImageEnabled,
+                blurEnabled,
+                blurBackgroundExpEnabled
+            ) {
+                BlurConfig(
+                    blurEnabled = blurEnabled,
+                    backgroundExpEnabled = blurBackgroundExpEnabled,
+                    backgroundUri = customBackgroundUri,
+                    backgroundImageEnabled = backgroundImageEnabled,
+                )
+            }
 
             AbkTheme(
                 themeMode = themeMode,
@@ -106,10 +119,7 @@ class AbkExtensionManagerActivity : ComponentActivity() {
                     backgroundUri = customBackgroundUri,
                     backgroundEnabled = backgroundImageEnabled,
                     uiSurfaceAlpha = uiSurfaceAlpha,
-                    blurBackgroundEnabled = blurEnabled &&
-                        blurBackgroundExpEnabled &&
-                        backgroundImageEnabled &&
-                        !customBackgroundUri.isNullOrBlank(),
+                    blurBackgroundEnabled = blurConfig.wantsBackgroundPainter,
                 ) {
                     AbkExtensionManagerScreen(
                         focusExtensionId = focusExtensionId,

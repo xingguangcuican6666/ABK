@@ -613,14 +613,27 @@ class MainViewModel @JvmOverloads constructor(
                 BackgroundPreferences(uri, enabled, alpha)
             }.collect { backgroundPrefs ->
                 if (!uiSurfaceAlphaPreviewDirty) {
+                    // No drag in progress: keep the preview and the persisted value in
+                    // sync (this also restores the preview after an interrupted drag via
+                    // syncUiSurfaceAlphaPreview()).
                     _uiSurfaceAlphaPreview.value = backgroundPrefs.alpha
-                }
-                _uiState.update {
-                    it.copy(
-                        customBackgroundUri = backgroundPrefs.uri,
-                        backgroundImageEnabled = backgroundPrefs.enabled,
-                        uiSurfaceAlpha = backgroundPrefs.alpha
-                    )
+                    _uiState.update {
+                        it.copy(
+                            customBackgroundUri = backgroundPrefs.uri,
+                            backgroundImageEnabled = backgroundPrefs.enabled,
+                            uiSurfaceAlpha = backgroundPrefs.alpha,
+                        )
+                    }
+                } else {
+                    // Drag in progress: a late DataStore emission from an earlier commit
+                    // must not yank the slider thumb back or override the live preview,
+                    // but background URI/enabled still need to keep up.
+                    _uiState.update {
+                        it.copy(
+                            customBackgroundUri = backgroundPrefs.uri,
+                            backgroundImageEnabled = backgroundPrefs.enabled,
+                        )
+                    }
                 }
             }
         }
@@ -3300,6 +3313,17 @@ class MainViewModel @JvmOverloads constructor(
     fun setUiSurfaceAlphaPreview(alpha: Float) {
         uiSurfaceAlphaPreviewDirty = true
         _uiSurfaceAlphaPreview.value = alpha.coerceIn(0f, 1f)
+    }
+
+    /**
+     * Resets the drag-preview state so the in-memory alpha re-syncs from the persisted
+     * value. Called when the settings page is disposed: an interrupted drag never fires
+     * Slider.onValueChangeFinished, which would otherwise leave the preview stuck on an
+     * un-persisted value for the rest of the session.
+     */
+    fun syncUiSurfaceAlphaPreview() {
+        uiSurfaceAlphaPreviewDirty = false
+        viewModelScope.launch { _uiSurfaceAlphaPreview.value = prefs.uiSurfaceAlpha.first() }
     }
     fun setBlurEnabled(v: Boolean) = viewModelScope.launch {
         prefs.setBlurEnabled(v)

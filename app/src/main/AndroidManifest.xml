@@ -15,7 +15,14 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
-    <!-- Runtime shader blur is guarded in code while the app still supports API 26+. -->
+    <!--
+      The miuix-blur AAR declares minSdk 33 while this app supports API 26+. The override
+      keeps the build working; safety is enforced at runtime. Every path into the library
+      (rememberBlurBackdrop, blurSource, blurEffect, blurSourceBody, isBlurActive) is gated
+      on isRuntimeShaderSupported() (API 33+), and the AAR registers no ContentProvider or
+      initializer, so nothing library-side executes on API 26-32. Keep these guards intact
+      if the dependency version or call sites change.
+    -->
     <uses-sdk tools:overrideLibrary="top.yukonga.miuix.kmp.blur" />
 
     <application
