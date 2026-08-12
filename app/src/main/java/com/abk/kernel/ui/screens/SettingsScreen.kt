@@ -649,6 +649,7 @@ fun SettingsScreen(
                                     Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
                                 }
                             },
+                            enableBlur = state.blurEnabled,
                             actions = {
                                 IconButton(onClick = {
                                     refreshPresentation.beginRefresh()
