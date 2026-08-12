@@ -56,6 +56,14 @@ val LocalBlurredCardBackground = compositionLocalOf<BlurredCardBackground?> { nu
 val LocalBlurBackgroundAnchor = compositionLocalOf<LayoutCoordinates?> { null }
 
 /**
+ * Snapshot-observable size of the shared background anchor. Reading this in composition
+ * resubscribes on every real viewport resize, unlike [LocalBlurBackgroundAnchor]'s `size`
+ * (which is not observable), so the pre-blurred card backdrop re-blurs when the window
+ * actually resizes (split-screen, freeform, IME on adjustResize devices).
+ */
+val LocalBlurBackgroundSize = compositionLocalOf { IntSize.Zero }
+
+/**
  * Whether the render-custom-background-into-blur feature is enabled. Unlike
  * [LocalBlurredCardBackground] this is a synchronous signal that does not wait for the
  * pre-blurred bitmap to load, so surfaces can stay translucent from the first frame and
@@ -138,9 +146,9 @@ fun rememberBlurredCardBackground(
     uri: String?,
     enabled: Boolean,
 ): BlurredCardBackground? {
-    val viewportSize = LocalBlurBackgroundAnchor.current?.size
-    val widthPx = viewportSize?.width ?: 0
-    val heightPx = viewportSize?.height ?: 0
+    val viewportSize = LocalBlurBackgroundSize.current
+    val widthPx = viewportSize.width
+    val heightPx = viewportSize.height
     if (!enabled || uri.isNullOrBlank() || widthPx <= 0 || heightPx <= 0) {
         return null
     }
@@ -206,7 +214,10 @@ fun rememberBlurredCardBackground(
         }
         if (loaded != null) {
             cachedBlurredCardBackground = loaded
-            saveBlurCache(context, uri, loaded)
+            // JPEG compress + disk write; keep off the main thread (StrictMode / jank).
+            withContext(Dispatchers.IO) {
+                saveBlurCache(context, uri, loaded)
+            }
         }
     }
     // Only hand out the blurred wallpaper for the current custom background; viewport

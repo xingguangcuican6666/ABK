@@ -15,12 +15,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.MaterialTheme
 import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.abk.kernel.ui.blur.LocalBlurBackgroundAnchor
+import com.abk.kernel.ui.blur.LocalBlurBackgroundSize
 import com.abk.kernel.ui.blur.LocalBlurredBackgroundPainter
 import com.abk.kernel.ui.blur.LocalBlurredCardBackground
 import com.abk.kernel.ui.blur.LocalBlurredCardBackgroundEnabled
@@ -40,6 +42,7 @@ fun AppBackgroundHost(
     val colorScheme = MaterialTheme.colorScheme
     val context = LocalContext.current
     var backgroundCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var backgroundSize by remember { mutableStateOf(IntSize.Zero) }
     // One shared painter for the visible background image and every blur backdrop.
     // Decode the wallpaper at full-screen resolution, which is stable across transient
     // insets (soft keyboard / IME resizing the window): a large user image is never
@@ -71,6 +74,12 @@ fun AppBackgroundHost(
                 if (backgroundCoordinates !== coordinates) {
                     backgroundCoordinates = coordinates.takeIf { it.isAttached }
                 }
+                // LayoutCoordinates.size is not snapshot-backed, so reading it in
+                // composition does not resubscribe when the anchor relayouts to a new
+                // size (split-screen / IME resize). Mirror it into observable state.
+                if (coordinates.isAttached && coordinates.size != backgroundSize) {
+                    backgroundSize = coordinates.size
+                }
             }
             .background(colorScheme.surface)
     ) {
@@ -84,6 +93,7 @@ fun AppBackgroundHost(
         }
         CompositionLocalProvider(
             LocalBlurBackgroundAnchor provides backgroundCoordinates,
+            LocalBlurBackgroundSize provides backgroundSize,
             LocalBlurredBackgroundPainter provides backgroundPainter,
         ) {
             val blurredCardBackground = rememberBlurredCardBackground(

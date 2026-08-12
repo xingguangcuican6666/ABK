@@ -259,7 +259,6 @@ class PreferencesRepository(private val context: Context) {
     }
     suspend fun setBlurEnabled(v: Boolean) = context.dataStore.edit {
         it[KEY_BLUR_ENABLED] = v
-        if (!v) it[KEY_BLUR_BACKGROUND_EXP_ENABLED] = false
     }
     suspend fun setBlurBackgroundExpEnabled(v: Boolean) = context.dataStore.edit {
         it[KEY_BLUR_BACKGROUND_EXP_ENABLED] = v
