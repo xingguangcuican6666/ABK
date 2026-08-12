@@ -79,16 +79,23 @@ private const val AbkCardBlurLoadDebounceMs = 200L
 private var cachedBlurredCardBackground by mutableStateOf<BlurredCardBackground?>(null)
 private var cachedBlurredCardUri by mutableStateOf<String?>(null)
 
-private fun blurCacheFile(context: android.content.Context): File =
-    File(context.filesDir, "abk_blurred_custom_background.jpg")
+private fun blurCacheFile(context: android.content.Context, uri: String): File {
+    // Key the cache file by the background URI. String.hashCode() is spec-defined and
+    // stable across processes, so a previous launch's blur is only reused for the same
+    // wallpaper. Without this, a single-slot file would serve a stale wallpaper's blur
+    // after the background changes across launches.
+    val key = Integer.toHexString(uri.hashCode())
+    return File(context.filesDir, "abk_blurred_custom_background_$key.jpg")
+}
 
 /** Loads a previously cached pre-blurred wallpaper that matches the viewport, if any. */
 private fun loadBlurCache(
     context: android.content.Context,
+    uri: String,
     viewportW: Int,
     viewportH: Int,
 ): BlurredCardBackground? {
-    val file = blurCacheFile(context)
+    val file = blurCacheFile(context, uri)
     if (!file.exists()) return null
     return runCatching {
         val decoded = BitmapFactory.decodeFile(file.absolutePath) ?: return@runCatching null
@@ -106,9 +113,13 @@ private fun loadBlurCache(
 }
 
 /** Persists the pre-blurred wallpaper so the next launch / matching viewport reuses it. */
-private fun saveBlurCache(context: android.content.Context, background: BlurredCardBackground) {
+private fun saveBlurCache(
+    context: android.content.Context,
+    uri: String,
+    background: BlurredCardBackground,
+) {
     runCatching {
-        val file = blurCacheFile(context)
+        val file = blurCacheFile(context, uri)
         file.parentFile?.mkdirs()
         val bitmap = background.image.asAndroidBitmap()
         val temp = File(file.parentFile, "${file.name}.tmp")
@@ -141,16 +152,15 @@ fun rememberBlurredCardBackground(
     // the new one is ready, and matching viewports are restored from disk instead of
     // re-blurring from scratch.
     LaunchedEffect(uri, enabled, widthPx, heightPx) {
-        // Wallpaper changed: drop the stale memory + disk blur for the old image.
-if (cachedBlurredCardUri != null && cachedBlurredCardUri != uri) {
-    cachedBlurredCardBackground = null
-    blurCacheFile(context).delete()
-}
-cachedBlurredCardUri = uri
+        // Wallpaper changed: drop the stale in-memory blur for the old image and clean up
+        // its on-disk cache. On a fresh process cachedBlurredCardUri is null, so the
+        // current wallpaper's disk cache is left intact for loadBlurCache below to reuse.
+        val previousUri = cachedBlurredCardUri
+        if (previousUri != null && previousUri != uri) {
             cachedBlurredCardBackground = null
-            cachedBlurredCardUri = uri
-            blurCacheFile(context).delete()
+            blurCacheFile(context, previousUri).delete()
         }
+        cachedBlurredCardUri = uri
         delay(AbkCardBlurLoadDebounceMs)
         if (widthPx <= 0 || heightPx <= 0) return@LaunchedEffect
         val targetWidth = widthPx
@@ -160,7 +170,7 @@ cachedBlurredCardUri = uri
             return@LaunchedEffect
         }
         val loaded = withContext(Dispatchers.Default) {
-            loadBlurCache(context, targetWidth, targetHeight)
+            loadBlurCache(context, uri, targetWidth, targetHeight)
                 ?: run {
                     try {
                         val loader = context.imageLoader
@@ -196,7 +206,7 @@ cachedBlurredCardUri = uri
         }
         if (loaded != null) {
             cachedBlurredCardBackground = loaded
-            saveBlurCache(context, loaded)
+            saveBlurCache(context, uri, loaded)
         }
     }
     // Only hand out the blurred wallpaper for the current custom background; viewport
