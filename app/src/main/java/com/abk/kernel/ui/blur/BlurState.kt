@@ -17,12 +17,12 @@ data class BlurConfig(
 ) {
     /**
      * Whether the software StackBlur card path should render the custom background into
-     * cards. Deliberately independent of [blurEnabled]: the software path needs no
-     * runtime shaders, so it must be reachable on API 26-32 where the AGSL bar blur
-     * (and its settings toggle) does not exist.
+     * cards. The master [blurEnabled] switch stays the overall on/off for every blur
+     * surface (AGSL bars on API 33+, software card blur on every API), while
+     * [backgroundExpEnabled] opts the card path into using the custom background.
      */
     val wantsBackgroundPainter: Boolean
-        get() = backgroundExpEnabled && backgroundImageEnabled && !backgroundUri.isNullOrBlank()
+        get() = blurEnabled && backgroundExpEnabled && backgroundImageEnabled && !backgroundUri.isNullOrBlank()
 }
 
 internal fun isBlurCapableDevice(): Boolean = isRuntimeShaderSupported()

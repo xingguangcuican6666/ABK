@@ -32,6 +32,7 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
 import com.abk.kernel.ui.theme.uiSurfaceColor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -79,7 +80,7 @@ fun rememberBlurredCardBackground(
         val targetWidth = widthPx
         val targetHeight = heightPx
         bitmap = withContext(Dispatchers.Default) {
-            runCatching {
+            try {
                 val loader = context.imageLoader
                 val result = loader.execute(
                     ImageRequest.Builder(context)
@@ -100,7 +101,15 @@ fun rememberBlurredCardBackground(
                             viewportSize = IntSize(targetWidth, targetHeight),
                         )
                     }
-            }.getOrNull()
+            } catch (e: CancellationException) {
+                // Restart on a viewport change cancels this pass mid-StackBlur; propagate
+                // so the cancelled effect cannot later overwrite the newer effect's result.
+                throw e
+            } catch (e: Exception) {
+                // Coil/StackBlur failure: fall back to the opaque surface tint. Errors
+                // (e.g. OutOfMemoryError) are deliberately not caught here.
+                null
+            }
         }
     }
     return bitmap

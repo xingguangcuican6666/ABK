@@ -42,10 +42,12 @@ fun rememberBlurBackdrop(
     return rememberLayerBackdrop {
         if (backgroundPainter != null) {
             drawCroppedPainter(backgroundPainter)
+            // Dim the wallpaper so it blends into the surface tone behind the bar.
+            drawRect(surfaceColor.copy(alpha = backgroundDim))
         } else {
+            // Opaque fallback; a dim overlay on it would be a no-op.
             drawRect(surfaceColor)
         }
-        drawRect(surfaceColor.copy(alpha = backgroundDim))
         drawContent()
     }
 }

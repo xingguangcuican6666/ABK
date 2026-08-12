@@ -708,7 +708,7 @@
     <string name="settings_ui_opacity">界面不透明度</string>
     <string name="settings_ui_opacity_desc">调低后卡片、顶部栏和底部栏会透出背景。</string>
     <string name="settings_blur">模糊</string>
-    <string name="settings_blur_desc">为顶部栏和底部栏启用毛玻璃效果</string>
+    <string name="settings_blur_desc">为界面启用毛玻璃模糊效果</string>
     <string name="settings_blur_background">将自定义背景渲染到模糊</string>
     <string name="settings_blur_background_desc">开启后，顶栏、底栏、卡片和磁贴会模糊自定义背景图片</string>
     <string name="settings_current_color">当前</string>

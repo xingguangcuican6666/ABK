@@ -2045,6 +2045,10 @@ class MainViewModel @JvmOverloads constructor(
             override fun onStop(owner: LifecycleOwner) {
                 appInForeground = false
                 stopForegroundWorkflowRefresh()
+                // Backgrounding (Home / recents) mid-drag never fires the slider's
+                // onValueChangeFinished, so drop the un-persisted preview and restore the
+                // persisted alpha instead of leaving the whole app on a stale value.
+                syncUiSurfaceAlphaPreview()
             }
         })
         viewModelScope.launch {
@@ -3317,13 +3321,19 @@ class MainViewModel @JvmOverloads constructor(
 
     /**
      * Resets the drag-preview state so the in-memory alpha re-syncs from the persisted
-     * value. Called when the settings page is disposed: an interrupted drag never fires
-     * Slider.onValueChangeFinished, which would otherwise leave the preview stuck on an
-     * un-persisted value for the rest of the session.
+     * value. Called when the settings page is disposed or the app is backgrounded: an
+     * interrupted drag never fires Slider.onValueChangeFinished, which would otherwise
+     * leave the preview stuck on an un-persisted value for the rest of the session.
      */
     fun syncUiSurfaceAlphaPreview() {
         uiSurfaceAlphaPreviewDirty = false
-        viewModelScope.launch { _uiSurfaceAlphaPreview.value = prefs.uiSurfaceAlpha.first() }
+        viewModelScope.launch {
+            val persisted = prefs.uiSurfaceAlpha.first()
+            // Re-check: a new drag may have started while the read was in flight.
+            if (!uiSurfaceAlphaPreviewDirty) {
+                _uiSurfaceAlphaPreview.value = persisted
+            }
+        }
     }
     fun setBlurEnabled(v: Boolean) = viewModelScope.launch {
         prefs.setBlurEnabled(v)

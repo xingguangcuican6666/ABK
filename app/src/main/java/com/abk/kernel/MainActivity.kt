@@ -90,7 +90,9 @@ import com.abk.kernel.ui.components.AbkSnackbarHost
 import com.abk.kernel.ui.components.animateBottomNavForChildPage
 import com.abk.kernel.ui.components.showAbkSnackbar
 import com.abk.kernel.extensions.AbkExtensionBootstrapActivity
+import com.abk.kernel.ui.blur.LocalBlurBackgroundAnchor
 import com.abk.kernel.ui.blur.LocalBlurState
+import com.abk.kernel.ui.blur.LocalBlurredCardBackground
 import com.abk.kernel.ui.blur.blurEffect
 import com.abk.kernel.ui.blur.blurSourceBody
 import com.abk.kernel.ui.blur.isBlurActive
@@ -207,7 +209,14 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             if (state.showOobe) {
-                                CompositionLocalProvider(LocalUiSurfaceAlpha provides 1f) {
+                                // OOBE is an opaque onboarding screen; clear the blur
+                                // locals so its cards render opaque instead of showing a
+                                // translucent frosted backdrop under the wallpaper.
+                                CompositionLocalProvider(
+                                    LocalUiSurfaceAlpha provides 1f,
+                                    LocalBlurredCardBackground provides null,
+                                    LocalBlurBackgroundAnchor provides null,
+                                ) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
@@ -591,13 +600,12 @@ private fun AbkMainScaffold(
     }
     val navProgress = navProgressAnim.value
 
-    // The bottom NavigationBar/NavigationRail live outside every screen's
-    // BlurScreenScaffold, so they keep their own backdrop as the blur source.
-    // When a child page hides the bar (navProgress reaches 1) or the opaque OOBE
-    // overlay covers everything, neither the backdrop nor its blur pipeline has a
-    // visible consumer, so they are switched off to avoid an invisible full-screen
-    // recordLayer + AGSL blur pass every frame.
-    val barBlurOnScreen = !state.showOobe && navProgress < 1f
+    // Bottom-nav progress goes 1f (bar shown) → 0f (a child page slides the bar off).
+    // Only run the bar backdrop and its blur pipeline while the bar is actually on
+    // screen; once it is fully hidden (matches ChildPageMotion's hide epsilon) or the
+    // opaque OOBE overlay covers everything, every recordLayer + blur pass is invisible,
+    // so it is switched off.
+    val barBlurOnScreen = !state.showOobe && navProgress > 0.02f
     val blurBackdrop = rememberBlurBackdrop(
         enableBlur = state.blurConfig.blurEnabled && barBlurOnScreen,
         surfaceColor = MaterialTheme.colorScheme.surfaceContainer,

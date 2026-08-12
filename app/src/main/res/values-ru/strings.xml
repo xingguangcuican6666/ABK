@@ -678,7 +678,7 @@
     <string name="settings_ui_opacity">Непрозрачность интерфейса</string>
     <string name="settings_ui_opacity_desc">При уменьшении карточки, верхняя и нижняя панели начинают пропускать фон.</string>
     <string name="settings_blur">Размытие</string>
-    <string name="settings_blur_desc">Включить матовое стекло на верхней и нижней панелях</string>
+    <string name="settings_blur_desc">Включить эффекты матового стекла</string>
     <string name="settings_blur_background">Рендерить пользовательский фон в размытие</string>
     <string name="settings_blur_background_desc">При включении верхняя и нижняя панели, карточки и плитки размывают изображение пользовательского фона</string>
     <string name="settings_current_color">Текущий</string>

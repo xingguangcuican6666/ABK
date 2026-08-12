@@ -15,8 +15,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -61,7 +63,6 @@ import com.abk.kernel.utils.DownloadDirectoryUtils
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.LocaleHelper
 import com.abk.kernel.ui.blur.BlurScreenScaffold
-import com.abk.kernel.ui.blur.isBlurCapableDevice
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AbkSegmentedButtonOption
 import com.abk.kernel.ui.components.AbkSingleChoiceSegmentedButtonRow
@@ -2064,30 +2065,35 @@ private fun ThemeSettingsScreen(
         }
 
         SettingsGroup(title = stringResource(R.string.settings_blur)) {
-            // Real frosted-glass top/bottom bars need AGSL runtime shaders (API 33+);
-            // on older devices that toggle is hidden and the bars keep their opaque
-            // fallback.
-            if (isBlurCapableDevice()) {
+            // Master blur switch controls every blur surface (AGSL bars on API 33+ and
+            // the software card blur on every API level), so it is shown on all devices.
+            // On API 26-32 the bars keep their opaque fallback while the card path below
+            // still works.
+            ExpressiveSwitchItem(
+                title = stringResource(R.string.settings_blur),
+                subtitle = stringResource(R.string.settings_blur_desc),
+                icon = Icons.Default.BlurOn,
+                checked = blurEnabled,
+                onCheckedChange = onBlurEnabledChange
+            )
+            // The nested "render custom background into blur" item expands out from below
+            // the toggle when blur is enabled. It is a no-op until a custom background
+            // image is configured, so it is disabled until then.
+            AnimatedVisibility(
+                visible = blurEnabled,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                val backgroundConfigured = backgroundImageEnabled && !backgroundUri.isNullOrBlank()
                 ExpressiveSwitchItem(
-                    title = stringResource(R.string.settings_blur),
-                    subtitle = stringResource(R.string.settings_blur_desc),
-                    icon = Icons.Default.BlurOn,
-                    checked = blurEnabled,
-                    onCheckedChange = onBlurEnabledChange
+                    title = stringResource(R.string.settings_blur_background),
+                    subtitle = stringResource(R.string.settings_blur_background_desc),
+                    icon = Icons.Default.Image,
+                    checked = blurBackgroundExpEnabled,
+                    enabled = backgroundConfigured,
+                    onCheckedChange = onBlurBackgroundExpEnabledChange
                 )
             }
-            // The software StackBlur card path works on every API level, so its toggle
-            // is exposed regardless of runtime-shader support. It is a no-op until a
-            // custom background image is configured, so it is disabled until then.
-            val backgroundConfigured = backgroundImageEnabled && !backgroundUri.isNullOrBlank()
-            ExpressiveSwitchItem(
-                title = stringResource(R.string.settings_blur_background),
-                subtitle = stringResource(R.string.settings_blur_background_desc),
-                icon = Icons.Default.Image,
-                checked = blurBackgroundExpEnabled,
-                enabled = backgroundConfigured,
-                onCheckedChange = onBlurBackgroundExpEnabledChange
-            )
         }
 
         SettingsGroup(title = stringResource(R.string.settings_color_source)) {

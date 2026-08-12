@@ -19,12 +19,11 @@ class BlurConfigTest {
     )
 
     @Test
-    fun wantsBackgroundPainterRequiresBackgroundFlags() {
+    fun wantsBackgroundPainterRequiresAllFlags() {
         val base = config()
         assertTrue(base.wantsBackgroundPainter)
 
-        // The master AGSL bar-blur switch must NOT gate the software card-blur path.
-        assertTrue(config(blurEnabled = false).wantsBackgroundPainter)
+        assertFalse(config(blurEnabled = false).wantsBackgroundPainter)
         assertFalse(config(backgroundExpEnabled = false).wantsBackgroundPainter)
         assertFalse(config(backgroundUri = null).wantsBackgroundPainter)
         assertFalse(config(backgroundUri = "").wantsBackgroundPainter)
@@ -33,9 +32,8 @@ class BlurConfigTest {
     }
 
     @Test
-    fun masterSwitchDoesNotGateSoftwareCardBlur() {
-        // The software StackBlur path is independent of the AGSL bar-blur master switch,
-        // so a disabled master switch must not disable the card blur.
-        assertTrue(config(blurEnabled = false, backgroundExpEnabled = true).wantsBackgroundPainter)
+    fun masterSwitchOffDisablesNestedBackgroundPainter() {
+        // Even if the nested flag is still persisted, the master switch must win.
+        assertFalse(config(blurEnabled = false, backgroundExpEnabled = true).wantsBackgroundPainter)
     }
 }
