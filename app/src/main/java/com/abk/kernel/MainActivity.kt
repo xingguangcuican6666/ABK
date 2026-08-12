@@ -8,7 +8,6 @@ import com.abk.kernel.utils.findActivity
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.view.WindowManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -129,13 +128,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // adjustNothing keeps the window (and the frosted-backdrop layer) from resizing on
-        // IME so blur never re-runs for the keyboard, but Android 10 and below do not
-        // deliver full IME insets, so imePadding cannot lift content over the keyboard;
-        // fall back to adjustResize there.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        }
+        // adjustResize keeps content above the IME; the card-blur backdrop keys its
+        // re-blur on width (not height), so a height-only IME resize does not re-run the
+        // decode + StackBlur pass.
         pendingModuleInstallUri = extractModuleInstallUri(intent)?.toString()
 
         setContent {

@@ -107,15 +107,19 @@ private fun blurCacheFile(context: android.content.Context, uri: String): File {
     return File(context.filesDir, "abk_blurred_custom_background_$key.jpg")
 }
 
-/** Deletes the oldest cache entries beyond [AbkBlurCacheMaxFiles], newest first. */
+/** Deletes stale temp files and the oldest cache entries beyond [AbkBlurCacheMaxFiles]. */
 private fun pruneBlurCache(context: android.content.Context) {
     runCatching {
         val prefix = "abk_blurred_custom_background_"
-        context.filesDir.listFiles { file ->
-            file.name.startsWith(prefix) && file.name.endsWith(".jpg")
-        }?.sortedByDescending { it.lastModified() }
-            ?.drop(AbkBlurCacheMaxFiles)
-            ?.forEach { it.delete() }
+        val files = context.filesDir.listFiles { file -> file.name.startsWith(prefix) }
+            ?: return@runCatching
+        // Temp files from an interrupted save are never valid; drop them outright.
+        files.filter { it.name.endsWith(".tmp") }.forEach { it.delete() }
+        // Keep the newest cache entries, newest first.
+        files.filter { it.name.endsWith(".jpg") }
+            .sortedByDescending { it.lastModified() }
+            .drop(AbkBlurCacheMaxFiles)
+            .forEach { it.delete() }
     }
 }
 
@@ -129,7 +133,12 @@ private fun loadBlurCache(
     val file = blurCacheFile(context, uri)
     if (!file.exists()) return null
     return runCatching {
-        val decoded = BitmapFactory.decodeFile(file.absolutePath) ?: return@runCatching null
+        val decoded = BitmapFactory.decodeFile(file.absolutePath)
+        if (decoded == null) {
+            // Corrupt / truncated cache: drop it so it isn't retried on every launch.
+            file.delete()
+            return@runCatching null
+        }
         val expectedW = (viewportW / AbkCardBlurDownsample.toFloat()).roundToInt().coerceAtLeast(1)
         val expectedH = (viewportH / AbkCardBlurDownsample.toFloat()).roundToInt().coerceAtLeast(1)
         if (decoded.width != expectedW || decoded.height != expectedH) {
@@ -176,13 +185,11 @@ fun rememberBlurredCardBackground(
         return null
     }
     val context = LocalContext.current
-    // Restarting this effect on every size change cancels the in-flight debounce, so a
-    // rotation / split-screen resize only runs the final decode + StackBlur pass once the
-    // viewport settles. The result goes into the module-level cache, so transient changes
-    // (soft keyboard resizing the window) keep showing the previous frosted backdrop until
-    // the new one is ready, and matching viewports are restored from disk instead of
-    // re-blurring from scratch.
-    LaunchedEffect(uri, enabled, widthPx, heightPx) {
+    // Re-blur only on a WIDTH change (rotation / split-screen). A height-only change is
+    // the IME (adjustResize), where the taller cached bitmap still covers the visible
+    // region, so keying the effect on width (not height) avoids a full decode + StackBlur
+    // pass on every keyboard toggle while still re-blurring real viewport changes.
+    LaunchedEffect(uri, enabled, widthPx) {
         // Wallpaper changed: drop the stale in-memory blur for the old image, but keep its
         // on-disk cache so switching back reuses it (bounded by pruneBlurCache on save,
         // not deleted per change). On a fresh process cachedBlurredCardUri is null, so the
@@ -273,6 +280,7 @@ fun Modifier.blurredCardBackground(
     if (!enabled) return@composed this
     val bitmap = LocalBlurredCardBackground.current ?: return@composed this
     val backgroundAnchor = LocalBlurBackgroundAnchor.current
+    val anchorSize = LocalBlurBackgroundSize.current
     var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var layoutRevision by remember { mutableIntStateOf(0) }
 
@@ -284,9 +292,15 @@ fun Modifier.blurredCardBackground(
         }
         .drawWithContent {
             layoutRevision
-            val boundsInBackground = coordinates?.boundsInBackgroundNow(backgroundAnchor)
-            if (boundsInBackground != null) {
-                drawBitmapIntersection(bitmap, boundsInBackground)
+            // Skip the strip while the cached blur's width is stale (rotation /
+            // split-screen): the old-viewport bitmap would be stretched across the new
+            // bounds. Height-only mismatches (IME) still draw correctly — the taller
+            // bitmap covers the visible region.
+            if (bitmap.viewportSize.width == anchorSize.width) {
+                val boundsInBackground = coordinates?.boundsInBackgroundNow(backgroundAnchor)
+                if (boundsInBackground != null) {
+                    drawBitmapIntersection(bitmap, boundsInBackground)
+                }
             }
             drawContent()
         }
