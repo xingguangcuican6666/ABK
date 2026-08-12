@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -99,7 +100,16 @@ fun AppBackgroundHost(
                 },
                 LocalAppBackgroundEnabled provides hasBackground,
             ) {
-                content()
+                // adjustNothing keeps the window (and the wallpaper/backdrop layer) from
+                // resizing when the IME opens, so the frosted backdrop never re-blurs on
+                // keyboard show/hide. Push the app content up over the IME instead.
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .imePadding()
+                ) {
+                    content()
+                }
             }
         }
     }

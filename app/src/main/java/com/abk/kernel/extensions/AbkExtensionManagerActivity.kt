@@ -1,7 +1,9 @@
 package com.abk.kernel.extensions
 
 import android.content.Context
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -81,6 +83,11 @@ class AbkExtensionManagerActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Same adjustNothing setup as MainActivity; fall back to adjustResize below
+        // Android 11 where full IME insets are not delivered to imePadding.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
         val focusExtensionId = intent.getStringExtra(ABK_EXTENSION_EXTRA_ID)
         val bootstrapMode = intent.getBooleanExtra("bootstrap_mode", false)
 
