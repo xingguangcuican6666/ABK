@@ -36,6 +36,7 @@ import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import java.io.File
 import java.io.FileOutputStream
+import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -87,13 +88,35 @@ private const val AbkCardBlurLoadDebounceMs = 200L
 private var cachedBlurredCardBackground by mutableStateOf<BlurredCardBackground?>(null)
 private var cachedBlurredCardUri by mutableStateOf<String?>(null)
 
+/** Bump when the blur parameters change so old cache files are not reused. */
+private const val AbkBlurCacheVersion = 1
+/** Upper bound on on-disk cache entries; older ones are pruned on save. */
+private const val AbkBlurCacheMaxFiles = 4
+
+/** Collision-resistant cache key: SHA-256 of the URI, not a 32-bit hashCode(). */
+private fun blurCacheKey(uri: String): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(uri.toByteArray(Charsets.UTF_8))
+    return digest.joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+}
+
 private fun blurCacheFile(context: android.content.Context, uri: String): File {
-    // Key the cache file by the background URI. String.hashCode() is spec-defined and
-    // stable across processes, so a previous launch's blur is only reused for the same
-    // wallpaper. Without this, a single-slot file would serve a stale wallpaper's blur
-    // after the background changes across launches.
-    val key = Integer.toHexString(uri.hashCode())
+    // Version + blur radius + downsample in the name so a future algorithm change cannot
+    // silently reuse a cache produced with different parameters, and two distinct URIs
+    // cannot collide into the same file.
+    val key = "v${AbkBlurCacheVersion}_r${AbkCardBlurRadius.toInt()}_d${AbkCardBlurDownsample}_${blurCacheKey(uri)}"
     return File(context.filesDir, "abk_blurred_custom_background_$key.jpg")
+}
+
+/** Deletes the oldest cache entries beyond [AbkBlurCacheMaxFiles], newest first. */
+private fun pruneBlurCache(context: android.content.Context) {
+    runCatching {
+        val prefix = "abk_blurred_custom_background_"
+        context.filesDir.listFiles { file ->
+            file.name.startsWith(prefix) && file.name.endsWith(".jpg")
+        }?.sortedByDescending { it.lastModified() }
+            ?.drop(AbkBlurCacheMaxFiles)
+            ?.forEach { it.delete() }
+    }
 }
 
 /** Loads a previously cached pre-blurred wallpaper that matches the viewport, if any. */
@@ -160,13 +183,13 @@ fun rememberBlurredCardBackground(
     // the new one is ready, and matching viewports are restored from disk instead of
     // re-blurring from scratch.
     LaunchedEffect(uri, enabled, widthPx, heightPx) {
-        // Wallpaper changed: drop the stale in-memory blur for the old image and clean up
-        // its on-disk cache. On a fresh process cachedBlurredCardUri is null, so the
+        // Wallpaper changed: drop the stale in-memory blur for the old image, but keep its
+        // on-disk cache so switching back reuses it (bounded by pruneBlurCache on save,
+        // not deleted per change). On a fresh process cachedBlurredCardUri is null, so the
         // current wallpaper's disk cache is left intact for loadBlurCache below to reuse.
         val previousUri = cachedBlurredCardUri
         if (previousUri != null && previousUri != uri) {
             cachedBlurredCardBackground = null
-            blurCacheFile(context, previousUri).delete()
         }
         cachedBlurredCardUri = uri
         delay(AbkCardBlurLoadDebounceMs)
@@ -217,6 +240,7 @@ fun rememberBlurredCardBackground(
             // JPEG compress + disk write; keep off the main thread (StrictMode / jank).
             withContext(Dispatchers.IO) {
                 saveBlurCache(context, uri, loaded)
+                pruneBlurCache(context)
             }
         }
     }
