@@ -14,9 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.material3.MaterialTheme
 import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
@@ -40,21 +38,21 @@ fun AppBackgroundHost(
     val colorScheme = MaterialTheme.colorScheme
     val context = LocalContext.current
     var backgroundCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     // One shared painter for the visible background image and every blur backdrop.
-    // The request is explicitly bounded to this host's viewport size (from onSizeChanged)
-    // so a large user wallpaper is decoded at screen resolution instead of its original
-    // dimensions. The request is cached on (uri, viewportSize) so it is rebuilt only when
-    // the wallpaper or the viewport actually changes.
+    // Decode the wallpaper at full-screen resolution, which is stable across transient
+    // insets (soft keyboard / IME resizing the window): a large user image is never
+    // decoded at its original size, and an IME opening does not re-decode the wallpaper
+    // (which would flash the background to empty while it reloads).
+    val displayMetrics = context.resources.displayMetrics
     val backgroundPainter = if (hasBackground) {
-        val request = remember(backgroundUri, viewportSize) {
+        val request = remember(
+            backgroundUri,
+            displayMetrics.widthPixels,
+            displayMetrics.heightPixels,
+        ) {
             ImageRequest.Builder(context)
                 .data(backgroundUri)
-                .apply {
-                    if (viewportSize.width > 0 && viewportSize.height > 0) {
-                        size(viewportSize.width, viewportSize.height)
-                    }
-                }
+                .size(displayMetrics.widthPixels, displayMetrics.heightPixels)
                 .build()
         }
         rememberAsyncImagePainter(
@@ -67,7 +65,6 @@ fun AppBackgroundHost(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .onSizeChanged { viewportSize = it }
             .onGloballyPositioned { coordinates ->
                 if (backgroundCoordinates !== coordinates) {
                     backgroundCoordinates = coordinates.takeIf { it.isAttached }

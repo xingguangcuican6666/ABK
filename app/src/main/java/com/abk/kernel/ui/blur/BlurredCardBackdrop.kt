@@ -74,12 +74,14 @@ fun rememberBlurredCardBackground(
     // rotation / split-screen resize only runs the final decode + StackBlur pass once the
     // viewport settles (previously it re-ran for every intermediate size).
     LaunchedEffect(uri, enabled, widthPx, heightPx) {
-        bitmap = null
         delay(AbkCardBlurLoadDebounceMs)
         if (widthPx <= 0 || heightPx <= 0) return@LaunchedEffect
         val targetWidth = widthPx
         val targetHeight = heightPx
-        bitmap = withContext(Dispatchers.Default) {
+        // Swap the replacement in only after it is ready, so transient viewport changes
+        // (e.g. the soft keyboard resizing the window) keep the previous frosted backdrop
+        // instead of flashing cards to an opaque surface while it re-blurs.
+        val loaded = withContext(Dispatchers.Default) {
             try {
                 val loader = context.imageLoader
                 val result = loader.execute(
@@ -110,6 +112,9 @@ fun rememberBlurredCardBackground(
                 // (e.g. OutOfMemoryError) are deliberately not caught here.
                 null
             }
+        }
+        if (loaded != null) {
+            bitmap = loaded
         }
     }
     return bitmap
