@@ -142,7 +142,11 @@ fun rememberBlurredCardBackground(
     // re-blurring from scratch.
     LaunchedEffect(uri, enabled, widthPx, heightPx) {
         // Wallpaper changed: drop the stale memory + disk blur for the old image.
-        if (cachedBlurredCardUri != uri) {
+if (cachedBlurredCardUri != null && cachedBlurredCardUri != uri) {
+    cachedBlurredCardBackground = null
+    blurCacheFile(context).delete()
+}
+cachedBlurredCardUri = uri
             cachedBlurredCardBackground = null
             cachedBlurredCardUri = uri
             blurCacheFile(context).delete()
