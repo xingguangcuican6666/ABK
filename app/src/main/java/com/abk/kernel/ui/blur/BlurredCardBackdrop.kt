@@ -1,6 +1,7 @@
 package com.abk.kernel.ui.blur
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
@@ -20,6 +21,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.Shape
@@ -32,6 +34,8 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
 import com.abk.kernel.ui.theme.uiSurfaceColor
+import java.io.File
+import java.io.FileOutputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -57,6 +61,59 @@ private const val AbkCardBlurDownsample = 4
 /** Debounce before re-running the full decode + StackBlur pass on viewport changes. */
 private const val AbkCardBlurLoadDebounceMs = 200L
 
+/**
+ * Global pre-blurred card background cache. Keeping it at module scope (not in a
+ * Composable remember) means recompositions and transient viewport changes (e.g. the
+ * soft keyboard resizing the window) keep the previous frosted backdrop instead of
+ * re-decoding + re-blurring the wallpaper from scratch. Keyed by the custom background
+ * URI; the bitmap is sized to the viewport at load time.
+ */
+private var cachedBlurredCardBackground by mutableStateOf<BlurredCardBackground?>(null)
+private var cachedBlurredCardUri by mutableStateOf<String?>(null)
+
+private fun blurCacheFile(context: android.content.Context): File =
+    File(context.filesDir, "abk_blurred_custom_background.jpg")
+
+/** Loads a previously cached pre-blurred wallpaper that matches the viewport, if any. */
+private fun loadBlurCache(
+    context: android.content.Context,
+    viewportW: Int,
+    viewportH: Int,
+): BlurredCardBackground? {
+    val file = blurCacheFile(context)
+    if (!file.exists()) return null
+    return runCatching {
+        val decoded = BitmapFactory.decodeFile(file.absolutePath) ?: return@runCatching null
+        val expectedW = (viewportW / AbkCardBlurDownsample.toFloat()).roundToInt().coerceAtLeast(1)
+        val expectedH = (viewportH / AbkCardBlurDownsample.toFloat()).roundToInt().coerceAtLeast(1)
+        if (decoded.width != expectedW || decoded.height != expectedH) {
+            decoded.recycle()
+            return@runCatching null
+        }
+        BlurredCardBackground(
+            image = decoded.asImageBitmap(),
+            viewportSize = IntSize(viewportW, viewportH),
+        )
+    }.getOrNull()
+}
+
+/** Persists the pre-blurred wallpaper so the next launch / matching viewport reuses it. */
+private fun saveBlurCache(context: android.content.Context, background: BlurredCardBackground) {
+    runCatching {
+        val file = blurCacheFile(context)
+        file.parentFile?.mkdirs()
+        val bitmap = background.image.asAndroidBitmap()
+        val temp = File(file.parentFile, "${file.name}.tmp")
+        FileOutputStream(temp).use { it ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it)
+        }
+        if (!temp.renameTo(file)) {
+            temp.copyTo(file, overwrite = true)
+            temp.delete()
+        }
+    }
+}
+
 @Composable
 fun rememberBlurredCardBackground(
     uri: String?,
@@ -69,55 +126,71 @@ fun rememberBlurredCardBackground(
         return null
     }
     val context = LocalContext.current
-    var bitmap by remember(uri, enabled) { mutableStateOf<BlurredCardBackground?>(null) }
     // Restarting this effect on every size change cancels the in-flight debounce, so a
     // rotation / split-screen resize only runs the final decode + StackBlur pass once the
-    // viewport settles (previously it re-ran for every intermediate size).
+    // viewport settles. The result goes into the module-level cache, so transient changes
+    // (soft keyboard resizing the window) keep showing the previous frosted backdrop until
+    // the new one is ready, and matching viewports are restored from disk instead of
+    // re-blurring from scratch.
     LaunchedEffect(uri, enabled, widthPx, heightPx) {
+        // Wallpaper changed: drop the stale memory + disk blur for the old image.
+        if (cachedBlurredCardUri != uri) {
+            cachedBlurredCardBackground = null
+            cachedBlurredCardUri = uri
+            blurCacheFile(context).delete()
+        }
         delay(AbkCardBlurLoadDebounceMs)
         if (widthPx <= 0 || heightPx <= 0) return@LaunchedEffect
         val targetWidth = widthPx
         val targetHeight = heightPx
-        // Swap the replacement in only after it is ready, so transient viewport changes
-        // (e.g. the soft keyboard resizing the window) keep the previous frosted backdrop
-        // instead of flashing cards to an opaque surface while it re-blurs.
+        // Already have a blur sized for this viewport (e.g. re-entering a known size).
+        if (cachedBlurredCardBackground?.viewportSize == IntSize(targetWidth, targetHeight)) {
+            return@LaunchedEffect
+        }
         val loaded = withContext(Dispatchers.Default) {
-            try {
-                val loader = context.imageLoader
-                val result = loader.execute(
-                    ImageRequest.Builder(context)
-                        .data(uri)
-                        .size(
-                            (targetWidth / AbkCardBlurDownsample).coerceAtLeast(1),
-                            (targetHeight / AbkCardBlurDownsample).coerceAtLeast(1),
+            loadBlurCache(context, targetWidth, targetHeight)
+                ?: run {
+                    try {
+                        val loader = context.imageLoader
+                        val result = loader.execute(
+                            ImageRequest.Builder(context)
+                                .data(uri)
+                                .size(
+                                    (targetWidth / AbkCardBlurDownsample).coerceAtLeast(1),
+                                    (targetHeight / AbkCardBlurDownsample).coerceAtLeast(1),
+                                )
+                                .allowHardware(false)
+                                .build()
                         )
-                        .allowHardware(false)
-                        .build()
-                )
-                val source = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
-                    ?: return@withContext null
-                blurCoverBitmap(source, AbkCardBlurRadius, targetWidth, targetHeight)
-                    ?.let { blurredBitmap ->
-                        BlurredCardBackground(
-                            image = blurredBitmap.asImageBitmap(),
-                            viewportSize = IntSize(targetWidth, targetHeight),
-                        )
+                        val source = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                            ?: return@withContext null
+                        blurCoverBitmap(source, AbkCardBlurRadius, targetWidth, targetHeight)
+                            ?.let { blurredBitmap ->
+                                BlurredCardBackground(
+                                    image = blurredBitmap.asImageBitmap(),
+                                    viewportSize = IntSize(targetWidth, targetHeight),
+                                )
+                            }
+                    } catch (e: CancellationException) {
+                        // Restart on a viewport change cancels this pass mid-StackBlur; propagate
+                        // so the cancelled effect cannot later overwrite the newer effect's result.
+                        throw e
+                    } catch (e: Exception) {
+                        // Coil/StackBlur failure: fall back to the opaque surface tint. Errors
+                        // (e.g. OutOfMemoryError) are deliberately not caught here.
+                        null
                     }
-            } catch (e: CancellationException) {
-                // Restart on a viewport change cancels this pass mid-StackBlur; propagate
-                // so the cancelled effect cannot later overwrite the newer effect's result.
-                throw e
-            } catch (e: Exception) {
-                // Coil/StackBlur failure: fall back to the opaque surface tint. Errors
-                // (e.g. OutOfMemoryError) are deliberately not caught here.
-                null
-            }
+                }
         }
         if (loaded != null) {
-            bitmap = loaded
+            cachedBlurredCardBackground = loaded
+            saveBlurCache(context, loaded)
         }
     }
-    return bitmap
+    // Only hand out the blurred wallpaper for the current custom background; viewport
+    // mismatches are kept (previous size) until the LaunchedEffect replaces it, so the
+    // frosted cards never flash to an opaque surface on a transient resize.
+    return cachedBlurredCardBackground?.takeIf { cachedBlurredCardUri == uri }
 }
 
 @Composable
