@@ -93,6 +93,7 @@ import com.abk.kernel.extensions.AbkExtensionBootstrapActivity
 import com.abk.kernel.ui.blur.LocalBlurBackgroundAnchor
 import com.abk.kernel.ui.blur.LocalBlurState
 import com.abk.kernel.ui.blur.LocalBlurredCardBackground
+import com.abk.kernel.ui.blur.LocalBlurredCardBackgroundEnabled
 import com.abk.kernel.ui.blur.blurEffect
 import com.abk.kernel.ui.blur.blurSourceBody
 import com.abk.kernel.ui.blur.isBlurActive
@@ -215,6 +216,7 @@ class MainActivity : ComponentActivity() {
                                 CompositionLocalProvider(
                                     LocalUiSurfaceAlpha provides 1f,
                                     LocalBlurredCardBackground provides null,
+                                    LocalBlurredCardBackgroundEnabled provides false,
                                     LocalBlurBackgroundAnchor provides null,
                                 ) {
                                     Box(

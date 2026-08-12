@@ -22,6 +22,7 @@ import coil.request.ImageRequest
 import com.abk.kernel.ui.blur.LocalBlurBackgroundAnchor
 import com.abk.kernel.ui.blur.LocalBlurredBackgroundPainter
 import com.abk.kernel.ui.blur.LocalBlurredCardBackground
+import com.abk.kernel.ui.blur.LocalBlurredCardBackgroundEnabled
 import com.abk.kernel.ui.blur.rememberBlurredCardBackground
 import com.abk.kernel.ui.theme.LocalAppBackgroundEnabled
 import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
@@ -90,6 +91,7 @@ fun AppBackgroundHost(
             )
             CompositionLocalProvider(
                 LocalBlurredCardBackground provides blurredCardBackground,
+                LocalBlurredCardBackgroundEnabled provides (blurBackgroundEnabled && hasBackground),
                 LocalUiSurfaceAlpha provides if (hasBackground) {
                     uiSurfaceAlpha.coerceIn(0f, 1f)
                 } else {

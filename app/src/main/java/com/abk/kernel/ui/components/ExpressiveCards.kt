@@ -43,7 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.abk.kernel.R
-import com.abk.kernel.ui.blur.LocalBlurredCardBackground
+import com.abk.kernel.ui.blur.LocalBlurredCardBackgroundEnabled
 import com.abk.kernel.ui.blur.blurredCardBackground
 import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
@@ -196,7 +196,10 @@ fun ExpressiveListItem(
     onClick: (() -> Unit)? = null
 ) {
     val colors = MaterialTheme.colorScheme
-    val drawsOwnBlurSurface = LocalBlurredCardBackground.current != null
+    // Follow the synchronous "feature enabled" signal, not the async bitmap readiness, so
+    // rows keep a surface tint from the first frame and don't flash transparent→tinted
+    // while the pre-blurred background loads.
+    val drawsOwnBlurSurface = LocalBlurredCardBackgroundEnabled.current
     val containerColor = when {
         selected -> blurredCardSurfaceColor(colors.primaryContainer)
         drawsOwnBlurSurface -> blurredCardSurfaceColor(colors.surfaceContainer)

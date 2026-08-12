@@ -55,6 +55,14 @@ data class BlurredCardBackground(
 val LocalBlurredCardBackground = compositionLocalOf<BlurredCardBackground?> { null }
 val LocalBlurBackgroundAnchor = compositionLocalOf<LayoutCoordinates?> { null }
 
+/**
+ * Whether the render-custom-background-into-blur feature is enabled. Unlike
+ * [LocalBlurredCardBackground] this is a synchronous signal that does not wait for the
+ * pre-blurred bitmap to load, so surfaces can stay translucent from the first frame and
+ * never flash opaque→translucent when the frosted backdrop arrives.
+ */
+val LocalBlurredCardBackgroundEnabled = compositionLocalOf { false }
+
 internal const val AbkCardBlurRadius = 45f
 private const val AbkCardBlurDownsample = 4
 
@@ -195,13 +203,14 @@ fun rememberBlurredCardBackground(
 
 @Composable
 /**
- * Surface tint used by cards/tiles. When a pre-blurred custom background is present the
- * tint stays translucent (capped by [AbkBlurTintAlpha]) so the frosted backdrop shows
- * through even at the default opaque surface alpha; otherwise it follows the regular
+ * Surface tint used by cards/tiles. While the render-custom-background-into-blur feature
+ * is enabled the tint is translucent (capped by [AbkBlurTintAlpha]) regardless of whether
+ * the pre-blurred bitmap has loaded yet, so cards never flash from opaque to translucent
+ * when the frosted backdrop arrives. When the feature is off it follows the regular
  * [uiSurfaceColor] opacity rule.
  */
 fun blurredCardSurfaceColor(color: Color): Color {
-    if (LocalBlurredCardBackground.current == null) return uiSurfaceColor(color)
+    if (!LocalBlurredCardBackgroundEnabled.current) return uiSurfaceColor(color)
     val alpha = (LocalUiSurfaceAlpha.current * AbkBlurTintAlpha).coerceIn(0f, 1f)
     return if (alpha >= 0.995f) color else color.copy(alpha = color.alpha * alpha)
 }
