@@ -36,6 +36,8 @@ fun AppBackgroundHost(
     val colorScheme = MaterialTheme.colorScheme
     var backgroundCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     // One shared painter for the visible background image and every blur backdrop.
+    // Coil's AsyncImagePainter sizes its request from the onDraw viewport (fillMaxSize),
+    // so a large user wallpaper is decoded at screen resolution, not its original size.
     val backgroundPainter = if (hasBackground) {
         rememberAsyncImagePainter(
             model = backgroundUri,
@@ -58,6 +60,7 @@ fun AppBackgroundHost(
             Image(
                 painter = backgroundPainter,
                 contentDescription = null,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
         }
