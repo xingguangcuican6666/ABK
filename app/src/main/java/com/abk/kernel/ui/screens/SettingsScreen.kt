@@ -2065,38 +2065,6 @@ private fun ThemeSettingsScreen(
             }
         }
 
-        SettingsGroup(title = stringResource(R.string.settings_blur)) {
-            // Master blur switch controls every blur surface (AGSL bars on API 33+ and
-            // the software card blur on every API level), so it is shown on all devices.
-            // On API 26-32 the bars keep their opaque fallback while the card path below
-            // still works.
-            ExpressiveSwitchItem(
-                title = stringResource(R.string.settings_blur),
-                subtitle = stringResource(R.string.settings_blur_desc),
-                icon = Icons.Default.BlurOn,
-                checked = blurEnabled,
-                onCheckedChange = onBlurEnabledChange
-            )
-            // The nested "render custom background into blur" item expands out from below
-            // the toggle when blur is enabled. It is a no-op until a custom background
-            // image is configured, so it is disabled until then.
-            AnimatedVisibility(
-                visible = blurEnabled,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-            ) {
-                val backgroundConfigured = backgroundImageEnabled && !backgroundUri.isNullOrBlank()
-                ExpressiveSwitchItem(
-                    title = stringResource(R.string.settings_blur_background),
-                    subtitle = stringResource(R.string.settings_blur_background_desc),
-                    icon = Icons.Default.Image,
-                    checked = blurBackgroundExpEnabled,
-                    enabled = backgroundConfigured,
-                    onCheckedChange = onBlurBackgroundExpEnabledChange
-                )
-            }
-        }
-
         SettingsGroup(title = stringResource(R.string.settings_color_source)) {
             SwitchSettingsItem(
                 icon = Icons.Default.AutoAwesome,
@@ -2172,6 +2140,45 @@ private fun ThemeSettingsScreen(
                     leadingIcon = Icons.Default.Delete,
                     onClick = { onBackgroundImageChange(null) }
                 )
+            }
+            // Blur controls (merged in from the former "模糊" card): they pop out above the
+            // opacity slider once a custom background is configured, reusing the original
+            // expand/fade animation. The master switch controls every blur surface (AGSL
+            // bars on API 33+ and the software card blur on every API level); the nested
+            // "render custom background into blur" item expands out from below the toggle
+            // when blur is enabled.
+            val backgroundConfigured = backgroundImageEnabled && !backgroundUri.isNullOrBlank()
+            AnimatedVisibility(
+                visible = backgroundConfigured,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ExpressiveSwitchItem(
+                        title = stringResource(R.string.settings_blur),
+                        subtitle = stringResource(R.string.settings_blur_desc),
+                        icon = Icons.Default.BlurOn,
+                        checked = blurEnabled,
+                        onCheckedChange = onBlurEnabledChange
+                    )
+                    AnimatedVisibility(
+                        visible = blurEnabled,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        ExpressiveSwitchItem(
+                            title = stringResource(R.string.settings_blur_background),
+                            subtitle = stringResource(R.string.settings_blur_background_desc),
+                            icon = Icons.Default.Image,
+                            checked = blurBackgroundExpEnabled,
+                            enabled = backgroundConfigured,
+                            onCheckedChange = onBlurBackgroundExpEnabledChange
+                        )
+                    }
+                }
             }
             BackgroundAlphaControl(
                 alpha = uiSurfaceAlpha,
