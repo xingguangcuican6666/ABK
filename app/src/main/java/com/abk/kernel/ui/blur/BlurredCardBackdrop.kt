@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.drawable.BitmapDrawable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
@@ -30,6 +31,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import coil.compose.AsyncImagePainter
 import coil.imageLoader
 import coil.request.ImageRequest
 import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
@@ -163,8 +165,19 @@ fun rememberBlurredCardBackground(
         return null
     }
     val context = LocalContext.current
+    // Reuse the bitmap the enclosing AppBackgroundHost already decoded for the shared
+    // wallpaper painter instead of issuing a second Coil decode. This keeps the wallpaper
+    // to a single decode and stops the blur pass from competing with the wallpaper decode
+    // on cold start (the black-flash window on low-end devices). The painter's `state` is a
+    // Compose snapshot state, so reading it here re-runs the effect once the decode lands.
+    val sharedPainter = LocalBlurredBackgroundPainter.current as? AsyncImagePainter
+    val sourceBitmap = (sharedPainter?.state as? AsyncImagePainter.State.Success)
+        ?.result
+        ?.drawable
+        ?.let { it as? BitmapDrawable }
+        ?.bitmap
     // Re-blur only when the viewport grows past the cached blur; shrink (IME) is covered.
-    LaunchedEffect(uri, enabled, widthPx, heightPx) {
+    LaunchedEffect(uri, enabled, widthPx, heightPx, sourceBitmap) {
         val previousUri = cachedBlurredCardUri
         if (previousUri != null && previousUri != uri) {
             cachedBlurredCardBackground = null
@@ -180,10 +193,19 @@ fun rememberBlurredCardBackground(
         }
         val loaded = withContext(Dispatchers.Default) {
             loadBlurCache(context, uri, targetWidth, targetHeight)
-                ?: run {
+                ?: sourceBitmap?.let { source ->
                     try {
-                        val loader = context.imageLoader
-                        val result = loader.execute(
+                        blurSourceToBackground(source, targetWidth, targetHeight)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                ?: if (sharedPainter == null) {
+                    // Defensive fallback: no shared painter to reuse, decode independently.
+                    try {
+                        val result = context.imageLoader.execute(
                             ImageRequest.Builder(context)
                                 .data(uri)
                                 .size(
@@ -193,20 +215,17 @@ fun rememberBlurredCardBackground(
                                 .allowHardware(false)
                                 .build()
                         )
-                        val source = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
-                            ?: return@withContext null
-                        blurCoverBitmap(source, AbkCardBlurRadius, targetWidth, targetHeight)
-                            ?.let { blurredBitmap ->
-                                BlurredCardBackground(
-                                    image = blurredBitmap.asImageBitmap(),
-                                    viewportSize = IntSize(targetWidth, targetHeight),
-                                )
-                            }
+                        (result.drawable as? BitmapDrawable)?.bitmap
+                            ?.let { blurSourceToBackground(it, targetWidth, targetHeight) }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         null
                     }
+                } else {
+                    // Shared painter exists but its bitmap has not landed yet; the effect
+                    // re-runs when the painter's state changes.
+                    null
                 }
         }
         if (loaded != null) {
@@ -363,6 +382,15 @@ private fun LayoutCoordinates.localBoundsInWindowNow(): Rect? {
         bottom = points.maxOf { it.y },
     )
 }
+
+/** Downsamples + blurs [source] into a viewport-aligned [BlurredCardBackground]. */
+private fun blurSourceToBackground(source: Bitmap, viewportW: Int, viewportH: Int): BlurredCardBackground? =
+    blurCoverBitmap(source, AbkCardBlurRadius, viewportW, viewportH)?.let { blurred ->
+        BlurredCardBackground(
+            image = blurred.asImageBitmap(),
+            viewportSize = IntSize(viewportW, viewportH),
+        )
+    }
 
 private fun blurCoverBitmap(source: Bitmap, radiusPx: Float, viewportW: Int, viewportH: Int): Bitmap? {
     if (source.isRecycled || viewportW <= 0 || viewportH <= 0) return null

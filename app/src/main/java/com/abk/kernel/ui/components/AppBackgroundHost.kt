@@ -53,6 +53,10 @@ fun AppBackgroundHost(
             ImageRequest.Builder(context)
                 .data(backgroundUri)
                 .size(displayMetrics.widthPixels, displayMetrics.heightPixels)
+                // Software bitmap so the blurred-card backdrop can reuse this exact
+                // decoded bitmap (hardware bitmaps can't be sampled by the StackBlur
+                // pass). Keeps the wallpaper to a single decode.
+                .allowHardware(false)
                 .build()
         }
         rememberAsyncImagePainter(
@@ -118,18 +122,34 @@ fun AppPageBackground(
     modifier: Modifier = Modifier
 ) {
     val hasBackground = backgroundImageEnabled && !backgroundUri.isNullOrBlank()
+    val sharedPainter = LocalBlurredBackgroundPainter.current
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
     ) {
         if (hasBackground) {
-            AsyncImage(
-                model = backgroundUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
+            // Reuse the wallpaper painter already decoded by the enclosing
+            // AppBackgroundHost instead of issuing a second Coil request. A separate
+            // AsyncImage here has a distinct cache key (it requests the original size)
+            // and no placeholder, so on low-end devices the child page flashes the
+            // opaque surface (black in dark theme) before the wallpaper lands. Sharing
+            // the painter keeps the wallpaper on screen from the first frame.
+            if (sharedPainter != null) {
+                Image(
+                    painter = sharedPainter,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                AsyncImage(
+                    model = backgroundUri,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
     }
 }
