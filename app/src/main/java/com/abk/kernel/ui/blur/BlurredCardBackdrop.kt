@@ -185,11 +185,12 @@ fun rememberBlurredCardBackground(
         return null
     }
     val context = LocalContext.current
-    // Re-blur only on a WIDTH change (rotation / split-screen). A height-only change is
-    // the IME (adjustResize), where the taller cached bitmap still covers the visible
-    // region, so keying the effect on width (not height) avoids a full decode + StackBlur
-    // pass on every keyboard toggle while still re-blurring real viewport changes.
-    LaunchedEffect(uri, enabled, widthPx) {
+    // Re-blur whenever the viewport grows past the cached blur, but not for shrink-only
+    // changes (IME, freeform shorter): the cached bitmap is a uniform downsample of its
+    // recorded viewport, so it covers any smaller-or-equal viewport exactly. Keying on
+    // both dimensions makes a real height growth (freeform taller, fold unfold) restart
+    // the effect, while the coverage check below skips the expensive pass for IME shrink.
+    LaunchedEffect(uri, enabled, widthPx, heightPx) {
         // Wallpaper changed: drop the stale in-memory blur for the old image, but keep its
         // on-disk cache so switching back reuses it (bounded by pruneBlurCache on save,
         // not deleted per change). On a fresh process cachedBlurredCardUri is null, so the
@@ -203,8 +204,10 @@ fun rememberBlurredCardBackground(
         if (widthPx <= 0 || heightPx <= 0) return@LaunchedEffect
         val targetWidth = widthPx
         val targetHeight = heightPx
-        // Already have a blur sized for this viewport (e.g. re-entering a known size).
-        if (cachedBlurredCardBackground?.viewportSize == IntSize(targetWidth, targetHeight)) {
+        // Skip only while the cached bitmap still covers the new viewport (shrink / IME);
+        // any dimension that grew past the cached viewport needs a fresh blur.
+        val cached = cachedBlurredCardBackground
+        if (cached != null && cached.viewportSize.width >= targetWidth && cached.viewportSize.height >= targetHeight) {
             return@LaunchedEffect
         }
         val loaded = withContext(Dispatchers.Default) {
@@ -292,11 +295,14 @@ fun Modifier.blurredCardBackground(
         }
         .drawWithContent {
             layoutRevision
-            // Skip the strip while the cached blur's width is stale (rotation /
-            // split-screen): the old-viewport bitmap would be stretched across the new
-            // bounds. Height-only mismatches (IME) still draw correctly — the taller
-            // bitmap covers the visible region.
-            if (bitmap.viewportSize.width == anchorSize.width) {
+            // Draw the strip only while the cached bitmap covers the current anchor. If
+            // the anchor has grown past the cached viewport (rotation / split-screen /
+            // freeform taller, before the re-blur lands), skip so the stale bitmap is not
+            // stretched across the new bounds.
+            if (
+                bitmap.viewportSize.width >= anchorSize.width &&
+                bitmap.viewportSize.height >= anchorSize.height
+            ) {
                 val boundsInBackground = coordinates?.boundsInBackgroundNow(backgroundAnchor)
                 if (boundsInBackground != null) {
                     drawBitmapIntersection(bitmap, boundsInBackground)
