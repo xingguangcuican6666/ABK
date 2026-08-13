@@ -128,9 +128,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // adjustResize keeps content above the IME; the card-blur backdrop keys its
-        // re-blur on width (not height), so a height-only IME resize does not re-run the
-        // decode + StackBlur pass.
         pendingModuleInstallUri = extractModuleInstallUri(intent)?.toString()
 
         setContent {

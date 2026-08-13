@@ -42,11 +42,7 @@ fun AppBackgroundHost(
     val context = LocalContext.current
     var backgroundCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var backgroundSize by remember { mutableStateOf(IntSize.Zero) }
-    // One shared painter for the visible background image and every blur backdrop.
-    // Decode the wallpaper at full-screen resolution, which is stable across transient
-    // insets (soft keyboard / IME resizing the window): a large user image is never
-    // decoded at its original size, and an IME opening does not re-decode the wallpaper
-    // (which would flash the background to empty while it reloads).
+    // Decode at display size (stable across IME insets), never at the image's original size.
     val displayMetrics = context.resources.displayMetrics
     val backgroundPainter = if (hasBackground) {
         val request = remember(
@@ -73,9 +69,7 @@ fun AppBackgroundHost(
                 if (backgroundCoordinates !== coordinates) {
                     backgroundCoordinates = coordinates.takeIf { it.isAttached }
                 }
-                // LayoutCoordinates.size is not snapshot-backed, so reading it in
-                // composition does not resubscribe when the anchor relayouts to a new
-                // size (split-screen / IME resize). Mirror it into observable state.
+                // LayoutCoordinates.size is not observable; mirror it into state.
                 if (coordinates.isAttached && coordinates.size != backgroundSize) {
                     backgroundSize = coordinates.size
                 }
@@ -109,9 +103,6 @@ fun AppBackgroundHost(
                 },
                 LocalAppBackgroundEnabled provides hasBackground,
             ) {
-                // adjustResize keeps the window content above the IME; the card-blur
-                // backdrop keys its re-blur on width (not height), so an IME height change
-                // does not re-run the decode + StackBlur pass.
                 Box(Modifier.fillMaxSize()) {
                     content()
                 }

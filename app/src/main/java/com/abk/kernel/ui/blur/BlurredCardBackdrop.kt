@@ -56,20 +56,10 @@ data class BlurredCardBackground(
 val LocalBlurredCardBackground = compositionLocalOf<BlurredCardBackground?> { null }
 val LocalBlurBackgroundAnchor = compositionLocalOf<LayoutCoordinates?> { null }
 
-/**
- * Snapshot-observable size of the shared background anchor. Reading this in composition
- * resubscribes on every real viewport resize, unlike [LocalBlurBackgroundAnchor]'s `size`
- * (which is not observable), so the pre-blurred card backdrop re-blurs when the window
- * actually resizes (split-screen, freeform, IME on adjustResize devices).
- */
+/** Observable viewport size; [LocalBlurBackgroundAnchor]'s `size` is not observable. */
 val LocalBlurBackgroundSize = compositionLocalOf { IntSize.Zero }
 
-/**
- * Whether the render-custom-background-into-blur feature is enabled. Unlike
- * [LocalBlurredCardBackground] this is a synchronous signal that does not wait for the
- * pre-blurred bitmap to load, so surfaces can stay translucent from the first frame and
- * never flash opaque→translucent when the frosted backdrop arrives.
- */
+/** Synchronous enable signal, so surfaces stay translucent before the bitmap loads. */
 val LocalBlurredCardBackgroundEnabled = compositionLocalOf { false }
 
 internal const val AbkCardBlurRadius = 45f
@@ -78,13 +68,7 @@ private const val AbkCardBlurDownsample = 4
 /** Debounce before re-running the full decode + StackBlur pass on viewport changes. */
 private const val AbkCardBlurLoadDebounceMs = 200L
 
-/**
- * Global pre-blurred card background cache. Keeping it at module scope (not in a
- * Composable remember) means recompositions and transient viewport changes (e.g. the
- * soft keyboard resizing the window) keep the previous frosted backdrop instead of
- * re-decoding + re-blurring the wallpaper from scratch. Keyed by the custom background
- * URI; the bitmap is sized to the viewport at load time.
- */
+/** Module-scope cache so recompositions and transient resizes keep the previous backdrop. */
 private var cachedBlurredCardBackground by mutableStateOf<BlurredCardBackground?>(null)
 private var cachedBlurredCardUri by mutableStateOf<String?>(null)
 
@@ -100,9 +84,6 @@ private fun blurCacheKey(uri: String): String {
 }
 
 private fun blurCacheFile(context: android.content.Context, uri: String): File {
-    // Version + blur radius + downsample in the name so a future algorithm change cannot
-    // silently reuse a cache produced with different parameters, and two distinct URIs
-    // cannot collide into the same file.
     val key = "v${AbkBlurCacheVersion}_r${AbkCardBlurRadius.toInt()}_d${AbkCardBlurDownsample}_${blurCacheKey(uri)}"
     return File(context.filesDir, "abk_blurred_custom_background_$key.jpg")
 }
@@ -113,9 +94,7 @@ private fun pruneBlurCache(context: android.content.Context) {
         val prefix = "abk_blurred_custom_background_"
         val files = context.filesDir.listFiles { file -> file.name.startsWith(prefix) }
             ?: return@runCatching
-        // Temp files from an interrupted save are never valid; drop them outright.
         files.filter { it.name.endsWith(".tmp") }.forEach { it.delete() }
-        // Keep the newest cache entries, newest first.
         files.filter { it.name.endsWith(".jpg") }
             .sortedByDescending { it.lastModified() }
             .drop(AbkBlurCacheMaxFiles)
@@ -135,7 +114,6 @@ private fun loadBlurCache(
     return runCatching {
         val decoded = BitmapFactory.decodeFile(file.absolutePath)
         if (decoded == null) {
-            // Corrupt / truncated cache: drop it so it isn't retried on every launch.
             file.delete()
             return@runCatching null
         }
@@ -185,16 +163,8 @@ fun rememberBlurredCardBackground(
         return null
     }
     val context = LocalContext.current
-    // Re-blur whenever the viewport grows past the cached blur, but not for shrink-only
-    // changes (IME, freeform shorter): the cached bitmap is a uniform downsample of its
-    // recorded viewport, so it covers any smaller-or-equal viewport exactly. Keying on
-    // both dimensions makes a real height growth (freeform taller, fold unfold) restart
-    // the effect, while the coverage check below skips the expensive pass for IME shrink.
+    // Re-blur only when the viewport grows past the cached blur; shrink (IME) is covered.
     LaunchedEffect(uri, enabled, widthPx, heightPx) {
-        // Wallpaper changed: drop the stale in-memory blur for the old image, but keep its
-        // on-disk cache so switching back reuses it (bounded by pruneBlurCache on save,
-        // not deleted per change). On a fresh process cachedBlurredCardUri is null, so the
-        // current wallpaper's disk cache is left intact for loadBlurCache below to reuse.
         val previousUri = cachedBlurredCardUri
         if (previousUri != null && previousUri != uri) {
             cachedBlurredCardBackground = null
@@ -204,8 +174,6 @@ fun rememberBlurredCardBackground(
         if (widthPx <= 0 || heightPx <= 0) return@LaunchedEffect
         val targetWidth = widthPx
         val targetHeight = heightPx
-        // Skip only while the cached bitmap still covers the new viewport (shrink / IME);
-        // any dimension that grew past the cached viewport needs a fresh blur.
         val cached = cachedBlurredCardBackground
         if (cached != null && cached.viewportSize.width >= targetWidth && cached.viewportSize.height >= targetHeight) {
             return@LaunchedEffect
@@ -235,28 +203,20 @@ fun rememberBlurredCardBackground(
                                 )
                             }
                     } catch (e: CancellationException) {
-                        // Restart on a viewport change cancels this pass mid-StackBlur; propagate
-                        // so the cancelled effect cannot later overwrite the newer effect's result.
                         throw e
                     } catch (e: Exception) {
-                        // Coil/StackBlur failure: fall back to the opaque surface tint. Errors
-                        // (e.g. OutOfMemoryError) are deliberately not caught here.
                         null
                     }
                 }
         }
         if (loaded != null) {
             cachedBlurredCardBackground = loaded
-            // JPEG compress + disk write; keep off the main thread (StrictMode / jank).
             withContext(Dispatchers.IO) {
                 saveBlurCache(context, uri, loaded)
                 pruneBlurCache(context)
             }
         }
     }
-    // Only hand out the blurred wallpaper for the current custom background; viewport
-    // mismatches are kept (previous size) until the LaunchedEffect replaces it, so the
-    // frosted cards never flash to an opaque surface on a transient resize.
     return cachedBlurredCardBackground?.takeIf { cachedBlurredCardUri == uri }
 }
 
@@ -295,10 +255,6 @@ fun Modifier.blurredCardBackground(
         }
         .drawWithContent {
             layoutRevision
-            // Draw the strip only while the cached bitmap covers the current anchor. If
-            // the anchor has grown past the cached viewport (rotation / split-screen /
-            // freeform taller, before the re-blur lands), skip so the stale bitmap is not
-            // stretched across the new bounds.
             if (
                 bitmap.viewportSize.width >= anchorSize.width &&
                 bitmap.viewportSize.height >= anchorSize.height
