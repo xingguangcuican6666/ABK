@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
@@ -104,6 +105,51 @@ private fun pruneBlurCache(context: android.content.Context) {
     }
 }
 
+/**
+ * Decodes a small, downsampled copy of the custom background directly from [uri]
+ * (local file or content stream). Used when the on-disk blur cache misses but the
+ * shared wallpaper painter's bitmap has not landed yet, so the card backdrop does not
+ * wait on the full-size wallpaper decode after a cold start.
+ */
+private fun decodeBlurSource(
+    context: android.content.Context,
+    uri: String,
+    viewportW: Int,
+    viewportH: Int,
+): Bitmap? = runCatching {
+    val parsed = Uri.parse(uri)
+    val targetW = (viewportW / AbkCardBlurDownsample.toFloat()).roundToInt().coerceAtLeast(1)
+    val targetH = (viewportH / AbkCardBlurDownsample.toFloat()).roundToInt().coerceAtLeast(1)
+    val file = if (parsed.scheme == "file") parsed.path?.let { File(it) } else null
+
+    // First pass: decode bounds only to pick a power-of-two sample size.
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    if (file != null) {
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+    } else {
+        context.contentResolver.openInputStream(parsed)?.use {
+            BitmapFactory.decodeStream(it, null, bounds)
+        }
+    }
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+
+    var sample = 1
+    while (bounds.outWidth / (sample * 2) >= targetW && bounds.outHeight / (sample * 2) >= targetH) {
+        sample *= 2
+    }
+    val opts = BitmapFactory.Options().apply {
+        inSampleSize = sample
+        inPreferredConfig = Bitmap.Config.ARGB_8888
+    }
+    if (file != null) {
+        BitmapFactory.decodeFile(file.absolutePath, opts)
+    } else {
+        context.contentResolver.openInputStream(parsed)?.use {
+            BitmapFactory.decodeStream(it, null, opts)
+        }
+    }
+}.getOrNull()
+
 /** Loads a previously cached pre-blurred wallpaper that matches the viewport, if any. */
 private fun loadBlurCache(
     context: android.content.Context,
@@ -183,7 +229,12 @@ fun rememberBlurredCardBackground(
             cachedBlurredCardBackground = null
         }
         cachedBlurredCardUri = uri
-        delay(AbkCardBlurLoadDebounceMs)
+        // Debounce only viewport-change re-runs. The first load for a URI — and the
+        // re-run once the wallpaper decode lands after a cold start — must not wait,
+        // so the frosted backdrop appears as soon as possible.
+        if (cachedBlurredCardBackground != null) {
+            delay(AbkCardBlurLoadDebounceMs)
+        }
         if (widthPx <= 0 || heightPx <= 0) return@LaunchedEffect
         val targetWidth = widthPx
         val targetHeight = heightPx
@@ -202,6 +253,16 @@ fun rememberBlurredCardBackground(
                         null
                     }
                 }
+                ?: decodeBlurSource(context, uri, targetWidth, targetHeight)
+                    ?.let { source ->
+                        try {
+                            blurSourceToBackground(source, targetWidth, targetHeight)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
                 ?: if (sharedPainter == null) {
                     // Defensive fallback: no shared painter to reuse, decode independently.
                     try {

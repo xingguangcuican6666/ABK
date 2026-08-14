@@ -24,6 +24,7 @@ import com.abk.kernel.data.repository.GitHubRepository
 import com.abk.kernel.data.repository.PreferencesRepository
 import com.abk.kernel.data.repository.Result
 import com.abk.kernel.ui.blur.BlurConfig
+import com.abk.kernel.utils.BackgroundImageStorage
 import com.abk.kernel.utils.BuildMonitorService
 import com.abk.kernel.utils.BuildProgressUtils
 import com.abk.kernel.utils.buildDisplaySnapshot
@@ -497,9 +498,30 @@ class MainViewModel @JvmOverloads constructor(
             str = { resId, args -> text(resId, *args) },
         )
         observePreferences()
+        migrateBackgroundUriToInternalStorage()
         observeForegroundWorkflowRefresh()
         if (registerStatusBroadcast) {
             registerStatusReceiver()
+        }
+    }
+
+    /**
+     * One-time migration: older installs persisted the picker's `content://` URI. Copy it
+     * into app-private storage so cold starts decode a local file instead of a cold content
+     * provider (slow wallpaper / black flash after the app is killed and reopened). Runs
+     * only while the stored URI is not already a local file.
+     */
+    private fun migrateBackgroundUriToInternalStorage() {
+        viewModelScope.launch {
+            val uriString = prefs.customBackgroundUri.first() ?: return@launch
+            if (!BackgroundImageStorage.needsCopy(uriString)) return@launch
+            val fileUri = withContext(Dispatchers.IO) {
+                BackgroundImageStorage.copyToInternalStorage(getApplication(), Uri.parse(uriString))
+            } ?: return@launch
+            // Only swap if the user has not picked a different background meanwhile.
+            if (prefs.customBackgroundUri.first() == uriString) {
+                prefs.setBackgroundImageUri(fileUri.toString())
+            }
         }
     }
 
@@ -3301,7 +3323,24 @@ class MainViewModel @JvmOverloads constructor(
     fun setCustomThemeColors(themeColorArgb: Int, accentColorArgb: Int) = viewModelScope.launch {
         prefs.setCustomThemeColors(themeColorArgb, accentColorArgb)
     }
-    fun setBackgroundImageUri(uri: String?) = viewModelScope.launch { prefs.setBackgroundImageUri(uri) }
+    /**
+     * Persists the picked background. `content://` picker URIs are first copied into
+     * app-private storage ([BackgroundImageStorage]) so cold starts decode a local file
+     * instead of a (possibly cold) content provider — otherwise the wallpaper can arrive
+     * late / the screen stays black after the app is killed and reopened. Runs in the
+     * view model scope so an early navigation away from the settings screen cannot cancel
+     * the copy. Falls back to the original URI when the copy fails.
+     */
+    fun setBackgroundImageUri(uri: String?) = viewModelScope.launch {
+        val storedUri = if (uri != null && BackgroundImageStorage.needsCopy(uri)) {
+            withContext(Dispatchers.IO) {
+                BackgroundImageStorage.copyToInternalStorage(getApplication(), Uri.parse(uri))
+            }?.toString() ?: uri
+        } else {
+            uri
+        }
+        prefs.setBackgroundImageUri(storedUri)
+    }
     fun setBackgroundImageEnabled(v: Boolean) = viewModelScope.launch { prefs.setBackgroundImageEnabled(v) }
     fun setUiSurfaceAlpha(alpha: Float) {
         val normalized = alpha.coerceIn(0f, 1f)

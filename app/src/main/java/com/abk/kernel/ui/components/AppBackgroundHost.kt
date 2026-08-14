@@ -41,9 +41,14 @@ fun AppBackgroundHost(
     val colorScheme = MaterialTheme.colorScheme
     val context = LocalContext.current
     var backgroundCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    var backgroundSize by remember { mutableStateOf(IntSize.Zero) }
     // Decode at display size (stable across IME insets), never at the image's original size.
     val displayMetrics = context.resources.displayMetrics
+    // Seed the viewport from display metrics so the blurred-card backdrop can start
+    // loading on the very first composition instead of waiting for onGloballyPositioned.
+    val initialBackgroundSize = remember(displayMetrics.widthPixels, displayMetrics.heightPixels) {
+        IntSize(displayMetrics.widthPixels, displayMetrics.heightPixels)
+    }
+    var backgroundSize by remember(initialBackgroundSize) { mutableStateOf(initialBackgroundSize) }
     val backgroundPainter = if (hasBackground) {
         val request = remember(
             backgroundUri,
@@ -57,6 +62,8 @@ fun AppBackgroundHost(
                 // decoded bitmap (hardware bitmaps can't be sampled by the StackBlur
                 // pass). Keeps the wallpaper to a single decode.
                 .allowHardware(false)
+                // Fade the wallpaper in over the neutral surface instead of popping in.
+                .crossfade(true)
                 .build()
         }
         rememberAsyncImagePainter(
@@ -78,7 +85,13 @@ fun AppBackgroundHost(
                     backgroundSize = coordinates.size
                 }
             }
-            .background(colorScheme.surface)
+            // While a wallpaper is configured, wait on a slightly lighter neutral than
+            // surface: on a cold start the decode lands a frame or two later, and pure
+            // black behind translucent frosted surfaces reads as a black flash (this
+            // mirrors ReSukiSU's use of surfaceContainer as the pre-load color).
+            .background(
+                if (hasBackground) colorScheme.surfaceContainer else colorScheme.surface
+            )
     ) {
         if (backgroundPainter != null) {
             Image(
