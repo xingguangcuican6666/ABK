@@ -6,6 +6,7 @@ import android.os.Build
 import com.abk.kernel.utils.findActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.darkColorScheme
@@ -13,6 +14,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
@@ -78,7 +80,22 @@ fun AbkTheme(
     MaterialExpressiveTheme(
         colorScheme = colorScheme,
         motionScheme = MotionScheme.expressive(),
-        content = content
+        content = {
+            // Material3 1.5.0-alpha19's MaterialTheme no longer provides
+            // LocalContentColor (it only sets the MaterialTheme, indication and
+            // selection-colors locals), so without an explicit default here
+            // LocalContentColor falls back to Color.Black. That default is only
+            // visible on content whose container color is not an exact scheme
+            // color — e.g. the translucent card surfaces used by the blur /
+            // custom-background feature — where contentColorFor() can't match a
+            // scheme role and delegates to LocalContentColor. Black is correct
+            // in light mode but invisible on dark surfaces, so provide the
+            // standard onSurface default the same way stable Material3 does.
+            CompositionLocalProvider(
+                LocalContentColor provides colorScheme.onSurface,
+                content = content
+            )
+        }
     )
 }
 
