@@ -1,0 +1,54 @@
+# Maintainer: xingguangcuican <xingguangcuican at users dot noreply dot github dot com>
+
+pkgname=abk-cli-git
+pkgver=r2141.g0da65a2d
+pkgrel=1
+pkgdesc='Command-line tool to trigger ABK kernel builds'
+arch=('any')
+url='https://github.com/xingguangcuican6666/abk'
+license=('GPL-3.0-or-later')
+
+depends=(
+  'python'
+  'python-certifi'
+  'python-cryptography'
+  'python-pynacl'
+)
+makedepends=('git')
+
+provides=('abk-cli')
+conflicts=('abk-cli')
+
+source=("$pkgname::git+https://github.com/xingguangcuican6666/abk.git#branch=dev")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/$pkgname"
+  printf 'r%s.g%s\n' \
+    "$(git rev-list --count HEAD)" \
+    "$(git rev-parse --short HEAD)"
+}
+
+check() {
+  cd "$srcdir/$pkgname"
+  PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s cli/tests -v
+}
+
+package() {
+  local src="$srcdir/$pkgname/cli"
+
+  install -dm755 "$pkgdir/usr/lib/abk-cli"
+  install -Dm755 "$src/abk.py" \
+    "$pkgdir/usr/lib/abk-cli/abk.py"
+  cp -a "$src/i18n" "$pkgdir/usr/lib/abk-cli/"
+
+  install -Dm644 "$src/README.md" \
+    "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 "$srcdir/$pkgname/LICENSE" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+  install -Dm755 /dev/stdin "$pkgdir/usr/bin/abk" <<'EOF'
+#!/bin/sh
+exec /usr/bin/python /usr/lib/abk-cli/abk.py "$@"
+EOF
+}
