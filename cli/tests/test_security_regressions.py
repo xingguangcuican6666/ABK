@@ -1008,17 +1008,372 @@ class SecurityRegressionTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "requires cryptography"):
                 abk.generate_signing_keypair()
 
-    def test_logout_without_config_has_no_filesystem_side_effect(self):
-        args = mock.Mock(json=False)
+    def test_logout_without_config_is_stateless(self):
+        args = mock.Mock(json=False, token=None, kpm_password=None)
         with (
-            mock.patch.object(abk, "_config_process_lock") as process_lock,
+            mock.patch.object(
+                abk,
+                "_native_credential_backend",
+                side_effect=abk.credential_store.NativeStoreUnavailable(
+                    "test backend unavailable"
+                ),
+            ),
+            mock.patch.object(
+                abk,
+                "_config_process_lock",
+                side_effect=AssertionError("stateless logout must not lock"),
+            ),
             contextlib.redirect_stdout(io.StringIO()),
         ):
             result = abk.cmd_logout(args)
 
         self.assertEqual(0, result)
-        process_lock.assert_not_called()
         self.assertFalse(self.config_dir.exists())
+        self.assertFalse(self.config_file.exists())
+
+    def test_logout_with_only_a_stale_lock_is_stateless(self):
+        self.config_dir.mkdir(parents=True)
+        lock_path = self.config_dir / abk.CONFIG_LOCK_FILE
+        lock_path.write_bytes(b"\0")
+
+        with mock.patch.object(
+            abk,
+            "_config_process_lock",
+            side_effect=AssertionError("stale lock must not be acquired"),
+        ):
+            removed, error = abk._delete_persisted_token()
+
+        self.assertFalse(removed)
+        self.assertIsNone(error)
+        self.assertEqual(b"\0", lock_path.read_bytes())
+
+    def test_logout_removes_an_orphaned_credential_key(self):
+        self.config_dir.mkdir(parents=True)
+        key_path = (
+            self.config_dir / abk.credential_store.CREDENTIAL_KEY_FILE_NAME
+        )
+        key_path.write_text("orphaned-key", encoding="utf-8")
+
+        removed, error = abk._delete_persisted_token()
+
+        self.assertTrue(removed)
+        self.assertIsNone(error)
+        self.assertFalse(key_path.exists())
+
+    def test_successful_store_ignores_unrelated_malformed_config(self):
+        self.config_dir.mkdir(parents=True)
+        malformed_config = (
+            b'{"note":"literal \\"token\\": text","download_dir":'
+        )
+        self.config_file.write_bytes(malformed_config)
+        store = mock.Mock()
+        store.store.return_value = abk.credential_store.StoreResult(
+            backend="test-native",
+            degraded=False,
+            location="test-native",
+        )
+        store.read.return_value = "fresh-token"
+
+        with (
+            mock.patch.object(abk, "_credential_store", return_value=store),
+            mock.patch.object(
+                abk,
+                "_verify_legacy_credential_removed",
+                side_effect=AssertionError("no legacy token was removed"),
+            ),
+        ):
+            result = abk._store_persisted_token("fresh-token")
+
+        self.assertFalse(result.degraded)
+        self.assertEqual(malformed_config, self.config_file.read_bytes())
+
+    def test_logout_rejects_invalid_config_before_secure_delete(self):
+        self.config_dir.mkdir(parents=True)
+        cases = (
+            b'{"download_dir":',
+            b'["not", "a", "config", "object"]',
+        )
+        for invalid_config in cases:
+            with self.subTest(invalid_config=invalid_config):
+                self.config_file.write_bytes(invalid_config)
+                store = mock.Mock()
+                with mock.patch.object(
+                    abk,
+                    "_credential_store",
+                    return_value=store,
+                ):
+                    removed, error = abk._delete_persisted_token()
+
+                self.assertFalse(removed)
+                self.assertIsInstance(
+                    error,
+                    abk.credential_store.CredentialStoreError,
+                )
+                store.delete.assert_not_called()
+                self.assertEqual(invalid_config, self.config_file.read_bytes())
+
+    def test_logout_rejects_unreadable_config_before_secure_delete(self):
+        self.config_dir.mkdir(parents=True)
+        self.config_file.write_text("{}", encoding="utf-8")
+        store = mock.Mock()
+
+        with (
+            mock.patch.object(abk, "_credential_store", return_value=store),
+            mock.patch.object(
+                Path,
+                "read_text",
+                side_effect=PermissionError("unreadable config"),
+            ),
+        ):
+            removed, error = abk._delete_persisted_token()
+
+        self.assertFalse(removed)
+        self.assertIsInstance(error, abk.credential_store.CredentialStoreError)
+        store.delete.assert_not_called()
+
+    def test_logout_rejects_symlinked_config_without_leaking_target_token(self):
+        self.config_dir.mkdir(parents=True)
+        target = Path(self.temp_dir.name) / "legacy-config.json"
+        target.write_text('{"token":"legacy-secret"}', encoding="utf-8")
+        try:
+            self.config_file.symlink_to(target)
+        except OSError as exc:
+            self.skipTest(f"config symlinks are unavailable: {exc}")
+        store = mock.Mock()
+
+        with mock.patch.object(abk, "_credential_store", return_value=store):
+            removed, error = abk._delete_persisted_token()
+
+        self.assertFalse(removed)
+        self.assertIsInstance(error, abk.credential_store.CredentialStoreError)
+        store.delete.assert_not_called()
+        self.assertTrue(self.config_file.is_symlink())
+        self.assertIn("legacy-secret", target.read_text(encoding="utf-8"))
+
+    def test_logout_rejects_hardlinked_config_without_leaking_other_link(self):
+        self.config_dir.mkdir(parents=True)
+        self.config_file.write_text(
+            '{"token":"legacy-secret"}',
+            encoding="utf-8",
+        )
+        other_link = Path(self.temp_dir.name) / "legacy-config-copy.json"
+        try:
+            os.link(self.config_file, other_link)
+        except OSError as exc:
+            self.skipTest(f"config hard links are unavailable: {exc}")
+        store = mock.Mock()
+
+        with mock.patch.object(abk, "_credential_store", return_value=store):
+            removed, error = abk._delete_persisted_token()
+
+        self.assertFalse(removed)
+        self.assertIsInstance(error, abk.credential_store.CredentialStoreError)
+        store.delete.assert_not_called()
+        self.assertIn("legacy-secret", self.config_file.read_text(encoding="utf-8"))
+        self.assertIn("legacy-secret", other_link.read_text(encoding="utf-8"))
+
+    def test_logout_with_valid_token_free_config_still_deletes_secure_state(self):
+        abk.save_config({"download_dir": "/tmp/out"})
+        store = mock.Mock()
+        store.delete.return_value = True
+
+        with mock.patch.object(abk, "_credential_store", return_value=store):
+            removed, error = abk._delete_persisted_token()
+
+        self.assertTrue(removed)
+        self.assertIsNone(error)
+        store.delete.assert_called_once_with()
+
+    def test_legacy_cleanup_failure_removes_new_secure_credential(self):
+        abk.save_config({"token": "legacy-token", "download_dir": "/tmp/out"})
+        with (
+            mock.patch.object(
+                abk,
+                "_native_credential_backend",
+                side_effect=abk.credential_store.NativeStoreUnavailable(
+                    "test backend unavailable"
+                ),
+            ),
+            mock.patch.object(
+                abk,
+                "save_config",
+                side_effect=OSError("read-only config"),
+            ),
+            contextlib.redirect_stderr(io.StringIO()),
+            self.assertRaisesRegex(
+                abk.credential_store.CredentialStoreError,
+                "legacy plaintext credential could not be removed",
+            ),
+        ):
+            abk._store_persisted_token("fresh-token")
+
+        store = abk._credential_store()
+        self.assertIsNone(store.read(include_native=False))
+        self.assertFalse(store.path.exists())
+        self.assertFalse(store.key_path.exists())
+        self.assertEqual("legacy-token", abk.load_config()["token"])
+
+    def test_legacy_cleanup_failure_restores_previous_secure_credential(self):
+        abk.save_config({"token": "legacy-token"})
+
+        class MemoryStore:
+            def __init__(self):
+                self.token = "previous-token"
+
+            def read(self, include_native=True):
+                return self.token
+
+            def store(self, token, **kwargs):
+                self.token = token
+                return abk.credential_store.StoreResult(
+                    backend="test-native",
+                    degraded=False,
+                    location="test-native",
+                )
+
+            def delete(self):
+                self.token = None
+                return True
+
+        store = MemoryStore()
+        with (
+            mock.patch.object(abk, "_credential_store", return_value=store),
+            mock.patch.object(
+                abk,
+                "save_config",
+                side_effect=OSError("read-only config"),
+            ),
+            self.assertRaises(abk.credential_store.CredentialStoreError),
+        ):
+            abk._store_persisted_token("fresh-token")
+
+        self.assertEqual("previous-token", store.token)
+        self.assertEqual("legacy-token", abk.load_config()["token"])
+
+    def test_lost_cleanup_response_restores_both_credential_states(self):
+        abk.save_config({"token": "legacy-token", "download_dir": "/tmp/out"})
+
+        class MemoryStore:
+            def __init__(self):
+                self.token = None
+
+            def read(self, include_native=True):
+                return self.token
+
+            def store(self, token, **kwargs):
+                self.token = token
+                return abk.credential_store.StoreResult(
+                    backend="test-native",
+                    degraded=False,
+                    location="test-native",
+                )
+
+            def delete(self):
+                self.token = None
+                return True
+
+        store = MemoryStore()
+        real_save_config = abk.save_config
+
+        def save_then_lose_response(config):
+            real_save_config(config)
+            raise OSError("lost save response")
+
+        with (
+            mock.patch.object(abk, "_credential_store", return_value=store),
+            mock.patch.object(
+                abk,
+                "save_config",
+                side_effect=save_then_lose_response,
+            ),
+            self.assertRaises(abk.credential_store.CredentialStoreError),
+        ):
+            abk._store_persisted_token("fresh-token")
+
+        self.assertIsNone(store.token)
+        self.assertEqual(
+            {"token": "legacy-token", "download_dir": "/tmp/out"},
+            abk.load_config(),
+        )
+
+    def test_config_rollback_failure_keeps_verified_secure_credential(self):
+        abk.save_config({"token": "legacy-token", "download_dir": "/tmp/out"})
+
+        class MemoryStore:
+            def __init__(self):
+                self.token = None
+
+            def read(self, include_native=True):
+                return self.token
+
+            def store(self, token, **kwargs):
+                self.token = token
+                return abk.credential_store.StoreResult(
+                    backend="test-native",
+                    degraded=False,
+                    location="test-native",
+                )
+
+            def delete(self):
+                self.token = None
+                return True
+
+        store = MemoryStore()
+        real_save_config = abk.save_config
+        save_calls = 0
+
+        def lose_cleanup_then_fail_rollback(config):
+            nonlocal save_calls
+            save_calls += 1
+            if save_calls == 1:
+                real_save_config(config)
+                raise OSError("lost cleanup response")
+            raise OSError("config rollback failed")
+
+        with (
+            mock.patch.object(abk, "_credential_store", return_value=store),
+            mock.patch.object(
+                abk,
+                "save_config",
+                side_effect=lose_cleanup_then_fail_rollback,
+            ),
+            self.assertRaisesRegex(
+                abk.credential_store.CredentialStoreError,
+                "legacy config rollback failed",
+            ),
+        ):
+            abk._store_persisted_token("fresh-token")
+
+        self.assertEqual("fresh-token", store.token)
+        self.assertNotIn("token", abk.load_config())
+
+    def test_legacy_cleanup_and_rollback_failures_are_combined(self):
+        abk.save_config({"token": "legacy-token"})
+        store = mock.Mock()
+        store.read.side_effect = [None, "fresh-token"]
+        store.store.return_value = abk.credential_store.StoreResult(
+            backend="test-native",
+            degraded=False,
+            location="test-native",
+        )
+        store.delete.side_effect = abk.credential_store.NativeStoreError(
+            "rollback backend unavailable"
+        )
+
+        with (
+            mock.patch.object(abk, "_credential_store", return_value=store),
+            mock.patch.object(
+                abk,
+                "save_config",
+                side_effect=OSError("read-only config"),
+            ),
+            self.assertRaisesRegex(
+                abk.credential_store.CredentialStoreError,
+                "legacy plaintext credential could not be removed; secure "
+                "credential rollback failed: rollback backend unavailable",
+            ),
+        ):
+            abk._store_persisted_token("fresh-token")
 
     def test_signing_metadata_rejects_invalid_environment_and_config_keys(self):
         config = {
@@ -1286,7 +1641,7 @@ class SecurityRegressionTests(unittest.TestCase):
 
         class ConcurrentConfigClient(SigningClient):
             def get_published_signing_key(self):
-                abk.save_config({"token": "fresh-token", "download_dir": "/fresh"})
+                abk.save_config({"session_marker": "fresh", "download_dir": "/fresh"})
                 return self.published_key
 
         client = ConcurrentConfigClient(
@@ -1296,9 +1651,66 @@ class SecurityRegressionTests(unittest.TestCase):
         abk.ensure_signing_key(client)
 
         config = abk.load_config()
-        self.assertEqual("fresh-token", config["token"])
+        self.assertEqual("fresh", config["session_marker"])
         self.assertEqual("/fresh", config["download_dir"])
         self.assertIn("alice/abk", config[abk.SIGNING_STATE_CONFIG_KEY])
+
+    def test_login_and_logout_serialize_the_entire_credential_transaction(self):
+        delete_started = threading.Event()
+        allow_delete = threading.Event()
+        store_started = threading.Event()
+
+        self.config_dir.mkdir(parents=True)
+        credential_path = (
+            self.config_dir / abk.credential_store.CREDENTIAL_FILE_NAME
+        )
+        credential_path.write_text("{}", encoding="utf-8")
+
+        class BlockingCredentialStore:
+            def __init__(self):
+                self.token = None
+
+            def delete(self):
+                delete_started.set()
+                if not allow_delete.wait(timeout=5):
+                    raise RuntimeError("test timed out waiting to release logout")
+                self.token = None
+                return False
+
+            def store(
+                self,
+                token,
+                before_fallback=None,
+                before_local_fallback=None,
+                allow_recovery=False,
+            ):
+                store_started.set()
+                self.token = token
+                return abk.credential_store.StoreResult(
+                    backend="test-native",
+                    degraded=False,
+                    location="test-native",
+                )
+
+            def read(self, include_native=True):
+                return self.token
+
+        store = BlockingCredentialStore()
+        with (
+            mock.patch.object(abk, "_credential_store", return_value=store),
+            ThreadPoolExecutor(max_workers=2) as executor,
+        ):
+            logout = executor.submit(abk._delete_persisted_token)
+            self.assertTrue(delete_started.wait(timeout=2))
+            login = executor.submit(abk._store_persisted_token, "new-token")
+
+            self.assertFalse(store_started.wait(timeout=0.2))
+            allow_delete.set()
+            self.assertEqual((False, None), logout.result(timeout=5))
+            result = login.result(timeout=5)
+
+        self.assertEqual("test-native", result.backend)
+        self.assertEqual("new-token", store.token)
 
     def test_concurrent_signing_initialization_publishes_one_matching_pair(self):
         if not abk._CRYPTO_BACKEND:
@@ -1388,9 +1800,21 @@ print(json.dumps({"started": started, "finished": finished}))
             )
             for _ in range(2)
         ]
+        try:
+            outputs = [
+                process.communicate(timeout=10)
+                for process in processes
+            ]
+        except BaseException:
+            for process in processes:
+                if process.poll() is None:
+                    process.kill()
+            for process in processes:
+                process.communicate()
+            raise
+
         intervals = []
-        for process in processes:
-            stdout, stderr = process.communicate(timeout=10)
+        for process, (stdout, stderr) in zip(processes, outputs):
             self.assertEqual(0, process.returncode, stderr)
             intervals.append(json.loads(stdout))
 
@@ -1398,6 +1822,68 @@ print(json.dumps({"started": started, "finished": finished}))
         self.assertGreaterEqual(
             intervals[1]["started"],
             intervals[0]["finished"] - 0.01,
+        )
+
+    def test_windows_config_lock_initializes_byte_after_acquisition(self):
+        events = []
+
+        class FakeStream:
+            def __init__(self):
+                self.position = 0
+                self.size = 0
+
+            def fileno(self):
+                return 123
+
+            def seek(self, offset, whence=0):
+                if whence == os.SEEK_END:
+                    self.position = self.size + offset
+                else:
+                    self.position = offset
+
+            def tell(self):
+                return self.position
+
+            def write(self, value):
+                events.append("write")
+                if not FakeMsvcrt.locked:
+                    raise AssertionError("lock byte was written before locking")
+                self.position += len(value)
+                self.size = max(self.size, self.position)
+
+            def close(self):
+                events.append("close")
+
+        class FakeMsvcrt:
+            LK_NBLCK = 1
+            LK_UNLCK = 2
+            locked = False
+
+            @classmethod
+            def locking(cls, fd, mode, length):
+                self.assertEqual((123, 1), (fd, length))
+                if mode == cls.LK_NBLCK:
+                    events.append("lock")
+                    cls.locked = True
+                elif mode == cls.LK_UNLCK:
+                    events.append("unlock")
+                    cls.locked = False
+                else:
+                    self.fail(f"unexpected lock mode: {mode}")
+
+        stream = FakeStream()
+        with (
+            mock.patch.object(abk.os, "name", "nt"),
+            mock.patch.object(abk.os, "open", return_value=123),
+            mock.patch.object(abk.os, "fdopen", return_value=stream),
+            mock.patch.dict(sys.modules, {"msvcrt": FakeMsvcrt}),
+        ):
+            with abk._config_process_lock(timeout=0):
+                events.append("yield")
+
+        self.assertEqual(
+            ["lock", "write", "yield", "unlock", "close"],
+            events,
         )
 
     @unittest.skipIf(os.name == "nt", "POSIX flock-specific regression")

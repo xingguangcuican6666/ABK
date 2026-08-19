@@ -495,6 +495,7 @@ class WorkflowContractTests(unittest.TestCase):
             4,
         )
         self.assertIn('result["schemaVersion"] == 1', workflow)
+        self.assertIn('result["credentialAesGcm"] is True', workflow)
         self.assertIn('result["tlsContext"] is True', workflow)
         self.assertIn('"LICENSE"', workflow)
         for dependency in abk.WORKFLOW_RUNTIME_NAMES:
@@ -502,8 +503,60 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn("raw.githubusercontent.com", workflow)
         self.assertIn("cp LICENSE dist/abk/LICENSE", workflow)
         self.assertIn('Copy-Item -LiteralPath "LICENSE"', workflow)
+        self.assertEqual(4, workflow.count("--collect-submodules keyring.backends"))
+        self.assertEqual(4, workflow.count("--copy-metadata keyring"))
+        self.assertIn("keyring.backends.SecretService", workflow)
+        self.assertIn("keyring.backends.macOS", workflow)
+        self.assertIn("keyring.backends.Windows", workflow)
 
-    def test_cross_packaging_uses_fast_compatible_crypto_fallback(self):
+        native_dependencies = workflow.split(
+            "- name: Run CLI regression tests",
+            maxsplit=1,
+        )[0]
+        non_windows_dependencies = native_dependencies.split(
+            "- name: Install Rust",
+            maxsplit=1,
+        )[0]
+        self.assertIn("python -m pip install keyring", non_windows_dependencies)
+        self.assertIn(
+            'if [[ "$RUNNER_OS" == "Linux" ]]; then\n'
+            '            python -m pip install "SecretStorage>=3.5"\n'
+            "          fi",
+            non_windows_dependencies,
+        )
+        self.assertNotIn("cryptography_available", non_windows_dependencies)
+        self.assertIn(
+            "cryptography is required for Linux Secret Service support",
+            non_windows_dependencies,
+        )
+        self.assertEqual(
+            3,
+            workflow.count('result["cryptoBackend"] == "cryptography"'),
+        )
+        self.assertIn(
+            'if ($LASTEXITCODE -ne 0) {\n'
+            '            Write-Warning "cryptography unavailable, using '
+            'pycryptodome instead"\n'
+            '          }\n'
+            '          python -m pip install keyring',
+            native_dependencies,
+        )
+
+    def test_source_install_includes_linux_secret_service_dependency(self):
+        requirements = (
+            REPO_ROOT / "cli" / "requirements.txt"
+        ).read_text(encoding="utf-8").splitlines()
+        readme = (REPO_ROOT / "cli" / "README.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            'SecretStorage>=3.5; sys_platform == "linux"',
+            requirements,
+        )
+        self.assertIn("keyring SecretStorage", readme)
+
+    def test_cross_packaging_includes_native_credential_backend(self):
         workflow = (
             REPO_ROOT / ".github" / "workflows" / "build-abk-cli.yml"
         ).read_text(encoding="utf-8")
@@ -519,14 +572,63 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(
             2,
             cross_workflow.count(
-                'assert abk._CRYPTO_BACKEND == \\\"pycryptodome\\\"'
+                'assert abk._CRYPTO_BACKEND == \\\"cryptography\\\"'
+            ),
+        )
+        self.assertNotIn("python3-cryptography", cross_workflow)
+        self.assertEqual(1, cross_workflow.count("--only-binary cryptography"))
+        self.assertEqual(2, cross_workflow.count('"cryptography==49.0.0"'))
+        self.assertEqual(2, cross_workflow.count('"keyring==25.7.0"'))
+        self.assertEqual(2, cross_workflow.count('"SecretStorage==3.5.0"'))
+        self.assertEqual(2, cross_workflow.count("libffi-dev"))
+        self.assertEqual(2, cross_workflow.count("libssl-dev"))
+        self.assertEqual(2, cross_workflow.count("pkg-config"))
+        self.assertEqual(
+            1,
+            cross_workflow.count(
+                'python -m pip install --only-binary cryptography '
+                'pyinstaller certifi "cryptography==49.0.0" '
+                'pycryptodome pynacl "keyring==25.7.0" '
+                '"SecretStorage==3.5.0"'
+            ),
+        )
+        self.assertEqual(
+            1,
+            cross_workflow.count(
+                'python -m pip install pyinstaller certifi '
+                '"cryptography==49.0.0" pycryptodome pynacl '
+                '"keyring==25.7.0" "SecretStorage==3.5.0"'
             ),
         )
         self.assertEqual(
             2,
+            cross_workflow.count(
+                "from keyring.backends.SecretService import Keyring"
+            ),
+        )
+        self.assertEqual(
+            2,
+            cross_workflow.count("--collect-submodules keyring.backends"),
+        )
+        self.assertEqual(2, cross_workflow.count("--copy-metadata keyring"))
+        self.assertEqual(2, cross_workflow.count("Crypto.Cipher.AES"))
+        self.assertEqual(2, cross_workflow.count("Crypto.Cipher._mode_gcm"))
+        self.assertEqual(
+            2,
             cross_workflow.count('$pip_cache:/root/.cache/pip'),
         )
-        self.assertEqual(2, cross_workflow.count("trap restore_pip_cache_owner EXIT"))
+        self.assertEqual(
+            1,
+            cross_workflow.count('$rust_cache:/root/.cache/puccinialin'),
+        )
+        self.assertEqual(
+            1,
+            cross_workflow.count("trap restore_pip_cache_owner EXIT"),
+        )
+        self.assertEqual(
+            1,
+            cross_workflow.count("trap restore_build_cache_owner EXIT"),
+        )
         self.assertIn('--entrypoint /bin/true', cross_workflow)
         self.assertIn('--install "$CROSS_BINFMT"', cross_workflow)
 

@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import ssl
+import stat
 import sys
 import tempfile
 import threading
@@ -53,6 +54,7 @@ except ImportError:
     _CERTIFI_CA_BUNDLE = None
 
 sys.path.insert(0, str(Path(__file__).parent))
+import credential_store
 from i18n import (
     SUPPORTED_LANGUAGES,
     language_storage_id,
@@ -475,14 +477,349 @@ def save_config(config):
                 pass
 
 
-def get_token(args):
+def _native_credential_backend():
+    return credential_store.create_native_backend()
+
+
+def _credential_store():
+    return credential_store.CredentialStore(
+        CONFIG_DIR,
+        native_backend_factory=_native_credential_backend,
+    )
+
+
+class LegacyCredentialMigrationError(credential_store.CredentialStoreError):
+    """Raised when plaintext credentials cannot be migrated without loss."""
+
+
+def _credential_access_error_message(error):
+    if isinstance(error, LegacyCredentialMigrationError):
+        return str(error)
+    return t("credential_read_failed", error=error)
+
+
+def _remember_runtime_secret(args, value):
+    if args is None or not isinstance(value, str) or not value:
+        return
+    values = getattr(args, "_runtime_secrets", None)
+    if not isinstance(values, set):
+        values = set()
+        args._runtime_secrets = values
+    values.add(value)
+
+
+def _add_runtime_warning(args, code, message):
+    if args is None:
+        return
+    warnings = getattr(args, "_runtime_warnings", None)
+    if not isinstance(warnings, list):
+        warnings = []
+        args._runtime_warnings = warnings
+    warning = {"code": code, "message": str(message)}
+    if warning not in warnings:
+        warnings.append(warning)
+
+
+def _warn_credential_fallback(args=None):
+    message = t("credential_fallback_warning")
+    if args is not None and getattr(args, "json", False) is True:
+        _add_runtime_warning(args, "degraded_credential_storage", message)
+        return
+    print(f"{t('warning_prefix')} {message}", file=sys.stderr)
+
+
+def _warn_credential_local_key_fallback(args=None):
+    message = t("credential_local_key_warning")
+    if args is not None and getattr(args, "json", False) is True:
+        _add_runtime_warning(args, "local_key_credential_storage", message)
+        return
+    print(f"{t('warning_prefix')} {message}", file=sys.stderr)
+
+
+def _verify_legacy_credential_removed():
+    if not CONFIG_FILE.exists():
+        return
+    try:
+        config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise credential_store.CredentialStoreError(
+            "legacy plaintext credential removal could not be verified"
+        ) from exc
+    if not isinstance(config, dict) or "token" in config:
+        raise credential_store.CredentialStoreError(
+            "legacy plaintext credential removal could not be verified"
+        )
+
+
+def _load_config_for_credential_cleanup():
+    try:
+        file_status = CONFIG_FILE.lstat()
+    except FileNotFoundError:
+        return {}
+    except OSError as exc:
+        raise credential_store.CredentialStoreError(
+            "legacy credential configuration could not be inspected"
+        ) from exc
+    if not stat.S_ISREG(file_status.st_mode):
+        raise credential_store.CredentialStoreError(
+            "legacy credential configuration is not a regular file"
+        )
+    if file_status.st_nlink != 1:
+        raise credential_store.CredentialStoreError(
+            "legacy credential configuration has multiple hard links"
+        )
+    try:
+        config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise credential_store.CredentialStoreError(
+            "legacy credential configuration is unreadable or malformed"
+        ) from exc
+    if not isinstance(config, dict):
+        raise credential_store.CredentialStoreError(
+            "legacy credential configuration is invalid"
+        )
+    return config
+
+
+def _restore_legacy_config(original_config):
+    try:
+        if _load_config_for_credential_cleanup() == original_config:
+            return
+    except credential_store.CredentialStoreError:
+        pass
+
+    save_error = None
+    try:
+        save_config(original_config)
+    except OSError as exc:
+        save_error = exc
+    try:
+        restored = _load_config_for_credential_cleanup()
+    except credential_store.CredentialStoreError as exc:
+        raise credential_store.CredentialStoreError(
+            "legacy credential configuration rollback could not be verified"
+        ) from (save_error or exc)
+    if restored != original_config:
+        raise credential_store.CredentialStoreError(
+            "legacy credential configuration rollback did not restore its "
+            "previous value"
+        ) from save_error
+
+
+def _rollback_secure_credential(store, previous_token, *, args=None):
+    try:
+        if previous_token is None:
+            store.delete()
+            restored = store.read()
+            if restored is not None:
+                raise credential_store.CredentialStoreError(
+                    "the newly stored secure credential is still present"
+                )
+            return
+
+        result = store.store(
+            previous_token,
+            before_fallback=lambda: _warn_credential_fallback(args),
+            before_local_fallback=lambda: _warn_credential_local_key_fallback(args),
+            allow_recovery=True,
+        )
+        restored = store.read(include_native=not result.degraded)
+        if (
+            not isinstance(restored, str)
+            or not hmac.compare_digest(restored, previous_token)
+        ):
+            raise credential_store.CredentialStoreError(
+                "the previous secure credential failed restoration verification"
+            )
+    except credential_store.CredentialStoreError:
+        raise
+    except Exception as exc:
+        raise credential_store.CredentialStoreError(
+            "the secure credential rollback could not be completed"
+        ) from exc
+
+
+def _store_persisted_token(token, *, args=None, allow_recovery=False):
+    with _config_process_lock():
+        config = load_config()
+        legacy_token_present = "token" in config
+        if legacy_token_present:
+            config = _load_config_for_credential_cleanup()
+        original_config = dict(config)
+        store = _credential_store()
+        previous_token = None
+        if legacy_token_present:
+            previous_token = store.read()
+            if previous_token is not None and not isinstance(previous_token, str):
+                raise credential_store.CredentialStoreError(
+                    "the previous secure credential is invalid"
+                )
+        result = store.store(
+            token,
+            before_fallback=lambda: _warn_credential_fallback(args),
+            before_local_fallback=lambda: _warn_credential_local_key_fallback(args),
+            allow_recovery=allow_recovery,
+        )
+        try:
+            persisted = store.read(include_native=not result.degraded)
+            if (
+                not isinstance(persisted, str)
+                or not hmac.compare_digest(persisted, token)
+            ):
+                raise credential_store.CredentialStoreError(
+                    "the stored GitHub credential failed disk verification"
+                )
+            if legacy_token_present:
+                config.pop("token", None)
+                try:
+                    save_config(config)
+                except OSError as exc:
+                    raise credential_store.CredentialStoreError(
+                        "legacy plaintext credential could not be removed"
+                    ) from exc
+                _verify_legacy_credential_removed()
+        except credential_store.CredentialStoreError as operation_error:
+            if legacy_token_present:
+                try:
+                    _restore_legacy_config(original_config)
+                except credential_store.CredentialStoreError as config_error:
+                    raise credential_store.CredentialStoreError(
+                        f"{operation_error}; legacy config rollback failed: "
+                        f"{config_error}"
+                    ) from operation_error
+                try:
+                    _rollback_secure_credential(
+                        store,
+                        previous_token,
+                        args=args,
+                    )
+                except credential_store.CredentialStoreError as rollback_error:
+                    raise credential_store.CredentialStoreError(
+                        f"{operation_error}; secure credential rollback failed: "
+                        f"{rollback_error}"
+                    ) from operation_error
+            raise
+        return result
+
+
+def _read_persisted_token(
+    *,
+    args=None,
+    migrate_legacy=True,
+    include_native=True,
+):
     config = load_config()
-    return (
+    legacy_token = config.get("token")
+    if isinstance(legacy_token, str) and legacy_token:
+        if not migrate_legacy:
+            return legacy_token
+        with _config_process_lock():
+            config = load_config()
+            latest_token = config.get("token")
+            if not isinstance(latest_token, str) or not latest_token:
+                legacy_token = None
+            else:
+                legacy_token = latest_token
+                try:
+                    _store_persisted_token(
+                        legacy_token,
+                        args=args,
+                    )
+                except credential_store.CredentialStoreError as exc:
+                    raise LegacyCredentialMigrationError(
+                        t("credential_migration_failed", error=exc)
+                    ) from exc
+                return latest_token
+    credential_paths = (
+        CONFIG_DIR / credential_store.CREDENTIAL_FILE_NAME,
+        CONFIG_DIR / credential_store.CREDENTIAL_PENDING_FILE_NAME,
+    )
+    for credential_path in credential_paths:
+        try:
+            credential_path.lstat()
+            break
+        except FileNotFoundError:
+            continue
+        except OSError:
+            # Let the normal locked read report inaccessible state.
+            break
+    else:
+        # A logged-out, stateless invocation has no credential transaction to
+        # serialize. Avoid creating a lock directory just to return None.
+        return None
+    if not migrate_legacy and not include_native:
+        # Secret collection is best-effort and must not create or wait on the
+        # config lock merely to render an error. Metadata writes are atomic,
+        # and this path cannot migrate or upgrade a backend.
+        return _credential_store().read(include_native=False)
+    with _config_process_lock():
+        return _credential_store().read(include_native=include_native)
+
+
+def _delete_persisted_token():
+    credential_paths = (
+        CONFIG_FILE,
+        CONFIG_DIR / credential_store.CREDENTIAL_FILE_NAME,
+        CONFIG_DIR / credential_store.CREDENTIAL_PENDING_FILE_NAME,
+        CONFIG_DIR / credential_store.CREDENTIAL_KEY_FILE_NAME,
+    )
+    for credential_path in credential_paths:
+        try:
+            credential_path.lstat()
+            break
+        except FileNotFoundError:
+            continue
+        except OSError:
+            # Let the normal locked delete report inaccessible state.
+            break
+    else:
+        # A stateless logout has nothing to serialize or remove. Avoid
+        # creating the configuration directory solely for its lock file.
+        return False, None
+
+    with _config_process_lock():
+        try:
+            config = _load_config_for_credential_cleanup()
+        except credential_store.CredentialStoreError as exc:
+            return False, exc
+        removed = False
+        error = None
+        try:
+            removed = _credential_store().delete()
+        except credential_store.CredentialStoreError as exc:
+            error = exc
+
+        if "token" in config:
+            try:
+                config.pop("token", None)
+                save_config(config)
+                _verify_legacy_credential_removed()
+                removed = True
+            except (OSError, credential_store.CredentialStoreError):
+                cleanup_error = credential_store.CredentialStoreError(
+                    "legacy plaintext credential could not be removed"
+                )
+                if error is None:
+                    error = cleanup_error
+                else:
+                    error = credential_store.CredentialStoreError(
+                        f"{error}; {cleanup_error}"
+                    )
+    return removed, error
+
+
+def get_token(args):
+    token = (
         getattr(args, "token", None)
         or os.environ.get("GITHUB_TOKEN")
         or os.environ.get("GH_TOKEN")
-        or config.get("token")
     )
+    if token:
+        _remember_runtime_secret(args, token)
+        return token
+    token = _read_persisted_token(args=args)
+    _remember_runtime_secret(args, token)
+    return token
 
 
 def get_client_id():
@@ -772,12 +1109,11 @@ class GitHubAPIError(RuntimeError):
 
 class GitHubClient:
     def __init__(self, token=None, repo=None, verbose=False):
-        config = load_config()
         self.token = (
             token 
             or os.environ.get("GITHUB_TOKEN") 
             or os.environ.get("GH_TOKEN")
-            or config.get("token")
+            or _read_persisted_token()
         )
         self.repo = repo or os.environ.get("ABK_REPO")
         self.repo_explicit = bool(self.repo)
@@ -1776,9 +2112,6 @@ def _config_process_lock(timeout=120):
         try:
             if os.name != "nt":
                 os.fchmod(stream.fileno(), 0o600)
-            stream.seek(0, os.SEEK_END)
-            if stream.tell() == 0:
-                stream.write(b"\0")
             deadline = time.monotonic() + timeout
             contention_errnos = {errno.EACCES, errno.EAGAIN}
             if os.name == "nt" and hasattr(errno, "EDEADLK"):
@@ -1804,6 +2137,12 @@ def _config_process_lock(timeout=120):
                             "timed out waiting for the ABK config lock"
                         ) from exc
                     time.sleep(0.1)
+            # Windows byte-range locks may extend beyond EOF. Initialize the
+            # lock byte only after acquiring it so two first-time processes
+            # cannot race an unprotected write against a mandatory lock.
+            stream.seek(0, os.SEEK_END)
+            if stream.tell() == 0:
+                stream.write(b"\0")
             _CONFIG_LOCK_STATE.depth = 1
             try:
                 yield
@@ -2749,6 +3088,7 @@ def _repo_is_explicit(client, args):
 
 
 def make_client(args, token):
+    _remember_runtime_secret(args, token)
     return GitHubClient(
         token=token,
         repo=_target_repo(args),
@@ -2892,6 +3232,7 @@ def _dispatch_run_details(response):
 
 def prepare_build_repository(client, args):
     """Select a writable target repository and configure artifact signing."""
+    _remember_runtime_secret(args, getattr(client, "token", None))
     if _repo_is_explicit(client, args):
         try:
             ensure_signing_key(client)
@@ -2981,17 +3322,25 @@ def cmd_login(args):
     if not token:
         return 1
 
+    _remember_runtime_secret(args, token)
     client = make_client(args, token)
     if _report_client_authentication_error(client, args):
         return 1
     try:
         user = client.get_user()
-        with _config_process_lock():
-            config = load_config()
-            config["token"] = token
-            save_config(config)
+        try:
+            # The device-flow token was verified by get_user(), so it may
+            # replace a credential whose old storage provider is unavailable.
+            storage = _store_persisted_token(
+                token,
+                args=args,
+                allow_recovery=True,
+            )
+        except credential_store.CredentialStoreError as exc:
+            print(t("credential_store_failed", error=exc), file=sys.stderr)
+            return 1
         print()
-        print(t("token_saved_to", path=CONFIG_FILE))
+        print(t("token_saved_to", path=storage.location))
         print(t("logged_in_as", user=user.get('login', 'Unknown')))
         print(t("checking_fork"))
         fork_status = client.check_and_prompt_sync()
@@ -3022,32 +3371,18 @@ def cmd_login(args):
             _ensure_signing_key_for_repository_setup(client)
         return 0
     except Exception as exc:
-        print(t("login_check_failed", error=exc), file=sys.stderr)
+        message = _redact_secret_text(str(exc), _collect_json_secrets(args))
+        print(t("login_check_failed", error=message), file=sys.stderr)
         return 1
 
 
 def cmd_logout(args):
-    if not CONFIG_FILE.exists():
-        print(t("logout_not"))
-        _set_json_result(
-            args,
-            ok=True,
-            loggedIn=bool(get_token(args)),
-            storedTokenRemoved=False,
-        )
-        return 0
-
-    with _config_process_lock():
-        if CONFIG_FILE.exists():
-            config = load_config()
-            if "token" in config:
-                del config["token"]
-                save_config(config)
-                removed = True
-            else:
-                removed = False
-        else:
-            removed = False
+    removed, storage_error = _delete_persisted_token()
+    if storage_error is not None:
+        message = t("credential_delete_failed", error=storage_error)
+        print(message, file=sys.stderr)
+        _set_json_error(args, message, "credential_storage_failed")
+        return 1
     if removed:
         print(t("logged_out_token_removed"))
     else:
@@ -4780,6 +5115,7 @@ def cmd_self_test(args):
         import certifi as certifi_module
 
         nacl.bindings.sodium_init()
+        credential_aes_backend = credential_store.aes_gcm_self_test()
         ca_bundle = certifi_module.where()
         if not Path(ca_bundle).is_file():
             raise RuntimeError("certifi CA bundle is missing")
@@ -4788,6 +5124,8 @@ def cmd_self_test(args):
             args,
             ok=True,
             cryptoBackend=_CRYPTO_BACKEND,
+            credentialAesBackend=credential_aes_backend,
+            credentialAesGcm=True,
             pynacl=True,
             caBundle=True,
             tlsContext=True,
@@ -4916,9 +5254,15 @@ class ABKVersionAction(argparse.Action):
 
 
 def _collect_json_secrets(args=None, argv=None):
-    stored_token = None
-    if CONFIG_FILE.exists():
-        stored_token = load_config().get("token")
+    try:
+        stored_token = _read_persisted_token(
+            migrate_legacy=False,
+            include_native=False,
+        )
+    except Exception:
+        # Error reporting must remain available even when credential metadata
+        # itself is the thing that is corrupt or inaccessible.
+        stored_token = None
     values = {
         value
         for value in (
@@ -4931,6 +5275,13 @@ def _collect_json_secrets(args=None, argv=None):
         )
         if isinstance(value, str) and value
     }
+    runtime_secrets = getattr(args, "_runtime_secrets", None)
+    if isinstance(runtime_secrets, (set, tuple, list)):
+        values.update(
+            value
+            for value in runtime_secrets
+            if isinstance(value, str) and value
+        )
     raw_args = list(sys.argv[1:] if argv is None else argv)
     secret_flags = ("--token", "--kpm-password")
     for index, item in enumerate(raw_args):
@@ -5044,6 +5395,13 @@ def _run_json_command(args):
             "error": "operation cancelled",
             "errorCode": "cancelled",
         }
+    except credential_store.CredentialStoreError as exc:
+        exit_code = 1
+        args._json_result = {
+            "ok": False,
+            "error": _credential_access_error_message(exc),
+            "errorCode": "credential_storage_failed",
+        }
     except Exception as exc:
         exit_code = 1
         args._json_result = {
@@ -5075,6 +5433,15 @@ def _run_json_command(args):
     payload.setdefault("command", args.command)
     payload.setdefault("error", None)
     payload.setdefault("errorCode", None)
+    runtime_warnings = getattr(args, "_runtime_warnings", None)
+    if isinstance(runtime_warnings, list) and runtime_warnings:
+        payload_warnings = payload.get("warnings")
+        if not isinstance(payload_warnings, list):
+            payload_warnings = []
+        for warning in runtime_warnings:
+            if warning not in payload_warnings:
+                payload_warnings.append(warning)
+        payload["warnings"] = payload_warnings
     secrets = _collect_json_secrets(args)
     redacted_payload = _redact_json_secrets(payload, secrets)
     json_document = json.dumps(
@@ -5403,8 +5770,12 @@ def main():
 
     if args.json:
         return _run_json_command(args)
-    _persist_requested_language(args.lang)
-    return args.func(args) or 0
+    try:
+        _persist_requested_language(args.lang)
+        return args.func(args) or 0
+    except credential_store.CredentialStoreError as exc:
+        print(_credential_access_error_message(exc), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

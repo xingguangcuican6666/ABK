@@ -112,6 +112,13 @@ class JsonContractTests(unittest.TestCase):
         self.config_patches = (
             mock.patch.object(abk, "CONFIG_DIR", config_dir),
             mock.patch.object(abk, "CONFIG_FILE", config_dir / "config.json"),
+            mock.patch.object(
+                abk,
+                "_native_credential_backend",
+                side_effect=abk.credential_store.NativeStoreUnavailable(
+                    "test backend unavailable"
+                ),
+            ),
             mock.patch.dict(
                 os.environ,
                 {"GITHUB_TOKEN": "", "GH_TOKEN": "", "ABK_SIGNING_KEY": ""},
@@ -204,6 +211,21 @@ class JsonContractTests(unittest.TestCase):
         self.assertEqual(abk.DEFAULT_REPO, payload["repo"])
         self.assertIsNone(payload["user"])
         self.assertEqual("whoami", payload["command"])
+        self.assertEqual("", stderr)
+
+    def test_logged_out_whoami_does_not_create_a_config_lock(self):
+        with mock.patch.object(
+            abk,
+            "_config_process_lock",
+            side_effect=AssertionError("logged-out reads must remain stateless"),
+        ):
+            exit_code, payload, stderr = self._run_main([
+                "abk", "--json", "whoami",
+            ])
+
+        self.assertEqual(0, exit_code)
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["loggedIn"])
         self.assertEqual("", stderr)
 
     def test_explicit_repo_whoami_preserves_user_identity_for_user_token(self):
@@ -465,6 +487,11 @@ class JsonContractTests(unittest.TestCase):
             mock.patch.object(abk, "make_client", return_value=client),
             mock.patch.object(
                 abk,
+                "_store_persisted_token",
+                wraps=abk._store_persisted_token,
+            ) as store_token,
+            mock.patch.object(
+                abk,
                 "ensure_signing_key",
                 side_effect=abk.SigningStateIndeterminateError("repair signing state"),
             ),
@@ -474,9 +501,256 @@ class JsonContractTests(unittest.TestCase):
             exit_code = abk.main()
 
         self.assertEqual(0, exit_code)
-        self.assertEqual("test-token", abk.load_config()["token"])
+        self.assertNotIn("token", abk.load_config())
+        store = abk._credential_store()
+        self.assertEqual("test-token", store.read())
+        self.assertNotIn(
+            "test-token",
+            store.path.read_text(encoding="utf-8"),
+        )
         self.assertIn("repair signing state", stderr.getvalue())
+        self.assertIn(abk.t("credential_fallback_warning"), stderr.getvalue())
         self.assertNotIn("Login/fork check failed", stderr.getvalue())
+        self.assertTrue(store_token.call_args.kwargs["allow_recovery"])
+
+    def test_legacy_plaintext_token_migrates_to_encrypted_fallback(self):
+        abk.save_config({"token": "legacy-token", "download_dir": "/tmp/out"})
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            token = abk.get_token(mock.Mock(token=None))
+
+        self.assertEqual("legacy-token", token)
+        config = abk.load_config()
+        self.assertNotIn("token", config)
+        self.assertEqual("/tmp/out", config["download_dir"])
+        store = abk._credential_store()
+        self.assertEqual("legacy-token", store.read())
+        self.assertNotIn(
+            "legacy-token",
+            store.path.read_text(encoding="utf-8"),
+        )
+        self.assertIn(abk.t("credential_fallback_warning"), stderr.getvalue())
+
+    def test_failed_legacy_migration_keeps_the_only_credential(self):
+        abk.save_config({"token": "legacy-token", "download_dir": "/tmp/out"})
+        failing_store = mock.Mock()
+        failing_store.read.return_value = None
+        failing_store.store.side_effect = abk.credential_store.NativeStoreError(
+            "credential store locked"
+        )
+        with (
+            mock.patch.object(abk, "_credential_store", return_value=failing_store),
+            self.assertRaises(abk.LegacyCredentialMigrationError),
+        ):
+            abk.get_token(mock.Mock(token=None))
+
+        self.assertEqual("legacy-token", abk.load_config()["token"])
+        self.assertFalse(
+            failing_store.store.call_args.kwargs["allow_recovery"]
+        )
+
+    def test_failed_secure_store_verification_keeps_legacy_plaintext(self):
+        abk.save_config({"token": "legacy-token", "download_dir": "/tmp/out"})
+        unverified_store = mock.Mock()
+        unverified_store.store.return_value = abk.credential_store.StoreResult(
+            backend="test-native",
+            degraded=False,
+            location="test-native",
+        )
+        unverified_store.read.return_value = "different-token"
+
+        with (
+            mock.patch.object(
+                abk,
+                "_credential_store",
+                return_value=unverified_store,
+            ),
+            self.assertRaises(abk.credential_store.CredentialStoreError),
+        ):
+            abk._store_persisted_token("legacy-token")
+
+        self.assertEqual("legacy-token", abk.load_config()["token"])
+        self.assertEqual("/tmp/out", abk.load_config()["download_dir"])
+
+    def test_json_legacy_migration_reports_degraded_storage_warning(self):
+        abk.save_config({"token": "legacy-token"})
+        client = ContractClient()
+        client.authentication_error = None
+
+        with mock.patch.object(abk, "make_client", return_value=client):
+            exit_code, payload, stderr = self._run_main([
+                "abk", "--json", "whoami",
+            ])
+
+        self.assertEqual(0, exit_code)
+        self.assertTrue(payload["ok"])
+        self.assertIn(
+            "degraded_credential_storage",
+            {warning["code"] for warning in payload["warnings"]},
+        )
+        self.assertNotIn("token", abk.load_config())
+        self.assertEqual("", stderr)
+
+    def test_json_local_key_fallback_reports_its_threat_boundary(self):
+        abk.save_config({"token": "legacy-token"})
+        client = ContractClient()
+        client.authentication_error = None
+
+        def native_unavailable():
+            raise abk.credential_store.NativeStoreUnavailable("not available")
+
+        store = abk.credential_store.CredentialStore(
+            abk.CONFIG_DIR,
+            native_backend_factory=native_unavailable,
+            machine_id_provider=lambda: b"",
+        )
+        with (
+            mock.patch.object(abk, "_credential_store", return_value=store),
+            mock.patch.object(abk, "make_client", return_value=client),
+        ):
+            exit_code, payload, stderr = self._run_main([
+                "abk", "--json", "whoami",
+            ])
+
+        self.assertEqual(0, exit_code)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(
+            {
+                "degraded_credential_storage",
+                "local_key_credential_storage",
+            },
+            {warning["code"] for warning in payload["warnings"]},
+        )
+        self.assertTrue(store.key_path.exists())
+        self.assertEqual("", stderr)
+
+    def test_json_corrupt_credential_is_an_explicit_storage_error(self):
+        store = abk._credential_store()
+        store.directory.mkdir(parents=True)
+        store.path.write_text('{"version": 999}', encoding="utf-8")
+
+        exit_code, payload, stderr = self._run_main([
+            "abk", "--json", "whoami",
+        ])
+
+        self.assertEqual(1, exit_code)
+        self.assertFalse(payload["ok"])
+        self.assertEqual("credential_storage_failed", payload["errorCode"])
+        self.assertIn("abk logout", payload["error"])
+        self.assertEqual("", stderr)
+
+    def test_json_pending_only_credential_is_not_reported_as_logged_out(self):
+        store = abk._credential_store()
+        store.directory.mkdir(parents=True)
+        store.pending_path.write_text('{"version": 999}', encoding="utf-8")
+
+        exit_code, payload, stderr = self._run_main([
+            "abk", "--json", "whoami",
+        ])
+
+        self.assertEqual(1, exit_code)
+        self.assertFalse(payload["ok"])
+        self.assertEqual("credential_storage_failed", payload["errorCode"])
+        self.assertIn("abk logout", payload["error"])
+        self.assertEqual("", stderr)
+
+    def test_human_corrupt_credential_is_not_reported_as_logged_out(self):
+        store = abk._credential_store()
+        store.directory.mkdir(parents=True)
+        store.path.write_text('{"version": 999}', encoding="utf-8")
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with (
+            mock.patch.object(sys, "argv", ["abk", "whoami"]),
+            contextlib.redirect_stdout(stdout),
+            contextlib.redirect_stderr(stderr),
+        ):
+            exit_code = abk.main()
+
+        self.assertEqual(1, exit_code)
+        self.assertNotIn(abk.t("logout_not"), stdout.getvalue())
+        self.assertIn("abk logout", stderr.getvalue())
+
+    def test_explicit_token_bypasses_corrupt_persisted_state(self):
+        store = abk._credential_store()
+        store.directory.mkdir(parents=True)
+        store.path.write_text('{"version": 999}', encoding="utf-8")
+
+        token = abk.get_token(mock.Mock(token="explicit-token"))
+
+        self.assertEqual("explicit-token", token)
+
+    def test_encrypted_fallback_token_is_available_for_error_redaction(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            abk._store_persisted_token("stored-secret-token")
+
+        secrets = abk._collect_json_secrets(argv=[])
+
+        self.assertIn("stored-secret-token", secrets)
+
+    def test_stateless_json_redaction_does_not_acquire_the_config_lock(self):
+        with mock.patch.object(
+            abk,
+            "_config_process_lock",
+            side_effect=AssertionError("redaction must remain side-effect free"),
+        ):
+            exit_code, payload, stderr = self._run_main([
+                "abk", "--json", "list",
+            ])
+
+        self.assertEqual(0, exit_code)
+        self.assertTrue(payload["ok"])
+        self.assertEqual("", stderr)
+
+    def test_secret_collection_survives_unreadable_credential_storage(self):
+        with mock.patch.object(
+            abk,
+            "_credential_store",
+            side_effect=OSError("read-only config directory"),
+        ):
+            secrets = abk._collect_json_secrets(argv=[])
+
+        self.assertIsInstance(secrets, set)
+
+    def test_native_token_is_redacted_from_repository_setup_errors(self):
+        secret = "native-stored-secret"
+        backend = mock.Mock()
+        backend.name = "test-native"
+        backend.get.return_value = secret
+        client = mock.Mock()
+        client.token = secret
+        client.repo = "alice/ABK"
+        client.repo_explicit = True
+        args = mock.Mock(
+            json=True,
+            repo="alice/ABK",
+            token=None,
+            kpm_password=None,
+            dry_run=False,
+        )
+
+        with (
+            mock.patch.object(
+                abk,
+                "_native_credential_backend",
+                return_value=backend,
+            ),
+            mock.patch.object(
+                abk,
+                "ensure_signing_key",
+                side_effect=RuntimeError(f"failure {secret}"),
+            ),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            abk._store_persisted_token(secret)
+            client.token = abk.get_token(args)
+            self.assertFalse(abk.prepare_build_repository(client, args))
+
+        rendered = json.dumps(args._json_result)
+        self.assertNotIn(secret, rendered)
+        self.assertIn("***", args._json_result["error"])
 
     def test_json_without_a_command_is_a_single_parser_error_document(self):
         exit_code, payload, stderr = self._run_main(["abk", "--json"])
@@ -571,6 +845,22 @@ class JsonContractTests(unittest.TestCase):
         self.assertEqual(0, exit_code)
         self.assertFalse(payload["loggedIn"])
         self.assertTrue(payload["storedTokenRemoved"])
+        self.assertEqual("", stderr)
+
+    def test_logout_removes_encrypted_fallback(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            abk._store_persisted_token("stored-token")
+        credential_path = abk._credential_store().path
+        self.assertTrue(credential_path.exists())
+
+        exit_code, payload, stderr = self._run_main([
+            "abk", "--json", "logout",
+        ])
+
+        self.assertEqual(0, exit_code)
+        self.assertFalse(payload["loggedIn"])
+        self.assertTrue(payload["storedTokenRemoved"])
+        self.assertFalse(credential_path.exists())
         self.assertEqual("", stderr)
 
     def test_overlapping_secrets_are_fully_redacted(self):
@@ -989,6 +1279,8 @@ class JsonContractTests(unittest.TestCase):
         self.assertEqual(0, exit_code)
         self.assertEqual(1, payload["schemaVersion"])
         self.assertTrue(payload["cryptoBackend"])
+        self.assertTrue(payload["credentialAesBackend"])
+        self.assertTrue(payload["credentialAesGcm"])
         self.assertTrue(payload["pynacl"])
         self.assertTrue(payload["caBundle"])
         self.assertTrue(payload["tlsContext"])

@@ -26,12 +26,15 @@ export PATH="$HOME/.local/bin:$PATH"
 sudo ln -sfn "$HOME/ABK/cli/abk.py" /usr/local/bin/abk
 ```
 
-产物签名与验证需要 `PyNaCl` 和一个 RSA 后端。推荐安装 `cryptography`；
-CLI 也兼容 `pycryptodome` / `pycryptodomex`：
+产物签名与验证需要 `PyNaCl` 和一个 RSA 后端，系统凭据集成需要
+`keyring`；Linux Secret Service 还需要 `SecretStorage` 和
+`cryptography`。其他环境也推荐使用 `cryptography`，CLI 同时兼容
+`pycryptodome` / `pycryptodomex`：
 
 ```bash
 python3 -m pip install -r ~/ABK/cli/requirements.txt
-# 或：python3 -m pip install pycryptodome PyNaCl certifi
+# 或（Linux）：python3 -m pip install cryptography PyNaCl certifi keyring SecretStorage
+# 或（macOS/Windows）：python3 -m pip install pycryptodome PyNaCl certifi keyring
 ```
 
 ## 配置 / Configuration
@@ -44,8 +47,48 @@ python3 -m pip install -r ~/ABK/cli/requirements.txt
 abk login
 ```
 
-会自动打开浏览器进行授权。Linux 默认保存到 `~/.config/abk/config.json`
-（遵循 `XDG_CONFIG_HOME`），Windows 保存到 `%APPDATA%\abk\config.json`。
+会自动打开浏览器进行授权。GitHub token 不会写入明文 `config.json`：
+
+- Windows 优先使用 Credential Manager；
+- macOS 优先使用 Keychain；
+- Linux 优先使用 Secret Service；
+- 系统凭据服务不可用时，CLI 会明确警告并使用 AES-256-GCM 加密文件降级
+  存储。Linux/macOS 默认元数据文件为 `~/.config/abk/credentials.json`
+  （遵循 `XDG_CONFIG_HOME`），Windows 为 `%APPDATA%\abk\credentials.json`。
+
+新写入的 v2 降级记录始终在同一配置目录的 `credentials.key` 中保存独立的
+32 字节随机主密钥。若系统能提供稳定机器标识，CLI 会把主密钥、机器标识和
+每次写入的新 seed 放入独立的 HKDF 域派生记录密钥；没有稳定机器标识时，
+则使用另一 HKDF 域从主密钥和 seed 派生。仅复制 `credentials.json` 并取得
+公开机器标识不足以解密 token。POSIX 系统会把目录和文件权限分别收紧为
+`0700` 和 `0600`；Windows 依赖用户配置目录的访问控制。token 不会以明文
+写入。
+
+机器绑定模式无法直接迁移到另一台机器；机器标识变化后，请运行
+`abk logout` 再重新登录。文件降级模式只能防止单个密文文件意外泄露：任何
+能读取整个配置目录（包括 `credentials.json` 和 `credentials.key`）的人都能
+解密 token，也无法防范拥有同一用户权限或 root 权限的本地攻击者。系统凭据
+服务恢复后，CLI 会在成功写入并验证系统存储后自动升级，再删除不再使用的
+本地主密钥；稳定机器标识恢复时只会增加机器绑定，不会删除仍必需的主密钥。
+若删除遇到瞬时文件错误，后续读取或登出会重试清理。`abk logout` 会同时清理
+密文和本地主密钥。旧版仅依赖机器标识的 v1 密文仍可读取；系统凭据服务不可
+用时，普通读取会将其重新加密为需要独立主密钥的 v2 格式。旧版 `config.json`
+中的明文 token 会在首次读取时自动迁移。环境变量和 `--token` 仅用于当前
+进程，不会被持久化。
+
+通过 GitHub 设备流验证的新 token 可以替换因机器标识暂时缺失而无法读取的
+旧机器绑定记录；机器标识发生变化或记录认证失败时仍会失败关闭。若旧记录
+位于暂时不可用的系统凭据提供方，新 token 会先降级存储，并在认证元数据中
+保留该提供方名称。后续登录只会在同一提供方恢复后替换旧系统凭据，登出也
+只会清理名称完全匹配的提供方，不会操作当前机器上的其他凭据后端。
+
+若凭据元数据已损坏、无法认证或记录了当前不可用的系统凭据提供方，登出会
+失败关闭：不会猜测删除当前机器上的系统凭据。对于无法认证的本地元数据，
+CLI 会先写入 `credentials.pending.json` 安全标记，再删除本地密文和随机主
+密钥，并明确报告可能需要手动清理；若清理中断，后续 `abk logout` 会继续
+清除本地残留。确认 `credentials.json` 和 `credentials.key` 均已移除，并从
+系统凭据服务中删除 `ABK CLI` 的 `github.com` 条目后，才可手动删除该安全
+标记并重新登录。
 
 首次构建会复用或初始化与 Android App 相同的 fork 签名 Secret、Release tag
 和公钥资产；CLI 本地只按仓库保存公钥，不保存 RSA 私钥。

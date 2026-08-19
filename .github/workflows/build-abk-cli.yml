@@ -127,9 +127,10 @@ jobs:
         with:
           path: |
             ~/.cache/pip
+            ~/.cache/puccinialin
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-${{ matrix.target_id }}-pip-crypto-v3
+          key: ${{ runner.os }}-${{ matrix.target_id }}-pip-crypto49-keyring25-v1
           restore-keys: |
             ${{ runner.os }}-${{ matrix.target_id }}-pip-crypto-
         # Windows pip cache: ~\AppData\Local\pip\Cache — handled via different ~ mapping
@@ -149,7 +150,17 @@ jobs:
           set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install pyinstaller certifi pycryptodome pynacl
-          python -m pip install cryptography 2>/dev/null || echo "::warning::cryptography unavailable, using pycryptodome"
+          if ! python -m pip install cryptography 2>/dev/null; then
+            if [[ "$RUNNER_OS" == "Linux" ]]; then
+              echo "::error::cryptography is required for Linux Secret Service support."
+              exit 1
+            fi
+            echo "::warning::cryptography unavailable, using pycryptodome"
+          fi
+          python -m pip install keyring
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            python -m pip install "SecretStorage>=3.5"
+          fi
 
       - name: Install Rust (cryptography build dependency)
         if: runner.os == 'Windows'
@@ -172,7 +183,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install setuptools-rust wheel pycryptodome pynacl
           python -m pip install cryptography 2>&1 | Out-Null
-          if (-not $?) { Write-Warning "cryptography unavailable, using pycryptodome instead" }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "cryptography unavailable, using pycryptodome instead"
+          }
+          python -m pip install keyring
+          if ($LASTEXITCODE -ne 0) { exit 1 }
           python -m pip install pyinstaller certifi
 
       - name: Run CLI regression tests
@@ -206,7 +221,10 @@ jobs:
             --hidden-import cryptography.hazmat.primitives.asymmetric \
             --hidden-import cryptography.hazmat.primitives.asymmetric.padding \
             --hidden-import cryptography.hazmat.primitives.hashes \
+            --hidden-import cryptography.hazmat.primitives.ciphers.aead \
             --hidden-import cryptography.hazmat.backends.openssl \
+            --collect-submodules keyring.backends \
+            --copy-metadata keyring \
             --add-data "cli/i18n:i18n" \
             cli/abk.py
 
@@ -226,7 +244,10 @@ jobs:
             --hidden-import cryptography.hazmat.primitives.asymmetric `
             --hidden-import cryptography.hazmat.primitives.asymmetric.padding `
             --hidden-import cryptography.hazmat.primitives.hashes `
+            --hidden-import cryptography.hazmat.primitives.ciphers.aead `
             --hidden-import cryptography.hazmat.backends.openssl `
+            --collect-submodules keyring.backends `
+            --copy-metadata keyring `
             --add-data "cli/i18n;i18n" `
             cli/abk.py
 
@@ -293,10 +314,11 @@ jobs:
             bash -lc '
               set -euo pipefail
               apt-get update
-              apt-get install -y build-essential zlib1g-dev
+              apt-get install -y build-essential zlib1g-dev libssl-dev libffi-dev pkg-config
               python -m pip install --upgrade pip
-              python -m pip install pyinstaller certifi pycryptodome pynacl
-              PYTHONPATH=cli python -c "import abk; assert abk._CRYPTO_BACKEND == \"pycryptodome\""
+              # Use the verified armv7 abi3 wheel; never compile Rust here.
+              python -m pip install --only-binary cryptography pyinstaller certifi "cryptography==49.0.0" pycryptodome pynacl "keyring==25.7.0" "SecretStorage==3.5.0"
+              PYTHONPATH=cli python -c "import abk, secretstorage; from keyring.backends.SecretService import Keyring; assert abk._CRYPTO_BACKEND == \"cryptography\""
               PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s cli/tests -v
               pyinstaller \
                 --noconfirm \
@@ -309,8 +331,12 @@ jobs:
                 --hidden-import nacl.bindings \
                 --hidden-import Crypto \
                 --hidden-import Crypto.PublicKey \
+                --hidden-import Crypto.Cipher.AES \
+                --hidden-import Crypto.Cipher._mode_gcm \
                 --hidden-import Crypto.Signature \
                 --hidden-import Crypto.Hash \
+                --collect-submodules keyring.backends \
+                --copy-metadata keyring \
                 --add-data "cli/i18n:i18n" \
                 cli/abk.py
             '
@@ -325,25 +351,29 @@ jobs:
           pip_cache="$HOME/.cache/pip"
           runner_uid="$(id -u)"
           runner_gid="$(id -g)"
-          mkdir -p "$pip_cache"
-          sudo chown -R 0:0 "$pip_cache"
-          restore_pip_cache_owner() {
-            sudo chown -R "$runner_uid:$runner_gid" "$pip_cache"
+          # maturin bootstraps a modern i686 Rust toolchain here when needed.
+          rust_cache="$HOME/.cache/puccinialin"
+          mkdir -p "$pip_cache" "$rust_cache"
+          sudo chown -R 0:0 "$pip_cache" "$rust_cache"
+          restore_build_cache_owner() {
+            sudo chown -R "$runner_uid:$runner_gid" "$pip_cache" "$rust_cache"
           }
-          trap restore_pip_cache_owner EXIT
+          trap restore_build_cache_owner EXIT
           docker run --rm \
             --platform linux/386 \
             -v "$PWD:/work" \
             -v "$pip_cache:/root/.cache/pip" \
+            -v "$rust_cache:/root/.cache/puccinialin" \
             -w /work \
             python:3.12-bookworm \
             bash -lc '
               set -euo pipefail
               apt-get update
-              apt-get install -y build-essential zlib1g-dev
+              apt-get install -y build-essential zlib1g-dev libssl-dev libffi-dev pkg-config
               python -m pip install --upgrade pip
-              python -m pip install pyinstaller certifi pycryptodome pynacl
-              PYTHONPATH=cli python -c "import abk; assert abk._CRYPTO_BACKEND == \"pycryptodome\""
+              # Keep the verified i686 source build stable; pip reuses its wheel.
+              python -m pip install pyinstaller certifi "cryptography==49.0.0" pycryptodome pynacl "keyring==25.7.0" "SecretStorage==3.5.0"
+              PYTHONPATH=cli python -c "import abk, secretstorage; from keyring.backends.SecretService import Keyring; assert abk._CRYPTO_BACKEND == \"cryptography\""
               PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s cli/tests -v
               pyinstaller \
                 --noconfirm \
@@ -356,8 +386,12 @@ jobs:
                 --hidden-import nacl.bindings \
                 --hidden-import Crypto \
                 --hidden-import Crypto.PublicKey \
+                --hidden-import Crypto.Cipher.AES \
+                --hidden-import Crypto.Cipher._mode_gcm \
                 --hidden-import Crypto.Signature \
                 --hidden-import Crypto.Hash \
+                --collect-submodules keyring.backends \
+                --copy-metadata keyring \
                 --add-data "cli/i18n:i18n" \
                 cli/abk.py
             '
@@ -409,6 +443,18 @@ jobs:
           test -f "dist/abk/LICENSE"
           test -f "dist/abk/_internal/i18n/zh-cn.json"
           test -f "dist/abk/_internal/i18n/en-us.json"
+          archive_contents="$(pyi-archive_viewer -r -b "dist/abk/${{ matrix.binary_name }}")"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            for module in keyring.backends.SecretService secretstorage jeepney cryptography; do
+              if [[ "$archive_contents" != *"$module"* ]]; then
+                echo "::error::Frozen Linux CLI is missing $module."
+                exit 1
+              fi
+            done
+          elif [[ "$archive_contents" != *"keyring.backends.macOS"* ]]; then
+            echo "::error::Frozen macOS CLI is missing Keychain support."
+            exit 1
+          fi
 
       - name: Verify bundle contents
         if: runner.os == 'Windows'
@@ -419,6 +465,11 @@ jobs:
           if (!(Test-Path "dist/abk/LICENSE")) { throw "Missing LICENSE" }
           if (!(Test-Path "dist/abk/_internal/i18n/zh-cn.json")) { throw "Missing zh-cn.json" }
           if (!(Test-Path "dist/abk/_internal/i18n/en-us.json")) { throw "Missing en-us.json" }
+          $archiveContents = (& pyi-archive_viewer -r -b "dist/abk/${{ matrix.binary_name }}") -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "Unable to inspect frozen CLI archive" }
+          if (-not $archiveContents.Contains("keyring.backends.Windows")) {
+            throw "Frozen Windows CLI is missing Credential Manager support"
+          }
 
       - name: Smoke test
         if: runner.os != 'Windows' && matrix.target_id != 'linux-armhf' && matrix.target_id != 'linux-x86'
@@ -426,7 +477,7 @@ jobs:
         run: |
           set -euo pipefail
           ./dist/abk/abk --help > /dev/null
-          ./dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
+          ./dist/abk/abk --json self-test | python -c 'import json, os, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] and (os.environ["RUNNER_OS"] != "Linux" or result["cryptoBackend"] == "cryptography") and result["credentialAesBackend"] and result["credentialAesGcm"] is True and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
           ./dist/abk/abk --json build --dry-run --matrix a14 --ksu Official | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
 
       - name: Smoke test linux-armhf
@@ -435,7 +486,7 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --help > /dev/null
-          docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
+          docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] == "cryptography" and result["credentialAesBackend"] and result["credentialAesGcm"] is True and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
           docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json build --dry-run --matrix a14 --ksu Official | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
 
       - name: Smoke test linux-x86
@@ -444,7 +495,7 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --help > /dev/null
-          docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
+          docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] == "cryptography" and result["credentialAesBackend"] and result["credentialAesGcm"] is True and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
           docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json build --dry-run --matrix a14 --ksu Official | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
 
       - name: Smoke test Windows
@@ -455,7 +506,7 @@ jobs:
           $selfTest = & .\dist\abk\abk.exe --json self-test
           if ($LASTEXITCODE -ne 0) { throw "Frozen CLI self-test failed" }
           $result = $selfTest | ConvertFrom-Json
-          if ($result.schemaVersion -ne 1 -or $result.ok -ne $true -or $result.command -ne "self-test" -or -not $result.cryptoBackend -or $result.pynacl -ne $true -or $result.caBundle -ne $true -or $result.tlsContext -ne $true) {
+          if ($result.schemaVersion -ne 1 -or $result.ok -ne $true -or $result.command -ne "self-test" -or -not $result.cryptoBackend -or -not $result.credentialAesBackend -or $result.credentialAesGcm -ne $true -or $result.pynacl -ne $true -or $result.caBundle -ne $true -or $result.tlsContext -ne $true) {
             throw "Unexpected frozen CLI self-test result"
           }
           $dryRun = & .\dist\abk\abk.exe --json build --dry-run --matrix a14 --ksu Official

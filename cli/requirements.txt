@@ -1,3 +1,5 @@
 cryptography>=41
 PyNaCl>=1.5
 certifi>=2024.2.2
+keyring>=25.7
+SecretStorage>=3.5; sys_platform == "linux"
