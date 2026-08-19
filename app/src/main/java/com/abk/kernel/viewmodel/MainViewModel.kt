@@ -215,6 +215,8 @@ data class MainUiState(
     val artifactSigningVerificationEnabled: Boolean = true,
     val artifactSigningConfigured: Boolean = false,
     val artifactSigningOperationInFlight: Boolean = false,
+    val customSourceSecretConfigured: Boolean = false,
+    val customSourceSecretOperationInFlight: Boolean = false,
     val appUpdateStability: String = APP_UPDATE_STABILITY_STABLE,
     val appUpdateLine: String = APP_UPDATE_LINE_NORMAL,
     val appUpdateChecking: Boolean = false,
@@ -1816,13 +1818,134 @@ class MainViewModel @JvmOverloads constructor(
 
     // ── Build ─────────────────────────────────────────────────────────────
 
-    fun dispatchBuild(config: KernelBuildConfig) {
+    fun dispatchBuild(
+        config: KernelBuildConfig,
+        customSourcePat: String = "",
+        useDeviceFlowToken: Boolean = false,
+    ) {
         val state = _uiState.value
         if (!state.isLoggedIn || state.user == null || state.forkRepo == null) {
             _uiState.update { it.copy(error = text(R.string.vm_build_login_required)) }
             return
         }
-        enqueueBuild(config)
+        val normalized = KernelSupport.normalize(config)
+        KernelSupport.validateCustomSource(normalized)?.let { validationError ->
+            _uiState.update { it.copy(error = validationError) }
+            return
+        }
+        if (normalized.buildTarget != BUILD_TARGET_CUSTOM_SOURCE ||
+            normalized.sourceAccessMode != SOURCE_ACCESS_GITHUB_PRIVATE
+        ) {
+            enqueueBuild(normalized)
+            return
+        }
+
+        viewModelScope.launch {
+            val owner = state.user.login
+            val fork = state.forkRepo
+            _uiState.update { it.copy(customSourceSecretOperationInFlight = true, error = null) }
+            try {
+                val supplied = when {
+                    customSourcePat.isNotBlank() -> customSourcePat.trim()
+                    useDeviceFlowToken -> prefs.accessToken.first().orEmpty()
+                    else -> ""
+                }
+                if (supplied.isNotBlank()) {
+                    when (val result = github.createOrUpdateRepositorySecret(
+                        owner,
+                        fork.name,
+                        FORK_CUSTOM_SOURCE_SECRET_NAME,
+                        supplied,
+                    )) {
+                        is Result.Success -> _uiState.update { it.copy(customSourceSecretConfigured = true) }
+                        is Result.Error -> {
+                            _uiState.update { it.copy(error = result.message) }
+                            return@launch
+                        }
+                        Result.Loading -> return@launch
+                    }
+                } else if (!refreshCustomSourceSecretStatusInternal(owner, fork.name)) {
+                    _uiState.update { it.copy(error = text(R.string.build_source_private_credential_required)) }
+                    return@launch
+                }
+                enqueueBuild(normalized)
+            } finally {
+                _uiState.update { it.copy(customSourceSecretOperationInFlight = false) }
+            }
+        }
+    }
+
+    fun refreshCustomSourceSecretStatus() {
+        val state = _uiState.value
+        val owner = state.user?.login ?: return
+        val repo = state.forkRepo?.name ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(customSourceSecretOperationInFlight = true) }
+            try {
+                refreshCustomSourceSecretStatusInternal(owner, repo)
+            } finally {
+                _uiState.update { it.copy(customSourceSecretOperationInFlight = false) }
+            }
+        }
+    }
+
+    private suspend fun refreshCustomSourceSecretStatusInternal(owner: String, repo: String): Boolean {
+        return when (val result = github.listRepositorySecrets(owner, repo)) {
+            is Result.Success -> result.data.any { it.name == FORK_CUSTOM_SOURCE_SECRET_NAME }.also { configured ->
+                _uiState.update { it.copy(customSourceSecretConfigured = configured) }
+            }
+            is Result.Error -> {
+                _uiState.update { it.copy(error = result.message) }
+                false
+            }
+            Result.Loading -> false
+        }
+    }
+
+    fun deleteCustomSourceSecret() {
+        val state = _uiState.value
+        val owner = state.user?.login ?: return
+        val repo = state.forkRepo?.name ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(customSourceSecretOperationInFlight = true, error = null) }
+            try {
+                when (val result = github.deleteRepositorySecret(owner, repo, FORK_CUSTOM_SOURCE_SECRET_NAME)) {
+                    is Result.Success -> _uiState.update { it.copy(customSourceSecretConfigured = false) }
+                    is Result.Error -> _uiState.update { it.copy(error = result.message) }
+                    Result.Loading -> Unit
+                }
+            } finally {
+                _uiState.update { it.copy(customSourceSecretOperationInFlight = false) }
+            }
+        }
+    }
+
+    fun updateCustomSourceSecret(secretValue: String = "", useDeviceFlowToken: Boolean = false) {
+        val state = _uiState.value
+        val owner = state.user?.login ?: return
+        val repo = state.forkRepo?.name ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(customSourceSecretOperationInFlight = true, error = null) }
+            try {
+                val value = if (useDeviceFlowToken) prefs.accessToken.first().orEmpty() else secretValue.trim()
+                if (value.isBlank()) {
+                    _uiState.update { it.copy(error = text(R.string.build_source_private_credential_required)) }
+                    return@launch
+                }
+                when (val result = github.createOrUpdateRepositorySecret(
+                    owner,
+                    repo,
+                    FORK_CUSTOM_SOURCE_SECRET_NAME,
+                    value,
+                )) {
+                    is Result.Success -> _uiState.update { it.copy(customSourceSecretConfigured = true) }
+                    is Result.Error -> _uiState.update { it.copy(error = result.message) }
+                    Result.Loading -> Unit
+                }
+            } finally {
+                _uiState.update { it.copy(customSourceSecretOperationInFlight = false) }
+            }
+        }
     }
 
     private fun enqueueBuild(config: KernelBuildConfig) {
@@ -5538,6 +5661,14 @@ internal fun defaultBuildPlanName(config: KernelBuildConfig): String {
             .filter { it.isNotBlank() }
             .joinToString(" · ")
     }
+    if (config.buildTarget == BUILD_TARGET_CUSTOM_SOURCE) {
+        val sourceName = config.sourceDeviceLabel.ifBlank {
+            config.sourceUrl.substringAfterLast('/').removeSuffix(".git")
+        }
+        return listOf(sourceName, config.sourceRef, config.osPatchLevel)
+            .filter { it.isNotBlank() }
+            .joinToString(" · ")
+    }
     val android = config.androidVersion.removePrefix("android").ifBlank { config.androidVersion }
     return listOf("${config.kernelVersion}.${config.subLevel}", "Android $android", config.kernelsuVariant)
         .filter { it.isNotBlank() }
@@ -5584,6 +5715,7 @@ internal data class BuildPlanCodecMessages(
     val unsupportedVersion: String = "Unsupported plan code version",
     val tooManyModules: String = "External module count exceeds the limit",
     val tooManyKernelOptions: String = "Kernel option count exceeds the limit",
+    val tooManyDefconfigs: String = "Defconfig count exceeds the limit",
     val negativeNumber: String = "Negative numbers can not be written to a plan code",
     val fieldTooLong: String = "Plan field is too long",
     val incomplete: String = "Plan code content is incomplete",
@@ -5611,6 +5743,12 @@ internal fun encodeBuildPlanPayload(
         writer.writeString(config.buildTarget)
         writer.writeString(config.onePlusCpu)
         writer.writeString(config.onePlusDeviceManifest)
+        writer.writeString(config.sourceUrl)
+        writer.writeString(config.sourceRef)
+        writer.writeString(config.sourceAccessMode)
+        writer.writeVarInt(config.sourceDefconfigs.size)
+        config.sourceDefconfigs.forEach(writer::writeString)
+        writer.writeString(config.sourceDeviceLabel)
     }
     writer.writeByte(BUILD_PLAN_KSU_VARIANTS.indexOrZero(config.kernelsuVariant))
     writer.writeByte(BUILD_PLAN_KSU_BRANCHES.indexOrZero(config.kernelsuBranch))
@@ -5705,7 +5843,7 @@ internal fun decodeBuildPlanPayload(
         val osPatchLevel = reader.readString()
         val revision = reader.readString()
         if (version >= BUILD_PLAN_ONEPLUS_FIELDS_VERSION) {
-            baseConfig.copy(
+            val targetBase = baseConfig.copy(
                 androidVersion = androidVersion,
                 kernelVersion = kernelVersion,
                 subLevel = subLevel,
@@ -5715,6 +5853,23 @@ internal fun decodeBuildPlanPayload(
                 onePlusCpu = reader.readString(),
                 onePlusDeviceManifest = reader.readString()
             )
+            if (version >= BUILD_PLAN_CUSTOM_SOURCE_FIELDS_VERSION) {
+                val sourceUrl = reader.readString()
+                val sourceRef = reader.readString()
+                val sourceAccessMode = reader.readString()
+                val defconfigCount = reader.readVarInt()
+                require(defconfigCount in 0..BUILD_PLAN_MAX_DEFCONFIGS) { messages.tooManyDefconfigs }
+                val sourceDefconfigs = List(defconfigCount) { reader.readString() }
+                targetBase.copy(
+                    sourceUrl = sourceUrl,
+                    sourceRef = sourceRef,
+                    sourceAccessMode = sourceAccessMode,
+                    sourceDefconfigs = sourceDefconfigs,
+                    sourceDeviceLabel = reader.readString()
+                )
+            } else {
+                targetBase
+            }
         } else {
             baseConfig.copy(
                 androidVersion = androidVersion,
@@ -6086,17 +6241,19 @@ private const val LATE_FAILED_ARTIFACT_POLL_INTERVAL_MS = 5_000L
 
 private const val BUILD_PLAN_CODE_PREFIX = "ABKP2:"
 private const val BUILD_PLAN_LEGACY_CODE_PREFIX = "ABKP1:"
-private const val BUILD_PLAN_CODE_VERSION = 7
+private const val BUILD_PLAN_CODE_VERSION = 8
 private const val BUILD_PLAN_MIN_SUPPORTED_VERSION = 2
 private const val BUILD_PLAN_CUSTOM_REF_VERSION = 3
 private const val BUILD_PLAN_ONEPLUS_FIELDS_VERSION = 4
 private const val BUILD_PLAN_KSU_BRANCH_V5_VERSION = 5
 private const val BUILD_PLAN_MODULE_METADATA_VERSION = 6
 private const val BUILD_PLAN_KERNEL_OPTIONS_VERSION = 7
+private const val BUILD_PLAN_CUSTOM_SOURCE_FIELDS_VERSION = 8
 private const val BUILD_PLAN_NAME_LIMIT = 80
 private const val BUILD_PLAN_MAX_STRING_BYTES = 4096
 private const val BUILD_PLAN_MAX_MODULES = 32
 private const val BUILD_PLAN_MAX_KERNEL_OPTIONS = 256
+private const val BUILD_PLAN_MAX_DEFCONFIGS = 128
 private const val OFFICIAL_BUILD_MODULE_CATALOG_ID = "official-abk-module-catalog"
 private const val OFFICIAL_BUILD_MODULE_CATALOG_URL = "https://github.com/xingguangcuican6666/ABK_repo"
 
@@ -6396,6 +6553,35 @@ private fun WorkflowRun.toBuildStatus(): BuildStatus = when (status) {
 // Helper to convert KernelBuildConfig to workflow dispatch inputs map
 internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
     val config = KernelSupport.normalize(this)
+    if (config.buildTarget == BUILD_TARGET_CUSTOM_SOURCE) {
+        return mapOf(
+            "source_repo" to config.sourceUrl,
+            "source_ref" to config.sourceRef,
+            "source_private" to (config.sourceAccessMode == SOURCE_ACCESS_GITHUB_PRIVATE).toString(),
+            "defconfigs" to config.sourceDefconfigs.joinToString("\n"),
+            "device_label" to config.sourceDeviceLabel,
+            "os_patch_level" to config.osPatchLevel,
+            "kernelsu_variant" to config.kernelsuVariant,
+            "kernelsu_branch" to config.kernelsuBranch,
+            "custom_ref" to if (config.kernelsuBranch == KSU_BRANCH_CUSTOM) config.customRef else "",
+            "version" to config.version,
+            "build_time" to config.buildTime,
+            "virtualization_support" to config.virtualizationSupport,
+            "use_zram" to config.useZram.toString(),
+            "use_bbg" to config.useBbg.toString(),
+            "use_ddk" to config.useDdk.toString(),
+            "use_ntsync" to config.useNtsync.toString(),
+            "use_networking" to config.useNetworking.toString(),
+            "use_kpm" to config.useKpm.toString(),
+            "use_rekernel" to config.useRekernel.toString(),
+            "cancel_susfs" to config.cancelSusfs.toString(),
+            "zram_full_algo" to config.zramFullAlgo.toString(),
+            "zram_extra_algos" to config.zramExtraAlgos,
+            "kpm_password" to config.kpmPassword,
+            "custom_external_modules" to if (config.useCustomExternalModules) config.customExternalModules.toWorkflowInput() else "",
+            "custom_kernel_options" to config.customKernelOptions.mapNotNull { it.toWorkflowLine() }.joinToString("\n"),
+        )
+    }
     if (config.buildTarget == BUILD_TARGET_ONEPLUS) {
         return mapOf(
             "cpu" to config.onePlusCpu,
@@ -6475,11 +6661,13 @@ private fun List<CustomExternalModule>?.toWorkflowInput(): String = this.orEmpty
     .joinToString("|")
 
 private const val KERNEL_WORKFLOW_FILE = "kernel-custom.yml"
+private const val CUSTOM_SOURCE_WORKFLOW_FILE = "kernel-source.yml"
 private const val FORK_ARTIFACT_SIGNING_SECRET_NAME = "ABK_ARTIFACT_SIGNING_KEY_BASE64"
+private const val FORK_CUSTOM_SOURCE_SECRET_NAME = "ABK_CUSTOM_SOURCE_GITHUB_TOKEN"
 private const val FORK_ARTIFACT_SIGNING_RELEASE_TAG = "abk-artifact-key"
 private const val FORK_ARTIFACT_SIGNING_PUBLIC_KEY_ASSET_NAME = "abk-artifact-signing-public.pem"
 private const val ONEPLUS_WORKFLOW_FILE = "oneplus-custom.yml"
-private val buildWorkflowFiles = listOf(KERNEL_WORKFLOW_FILE, ONEPLUS_WORKFLOW_FILE)
+private val buildWorkflowFiles = listOf(KERNEL_WORKFLOW_FILE, CUSTOM_SOURCE_WORKFLOW_FILE, ONEPLUS_WORKFLOW_FILE)
 private const val MIRROR_WORKFLOW_FILE = "mirror-custom-artifacts.yml"
 private val ACTIVE_BUILD_STATUSES = setOf(BuildStatus.QUEUED, BuildStatus.IN_PROGRESS)
 private const val MANAGER_SETTING_APP_PROFILE_TEMPLATES = "app_profile_templates"
@@ -6509,10 +6697,10 @@ private data class ManagerSettingsLoad(
 private data class Quadruple<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
 
 private fun workflowFileFor(config: KernelBuildConfig): String =
-    if (KernelSupport.normalizeBuildTarget(config.buildTarget) == BUILD_TARGET_ONEPLUS) {
-        ONEPLUS_WORKFLOW_FILE
-    } else {
-        KERNEL_WORKFLOW_FILE
+    when (KernelSupport.normalizeBuildTarget(config.buildTarget)) {
+        BUILD_TARGET_ONEPLUS -> ONEPLUS_WORKFLOW_FILE
+        BUILD_TARGET_CUSTOM_SOURCE -> CUSTOM_SOURCE_WORKFLOW_FILE
+        else -> KERNEL_WORKFLOW_FILE
     }
 
 /**

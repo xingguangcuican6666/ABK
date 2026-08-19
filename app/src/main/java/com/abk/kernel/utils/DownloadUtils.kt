@@ -17,6 +17,7 @@ import com.abk.kernel.data.repository.PreferencesRepository
 import com.abk.kernel.data.model.normalizeAppUpdateLine
 import com.abk.kernel.data.model.toArtifact
 import com.abk.kernel.data.model.toArtifactCategory
+import com.google.gson.Gson
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -39,6 +40,7 @@ import kotlin.coroutines.coroutineContext
 object DownloadUtils {
 
     private val client = OkHttpClient.Builder().build()
+    private val gson = Gson()
     private const val LICENSE_FILE_NAME = "LICENSE"
     private const val THIRD_PARTY_NOTICES_FILE_NAME = "THIRD_PARTY_NOTICES.md"
     private const val BUNDLE_MANIFEST_FILE_NAME = "ABK_BUNDLE_MANIFEST.txt"
@@ -127,7 +129,8 @@ object DownloadUtils {
         val file: File,
         val type: ArtifactType,
         val verified: Boolean = false,
-        val verificationSummary: String? = null
+        val verificationSummary: String? = null,
+        val manifest: SignedBundleManifest? = null
     )
 
     private data class BundledMagiskModuleDependency(
@@ -357,10 +360,11 @@ object DownloadUtils {
                 val signingVerificationEnabled = PreferencesRepository(context)
                     .readArtifactSigningVerificationEnabledBlocking()
                 val requiresTrustedKey = candidates.any { candidate ->
-                    ArtifactVerification.readBundleManifest(candidate) != null &&
-                        ArtifactVerification.requiresTrustedBundle(
-                            classifyDownloadedFile(candidate)
-                        )
+                    val manifest = ArtifactVerification.readBundleManifest(candidate)
+                    manifest != null && ArtifactVerification.requiresTrustedBundle(
+                        classifyDownloadedFile(candidate),
+                        manifest
+                    )
                 }
                 val signingPublicKeyPem = if (
                     signingVerificationEnabled &&
@@ -397,7 +401,8 @@ object DownloadUtils {
                     .readArtifactSigningVerificationEnabledBlocking()
                 collectCandidateFiles(targetOutDir).map { candidate ->
                     val type = classifyDownloadedFile(candidate)
-                    val verification = if (signingVerificationEnabled && ArtifactVerification.requiresTrustedBundle(type)) {
+                    val manifest = ArtifactVerification.readBundleManifest(candidate)
+                    val verification = if (signingVerificationEnabled && ArtifactVerification.requiresTrustedBundle(type, manifest)) {
                         ArtifactVerification.verifyBundleFile(
                             candidate,
                             type,
@@ -412,12 +417,13 @@ object DownloadUtils {
                         type = type,
                         verified = verification?.success == true,
                         verificationSummary = verification?.message ?: if (
-                            !signingVerificationEnabled && ArtifactVerification.requiresTrustedBundle(type)
+                            !signingVerificationEnabled && ArtifactVerification.requiresTrustedBundle(type, manifest)
                         ) {
                             context.getString(R.string.flash_bundle_verification_disabled)
                         } else {
                             null
-                        }
+                        },
+                        manifest = manifest.takeIf { verification?.success == true }
                     )
                 }
             }
@@ -437,7 +443,11 @@ object DownloadUtils {
                         sourceAssetName = artifact.name,
                         verified = entry.verified,
                         verificationSummary = entry.verificationSummary,
-                        category = entry.type.toArtifactCategory()
+                        manifestPayloadKind = entry.manifest?.payloadKind,
+                        manifestKernelSource = entry.manifest?.kernelSource?.let(gson::toJson),
+                        manifestFeatureStatus = entry.manifest?.featureStatus?.let(gson::toJson),
+                        manifestClientNotice = entry.manifest?.clientNotice?.let(gson::toJson),
+                        category = if (entry.manifest?.payloadKind == "KERNEL_IMAGE_SET") ArtifactCategory.KERNEL else entry.type.toArtifactCategory()
                     )
                 }
             )
@@ -646,7 +656,8 @@ object DownloadUtils {
                     .readArtifactSigningVerificationEnabledBlocking()
                 files.map { candidate ->
                     val type = classifyDownloadedFile(candidate)
-                    val verification = if (signingVerificationEnabled && ArtifactVerification.requiresTrustedBundle(type)) {
+                    val manifest = ArtifactVerification.readBundleManifest(candidate)
+                    val verification = if (signingVerificationEnabled && ArtifactVerification.requiresTrustedBundle(type, manifest)) {
                         if (runId == PREBUILT_GKI_RUN_ID) {
                             null
                         } else {
@@ -666,12 +677,13 @@ object DownloadUtils {
                         type = type,
                         verified = verification?.success == true,
                         verificationSummary = verification?.message ?: if (
-                            !signingVerificationEnabled && ArtifactVerification.requiresTrustedBundle(type)
+                            !signingVerificationEnabled && ArtifactVerification.requiresTrustedBundle(type, manifest)
                         ) {
                             context.getString(R.string.flash_bundle_verification_disabled)
                         } else {
                             null
-                        }
+                        },
+                        manifest = manifest.takeIf { verification?.success == true }
                     )
                 }
             }
@@ -691,7 +703,11 @@ object DownloadUtils {
                         sourceAssetName = name,
                         verified = entry.verified,
                         verificationSummary = entry.verificationSummary,
-                        category = entry.type.toArtifactCategory()
+                        manifestPayloadKind = entry.manifest?.payloadKind,
+                        manifestKernelSource = entry.manifest?.kernelSource?.let(gson::toJson),
+                        manifestFeatureStatus = entry.manifest?.featureStatus?.let(gson::toJson),
+                        manifestClientNotice = entry.manifest?.clientNotice?.let(gson::toJson),
+                        category = if (entry.manifest?.payloadKind == "KERNEL_IMAGE_SET") ArtifactCategory.KERNEL else entry.type.toArtifactCategory()
                     )
                 }
             )
@@ -805,10 +821,11 @@ object DownloadUtils {
         if (!source.exists()) {
             return PreparedDownloadedArtifact(source)
         }
-        val manifestType = ArtifactVerification.readBundleManifest(source)?.artifactType
+        val sourceManifest = ArtifactVerification.readBundleManifest(source)
+        val manifestType = sourceManifest?.artifactType
             ?.let { runCatching { ArtifactType.valueOf(it) }.getOrNull() }
         val effectiveType = manifestType ?: artifact.type
-        if (ArtifactVerification.requiresTrustedBundle(effectiveType) || looksLikeSignedBundle(source)) {
+        if (ArtifactVerification.requiresTrustedBundle(effectiveType, sourceManifest) || looksLikeSignedBundle(source)) {
             val auxiliaryArtifacts = resolveAuxiliaryArtifacts(source)
             if (!signingVerificationEnabled) {
                 val extractDir = createStageDir(context, "prepared-${safeFileName(artifact.name)}")
@@ -1202,7 +1219,12 @@ object DownloadUtils {
             file = persistedBundle,
             type = type,
             verified = verification?.verified == true,
-            verificationSummary = verification?.summary
+            verificationSummary = verification?.summary,
+            manifest = if (verification?.verified == true) {
+                ArtifactVerification.readBundleManifest(persistedBundle)
+            } else {
+                null
+            }
         )
     }
 
@@ -1346,10 +1368,11 @@ object DownloadUtils {
         signingVerificationEnabled: Boolean,
         signingPublicKeyPem: String?
     ): BundleVerificationState? {
-        val manifestType = ArtifactVerification.readBundleManifest(bundleFile)?.artifactType
+        val manifest = ArtifactVerification.readBundleManifest(bundleFile)
+        val manifestType = manifest?.artifactType
             ?.let { runCatching { ArtifactType.valueOf(it) }.getOrNull() }
         val effectiveType = manifestType ?: type
-        if (!ArtifactVerification.requiresTrustedBundle(effectiveType) && !looksLikeSignedBundle(bundleFile)) return null
+        if (!ArtifactVerification.requiresTrustedBundle(effectiveType, manifest) && !looksLikeSignedBundle(bundleFile)) return null
         if (!signingVerificationEnabled) {
             return BundleVerificationState(
                 verified = false,
@@ -1396,10 +1419,11 @@ object DownloadUtils {
         if (!signingVerificationEnabled) return null
         val source = File(artifact.filePath)
         if (!source.isFile) return null
-        val manifestType = ArtifactVerification.readBundleManifest(source)?.artifactType
+        val manifest = ArtifactVerification.readBundleManifest(source)
+        val manifestType = manifest?.artifactType
             ?.let { runCatching { ArtifactType.valueOf(it) }.getOrNull() }
         val effectiveType = manifestType ?: artifact.type
-        if (!ArtifactVerification.requiresTrustedBundle(effectiveType) &&
+        if (!ArtifactVerification.requiresTrustedBundle(effectiveType, manifest) &&
             !looksLikeSignedBundle(source) &&
             !looksLikeLegacyNoticeBundle(source)
         ) {
@@ -1611,6 +1635,9 @@ object DownloadUtils {
             .toList()
 
         val candidates = files.filter { file ->
+            if (ArtifactVerification.readBundleManifest(file)?.payloadKind == "KERNEL_IMAGE_SET") {
+                return@filter true
+            }
             when (classifyDownloadedFile(file)) {
                 ArtifactType.KERNEL_PACKAGE,
                 ArtifactType.KERNEL_IMG,

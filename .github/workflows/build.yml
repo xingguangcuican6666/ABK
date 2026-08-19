@@ -7,6 +7,46 @@ permissions:
 on:
   workflow_call:
     inputs:
+      source_mode:
+        required: false
+        type: string
+        default: "aosp"
+      source_repo:
+        required: false
+        type: string
+        default: ""
+      source_ref:
+        required: false
+        type: string
+        default: ""
+      source_private:
+        required: false
+        type: boolean
+        default: false
+      source_commit:
+        required: false
+        type: string
+        default: ""
+      source_defconfigs:
+        required: false
+        type: string
+        default: ""
+      source_device_label:
+        required: false
+        type: string
+        default: ""
+      source_kernel_version:
+        required: false
+        type: string
+        default: ""
+      source_full_kernel_version:
+        required: false
+        type: string
+        default: ""
+      source_android_version:
+        required: false
+        type: string
+        default: ""
       # ==================== 基础配置 ====================
       android_version:
         required: true
@@ -216,6 +256,7 @@ jobs:
           echo "========================================"
 
       - name: 校验自定义内核版本组合
+        if: inputs.source_mode != 'custom_git'
         shell: bash
         run: |
           set -euo pipefail
@@ -402,6 +443,43 @@ jobs:
             echo "::error::${android_version}/${kernel_version}/${os_patch_level} 可用子版本号: ${sublevels_for_patch}"
           fi
           exit 1
+
+      - name: 校验类 LineageOS 源码构建参数
+        if: inputs.source_mode == 'custom_git'
+        env:
+          SOURCE_REPO: ${{ inputs.source_repo }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          SOURCE_PRIVATE: ${{ inputs.source_private }}
+          SOURCE_DEFCONFIGS: ${{ inputs.source_defconfigs }}
+          SOURCE_DEVICE_LABEL: ${{ inputs.source_device_label }}
+          SOURCE_KERNEL_VERSION: ${{ inputs.source_kernel_version }}
+          SOURCE_ANDROID_VERSION: ${{ inputs.source_android_version }}
+          SOURCE_PATCH_LEVEL: ${{ inputs.os_patch_level }}
+        run: |
+          set -euo pipefail
+          access=public
+          [ "$SOURCE_PRIVATE" = "true" ] && access=github_private
+          python3 "$GITHUB_WORKSPACE/.github/scripts/custom-source.py" normalize-url \
+            --source-url "$SOURCE_REPO" --access "$access" >/dev/null
+          [ -n "$SOURCE_REF" ] || { echo "::error::源码 ref 不能为空"; exit 1; }
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "::error::源码 commit 必须是完整 SHA"; exit 1; }
+          python3 - <<'PY'
+          import os, re
+          if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", os.environ["SOURCE_PATCH_LEVEL"]):
+              raise SystemExit("os_patch_level must use YYYY-MM")
+          if os.environ["SOURCE_KERNEL_VERSION"] not in {"5.10", "5.15", "6.1", "6.6", "6.12"}:
+              raise SystemExit("unsupported custom source kernel line")
+          expected = {
+              "5.10": "android12", "5.15": "android13", "6.1": "android14",
+              "6.6": "android15", "6.12": "android16",
+          }[os.environ["SOURCE_KERNEL_VERSION"]]
+          if os.environ["SOURCE_ANDROID_VERSION"] != expected:
+              raise SystemExit("custom source Android/kernel mapping mismatch")
+          PY
+          printf '%s\n' "$SOURCE_DEFCONFIGS" | grep -qx 'gki_defconfig' || {
+            echo "::error::defconfig 列表必须包含 gki_defconfig"; exit 1;
+          }
 
       - name: 清理磁盘空间
         uses: endersonmenezes/free-disk-space@v3
@@ -959,7 +1037,20 @@ jobs:
 
       - name: 初始化并同步内核源码
         working-directory: ${{ env.KERNEL_ROOT }}
+        env:
+          ABK_CUSTOM_SOURCE_GITHUB_TOKEN: ${{ secrets.ABK_CUSTOM_SOURCE_GITHUB_TOKEN }}
+          SOURCE_MODE: ${{ inputs.source_mode }}
+          SOURCE_REPO: ${{ inputs.source_repo }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          SOURCE_PRIVATE: ${{ inputs.source_private }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          SOURCE_DEFCONFIGS: ${{ inputs.source_defconfigs }}
+          SOURCE_DEVICE_LABEL: ${{ inputs.source_device_label }}
+          SOURCE_FULL_KERNEL_VERSION: ${{ inputs.source_full_kernel_version }}
+          SOURCE_ANDROID_VERSION: ${{ inputs.source_android_version }}
+          SOURCE_PATCH_LEVEL: ${{ inputs.os_patch_level }}
         run: |
+          set -euo pipefail
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1.git gcc
 
           FORMATTED_BRANCH="${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.os_patch_level }}"
@@ -978,7 +1069,112 @@ jobs:
           $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
           echo "REMOTE_BRANCH=$REMOTE_BRANCH" >> $GITHUB_ENV
 
+          if [ "$SOURCE_MODE" = "custom_git" ]; then
+            access_header=""
+            if [ "$SOURCE_PRIVATE" = "true" ]; then
+              if [ -z "${ABK_CUSTOM_SOURCE_GITHUB_TOKEN:-}" ]; then
+                echo "::error::缺少 ABK_CUSTOM_SOURCE_GITHUB_TOKEN，无法访问私有源码仓。"
+                exit 1
+              fi
+              access_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$ABK_CUSTOM_SOURCE_GITHUB_TOKEN" | base64 -w0)"
+              git config --global http.https://github.com/.extraheader "$access_header"
+            fi
+
+            rm -rf common
+            git init common
+            git -C common remote add origin "$SOURCE_REPO"
+            if [ -n "$access_header" ]; then
+              git -C common config http.https://github.com/.extraheader "$access_header"
+            fi
+            git -C common fetch --depth=1 origin "$SOURCE_COMMIT"
+            git -C common checkout --detach "$SOURCE_COMMIT"
+            git -C common config user.name "ABK Custom Source"
+            git -C common config user.email "abk-custom-source@localhost"
+
+            python3 "$GITHUB_WORKSPACE/.github/scripts/custom-source.py" inspect \
+              --source-dir common \
+              --source-url "$SOURCE_REPO" \
+              --source-ref "$SOURCE_REF" \
+              --resolved-commit "$SOURCE_COMMIT" \
+              --access "$([ "$SOURCE_PRIVATE" = "true" ] && echo github_private || echo public)" \
+              --os-patch-level "$SOURCE_PATCH_LEVEL" \
+              --defconfigs "$SOURCE_DEFCONFIGS" \
+              --device-label "$SOURCE_DEVICE_LABEL" \
+              --github-output "$GITHUB_OUTPUT"
+
+            python3 "$GITHUB_WORKSPACE/.github/scripts/custom-source.py" merge-defconfigs \
+              --source-dir common \
+              --defconfigs "$SOURCE_DEFCONFIGS" \
+              --output "$DEFCONFIG"
+
+            echo "ABK_SOURCE_MODE=custom_git" >> "$GITHUB_ENV"
+            echo "ABK_CUSTOM_SOURCE_ROOT=$KERNEL_ROOT/common" >> "$GITHUB_ENV"
+            echo "ABK_CUSTOM_SOURCE_URL=$SOURCE_REPO" >> "$GITHUB_ENV"
+            echo "ABK_CUSTOM_SOURCE_REF=$SOURCE_REF" >> "$GITHUB_ENV"
+            echo "ABK_CUSTOM_SOURCE_ACCESS=$([ "$SOURCE_PRIVATE" = "true" ] && echo github_private || echo public)" >> "$GITHUB_ENV"
+            echo "ABK_CUSTOM_SOURCE_COMMIT=$SOURCE_COMMIT" >> "$GITHUB_ENV"
+            echo "ABK_CUSTOM_SOURCE_KERNEL_VERSION=$SOURCE_FULL_KERNEL_VERSION" >> "$GITHUB_ENV"
+            echo "ABK_CUSTOM_SOURCE_ANDROID_VERSION=$SOURCE_ANDROID_VERSION" >> "$GITHUB_ENV"
+            echo "ABK_CUSTOM_SOURCE_PATCH_LEVEL=$SOURCE_PATCH_LEVEL" >> "$GITHUB_ENV"
+            echo "ABK_CUSTOM_SOURCE_DEVICE_LABEL=$SOURCE_DEVICE_LABEL" >> "$GITHUB_ENV"
+            ABK_INPUT_DEFCONFIGS="$SOURCE_DEFCONFIGS" python3 -c \
+              'import json, os; values=[x.strip() for x in os.environ["ABK_INPUT_DEFCONFIGS"].splitlines() if x.strip()]; print("ABK_CUSTOM_SOURCE_DEFCONFIGS_JSON=" + json.dumps(values, ensure_ascii=False, separators=(",", ":")))' \
+              >> "$GITHUB_ENV"
+          fi
+
+      - name: 初始化 Custom source manifest 状态
+        if: inputs.source_mode == 'custom_git'
+        env:
+          SOURCE_MODE: ${{ inputs.source_mode }}
+          SOURCE_DEFCONFIGS: ${{ inputs.source_defconfigs }}
+          USE_ZRAM: ${{ inputs.use_zram }}
+          USE_BBG: ${{ inputs.use_bbg }}
+          USE_DDK: ${{ inputs.use_ddk }}
+          USE_NTSYNC: ${{ inputs.use_ntsync }}
+          USE_NETWORKING: ${{ inputs.use_networking }}
+          USE_KPM: ${{ inputs.use_kpm }}
+          USE_REKERNEL: ${{ inputs.use_rekernel }}
+          ENABLE_SUSFS: ${{ inputs.enable_susfs }}
+          VIRTUALIZATION_SUPPORT: ${{ inputs.virtualization_support }}
+          KSU_VARIANT: ${{ inputs.ksu_variant }}
+        run: |
+          set -euo pipefail
+          status_file="$RUNNER_TEMP/abk-custom-source-feature-status.json"
+          transaction_dir="$RUNNER_TEMP/abk-custom-source-transactions"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/custom-source-feature-status.py" init \
+            --file "$status_file" \
+            --feature "kernelsu=$([ "$KSU_VARIANT" != None ] && echo true || echo false)" \
+            --feature "susfs=$ENABLE_SUSFS" \
+            --feature "virtualization=$([ "$VIRTUALIZATION_SUPPORT" != off ] && echo true || echo false)" \
+            --feature "zram=$USE_ZRAM" \
+            --feature "bbg=$USE_BBG" \
+            --feature "ddk=$USE_DDK" \
+            --feature "ntsync=$USE_NTSYNC" \
+            --feature "networking=$USE_NETWORKING" \
+            --feature "kpm=$USE_KPM" \
+            --feature "rekernel=$USE_REKERNEL"
+          mkdir -p "$transaction_dir"
+          if [ "$USE_KPM" = "true" ] &&
+            { [ "$KSU_VARIANT" != "SukiSU" ] && [ "$KSU_VARIANT" != "ReSukiSU" ]; }; then
+            python3 "$GITHUB_WORKSPACE/.github/scripts/custom-source-feature-status.py" mark \
+              --file "$status_file" \
+              --id kpm \
+              --state skipped \
+              --reason-code dependency_skipped \
+              --message "KPM requires the SukiSU or ReSukiSU KernelSU variant"
+            touch "$transaction_dir/kpm.disabled"
+          fi
+          echo "ABK_CUSTOM_SOURCE_FEATURE_STATUS=$status_file" >> "$GITHUB_ENV"
+          echo "ABK_CUSTOM_SOURCE_TRANSACTION_DIR=$transaction_dir" >> "$GITHUB_ENV"
+          echo "ABK_CUSTOM_SOURCE_FEATURE_STATUS_FILE=$status_file" >> "$GITHUB_STEP_SUMMARY"
+          git -C "$KERNEL_ROOT/common" add -A
+          if ! git -C "$KERNEL_ROOT/common" diff --cached --quiet; then
+            git -C "$KERNEL_ROOT/common" commit -m "ABK custom source baseline" >/dev/null
+          fi
+          echo "ABK_CUSTOM_SOURCE_BASELINE=$(git -C "$KERNEL_ROOT/common" rev-parse HEAD)" >> "$GITHUB_ENV"
+
       - name: 应用 Stock Config 伪装
+        if: inputs.source_mode != 'custom_git'
         run: |
           STOCK_SRC="$GITHUB_WORKSPACE/config/stock_defconfig"
           STOCK_DST="$KERNEL_ROOT/common/arch/arm64/configs/stock_defconfig"
@@ -1062,6 +1258,11 @@ jobs:
 
       - name: 添加 KernelSU
         if: inputs.ksu_variant != 'None'
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: kernelsu
+          ABK_FEATURE_END: "true"
+          ABK_FEATURE_FAILURE_MESSAGE: "KernelSU integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           case "${{ inputs.ksu_variant }}" in
@@ -1098,6 +1299,10 @@ jobs:
 
       - name: 修复 ReSukiSU SUSFS 源码兼容
         if: inputs.ksu_variant == 'ReSukiSU' && inputs.enable_susfs
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: susfs
+          ABK_FEATURE_FAILURE_MESSAGE: "ReSukiSU SUSFS compatibility integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
@@ -1443,6 +1648,10 @@ jobs:
 
       - name: 配置 SukiSU 管理器信息
         if: inputs.ksu_variant == 'SukiSU'
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: kernelsu
+          ABK_FEATURE_FAILURE_MESSAGE: "SukiSU manager version integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}/KernelSU
         run: |
           KBUILD_FILE="./kernel/Kbuild"
@@ -1496,14 +1705,18 @@ jobs:
 
       - name: 应用 SUSFS 补丁
         if: inputs.enable_susfs && inputs.ksu_variant != 'None'
-        working-directory: ${{ env.KERNEL_ROOT }}
         env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: susfs
+          ABK_FEATURE_END: "false"
+          ABK_FEATURE_FAILURE_MESSAGE: "SUSFS patch failed"
           ABK_ANDROID_VERSION: ${{ inputs.android_version }}
           ABK_KERNEL_VERSION: ${{ inputs.kernel_version }}
           ABK_KSU_VARIANT: ${{ inputs.ksu_variant }}
           ABK_SUB_LEVEL: ${{ inputs.sub_level }}
           ABK_OS_PATCH_LEVEL: ${{ inputs.os_patch_level }}
           ABK_USE_BBG: ${{ inputs.use_bbg }}
+        working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           echo "应用 SUSFS 补丁..."
           # 读取 SUSFS 上游版本（例如 v2.1.0），用于匹配修复补丁目录
@@ -2135,6 +2348,11 @@ jobs:
 
       - name: 确保 SUSFS Kconfig 与核心对象
         if: inputs.enable_susfs && inputs.ksu_variant != 'None'
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: susfs
+          ABK_FEATURE_END: "true"
+          ABK_FEATURE_FAILURE_MESSAGE: "SUSFS Kconfig integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
@@ -2254,6 +2472,11 @@ jobs:
 
       - name: 注入 SukiSU/ReSukiSU KPM Kconfig
         if: inputs.use_kpm && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU')
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: kpm
+          ABK_FEATURE_END: "true"
+          ABK_FEATURE_FAILURE_MESSAGE: "KPM Kconfig integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
@@ -2384,6 +2607,11 @@ jobs:
 
       - name: 应用 NTsync 补丁
         if: ${{ inputs.use_ntsync }}
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: ntsync
+          ABK_FEATURE_END: "true"
+          ABK_FEATURE_FAILURE_MESSAGE: "NTsync patch failed"
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
           set -euo pipefail
@@ -2416,6 +2644,11 @@ jobs:
 
       - name: 应用 Networking 增强 (IPSet + BBR)
         if: ${{ inputs.use_networking }}
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: networking
+          ABK_FEATURE_END: "true"
+          ABK_FEATURE_FAILURE_MESSAGE: "Networking enhancement failed"
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
           set -euo pipefail
@@ -2490,12 +2723,22 @@ jobs:
 
       - name: 克隆虚拟化支持补丁仓库
         if: inputs.virtualization_support != 'off'
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: virtualization
+          ABK_FEATURE_END: "false"
+          ABK_FEATURE_FAILURE_MESSAGE: "Virtualization patch download failed"
         run: |
           git clone --depth 1 https://github.com/ravindu644/Droidspaces-OSS.git /tmp/virtualization-support-patches
           echo "VIRTUALIZATION_SUPPORT_PATCHES=/tmp/virtualization-support-patches/Documentation/resources/kernel-patches/GKI" >> $GITHUB_ENV
 
       - name: 集成虚拟化支持
         if: inputs.virtualization_support != 'off'
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: virtualization
+          ABK_FEATURE_END: "true"
+          ABK_FEATURE_FAILURE_MESSAGE: "Virtualization integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
           set -euo pipefail
@@ -2683,6 +2926,10 @@ jobs:
 
       - name: 应用 Unicode 绕过修复
         if: inputs.enable_susfs
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: susfs
+          ABK_FEATURE_FAILURE_MESSAGE: "SUSFS Unicode compatibility integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
           if [ "${{ inputs.kernel_version }}" = "5.10" ] || [ "${{ inputs.kernel_version }}" = "5.15" ]; then
@@ -2693,6 +2940,11 @@ jobs:
 
       - name: 配置 ZRAM 补丁栈
         if: ${{ inputs.use_zram }}
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: zram
+          ABK_FEATURE_END: "false"
+          ABK_FEATURE_FAILURE_MESSAGE: "ZRAM patch stack failed"
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
           if [ "${EFFECTIVE_ZRAM_LEGACY_LZ4K:-true}" = "true" ]; then
@@ -2784,6 +3036,11 @@ jobs:
 
       - name: 配置 ZRAM 选项
         if: ${{ inputs.use_zram }}
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: zram
+          ABK_FEATURE_END: "true"
+          ABK_FEATURE_FAILURE_MESSAGE: "ZRAM configuration failed"
         run: |
           CONFIG_FILE="$DEFCONFIG"
 
@@ -2915,6 +3172,11 @@ jobs:
 
       - name: 添加 BBG 防格机补丁
         if: inputs.use_bbg
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: bbg
+          ABK_FEATURE_END: "true"
+          ABK_FEATURE_FAILURE_MESSAGE: "BBG integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
@@ -3062,6 +3324,11 @@ jobs:
 
       - name: 添加 DDK 防格机 LSM
         if: inputs.use_ddk
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: ddk
+          ABK_FEATURE_END: "true"
+          ABK_FEATURE_FAILURE_MESSAGE: "DDK integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           echo "应用 Xingguang DDK patch 栈并启用内建 LSM"
@@ -3071,6 +3338,11 @@ jobs:
 
       - name: 应用 Re-Kernel
         if: inputs.use_rekernel
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: rekernel
+          ABK_FEATURE_END: "true"
+          ABK_FEATURE_FAILURE_MESSAGE: "Re-Kernel integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
@@ -3200,6 +3472,10 @@ jobs:
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
+          feature_disabled() {
+            [ "${{ inputs.source_mode }}" = "custom_git" ] &&
+              [ -f "$ABK_CUSTOM_SOURCE_TRANSACTION_DIR/$1.disabled" ]
+          }
           kpm_kconfig_status="${ABK_KPM_KCONFIG_STATUS:-unknown}"
           kpm_kconfig_ready="${ABK_KPM_KCONFIG_READY:-false}"
           kpm_kconfig_path="${ABK_KPM_KCONFIG_PATH:-}"
@@ -3208,7 +3484,7 @@ jobs:
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
           EOF
-          if [ "${{ inputs.ksu_variant }}" != "None" ]; then
+          if [ "${{ inputs.ksu_variant }}" != "None" ] && ! feature_disabled kernelsu; then
             echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           fi
 
@@ -3226,7 +3502,7 @@ jobs:
             fi
           fi
 
-          if [ "${{ inputs.use_kpm }}" == "true" ] && { [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; }; then
+          if [ "${{ inputs.use_kpm }}" == "true" ] && ! feature_disabled kpm && { [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; }; then
             if [ "$kpm_config_supported" = "true" ]; then
               echo "CONFIG_KPM=y" >> "$DEFCONFIG"
               case "$kpm_kconfig_status" in
@@ -3287,6 +3563,10 @@ jobs:
 
       - name: 添加 SUSFS 配置
         if: inputs.enable_susfs && inputs.ksu_variant != 'None'
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: susfs
+          ABK_FEATURE_FAILURE_MESSAGE: "SUSFS defconfig integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           if [ "${{ inputs.ksu_variant }}" == "SukiSU" ]; then
@@ -3590,6 +3870,10 @@ jobs:
 
       - name: 修复 Official SUSFS 源码兼容
         if: inputs.ksu_variant == 'Official' && inputs.enable_susfs
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: susfs
+          ABK_FEATURE_FAILURE_MESSAGE: "Official SUSFS compatibility integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
@@ -4966,6 +5250,10 @@ jobs:
 
       - name: 修复 Official SUSFS 6.1-6.12 SELinux 导出
         if: inputs.ksu_variant == 'Official' && inputs.enable_susfs && (inputs.kernel_version == '6.1' || inputs.kernel_version == '6.6' || inputs.kernel_version == '6.12')
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: susfs
+          ABK_FEATURE_FAILURE_MESSAGE: "Official SUSFS SELinux export integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
@@ -5139,6 +5427,10 @@ jobs:
 
       - name: 补齐 SukiSU SUSFS 内联 hook 符号
         if: inputs.ksu_variant == 'SukiSU' && inputs.enable_susfs
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: susfs
+          ABK_FEATURE_FAILURE_MESSAGE: "SukiSU SUSFS inline hook integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
@@ -5146,6 +5438,10 @@ jobs:
 
       - name: 最终修复 SukiSU/ReSukiSU 源码兼容
         if: inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU'
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: kernelsu
+          ABK_FEATURE_FAILURE_MESSAGE: "KernelSU final compatibility integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
@@ -5303,6 +5599,10 @@ jobs:
 
       - name: 修复 SukiSU/ReSukiSU android16-6.12 源码兼容
         if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU') && inputs.android_version == 'android16' && inputs.kernel_version == '6.12'
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: kernelsu
+          ABK_FEATURE_FAILURE_MESSAGE: "KernelSU android16 compatibility integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
@@ -5755,8 +6055,17 @@ jobs:
       - name: 应用 KPM 补丁 (SukiSU/ReSukiSU)
         if: inputs.use_kpm && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU')
         env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: kpm
+          ABK_FEATURE_END: "true"
+          ABK_FEATURE_FAILURE_MESSAGE: "KPM image patch failed and the image was restored"
           KPM_PASSWORD: ${{ inputs.kpm_password }}
         run: |
+          set -euo pipefail
+          if [ "${{ inputs.source_mode }}" = "custom_git" ] && [ -f "$ABK_CUSTOM_SOURCE_TRANSACTION_DIR/kpm.disabled" ]; then
+            echo "KPM was skipped during source integration; no image patch will be applied."
+            exit 0
+          fi
           case "${{ inputs.android_version }}" in
             "android12"|"android13")
               if [ "${{ inputs.kernel_version }}" != "6.6" ]; then
@@ -5768,19 +6077,31 @@ jobs:
               ;;
           esac
 
+          image_backup="$TARGET_PATH/Image.abk-kpm-backup"
+          cp "$TARGET_PATH/Image" "$image_backup"
           cp -r $SUKISU_PATCHES/kpm/patch_linux "$TARGET_PATH/patch"
           cd "$TARGET_PATH"
           chmod 777 patch
-          if [ -n "$KPM_PASSWORD" ]; then
-            ./patch -s "$KPM_PASSWORD"
-          else
-            ./patch
+          patch_ok=true
+          if ! { if [ -n "$KPM_PASSWORD" ]; then ./patch -s "$KPM_PASSWORD"; else ./patch; fi; }; then
+            patch_ok=false
+          fi
+          [ -f oImage ] || patch_ok=false
+          if [ "$patch_ok" != true ]; then
+            if [ "${{ inputs.source_mode }}" = "custom_git" ]; then
+              mv "$image_backup" Image
+              echo "::warning::KPM image patch failed; original Image restored."
+              exit 1
+            fi
+            exit 1
           fi
           rm -rf Image
           mv oImage Image
+          rm -f "$image_backup"
 
       - name: 准备 Boot 镜像
         run: |
+          set -euo pipefail
           mkdir -p bootimgs
 
           if [ "${{ inputs.android_version }}" == "android12" ] || [ "${{ inputs.android_version }}" == "android13" ]; then
@@ -5793,7 +6114,16 @@ jobs:
           cp "$SRC_DIR/Image.lz4" ./bootimgs/
           cp "$SRC_DIR/Image" ./
           cp "$SRC_DIR/Image.lz4" ./
-          gzip -n -k -f -9 ./Image > ./Image.gz
+          gzip -n -c -9 ./Image > ./Image.gz
+          cp ./Image.gz ./bootimgs/Image.gz
+
+          if [ "${{ inputs.source_mode }}" = "custom_git" ]; then
+            images_name="${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-Images.zip"
+            (
+              cd bootimgs
+              zip -9 "../$images_name" Image Image.lz4 Image.gz
+            )
+          fi
 
       - name: 创建 AnyKernel3 压缩包
         run: |
@@ -5803,7 +6133,7 @@ jobs:
           zip -r "../$ZIP_NAME" ./*
 
       - name: 构建 Boot 镜像 (Android 12)
-        if: inputs.android_version == 'android12'
+        if: inputs.source_mode != 'custom_git' && inputs.android_version == 'android12'
         working-directory: bootimgs
         run: |
           GKI_URL=https://dl.google.com/android/gki/gki-certified-boot-android12-5.10-${{ inputs.os_patch_level }}_${{ inputs.revision }}.zip
@@ -5834,7 +6164,7 @@ jobs:
           cp ./boot-lz4.img ../${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-boot-lz4.img
 
       - name: 构建 Boot 镜像 (Android 13+)
-        if: inputs.android_version == 'android13' || inputs.android_version == 'android14' || inputs.android_version == 'android15' || inputs.android_version == 'android16'
+        if: inputs.source_mode != 'custom_git' && (inputs.android_version == 'android13' || inputs.android_version == 'android14' || inputs.android_version == 'android15' || inputs.android_version == 'android16')
         working-directory: bootimgs
         run: |
           gzip -n -k -f -9 ./Image > ./Image.gz
@@ -5858,79 +6188,30 @@ jobs:
           set -euo pipefail
 
           if [ -z "${ABK_ARTIFACT_SIGNING_KEY_BASE64:-}" ]; then
+            if [ "${{ inputs.source_mode }}" = "custom_git" ]; then
+              echo "::error::Custom source 产物必须签名；请先在 ABK App 中初始化 fork 产物签名。"
+              exit 1
+            fi
             echo "::warning::缺少 ABK_ARTIFACT_SIGNING_KEY_BASE64 secret，将生成未签名 bundle"
-            export ABK_SKIP_BUNDLE_SIGNATURE=1
+            key_file=""
           else
             key_file="$RUNNER_TEMP/abk-artifact-signing.key"
             printf '%s' "$ABK_ARTIFACT_SIGNING_KEY_BASE64" | base64 -d > "$key_file"
           fi
+          args=(--root .)
+          [ -n "$key_file" ] && args+=(--key-file "$key_file")
+          [ "${{ inputs.source_mode }}" = "custom_git" ] && args+=(--require-signature)
+          python3 "$GITHUB_WORKSPACE/.github/scripts/create-artifact-bundles.py" "${args[@]}"
 
-          python3 - <<'PY'
-          import base64
-          import hashlib
-          import json
-          import os
-          from pathlib import Path
-          from zipfile import ZipFile, ZIP_DEFLATED
-          import subprocess
-
-          manifest_name = "ABK_BUNDLE_MANIFEST.json"
-          signature_name = "ABK_BUNDLE_MANIFEST.sig"
-          text_manifest_name = "ABK_BUNDLE_MANIFEST.txt"
-          doc_names = ("LICENSE", "THIRD_PARTY_NOTICES.md")
-          key_file = Path(os.environ["RUNNER_TEMP"]) / "abk-artifact-signing.key"
-          skip_signature = os.environ.get("ABK_SKIP_BUNDLE_SIGNATURE") == "1"
-          root = Path(".")
-
-          def artifact_type(name: str) -> str:
-              lower = name.lower()
-              if lower.endswith(".img"):
-                  return "KERNEL_IMG"
-              if "anykernel" in lower or "ak3" in lower:
-                  return "ANYKERNEL3"
-              return "OTHER"
-
-          docs = {name: root / name for name in doc_names}
-          for path in docs.values():
-              if not path.is_file():
-                  raise SystemExit(f"missing compliance document: {path.name}")
-
-          for payload in sorted(root.glob("*")):
-              if not payload.is_file():
-                  continue
-              if payload.name.endswith(".bundle.zip"):
-                  continue
-              if not (payload.suffix.lower() == ".img" or payload.name.endswith("AnyKernel3.zip")):
-                  continue
-
-              bundle_path = payload.with_name(f"{payload.name}.bundle.zip")
-              payload_bytes = payload.read_bytes()
-              manifest = {
-                  "schema": 1,
-                  "bundle_name": bundle_path.name,
-                  "artifact_type": artifact_type(payload.name),
-                  "run_id": int(os.environ.get("GITHUB_RUN_ID", "0")),
-                  "payload_name": payload.name,
-                  "payload_sha256": hashlib.sha256(payload_bytes).hexdigest(),
-                  "payload_size_bytes": len(payload_bytes),
-                  "created_at": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
-              }
-              manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
-              with ZipFile(bundle_path, "w", compression=ZIP_DEFLATED, compresslevel=9) as zf:
-                  zf.writestr(manifest_name, manifest_bytes)
-                  if not skip_signature:
-                      sig = subprocess.check_output(
-                          [
-                              "openssl", "dgst", "-sha256", "-sign", str(key_file), "-binary"
-                          ],
-                          input=manifest_bytes,
-                      )
-                      zf.writestr(signature_name, sig)
-                  zf.writestr(text_manifest_name, f"payload={payload.name}\n")
-                  zf.write(payload, arcname=payload.name)
-                  for doc_name, doc_path in docs.items():
-                      zf.write(doc_path, arcname=doc_name)
-          PY
+          if [ "${{ inputs.source_mode }}" = "custom_git" ]; then
+            images_count=$(find . -maxdepth 1 -type f -name '*-Images.zip.bundle.zip' | wc -l)
+            anykernel_count=$(find . -maxdepth 1 -type f -name '*-AnyKernel3.zip.bundle.zip' | wc -l)
+            if [ "$images_count" -ne 1 ] || [ "$anykernel_count" -ne 1 ]; then
+              echo "::error::Custom source 必须同时生成一个 Images bundle 和一个 AnyKernel3 bundle。"
+              rm -f ./*.bundle.zip
+              exit 1
+            fi
+          fi
 
       - name: 收集补丁冲突文件
         if: always()

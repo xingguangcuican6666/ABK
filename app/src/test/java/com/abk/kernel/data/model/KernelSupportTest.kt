@@ -8,6 +8,31 @@ import org.junit.Test
 class KernelSupportTest {
 
     @Test
+    fun customSourceValidationAcceptsOrderedDuplicatesAndRejectsUnsafePaths() {
+        val valid = KernelBuildConfig(
+            buildTarget = BUILD_TARGET_CUSTOM_SOURCE,
+            sourceUrl = "https://github.com/LineageOS/android_kernel_xiaomi_sm8635.git",
+            sourceRef = "lineage-23.2",
+            sourceDefconfigs = listOf("vendor/base.config", "gki_defconfig", "vendor/base.config"),
+            osPatchLevel = "2025-09",
+            kernelsuVariant = KSU_VARIANT_NONE,
+        )
+        assertEquals(null, KernelSupport.validateCustomSource(valid))
+        assertTrue(
+            KernelSupport.validateCustomSource(
+                valid.copy(sourceDefconfigs = listOf("gki_defconfig", "../secret"))
+            ) != null
+        )
+        assertTrue(
+            KernelSupport.validateCustomSource(
+                valid.copy(sourceUrl = "https://user:pass@github.com/example/kernel.git")
+            ) != null
+        )
+        assertTrue(KernelSupport.validateCustomSource(valid.copy(sourceRef = "refs/heads/../main")) != null)
+        assertTrue(KernelSupport.validateCustomSource(valid.copy(sourceRef = "lineage\n23.2")) != null)
+    }
+
+    @Test
     fun normalizeCoercesInvalidValuesAndDisablesKsuOnlyFeaturesForNoneVariant() {
         val normalized = KernelSupport.normalize(
             KernelBuildConfig(

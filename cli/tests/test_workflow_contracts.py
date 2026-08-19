@@ -1,10 +1,12 @@
 import json
+import os
 import re
 import subprocess
 import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -75,6 +77,285 @@ def build_args(**overrides):
 
 
 class WorkflowContractTests(unittest.TestCase):
+    def test_custom_source_workflow_has_exactly_25_inputs(self):
+        inputs = workflow_dispatch_inputs(REPO_ROOT / ".github" / "workflows" / "kernel-source.yml")
+        self.assertEqual(25, len(inputs))
+        self.assertTrue({"source_repo", "source_ref", "source_private", "defconfigs", "os_patch_level"} <= inputs)
+
+    def test_custom_source_helpers_validate_safe_urls_and_defconfigs(self):
+        import importlib.util
+
+        module_path = REPO_ROOT / ".github" / "scripts" / "custom-source.py"
+        spec = importlib.util.spec_from_file_location("custom_source", module_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(
+            "https://github.com/LineageOS/android_kernel_xiaomi_sm8635.git",
+            module.normalize_source_url("https://github.com/LineageOS/android_kernel_xiaomi_sm8635.git"),
+        )
+        with self.assertRaises(module.CustomSourceError):
+            module.normalize_source_url("https://user:pass@github.com/a/b.git", private=True)
+        with self.assertRaises(module.CustomSourceError):
+            module.parse_defconfigs("vendor/foo.config\n")
+        self.assertEqual(
+            ["vendor/foo.config", "gki_defconfig", "vendor/foo.config"],
+            module.parse_defconfigs("vendor/foo.config\ngki_defconfig\nvendor/foo.config\n"),
+        )
+
+    def test_custom_source_kernel_mapping_and_tree_contract(self):
+        import importlib.util
+
+        module_path = REPO_ROOT / ".github" / "scripts" / "custom-source.py"
+        spec = importlib.util.spec_from_file_location("custom_source_tree", module_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        expected = {
+            (5, 10): "android12",
+            (5, 15): "android13",
+            (6, 1): "android14",
+            (6, 6): "android15",
+            (6, 12): "android16",
+        }
+        self.assertEqual(expected, module.SUPPORTED_KERNELS)
+
+        with tempfile.TemporaryDirectory() as temp_value:
+            root = Path(temp_value)
+            (root / "arch/arm64/configs/vendor").mkdir(parents=True)
+            (root / "scripts/kconfig").mkdir(parents=True)
+            (root / "Makefile").write_text("VERSION = 6\nPATCHLEVEL = 1\nSUBLEVEL = 174\n")
+            (root / "build.config.gki.aarch64").write_text("BUILD_CONFIG=1\n")
+            (root / "scripts/kconfig/merge_config.sh").write_text("#!/bin/sh\n")
+            (root / "arch/arm64/configs/gki_defconfig").write_text("CONFIG_BASE=y\n")
+            (root / "arch/arm64/configs/vendor/peridot_GKI.config").write_text("CONFIG_VENDOR=y\n")
+            details = module.validate_tree(root, ["gki_defconfig", "vendor/peridot_GKI.config"])
+            self.assertEqual("android14", details["android_version"])
+            self.assertEqual("6.1.174", details["full_kernel_version"])
+
+            (root / "Makefile").write_text("VERSION = 4\nPATCHLEVEL = 19\nSUBLEVEL = 1\n")
+            with self.assertRaises(module.CustomSourceError):
+                module.validate_tree(root, ["gki_defconfig"])
+
+    def test_custom_source_feature_status_records_dependency_skip(self):
+        script = REPO_ROOT / ".github" / "scripts" / "custom-source-feature-status.py"
+        with tempfile.TemporaryDirectory() as temp_value:
+            status = Path(temp_value) / "status.json"
+            subprocess.run(
+                [sys.executable, str(script), "init", "--file", str(status), "--feature", "kernelsu=true", "--feature", "kpm=true"],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    sys.executable, str(script), "mark", "--file", str(status), "--id", "kpm",
+                    "--state", "skipped", "--reason-code", "dependency_skipped",
+                    "--message", "KernelSU integration was skipped",
+                ],
+                check=True,
+            )
+            value = json.loads(status.read_text())
+            self.assertFalse(value["effective"]["kpm"])
+            self.assertEqual("dependency_skipped", value["skipped"][0]["reason_code"])
+
+    def test_custom_source_bundler_signs_extended_schema_one_manifest(self):
+        script = REPO_ROOT / ".github" / "scripts" / "create-artifact-bundles.py"
+        with tempfile.TemporaryDirectory() as temp_value:
+            root = Path(temp_value)
+            key = root / "signing.pem"
+            subprocess.run(
+                ["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(key)],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            (root / "LICENSE").write_text("license\n")
+            (root / "THIRD_PARTY_NOTICES.md").write_text("notices\n")
+            (root / "android14-6.1.174-2025-09-Images.zip").write_bytes(b"images")
+            (root / "android14-6.1.174-2025-09-AnyKernel3.zip").write_bytes(b"anykernel")
+            status = root / "feature-status.json"
+            status.write_text(json.dumps({
+                "requested": {"zram": True},
+                "effective": {"zram": False},
+                "skipped": [{"id": "zram", "reason_code": "patch_failed", "message": "failed"}],
+            }))
+            env = os.environ.copy()
+            env.update({
+                "ABK_SOURCE_MODE": "custom_git",
+                "ABK_CUSTOM_SOURCE_URL": "https://github.com/example/private.git",
+                "ABK_CUSTOM_SOURCE_ACCESS": "github_private",
+                "ABK_CUSTOM_SOURCE_REF": "lineage-23.2",
+                "ABK_CUSTOM_SOURCE_COMMIT": "a" * 40,
+                "ABK_CUSTOM_SOURCE_KERNEL_VERSION": "6.1.174",
+                "ABK_CUSTOM_SOURCE_ANDROID_VERSION": "android14",
+                "ABK_CUSTOM_SOURCE_PATCH_LEVEL": "2025-09",
+                "ABK_CUSTOM_SOURCE_DEVICE_LABEL": "POCO F6 / peridot",
+                "ABK_CUSTOM_SOURCE_DEFCONFIGS_JSON": json.dumps(["gki_defconfig", "vendor/peridot_GKI.config"]),
+                "ABK_CUSTOM_SOURCE_FEATURE_STATUS": str(status),
+                "GITHUB_RUN_ID": "74",
+            })
+            subprocess.run(
+                [sys.executable, str(script), "--root", str(root), "--key-file", str(key), "--require-signature"],
+                check=True,
+                env=env,
+            )
+
+            bundles = sorted(root.glob("*.bundle.zip"))
+            self.assertEqual(2, len(bundles))
+            manifests = []
+            for bundle in bundles:
+                with zipfile.ZipFile(bundle) as archive:
+                    manifest = json.loads(archive.read("ABK_BUNDLE_MANIFEST.json"))
+                    manifests.append(manifest)
+                    self.assertIn("ABK_BUNDLE_MANIFEST.sig", archive.namelist())
+                    self.assertEqual(1, manifest["schema"])
+                    self.assertEqual("a" * 40, manifest["kernel_source"]["resolved_commit"])
+                    self.assertEqual("patch_failed", manifest["feature_status"]["skipped"][0]["reason_code"])
+                    self.assertEqual("custom_source_notice_v1", manifest["client_notice"]["capability"])
+            image_manifest = next(item for item in manifests if item["artifact_type"] == "OTHER")
+            self.assertEqual("KERNEL_IMAGE_SET", image_manifest["payload_kind"])
+
+    def test_custom_source_feature_rollback_preserves_other_feature_commits(self):
+        hook = REPO_ROOT / ".github" / "scripts" / "custom-source-feature-env.sh"
+        status_script = REPO_ROOT / ".github" / "scripts" / "custom-source-feature-status.py"
+        with tempfile.TemporaryDirectory() as temp_value:
+            temp = Path(temp_value)
+            source = temp / "source"
+            source.mkdir()
+            subprocess.run(["git", "init"], cwd=source, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(["git", "config", "user.name", "ABK Test"], cwd=source, check=True)
+            subprocess.run(["git", "config", "user.email", "abk@example.invalid"], cwd=source, check=True)
+            (source / "base").write_text("base\n")
+            subprocess.run(["git", "add", "base"], cwd=source, check=True)
+            subprocess.run(["git", "commit", "-m", "baseline"], cwd=source, check=True, stdout=subprocess.DEVNULL)
+            baseline = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
+            status = temp / "status.json"
+            subprocess.run(
+                [sys.executable, str(status_script), "init", "--file", str(status), "--feature", "zram=true", "--feature", "bbg=true"],
+                check=True,
+            )
+            common_env = os.environ.copy()
+            common_env.update({
+                "BASH_ENV": str(hook),
+                "ABK_SOURCE_MODE": "custom_git",
+                "ABK_CUSTOM_SOURCE_ROOT": str(source),
+                "ABK_CUSTOM_SOURCE_TRANSACTION_DIR": str(temp / "transactions"),
+                "ABK_CUSTOM_SOURCE_FEATURE_STATUS": str(status),
+                "ABK_CUSTOM_SOURCE_BASELINE": baseline,
+                "KERNEL_ROOT": str(temp),
+                "GITHUB_WORKSPACE": str(REPO_ROOT),
+            })
+            for feature, command in (("zram", "echo zram > zram.txt"), ("bbg", "echo bbg > bbg.txt")):
+                env = common_env.copy()
+                env["ABK_FEATURE_ID"] = feature
+                subprocess.run(["bash", "-c", command], cwd=source, env=env, check=True)
+
+            env = common_env.copy()
+            env.update({"ABK_FEATURE_ID": "zram", "ABK_FEATURE_FAILURE_MESSAGE": "zram failed"})
+            subprocess.run(["bash", "-c", "echo broken >> zram.txt; false"], cwd=source, env=env, check=True)
+
+            self.assertFalse((source / "zram.txt").exists())
+            self.assertEqual("bbg\n", (source / "bbg.txt").read_text())
+            value = json.loads(status.read_text())
+            self.assertFalse(value["effective"]["zram"])
+            self.assertTrue(value["effective"]["bbg"])
+
+    def test_custom_source_kernelsu_rollback_removes_external_tree(self):
+        hook = REPO_ROOT / ".github" / "scripts" / "custom-source-feature-env.sh"
+        status_script = REPO_ROOT / ".github" / "scripts" / "custom-source-feature-status.py"
+        with tempfile.TemporaryDirectory() as temp_value:
+            root = Path(temp_value)
+            source = root / "common"
+            source.mkdir()
+            subprocess.run(["git", "init"], cwd=source, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(["git", "config", "user.name", "ABK Test"], cwd=source, check=True)
+            subprocess.run(["git", "config", "user.email", "abk@example.invalid"], cwd=source, check=True)
+            (source / "base").write_text("base\n")
+            subprocess.run(["git", "add", "base"], cwd=source, check=True)
+            subprocess.run(["git", "commit", "-m", "baseline"], cwd=source, check=True, stdout=subprocess.DEVNULL)
+            baseline = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
+            status = root / "status.json"
+            subprocess.run(
+                [sys.executable, str(status_script), "init", "--file", str(status), "--feature", "kernelsu=true", "--feature", "susfs=true", "--feature", "kpm=true"],
+                check=True,
+            )
+            env = os.environ.copy()
+            env.update({
+                "BASH_ENV": str(hook),
+                "ABK_SOURCE_MODE": "custom_git",
+                "ABK_FEATURE_ID": "kernelsu",
+                "ABK_FEATURE_FAILURE_MESSAGE": "KernelSU failed",
+                "ABK_CUSTOM_SOURCE_ROOT": str(source),
+                "ABK_CUSTOM_SOURCE_TRANSACTION_DIR": str(root / "transactions"),
+                "ABK_CUSTOM_SOURCE_FEATURE_STATUS": str(status),
+                "ABK_CUSTOM_SOURCE_BASELINE": baseline,
+                "KERNEL_ROOT": str(root),
+                "GITHUB_WORKSPACE": str(REPO_ROOT),
+            })
+            subprocess.run(
+                ["bash", "-c", "mkdir KernelSU; echo source > KernelSU/file; echo ksu > common/ksu.txt"],
+                cwd=root,
+                env=env,
+                check=True,
+            )
+            subprocess.run(
+                ["bash", "-c", "echo broken >> KernelSU/file; false"],
+                cwd=root,
+                env=env,
+                check=True,
+            )
+
+            self.assertFalse((root / "KernelSU").exists())
+            self.assertFalse((source / "ksu.txt").exists())
+            value = json.loads(status.read_text())
+            self.assertFalse(value["effective"]["kernelsu"])
+            self.assertEqual("dependency_skipped", next(x for x in value["skipped"] if x["id"] == "susfs")["reason_code"])
+
+    def test_custom_source_external_git_rollback_preserves_other_features(self):
+        hook = REPO_ROOT / ".github" / "scripts" / "custom-source-feature-env.sh"
+        status_script = REPO_ROOT / ".github" / "scripts" / "custom-source-feature-status.py"
+        with tempfile.TemporaryDirectory() as temp_value:
+            root = Path(temp_value)
+            source = root / "common"
+            external = root / "KernelSU"
+            for repository in (source, external):
+                repository.mkdir()
+                subprocess.run(["git", "init"], cwd=repository, check=True, stdout=subprocess.DEVNULL)
+                subprocess.run(["git", "config", "user.name", "ABK Test"], cwd=repository, check=True)
+                subprocess.run(["git", "config", "user.email", "abk@example.invalid"], cwd=repository, check=True)
+                (repository / "base").write_text("base\n")
+                subprocess.run(["git", "add", "base"], cwd=repository, check=True)
+                subprocess.run(["git", "commit", "-m", "baseline"], cwd=repository, check=True, stdout=subprocess.DEVNULL)
+
+            baseline = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
+            status = root / "status.json"
+            subprocess.run(
+                [sys.executable, str(status_script), "init", "--file", str(status), "--feature", "susfs=true", "--feature", "kpm=true"],
+                check=True,
+            )
+            common_env = os.environ.copy()
+            common_env.update({
+                "BASH_ENV": str(hook),
+                "ABK_SOURCE_MODE": "custom_git",
+                "ABK_CUSTOM_SOURCE_ROOT": str(source),
+                "ABK_CUSTOM_SOURCE_TRANSACTION_DIR": str(root / "transactions"),
+                "ABK_CUSTOM_SOURCE_FEATURE_STATUS": str(status),
+                "ABK_CUSTOM_SOURCE_BASELINE": baseline,
+                "KERNEL_ROOT": str(root),
+                "GITHUB_WORKSPACE": str(REPO_ROOT),
+            })
+            for feature, filename in (("susfs", "susfs.txt"), ("kpm", "kpm.txt")):
+                env = common_env.copy()
+                env["ABK_FEATURE_ID"] = feature
+                subprocess.run(["bash", "-c", f"echo {feature} > KernelSU/{filename}"], cwd=root, env=env, check=True)
+
+            env = common_env.copy()
+            env.update({"ABK_FEATURE_ID": "susfs", "ABK_FEATURE_FAILURE_MESSAGE": "SUSFS failed"})
+            subprocess.run(["bash", "-c", "echo broken >> KernelSU/susfs.txt; false"], cwd=root, env=env, check=True)
+
+            self.assertFalse((external / "susfs.txt").exists())
+            self.assertEqual("kpm\n", (external / "kpm.txt").read_text())
+            value = json.loads(status.read_text())
+            self.assertFalse(value["effective"]["susfs"])
+            self.assertTrue(value["effective"]["kpm"])
+
     def test_desktop_workflow_limits_github_token_permissions(self):
         workflow = (
             REPO_ROOT / ".github" / "workflows" / "build-abk-desktop.yml"

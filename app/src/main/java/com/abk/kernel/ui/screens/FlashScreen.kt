@@ -71,6 +71,7 @@ import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material.icons.filled.Inventory2
@@ -171,6 +172,7 @@ import com.abk.kernel.utils.BuildProgressUtils
 import com.abk.kernel.data.model.BuildQueueItemStatus
 import com.abk.kernel.data.model.BuildStatus
 import com.abk.kernel.data.model.DownloadedArtifact
+import com.google.gson.Gson
 import com.abk.kernel.data.model.KernelBuildConfig
 import com.abk.kernel.data.model.KernelSupport
 import com.abk.kernel.data.model.PREBUILT_GKI_RUN_ID
@@ -246,6 +248,8 @@ fun FlashScreen(
     var prebuiltParameterTarget by remember { mutableStateOf<PrebuiltGkiRelease?>(null) }
     var deleteRemoteWorkflowRun by remember { mutableStateOf(false) }
     var showFlashConfirm by remember { mutableStateOf(false) }
+    var manifestNoticeItem by remember { mutableStateOf<DownloadedArtifact?>(null) }
+    val sessionManifestNotices = remember { mutableSetOf<String>() }
     var flashSecurityPrompt by remember { mutableStateOf<DownloadUtils.FlashSecurityPrompt?>(null) }
     var allowLegacyBundleFallback by remember { mutableStateOf(false) }
     var showInstallManagerConfirm by remember { mutableStateOf(false) }
@@ -804,7 +808,77 @@ fun FlashScreen(
             artifact = item,
             signingVerificationEnabled = state.artifactSigningVerificationEnabled,
         )
-        if (flashSecurityPrompt == null) showFlashConfirm = true
+        if (flashSecurityPrompt == null) {
+            showFlashConfirm = true
+        }
+    }
+
+    LaunchedEffect(state.downloadedArtifacts) {
+        for (item in state.downloadedArtifacts.filter { it.verified && it.manifestClientNotice != null }) {
+            val file = File(item.filePath)
+            if (!file.isFile) continue
+            val key = withContext(Dispatchers.IO) { DownloadUtils.fileSha256Hex(file) }
+            if (sessionManifestNotices.add(key)) {
+                manifestNoticeItem = item
+                break
+            }
+        }
+    }
+
+    manifestNoticeItem?.let { item ->
+        val source = item.manifestKernelSource?.let { runCatching { Gson().fromJson(it, com.abk.kernel.utils.KernelSourceManifest::class.java) }.getOrNull() }
+        val feature = item.manifestFeatureStatus?.let { runCatching { Gson().fromJson(it, com.abk.kernel.utils.FeatureStatusManifest::class.java) }.getOrNull() }
+        AlertDialog(
+            onDismissRequest = { manifestNoticeItem = null },
+            icon = { Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
+            title = { Text(stringResource(R.string.flash_custom_source_notice_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    source?.url?.let { Text(stringResource(R.string.flash_custom_source_url, it)) }
+                    if (source?.access == "github_private") {
+                        Text(
+                            stringResource(R.string.flash_custom_source_private_warning),
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    source?.requestedRef?.let { Text(stringResource(R.string.flash_custom_source_ref, it)) }
+                    source?.resolvedCommit?.let { Text(stringResource(R.string.flash_custom_source_commit, it)) }
+                    source?.kernelVersion?.let { kernel ->
+                        Text(stringResource(R.string.flash_custom_source_kernel, source.androidVersion.orEmpty(), kernel))
+                    }
+                    source?.toolchainPatchLevel?.let {
+                        Text(stringResource(R.string.flash_custom_source_toolchain, it))
+                    }
+                    source?.deviceLabel?.takeIf { it.isNotBlank() }?.let {
+                        Text(stringResource(R.string.flash_custom_source_device, it))
+                    }
+                    source?.defconfigs?.takeIf { it.isNotEmpty() }?.let { defconfigs ->
+                        Text(stringResource(R.string.flash_custom_source_defconfigs, defconfigs.joinToString(" -> ")))
+                    }
+                    feature?.requested?.takeIf { it.isNotEmpty() }?.let {
+                        Text(stringResource(R.string.flash_custom_source_requested, formatManifestFeatureMap(it)))
+                    }
+                    feature?.effective?.takeIf { it.isNotEmpty() }?.let {
+                        Text(stringResource(R.string.flash_custom_source_effective, formatManifestFeatureMap(it)))
+                    }
+                    feature?.skipped?.takeIf { it.isNotEmpty() }?.let { skippedFeatures ->
+                        Text(stringResource(R.string.flash_custom_source_skipped_title), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
+                        skippedFeatures.forEach { skipped ->
+                            Text("• ${skipped.id}: ${skipped.message}", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    Text(
+                        stringResource(R.string.flash_custom_source_old_client_warning),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { manifestNoticeItem = null }) { Text(stringResource(R.string.confirm)) }
+            }
+        )
     }
 
     if (showFlashConfirm) {
@@ -817,6 +891,38 @@ fun FlashScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(stringResource(R.string.flash_confirm_msg))
+                    if (item.manifestClientNotice != null) {
+                        val source = item.manifestKernelSource?.let { runCatching { Gson().fromJson(it, com.abk.kernel.utils.KernelSourceManifest::class.java) }.getOrNull() }
+                        val feature = item.manifestFeatureStatus?.let { runCatching { Gson().fromJson(it, com.abk.kernel.utils.FeatureStatusManifest::class.java) }.getOrNull() }
+                        Text(stringResource(R.string.flash_custom_source_review_before_flash), fontWeight = FontWeight.SemiBold)
+                        source?.url?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                        if (source?.access == "github_private") {
+                            Text(
+                                stringResource(R.string.flash_custom_source_private_warning),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        source?.requestedRef?.let { Text(stringResource(R.string.flash_custom_source_ref, it), style = MaterialTheme.typography.bodySmall) }
+                        source?.resolvedCommit?.let { Text(stringResource(R.string.flash_custom_source_commit, it), style = MaterialTheme.typography.bodySmall) }
+                        source?.deviceLabel?.takeIf { it.isNotBlank() }?.let {
+                            Text(stringResource(R.string.flash_custom_source_device, it), style = MaterialTheme.typography.bodySmall)
+                        }
+                        feature?.requested?.takeIf { it.isNotEmpty() }?.let {
+                            Text(stringResource(R.string.flash_custom_source_requested, formatManifestFeatureMap(it)), style = MaterialTheme.typography.bodySmall)
+                        }
+                        feature?.effective?.takeIf { it.isNotEmpty() }?.let {
+                            Text(stringResource(R.string.flash_custom_source_effective, formatManifestFeatureMap(it)), style = MaterialTheme.typography.bodySmall)
+                        }
+                        feature?.skipped.orEmpty().forEach { skipped ->
+                            Text("! ${skipped.id}: ${skipped.message}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Text(
+                            stringResource(R.string.flash_custom_source_old_client_warning),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     if (item.type == ArtifactType.ANYKERNEL3 && supportsAnyKernelInactiveSlot) {
                         Text(
                             text = stringResource(R.string.root_patch_ak3_slot_title),
@@ -1826,3 +1932,8 @@ fun FlashScreen(
         }
     }
 }
+
+private fun formatManifestFeatureMap(values: Map<String, Any?>): String =
+    values.entries
+        .sortedBy { it.key }
+        .joinToString(", ") { (key, value) -> "$key=${value ?: "null"}" }

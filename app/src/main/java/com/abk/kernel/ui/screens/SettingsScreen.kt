@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -1217,6 +1218,9 @@ private fun SecuritySettingsGroup(
     var showDisableConfirm1 by remember { mutableStateOf(false) }
     var showDisableConfirm2 by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
+    var showCustomSourceSecretDialog by remember { mutableStateOf(false) }
+    var showDeleteCustomSourceSecretConfirm by remember { mutableStateOf(false) }
+    var customSourcePat by remember { mutableStateOf("") }
     var importPublicKeyText by remember { mutableStateOf("") }
     var importPrivateKeyText by remember { mutableStateOf("") }
     var importError by remember { mutableStateOf<String?>(null) }
@@ -1238,6 +1242,9 @@ private fun SecuritySettingsGroup(
             }
             importError = null
         }
+    }
+    LaunchedEffect(canManageKeys) {
+        if (canManageKeys) vm.refreshCustomSourceSecretStatus()
     }
     SettingsGroup(title = stringResource(R.string.settings_security)) {
         SwitchSettingsItem(
@@ -1284,6 +1291,36 @@ private fun SecuritySettingsGroup(
             enabled = !state.artifactSigningOperationInFlight && state.artifactSigningVerificationEnabled && canManageKeys,
             onClick = { showResetConfirm = true }
         )
+        ExpressiveListItem(
+            title = stringResource(R.string.settings_custom_source_secret_title),
+            subtitle = when {
+                !canManageKeys -> stringResource(R.string.settings_security_requires_fork)
+                state.customSourceSecretConfigured -> stringResource(R.string.settings_custom_source_secret_configured)
+                else -> stringResource(R.string.settings_custom_source_secret_missing)
+            },
+            leadingIcon = Icons.Default.Password,
+            enabled = canManageKeys && !state.customSourceSecretOperationInFlight,
+            onClick = {
+                customSourcePat = ""
+                showCustomSourceSecretDialog = true
+            }
+        )
+        if (state.customSourceSecretConfigured) {
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_custom_source_secret_delete),
+                subtitle = stringResource(R.string.settings_custom_source_secret_delete_desc),
+                leadingIcon = Icons.Default.Delete,
+                enabled = canManageKeys && !state.customSourceSecretOperationInFlight,
+                onClick = { showDeleteCustomSourceSecretConfirm = true }
+            )
+        }
+        if (state.customSourceSecretOperationInFlight) {
+            AbkInlineLoadingPill(
+                text = stringResource(R.string.settings_custom_source_secret_operation),
+                modifier = Modifier.fillMaxWidth(),
+                compact = false
+            )
+        }
         if (state.artifactSigningOperationInFlight) {
             AbkInlineLoadingPill(
                 text = stringResource(R.string.settings_security_operation_running),
@@ -1372,6 +1409,65 @@ private fun SecuritySettingsGroup(
             onConfirm = {
                 showResetConfirm = false
                 vm.resetArtifactSigningKeys()
+            }
+        )
+    }
+
+    if (showCustomSourceSecretDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!state.customSourceSecretOperationInFlight) showCustomSourceSecretDialog = false
+            },
+            icon = { Icon(Icons.Default.Password, contentDescription = null) },
+            title = { Text(stringResource(R.string.settings_custom_source_secret_dialog_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.settings_custom_source_secret_dialog_desc))
+                    OutlinedTextField(
+                        value = customSourcePat,
+                        onValueChange = { customSourcePat = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.build_source_pat)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.updateCustomSourceSecret(customSourcePat)
+                        customSourcePat = ""
+                        showCustomSourceSecretDialog = false
+                    },
+                    enabled = customSourcePat.isNotBlank() && !state.customSourceSecretOperationInFlight
+                ) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showCustomSourceSecretDialog = false },
+                    enabled = !state.customSourceSecretOperationInFlight
+                ) { Text(stringResource(android.R.string.cancel)) }
+            }
+        )
+    }
+
+    if (showDeleteCustomSourceSecretConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteCustomSourceSecretConfirm = false },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+            title = { Text(stringResource(R.string.settings_custom_source_secret_delete)) },
+            text = { Text(stringResource(R.string.settings_custom_source_secret_delete_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteCustomSourceSecret()
+                    showDeleteCustomSourceSecretConfirm = false
+                }) { Text(stringResource(R.string.delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteCustomSourceSecretConfirm = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
             }
         )
     }

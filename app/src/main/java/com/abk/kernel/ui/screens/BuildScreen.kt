@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -56,7 +57,10 @@ import com.abk.kernel.data.model.BuildProgress
 import com.abk.kernel.data.model.BuildStepProgress
 import com.abk.kernel.data.model.BuildStatus
 import com.abk.kernel.data.model.BUILD_TARGET_GKI
+import com.abk.kernel.data.model.BUILD_TARGET_CUSTOM_SOURCE
 import com.abk.kernel.data.model.BUILD_TARGET_ONEPLUS
+import com.abk.kernel.data.model.SOURCE_ACCESS_GITHUB_PRIVATE
+import com.abk.kernel.data.model.SOURCE_ACCESS_PUBLIC
 import com.abk.kernel.data.model.CustomExternalModule
 import com.abk.kernel.data.model.CustomExternalModuleEntryKind
 import com.abk.kernel.data.model.CustomExternalModuleStage
@@ -67,6 +71,7 @@ import com.abk.kernel.data.model.KernelSupport
 import com.abk.kernel.data.model.KernelBuildConfig
 import com.abk.kernel.data.model.KSU_BRANCH_CUSTOM
 import com.abk.kernel.data.model.KSU_BRANCH_LATEST
+import com.abk.kernel.data.model.KSU_BRANCH_STABLE
 import com.abk.kernel.data.model.KSU_VARIANT_NONE
 import com.abk.kernel.data.model.KSU_VARIANT_RESUKISU
 import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
@@ -130,6 +135,7 @@ fun BuildScreen(
     val rawConfig = state.buildConfig
     val config = remember(rawConfig) { KernelSupport.normalize(rawConfig) }
     val isOnePlusBuild = config.buildTarget == BUILD_TARGET_ONEPLUS
+    val isCustomSourceBuild = config.buildTarget == BUILD_TARGET_CUSTOM_SOURCE
     val recommended = state.recommendedBuildConfig
     val motionScheme = MaterialTheme.motionScheme
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -158,6 +164,10 @@ fun BuildScreen(
         buildTimePreview(context, config.buildTime)
     }
     var showConfirmDialog by remember { mutableStateOf(false) }
+    var showDeviceTokenRiskDialog by remember { mutableStateOf(false) }
+    var customSourcePat by remember { mutableStateOf("") }
+    var useDeviceFlowSourceToken by remember { mutableStateOf(false) }
+    var sourceCredentialAdvanced by rememberSaveable { mutableStateOf(false) }
     var showBuildSubmittedDialog by rememberSaveable { mutableStateOf(false) }
     var showSavePlanDialog by remember { mutableStateOf(false) }
     var showImportPlanDialog by remember { mutableStateOf(false) }
@@ -181,6 +191,7 @@ fun BuildScreen(
     var showClearKernelOptionsDialog by remember { mutableStateOf(false) }
     var clearAllKernelOptions by rememberSaveable { mutableStateOf(false) }
     var sharePlanTarget by remember { mutableStateOf<BuildPlan?>(null) }
+    var pendingPrivatePlanShare by remember { mutableStateOf<Pair<BuildPlan, BuildPlanShareScope>?>(null) }
     var renamePlanTarget by remember { mutableStateOf<BuildPlan?>(null) }
     var renamePlanName by remember { mutableStateOf("") }
     var deletePlanTarget by remember { mutableStateOf<BuildPlan?>(null) }
@@ -258,6 +269,12 @@ fun BuildScreen(
 
     LaunchedEffect(config, rawConfig) {
         if (config != rawConfig) vm.updateBuildConfig(config)
+    }
+
+    LaunchedEffect(isCustomSourceBuild, config.sourceAccessMode, state.isLoggedIn, state.forkRepo?.id) {
+        if (isCustomSourceBuild && config.sourceAccessMode == SOURCE_ACCESS_GITHUB_PRIVATE) {
+            vm.refreshCustomSourceSecretStatus()
+        }
     }
 
     fun closeChildPage() {
@@ -397,7 +414,61 @@ fun BuildScreen(
                 val disabledLabel = stringResource(R.string.build_feature_disabled)
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(stringResource(R.string.build_config_overview), fontWeight = FontWeight.SemiBold)
-                    if (isOnePlusBuild) {
+                    if (isCustomSourceBuild) {
+                        Text(stringResource(R.string.build_source_manifest_notice))
+                        Text(stringResource(R.string.build_source_repo_line, config.sourceUrl))
+                        Text(stringResource(R.string.build_source_ref_line, config.sourceRef))
+                        Text(stringResource(R.string.build_source_patch_line, config.osPatchLevel))
+                        config.sourceDeviceLabel.takeIf { it.isNotBlank() }?.let {
+                            Text(stringResource(R.string.build_source_device_line, it))
+                        }
+                        Text(stringResource(R.string.build_source_defconfig_line, config.sourceDefconfigs.joinToString(" -> ")))
+                        if (config.sourceAccessMode == SOURCE_ACCESS_GITHUB_PRIVATE) {
+                            HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                            Text(stringResource(R.string.build_source_private_credential_title), fontWeight = FontWeight.SemiBold)
+                            Text(
+                                stringResource(
+                                    if (state.customSourceSecretConfigured) {
+                                        R.string.build_source_secret_reuse_desc
+                                    } else {
+                                        R.string.build_source_secret_required_desc
+                                    }
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedTextField(
+                                value = customSourcePat,
+                                onValueChange = { customSourcePat = it; useDeviceFlowSourceToken = false },
+                                label = { Text(stringResource(R.string.build_source_pat)) },
+                                placeholder = { Text("github_pat_...") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            TextButton(onClick = { sourceCredentialAdvanced = !sourceCredentialAdvanced }) {
+                                Icon(Icons.Default.AdminPanelSettings, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.build_source_credential_advanced))
+                            }
+                            AnimatedVisibility(sourceCredentialAdvanced) {
+                                Column {
+                                    SwitchRow(
+                                        stringResource(R.string.build_source_use_device_token),
+                                        useDeviceFlowSourceToken
+                                    ) {
+                                        useDeviceFlowSourceToken = it
+                                        if (it) customSourcePat = ""
+                                    }
+                                    Text(
+                                        stringResource(R.string.build_source_device_token_risk),
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    } else if (isOnePlusBuild) {
                         Text(stringResource(R.string.build_target_line, buildTargetLabel(config.buildTarget)))
                         Text(stringResource(R.string.build_oneplus_device_line, KernelSupport.onePlusDeviceLabel(config.onePlusDeviceManifest)))
                         Text(stringResource(R.string.build_oneplus_kernel_line, config.androidVersion, config.kernelVersion))
@@ -488,14 +559,54 @@ fun BuildScreen(
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    showConfirmDialog = false
-                    vm.dispatchBuild(config)
-                    showBuildSubmittedDialog = true
-                }) { Text(stringResource(R.string.confirm)) }
+                Button(
+                    onClick = {
+                        if (isCustomSourceBuild &&
+                            config.sourceAccessMode == SOURCE_ACCESS_GITHUB_PRIVATE &&
+                            useDeviceFlowSourceToken
+                        ) {
+                            showDeviceTokenRiskDialog = true
+                        } else {
+                            showConfirmDialog = false
+                            vm.dispatchBuild(config, customSourcePat = customSourcePat)
+                            customSourcePat = ""
+                            showBuildSubmittedDialog = true
+                        }
+                    },
+                    enabled = !isCustomSourceBuild ||
+                        config.sourceAccessMode != SOURCE_ACCESS_GITHUB_PRIVATE ||
+                        state.customSourceSecretConfigured ||
+                        customSourcePat.isNotBlank() ||
+                        useDeviceFlowSourceToken
+                ) { Text(stringResource(R.string.confirm)) }
             },
             dismissButton = {
                 TextButton(onClick = { showConfirmDialog = false }) { Text(stringResource(R.string.cancel)) }
+            }
+        )
+    }
+
+    if (showDeviceTokenRiskDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeviceTokenRiskDialog = false },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text(stringResource(R.string.build_source_device_token_confirm_title)) },
+            text = { Text(stringResource(R.string.build_source_device_token_confirm_desc)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeviceTokenRiskDialog = false
+                        showConfirmDialog = false
+                        vm.dispatchBuild(config, useDeviceFlowToken = true)
+                        showBuildSubmittedDialog = true
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text(stringResource(R.string.confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeviceTokenRiskDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
             }
         )
     }
@@ -625,13 +736,46 @@ fun BuildScreen(
             plan = plan,
             onDismiss = { sharePlanTarget = null },
             onShare = { scope ->
-                copyTextToClipboard(
-                    context = context,
-                    label = context.getString(R.string.build_plan_clipboard_label),
-                    text = vm.shareBuildPlanCode(plan.config, plan.name, scope)
-                )
-                sharePlanTarget = null
-                Toast.makeText(context, context.getString(R.string.build_plan_code_copied), Toast.LENGTH_SHORT).show()
+                if (scope == BuildPlanShareScope.FULL &&
+                    plan.config.buildTarget == BUILD_TARGET_CUSTOM_SOURCE &&
+                    plan.config.sourceAccessMode == SOURCE_ACCESS_GITHUB_PRIVATE
+                ) {
+                    pendingPrivatePlanShare = plan to scope
+                    sharePlanTarget = null
+                } else {
+                    copyTextToClipboard(
+                        context = context,
+                        label = context.getString(R.string.build_plan_clipboard_label),
+                        text = vm.shareBuildPlanCode(plan.config, plan.name, scope)
+                    )
+                    sharePlanTarget = null
+                    Toast.makeText(context, context.getString(R.string.build_plan_code_copied), Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+    }
+
+    pendingPrivatePlanShare?.let { (plan, scope) ->
+        AlertDialog(
+            onDismissRequest = { pendingPrivatePlanShare = null },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text(stringResource(R.string.build_source_private_plan_share_title)) },
+            text = { Text(stringResource(R.string.build_source_private_plan_share_desc, plan.config.sourceUrl)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    copyTextToClipboard(
+                        context = context,
+                        label = context.getString(R.string.build_plan_clipboard_label),
+                        text = vm.shareBuildPlanCode(plan.config, plan.name, scope)
+                    )
+                    pendingPrivatePlanShare = null
+                    Toast.makeText(context, context.getString(R.string.build_plan_code_copied), Toast.LENGTH_SHORT).show()
+                }) { Text(stringResource(R.string.confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingPrivatePlanShare = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
             }
         )
     }
@@ -1182,6 +1326,29 @@ fun BuildScreen(
                             onePlusUseProxyOptimization = true,
                             onePlusUseUnicodeBypass = false
                         )
+                    } else if (target == BUILD_TARGET_CUSTOM_SOURCE) {
+                        config.copy(
+                            buildTarget = BUILD_TARGET_CUSTOM_SOURCE,
+                            kernelsuVariant = KSU_VARIANT_NONE,
+                            kernelsuBranch = KSU_BRANCH_STABLE,
+                            sourceUrl = config.sourceUrl,
+                            sourceRef = config.sourceRef,
+                            sourceAccessMode = SOURCE_ACCESS_PUBLIC,
+                            sourceDefconfigs = config.sourceDefconfigs.ifEmpty { listOf("gki_defconfig") },
+                            sourceDeviceLabel = config.sourceDeviceLabel,
+                            useZram = false,
+                            useBbg = false,
+                            useDdk = false,
+                            useNtsync = false,
+                            useNetworking = false,
+                            useKpm = false,
+                            useRekernel = false,
+                            cancelSusfs = true,
+                            virtualizationSupport = "off",
+                            useCustomExternalModules = false,
+                            customExternalModules = emptyList(),
+                            customKernelOptions = emptyList()
+                        )
                     } else {
                         config.copy(
                             buildTarget = BUILD_TARGET_GKI,
@@ -1244,7 +1411,71 @@ fun BuildScreen(
             }
 
             SectionCard(section = BuildSection.KernelVersion) {
-                if (isOnePlusBuild) {
+                if (isCustomSourceBuild) {
+                    OutlinedTextField(
+                        value = config.sourceUrl,
+                        onValueChange = { vm.updateBuildConfig(config.copy(sourceUrl = it)) },
+                        label = { Text(stringResource(R.string.build_source_repo_url)) },
+                        placeholder = { Text("https://github.com/LineageOS/android_kernel_xxx.git") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = config.sourceRef,
+                        onValueChange = { vm.updateBuildConfig(config.copy(sourceRef = it)) },
+                        label = { Text(stringResource(R.string.build_source_ref)) },
+                        placeholder = { Text("lineage-23.2 或 40 位 commit SHA") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    val publicSourceLabel = stringResource(R.string.build_source_public)
+                    val privateSourceLabel = stringResource(R.string.build_source_private)
+                    DropdownField(
+                        label = stringResource(R.string.build_source_access),
+                        value = config.sourceAccessMode,
+                        options = listOf(SOURCE_ACCESS_PUBLIC, SOURCE_ACCESS_GITHUB_PRIVATE),
+                        optionLabel = { mode ->
+                            if (mode == SOURCE_ACCESS_GITHUB_PRIVATE) {
+                                privateSourceLabel
+                            } else {
+                                publicSourceLabel
+                            }
+                        },
+                        onSelect = { vm.updateBuildConfig(config.copy(sourceAccessMode = it)) }
+                    )
+                    OutlinedTextField(
+                        value = config.osPatchLevel,
+                        onValueChange = { vm.updateBuildConfig(config.copy(osPatchLevel = it)) },
+                        label = { Text(stringResource(R.string.build_source_patch_month)) },
+                        placeholder = { Text("2025-09") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = config.sourceDeviceLabel,
+                        onValueChange = { vm.updateBuildConfig(config.copy(sourceDeviceLabel = it)) },
+                        label = { Text(stringResource(R.string.build_source_device_label)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    CustomSourceDefconfigEditor(
+                        values = config.sourceDefconfigs,
+                        onValuesChange = { vm.updateBuildConfig(config.copy(sourceDefconfigs = it)) }
+                    )
+                    if (config.sourceAccessMode == SOURCE_ACCESS_GITHUB_PRIVATE) {
+                        Text(
+                            text = stringResource(
+                                if (state.customSourceSecretConfigured) {
+                                    R.string.build_source_secret_exists
+                                } else {
+                                    R.string.build_source_secret_missing
+                                }
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                } else if (isOnePlusBuild) {
                     DropdownField(
                         label = stringResource(R.string.build_oneplus_device_manifest),
                         value = config.onePlusDeviceManifest,
@@ -1818,8 +2049,15 @@ fun BuildScreen(
 
             // Submit button
             Button(
-                onClick = { showConfirmDialog = true },
-                enabled = true,
+                onClick = {
+                    val validationError = KernelSupport.validateCustomSource(config)
+                    if (validationError != null) {
+                        Toast.makeText(context, validationError, Toast.LENGTH_LONG).show()
+                    } else {
+                        showConfirmDialog = true
+                    }
+                },
+                enabled = !state.customSourceSecretOperationInFlight,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
                 Icon(Icons.Default.RocketLaunch, null)
@@ -3027,6 +3265,10 @@ private fun BuildTargetSelector(
             label = buildTargetLabel(BUILD_TARGET_GKI)
         ),
         AbkSegmentedButtonOption(
+            value = BUILD_TARGET_CUSTOM_SOURCE,
+            label = buildTargetLabel(BUILD_TARGET_CUSTOM_SOURCE)
+        ),
+        AbkSegmentedButtonOption(
             value = BUILD_TARGET_ONEPLUS,
             label = buildTargetLabel(BUILD_TARGET_ONEPLUS)
         )
@@ -3046,7 +3288,73 @@ private fun BuildTargetSelector(
 }
 
 @Composable
+private fun CustomSourceDefconfigEditor(
+    values: List<String>,
+    onValuesChange: (List<String>) -> Unit,
+) {
+    var draft by remember { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.build_source_defconfigs), fontWeight = FontWeight.SemiBold)
+        values.forEachIndexed { index, value ->
+            ExpressiveListItem(
+                title = "${index + 1}. $value",
+                subtitle = stringResource(R.string.build_source_defconfig_base_hint),
+                leadingIcon = Icons.Default.Tune,
+                trailingContent = {
+                    Row {
+                        IconButton(
+                            onClick = {
+                                if (index > 0) {
+                                    val next = values.toMutableList()
+                                    next[index] = next[index - 1].also { next[index - 1] = next[index] }
+                                    onValuesChange(next)
+                                }
+                            },
+                            enabled = index > 0
+                        ) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.build_source_move_up)) }
+                        IconButton(
+                            onClick = {
+                                if (index < values.lastIndex) {
+                                    val next = values.toMutableList()
+                                    next[index] = next[index + 1].also { next[index + 1] = next[index] }
+                                    onValuesChange(next)
+                                }
+                            },
+                            enabled = index < values.lastIndex
+                        ) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.build_source_move_down)) }
+                        IconButton(
+                            onClick = { onValuesChange(values.filterIndexed { itemIndex, _ -> itemIndex != index }) },
+                            enabled = values.size > 1
+                        ) { Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete)) }
+                    }
+                }
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                label = { Text(stringResource(R.string.build_source_add_defconfig)) },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
+            IconButton(
+                onClick = {
+                    val item = draft.trim()
+                    if (item.isNotBlank()) {
+                        onValuesChange(values + item)
+                        draft = ""
+                    }
+                },
+                enabled = draft.isNotBlank()
+            ) { Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add)) }
+        }
+    }
+}
+
+@Composable
 private fun buildTargetLabel(target: String): String = when (target) {
+    BUILD_TARGET_CUSTOM_SOURCE -> stringResource(R.string.build_target_custom_source)
     BUILD_TARGET_ONEPLUS -> stringResource(R.string.build_target_oneplus)
     else -> stringResource(R.string.build_target_gki)
 }
@@ -3058,6 +3366,13 @@ private fun copyTextToClipboard(context: Context, label: String, text: String) {
 
 @Composable
 private fun buildPlanSummary(config: KernelBuildConfig): String {
+    if (config.buildTarget == BUILD_TARGET_CUSTOM_SOURCE) {
+        val sourceName = config.sourceUrl.substringAfterLast('/').removeSuffix(".git").ifBlank {
+            stringResource(R.string.build_target_custom_source)
+        }
+        return "${buildTargetLabel(config.buildTarget)} · $sourceName · ${config.sourceRef}\n" +
+            "${config.osPatchLevel} · ${config.sourceDefconfigs.joinToString(" -> ")} · ${ksuVariantDisplayName(config.kernelsuVariant)}"
+    }
     if (config.buildTarget == BUILD_TARGET_ONEPLUS) {
         val enabled = mutableListOf<String>()
         if (!config.cancelSusfs) enabled += "SUSFS"
@@ -3109,6 +3424,37 @@ private fun BuildPlanHero(
     recommended: KernelBuildConfig?,
     status: BuildStatus
 ) {
+    if (config.buildTarget == BUILD_TARGET_CUSTOM_SOURCE) {
+        ExpressiveHeroCard(
+            title = config.sourceDeviceLabel.ifBlank {
+                config.sourceUrl.substringAfterLast('/').removeSuffix(".git").ifBlank {
+                    stringResource(R.string.build_target_custom_source)
+                }
+            },
+            subtitle = stringResource(R.string.build_source_hero_desc),
+            icon = Icons.Default.Source,
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            badge = {
+                ExpressiveStatusChip(
+                    label = config.sourceRef.ifBlank { stringResource(R.string.build_source_ref) },
+                    icon = Icons.Default.Commit,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+                ExpressiveStatusChip(
+                    label = config.osPatchLevel,
+                    icon = Icons.Default.CalendarMonth,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                ExpressiveStatusChip(
+                    label = buildStatusLabel(status),
+                    icon = Icons.Default.RunCircle,
+                    color = buildStatusColor(status)
+                )
+            }
+        )
+        return
+    }
     if (config.buildTarget == BUILD_TARGET_ONEPLUS) {
         ExpressiveHeroCard(
             title = KernelSupport.onePlusDeviceLabel(config.onePlusDeviceManifest),

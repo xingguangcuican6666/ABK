@@ -1,0 +1,279 @@
+name: Android 内核构建-类 LineageOS 源码
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_repo:
+        description: "HTTPS Git 源码仓库（源码必须位于仓库根目录）"
+        required: true
+        type: string
+      source_ref:
+        description: "源码 branch、tag、refs/... 或完整 40 位 commit SHA"
+        required: true
+        type: string
+      source_private:
+        description: "GitHub 私有仓库（需配置 ABK_CUSTOM_SOURCE_GITHUB_TOKEN）"
+        required: true
+        type: boolean
+        default: false
+      defconfigs:
+        description: "相对于 arch/arm64/configs 的配置文件，每行一个，必须包含 gki_defconfig"
+        required: true
+        type: string
+        default: |-
+          gki_defconfig
+      device_label:
+        description: "设备名称或代号（仅写入产物 manifest）"
+        required: false
+        type: string
+        default: ""
+      os_patch_level:
+        description: "AOSP 工具链/manifest 补丁月份（YYYY-MM）"
+        required: true
+        type: string
+        default: "2025-09"
+      kernelsu_variant:
+        description: "KernelSU 变体"
+        required: true
+        type: choice
+        options: [None, Official, SukiSU, ReSukiSU]
+        default: None
+      kernelsu_branch:
+        description: "KernelSU 分支"
+        required: true
+        type: choice
+        options: ["Stable(标准)", "Dev(开发)", "Latest(最新)", "Custom(自定义)"]
+        default: "Stable(标准)"
+      custom_ref:
+        description: "KernelSU 自定义 ref"
+        required: false
+        type: string
+        default: ""
+      version:
+        description: "自定义内核版本后缀"
+        required: false
+        type: string
+        default: ""
+      build_time:
+        description: "自定义构建时间（N 或留空表示当前 UTC）"
+        required: false
+        type: string
+        default: "N"
+      virtualization_support:
+        description: "虚拟化支持"
+        required: true
+        type: choice
+        options: ["off", "on", "678", "123", "345"]
+        default: "off"
+      use_zram:
+        description: "启用 ZRAM 增强"
+        required: true
+        type: boolean
+        default: false
+      use_bbg:
+        description: "启用 BBG 防格机"
+        required: true
+        type: boolean
+        default: false
+      use_ddk:
+        description: "启用 DDK 防格机 LSM"
+        required: true
+        type: boolean
+        default: false
+      use_ntsync:
+        description: "启用 NTsync"
+        required: true
+        type: boolean
+        default: false
+      use_networking:
+        description: "启用网络增强"
+        required: true
+        type: boolean
+        default: false
+      use_kpm:
+        description: "启用 KPM"
+        required: true
+        type: boolean
+        default: false
+      use_rekernel:
+        description: "启用 Re-Kernel"
+        required: true
+        type: boolean
+        default: false
+      cancel_susfs:
+        description: "禁用 SUSFS"
+        required: true
+        type: boolean
+        default: true
+      zram_full_algo:
+        description: "启用完整 ZRAM 算法支持"
+        required: true
+        type: boolean
+        default: false
+      zram_extra_algos:
+        description: "额外 ZRAM 算法（逗号分隔）"
+        required: false
+        type: string
+        default: ""
+      kpm_password:
+        description: "KPM 超级密码"
+        required: false
+        type: string
+        default: ""
+      custom_external_modules:
+        description: "自定义外部模块配置（失败将终止构建）"
+        required: false
+        type: string
+        default: ""
+      custom_kernel_options:
+        description: "自定义 Kconfig（失败将终止构建）"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  preflight:
+    name: 预检类 LineageOS 源码
+    runs-on: ubuntu-latest
+    outputs:
+      source_url: ${{ steps.inspect.outputs.source_url }}
+      source_ref: ${{ steps.inspect.outputs.source_ref }}
+      source_commit: ${{ steps.inspect.outputs.source_commit }}
+      android_version: ${{ steps.inspect.outputs.android_version }}
+      kernel_version: ${{ steps.inspect.outputs.kernel_version }}
+      sub_level: ${{ steps.inspect.outputs.sub_level }}
+      full_kernel_version: ${{ steps.inspect.outputs.full_kernel_version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: 解析并验证源码
+        id: inspect
+        env:
+          SOURCE_TOKEN: ${{ secrets.ABK_CUSTOM_SOURCE_GITHUB_TOKEN }}
+          SOURCE_REPO: ${{ inputs.source_repo }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          SOURCE_PRIVATE: ${{ inputs.source_private }}
+          SOURCE_DEFCONFIGS: ${{ inputs.defconfigs }}
+          SOURCE_DEVICE_LABEL: ${{ inputs.device_label }}
+          OS_PATCH_LEVEL: ${{ inputs.os_patch_level }}
+        run: |
+          set -euo pipefail
+
+          access=public
+          if [ "$SOURCE_PRIVATE" = "true" ]; then
+            access=github_private
+            if [ -z "$SOURCE_TOKEN" ]; then
+              echo "::error::私仓源码需要 fork Secret ABK_CUSTOM_SOURCE_GITHUB_TOKEN。请返回 ABK App 的源码凭据设置后重试。"
+              exit 1
+            fi
+            auth_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$SOURCE_TOKEN" | base64 -w0)"
+            git config --global http.https://github.com/.extraheader "$auth_header"
+          fi
+
+          normalized_url="$(python3 .github/scripts/custom-source.py normalize-url --source-url "$SOURCE_REPO" --access "$access")"
+          source_ref="$(printf '%s' "$SOURCE_REF" | tr -d '\r\n')"
+          [ -n "$source_ref" ] || { echo "::error::源码 ref 不能为空"; exit 1; }
+
+          source_dir="$RUNNER_TEMP/custom-source"
+          git init "$source_dir"
+          git -C "$source_dir" remote add origin "$normalized_url"
+
+          resolve_named_ref() {
+            local ref="$1"
+            local -a candidates=()
+            local sha remote_ref
+            while IFS=$'\t' read -r sha remote_ref; do
+              [ -n "$sha" ] || continue
+              case "$remote_ref" in
+                refs/tags/*'^{}') continue ;;
+              esac
+              candidates+=("$remote_ref")
+            done < <(git ls-remote origin "$ref" "refs/heads/$ref" "refs/tags/$ref")
+            mapfile -t candidates < <(printf '%s\n' "${candidates[@]}" | sed '/^$/d' | sort -u)
+            if [ "${#candidates[@]}" -eq 0 ]; then
+              echo "::error::找不到源码 ref: $ref" >&2
+              return 1
+            fi
+            if [ "${#candidates[@]}" -gt 1 ]; then
+              echo "::error::源码 branch/tag 同名或 ref 有歧义，请填写完整 refs/heads/...、refs/tags/... 或 commit SHA: $ref" >&2
+              printf '  %s\n' "${candidates[@]}" >&2
+              return 1
+            fi
+            printf '%s' "${candidates[0]}"
+          }
+
+          if [[ "$source_ref" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            fetch_ref="$source_ref"
+          else
+            fetch_ref="$(resolve_named_ref "$source_ref")"
+          fi
+          git -C "$source_dir" fetch --depth=1 origin "$fetch_ref"
+          resolved_commit="$(git -C "$source_dir" rev-parse 'FETCH_HEAD^{commit}')"
+          git -C "$source_dir" checkout --detach "$resolved_commit"
+
+          python3 .github/scripts/custom-source.py inspect \
+            --source-dir "$source_dir" \
+            --source-url "$normalized_url" \
+            --source-ref "$source_ref" \
+            --resolved-commit "$resolved_commit" \
+            --access "$access" \
+            --os-patch-level "$OS_PATCH_LEVEL" \
+            --defconfigs "$SOURCE_DEFCONFIGS" \
+            --device-label "$SOURCE_DEVICE_LABEL" \
+            --github-output "$GITHUB_OUTPUT"
+
+          android_version="$(grep '^android_version=' "$GITHUB_OUTPUT" | tail -n1 | cut -d= -f2-)"
+          kernel_version="$(grep '^kernel_version=' "$GITHUB_OUTPUT" | tail -n1 | cut -d= -f2-)"
+          manifest_ref="common-${android_version}-${kernel_version}-${OS_PATCH_LEVEL}"
+          if ! git ls-remote --exit-code --heads https://android.googlesource.com/kernel/manifest "refs/heads/$manifest_ref" >/dev/null; then
+            echo "::error::AOSP manifest 不存在精确分支 $manifest_ref；不会自动改用其他月份。"
+            exit 1
+          fi
+
+          git config --global --unset-all http.https://github.com/.extraheader || true
+
+  build:
+    name: "${{ needs.preflight.outputs.full_kernel_version }}-${{ inputs.device_label || 'custom-source' }}"
+    needs: preflight
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      source_mode: custom_git
+      source_repo: ${{ needs.preflight.outputs.source_url }}
+      source_ref: ${{ needs.preflight.outputs.source_ref }}
+      source_private: ${{ inputs.source_private }}
+      source_commit: ${{ needs.preflight.outputs.source_commit }}
+      source_defconfigs: ${{ inputs.defconfigs }}
+      source_device_label: ${{ inputs.device_label }}
+      source_kernel_version: ${{ needs.preflight.outputs.kernel_version }}
+      source_full_kernel_version: ${{ needs.preflight.outputs.full_kernel_version }}
+      source_android_version: ${{ needs.preflight.outputs.android_version }}
+      android_version: ${{ needs.preflight.outputs.android_version }}
+      kernel_version: ${{ needs.preflight.outputs.kernel_version }}
+      sub_level: ${{ needs.preflight.outputs.sub_level }}
+      os_patch_level: ${{ inputs.os_patch_level }}
+      revision: ""
+      ksu_variant: ${{ inputs.kernelsu_variant }}
+      ksu_branch: ${{ inputs.kernelsu_branch }}
+      custom_ref: ${{ inputs.custom_ref }}
+      version: ${{ inputs.version }}
+      build_time: ${{ inputs.build_time }}
+      virtualization_support: ${{ inputs.virtualization_support }}
+      use_zram: ${{ inputs.use_zram }}
+      use_bbg: ${{ inputs.use_bbg }}
+      use_ddk: ${{ inputs.use_ddk }}
+      use_ntsync: ${{ inputs.use_ntsync }}
+      use_networking: ${{ inputs.use_networking }}
+      use_kpm: ${{ inputs.use_kpm }}
+      use_rekernel: ${{ inputs.use_rekernel }}
+      enable_susfs: ${{ !inputs.cancel_susfs && inputs.kernelsu_variant != 'None' }}
+      supp_op: false
+      zram_full_algo: ${{ inputs.zram_full_algo }}
+      zram_extra_algos: ${{ inputs.zram_extra_algos }}
+      kpm_password: ${{ inputs.kpm_password }}
+      custom_external_modules: ${{ inputs.custom_external_modules }}
+      custom_kernel_options: ${{ inputs.custom_kernel_options }}
