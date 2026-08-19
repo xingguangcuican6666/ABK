@@ -24,6 +24,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -174,6 +175,7 @@ fun BuildScreen(
     var showPlanLibraryPage by rememberSaveable { mutableStateOf(false) }
     var showBuildQueuePage by rememberSaveable { mutableStateOf(false) }
     var showKernelOptionsPage by rememberSaveable { mutableStateOf(false) }
+    var showDefconfigEditorPage by rememberSaveable { mutableStateOf(false) }
     var planToolsExpanded by rememberSaveable { mutableStateOf(false) }
     var savePlanName by remember { mutableStateOf("") }
     var importPlanCode by remember { mutableStateOf("") }
@@ -252,7 +254,7 @@ fun BuildScreen(
     val canToggleKernelOptionClearAll = kernelOptionSearchQuery.isNotBlank() &&
         filteredKernelOptions.size != config.customKernelOptions.size
     val clearAllKernelOptionsTarget = !canToggleKernelOptionClearAll || clearAllKernelOptions
-    val childPageVisible = showPlanLibraryPage || showBuildQueuePage || showKernelOptionsPage
+    val childPageVisible = showPlanLibraryPage || showBuildQueuePage || showKernelOptionsPage || showDefconfigEditorPage
     val childPageTransition = rememberChildPageOverlayTransition(
         visible = childPageVisible,
         label = "build-child-page"
@@ -281,6 +283,7 @@ fun BuildScreen(
         showPlanLibraryPage = false
         showBuildQueuePage = false
         showKernelOptionsPage = false
+        showDefconfigEditorPage = false
         kernelOptionSearchQuery = ""
         showKernelOptionActionMenu = false
         showClearKernelOptionsDialog = false
@@ -296,6 +299,8 @@ fun BuildScreen(
     fun openPlanLibraryPage() {
         childPageBack.resetProgress()
         showBuildQueuePage = false
+        showKernelOptionsPage = false
+        showDefconfigEditorPage = false
         showPlanLibraryPage = true
     }
 
@@ -303,6 +308,7 @@ fun BuildScreen(
         childPageBack.resetProgress()
         showPlanLibraryPage = false
         showKernelOptionsPage = false
+        showDefconfigEditorPage = false
         kernelOptionSearchQuery = ""
         showBuildQueuePage = true
     }
@@ -311,8 +317,17 @@ fun BuildScreen(
         childPageBack.resetProgress()
         showPlanLibraryPage = false
         showBuildQueuePage = false
+        showDefconfigEditorPage = false
         kernelOptionSearchQuery = ""
         showKernelOptionsPage = true
+    }
+
+    fun openDefconfigEditorPage() {
+        childPageBack.resetProgress()
+        showPlanLibraryPage = false
+        showBuildQueuePage = false
+        showKernelOptionsPage = false
+        showDefconfigEditorPage = true
     }
 
     LaunchedEffect(isOnePlusBuild, showKernelOptionsPage) {
@@ -1458,9 +1473,19 @@ fun BuildScreen(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
-                    CustomSourceDefconfigEditor(
-                        values = config.sourceDefconfigs,
-                        onValuesChange = { vm.updateBuildConfig(config.copy(sourceDefconfigs = it)) }
+                    ExpressiveListItem(
+                        title = stringResource(R.string.build_source_defconfigs),
+                        subtitle = config.sourceDefconfigs.joinToString(" -> ")
+                            .ifBlank { stringResource(R.string.build_source_defconfig_base_hint) },
+                        leadingIcon = Icons.Default.Tune,
+                        trailingContent = {
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        onClick = ::openDefconfigEditorPage
                     )
                     if (config.sourceAccessMode == SOURCE_ACCESS_GITHUB_PRIVATE) {
                         Text(
@@ -2111,6 +2136,7 @@ fun BuildScreen(
                             title = when {
                                 showBuildQueuePage -> stringResource(R.string.build_queue_title)
                                 showKernelOptionsPage -> stringResource(R.string.build_kernel_options_title)
+                                showDefconfigEditorPage -> stringResource(R.string.build_source_defconfigs)
                                 else -> stringResource(R.string.build_plan_library)
                             },
                             navigationIcon = {
@@ -2201,6 +2227,14 @@ fun BuildScreen(
                             },
                             onDeleteOption = vm::removeCustomKernelOption,
                             bottomPadding = outerPadding.calculateBottomPadding()
+                        )
+                    } else if (showDefconfigEditorPage) {
+                        BuildDefconfigEditorPage(
+                            topBarHeight = topBarHeight,
+                            values = config.sourceDefconfigs,
+                            onValuesChange = { vm.updateBuildConfig(config.copy(sourceDefconfigs = it)) },
+                            bottomPadding = outerPadding.calculateBottomPadding(),
+                            modifier = Modifier.fillMaxSize()
                         )
                     } else {
                         BuildPlanLibraryPage(
@@ -3288,66 +3322,105 @@ private fun BuildTargetSelector(
 }
 
 @Composable
-private fun CustomSourceDefconfigEditor(
+private fun BuildDefconfigEditorPage(
+    topBarHeight: Dp,
     values: List<String>,
     onValuesChange: (List<String>) -> Unit,
+    bottomPadding: Dp,
+    modifier: Modifier = Modifier
 ) {
     var draft by remember { mutableStateOf("") }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.build_source_defconfigs), fontWeight = FontWeight.SemiBold)
-        values.forEachIndexed { index, value ->
-            ExpressiveListItem(
-                title = "${index + 1}. $value",
-                subtitle = stringResource(R.string.build_source_defconfig_base_hint),
-                leadingIcon = Icons.Default.Tune,
-                trailingContent = {
-                    Row {
-                        IconButton(
-                            onClick = {
-                                if (index > 0) {
-                                    val next = values.toMutableList()
-                                    next[index] = next[index - 1].also { next[index - 1] = next[index] }
-                                    onValuesChange(next)
-                                }
-                            },
-                            enabled = index > 0
-                        ) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.build_source_move_up)) }
-                        IconButton(
-                            onClick = {
-                                if (index < values.lastIndex) {
-                                    val next = values.toMutableList()
-                                    next[index] = next[index + 1].also { next[index + 1] = next[index] }
-                                    onValuesChange(next)
-                                }
-                            },
-                            enabled = index < values.lastIndex
-                        ) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.build_source_move_down)) }
-                        IconButton(
-                            onClick = { onValuesChange(values.filterIndexed { itemIndex, _ -> itemIndex != index }) },
-                            enabled = values.size > 1
-                        ) { Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete)) }
-                    }
-                }
+    LazyColumn(
+        modifier = modifier.padding(horizontal = AbkScreenHorizontalPadding),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(top = topBarHeight + 16.dp, bottom = bottomPadding + 24.dp)
+    ) {
+        item(key = "hint") {
+            Text(
+                text = stringResource(R.string.build_source_defconfig_base_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = { draft = it },
-                label = { Text(stringResource(R.string.build_source_add_defconfig)) },
-                modifier = Modifier.weight(1f),
-                singleLine = true
-            )
-            IconButton(
-                onClick = {
-                    val item = draft.trim()
-                    if (item.isNotBlank()) {
-                        onValuesChange(values + item)
-                        draft = ""
+        if (values.isEmpty()) {
+            item(key = "empty") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = stringResource(R.string.build_source_defconfig_empty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            itemsIndexed(
+                items = values,
+                key = { index, value -> "$index:$value" }
+            ) { index, value ->
+                ExpressiveListItem(
+                    title = "${index + 1}. $value",
+                    subtitle = stringResource(R.string.build_source_defconfig_base_hint),
+                    leadingIcon = Icons.Default.Tune,
+                    trailingContent = {
+                        Row {
+                            IconButton(
+                                onClick = {
+                                    if (index > 0) {
+                                        val next = values.toMutableList()
+                                        next[index] = next[index - 1].also { next[index - 1] = next[index] }
+                                        onValuesChange(next)
+                                    }
+                                },
+                                enabled = index > 0
+                            ) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.build_source_move_up)) }
+                            IconButton(
+                                onClick = {
+                                    if (index < values.lastIndex) {
+                                        val next = values.toMutableList()
+                                        next[index] = next[index + 1].also { next[index + 1] = next[index] }
+                                        onValuesChange(next)
+                                    }
+                                },
+                                enabled = index < values.lastIndex
+                            ) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.build_source_move_down)) }
+                            IconButton(
+                                onClick = { onValuesChange(values.filterIndexed { itemIndex, _ -> itemIndex != index }) },
+                                enabled = values.size > 1
+                            ) { Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete)) }
+                        }
                     }
-                },
-                enabled = draft.isNotBlank()
-            ) { Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add)) }
+                )
+            }
+        }
+        item(key = "add") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    label = { Text(stringResource(R.string.build_source_add_defconfig)) },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                IconButton(
+                    onClick = {
+                        val item = draft.trim()
+                        if (item.isNotBlank()) {
+                            onValuesChange(values + item)
+                            draft = ""
+                        }
+                    },
+                    enabled = draft.isNotBlank()
+                ) { Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add)) }
+            }
         }
     }
 }

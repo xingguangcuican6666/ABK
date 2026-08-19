@@ -1430,6 +1430,7 @@
     <string name="build_source_device_label">设备名称或代号（可选）</string>
     <string name="build_source_defconfigs">有序 defconfig 列表</string>
     <string name="build_source_defconfig_base_hint">相对于 arch/arm64/configs；后一项覆盖前一项</string>
+    <string name="build_source_defconfig_empty">暂无 defconfig，请至少添加一项</string>
     <string name="build_source_add_defconfig">添加 defconfig 路径</string>
     <string name="build_source_move_up">上移</string>
     <string name="build_source_move_down">下移</string>
