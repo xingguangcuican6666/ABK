@@ -19,7 +19,11 @@ internal fun mergeRemoteArtifacts(
 
 internal fun List<BuildArtifact>.sortedForDisplay(): List<BuildArtifact> =
     sortedWith(
-        compareByDescending<BuildArtifact> { it.runNumber }
-            .thenByDescending { it.runId }
+        // run_number is scoped to an individual workflow, so a newer LOS run
+        // such as #5 can be older-looking than an app run numbered #1395.
+        // GitHub's run id is repository-global and monotonically increasing.
+        compareByDescending<BuildArtifact> { it.runId }
+            .thenByDescending { it.runCreatedAt }
+            .thenByDescending { it.runNumber }
             .thenBy { it.name }
     )
