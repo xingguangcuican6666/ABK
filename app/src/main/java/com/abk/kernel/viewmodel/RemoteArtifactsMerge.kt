@@ -10,11 +10,21 @@ internal fun mergeRemoteArtifacts(
     existing: List<BuildArtifact>,
     incoming: List<BuildArtifact>,
 ): List<BuildArtifact> {
-    val incomingRunIds = incoming.map { it.runId }.toSet()
-    return (incoming + existing.filterNot { it.runId in incomingRunIds })
+    val incomingUnique = incoming
         .distinctBy { it.id }
         .sortedForDisplay()
         .take(MAX_PERSISTED_REMOTE_ARTIFACTS)
+    val incomingRunIds = incomingUnique.map { it.runId }.toSet()
+    val retainedExisting = existing
+        .filterNot { it.runId in incomingRunIds }
+        .distinctBy { it.id }
+        .sortedForDisplay()
+        .take((MAX_PERSISTED_REMOTE_ARTIFACTS - incomingUnique.size).coerceAtLeast(0))
+
+    // Never evict artifacts returned by the current refresh. This matters when
+    // switching repositories: an older LOS run can be newer than the user's
+    // current runs but still be the only artifact needed by the flash page.
+    return (incomingUnique + retainedExisting).sortedForDisplay()
 }
 
 internal fun List<BuildArtifact>.sortedForDisplay(): List<BuildArtifact> =
