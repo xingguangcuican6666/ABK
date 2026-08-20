@@ -353,11 +353,11 @@ fun FlashScreen(
                 }
                 val run = recentRunById[group.runId]
                 if (run.isAbkManagerFlashRun(group.runTitle)) {
-                val isActiveFlashRun = isActive &&
-                    (run?.isKernelBuild() == true || run?.isManagerBuild() == true)
                     return@filter false
                 }
                 val isActive = run?.isActive() == true
+                val isActiveFlashRun = isActive &&
+                    (run?.isKernelBuild() == true || run?.isManagerBuild() == true)
                 val isSessionGhost = group.runId in state.sessionGhostFailedRuns
                 isActiveFlashRun || isSessionGhost || group.shouldAppearInWorkflowList(run)
             }
