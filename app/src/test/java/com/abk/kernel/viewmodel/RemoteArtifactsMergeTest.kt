@@ -7,11 +7,11 @@ import org.junit.Test
 class RemoteArtifactsMergeTest {
 
     @Test
-    fun keepsNewerRunWhenItsWorkflowLocalRunNumberIsLower() {
+    fun keepsIncomingRunWhenOldRepositoryCacheIsFull() {
         val existing = (1L..240L).map { offset ->
             artifact(
                 id = offset,
-                runId = 323_000_000_00L + offset,
+                runId = 323_645_000_000L + offset,
                 runNumber = 1000 + offset.toInt(),
                 name = "old-$offset",
             )
@@ -26,9 +26,10 @@ class RemoteArtifactsMergeTest {
         val merged = mergeRemoteArtifacts(existing, listOf(lineageArtifact))
 
         assertTrue(
-            "A newer GitHub run must not be evicted because run_number is local to each workflow",
+            "Artifacts returned by the current refresh must survive an old cache",
             merged.any { it.id == lineageArtifact.id },
         )
+        assertTrue(merged.size <= 240)
     }
 
     private fun artifact(
