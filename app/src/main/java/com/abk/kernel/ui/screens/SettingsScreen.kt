@@ -889,6 +889,20 @@ private fun SettingsMainContent(
                 value = state.downloadMirrorBaseUrl,
                 onValueChange = { vm.setDownloadMirrorBaseUrl(it) }
             )
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_download_threads),
+                subtitle = stringResource(R.string.settings_download_threads_desc, state.downloadThreadCount),
+                leadingIcon = Icons.Default.Speed,
+                trailingContent = {
+                    Slider(
+                        value = state.downloadThreadCount.toFloat(),
+                        onValueChange = { vm.setDownloadThreadCount(it.toInt()) },
+                        valueRange = 1f..64f,
+                        steps = 62,
+                        modifier = Modifier.width(150.dp)
+                    )
+                }
+            )
             Spacer(Modifier.height(10.dp))
             val hasArtifacts = state.downloadedArtifacts.isNotEmpty()
             var showClearArtifactsDialog by remember { mutableStateOf(false) }

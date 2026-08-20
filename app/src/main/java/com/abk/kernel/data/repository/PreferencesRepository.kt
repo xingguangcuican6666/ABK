@@ -68,6 +68,8 @@ class PreferencesRepository(private val context: Context) {
         val KEY_PENDING_AUTO_DOWNLOAD_RUN_ID = longPreferencesKey("pending_auto_download_run_id")
         val KEY_DOWNLOAD_MIRROR_BASE_URL = stringPreferencesKey("download_mirror_base_url")
         val KEY_DOWNLOAD_DIRECTORY = stringPreferencesKey("download_directory")
+        val KEY_DOWNLOAD_THREAD_COUNT = intPreferencesKey("download_thread_count")
+        const val DEFAULT_DOWNLOAD_THREAD_COUNT = 8
         val KEY_PREBUILT_GKI_ENABLED = booleanPreferencesKey("prebuilt_gki_enabled")
         val KEY_ARTIFACT_SIGNING_VERIFICATION_ENABLED = booleanPreferencesKey("artifact_signing_verification_enabled")
         val KEY_FORK_ARTIFACT_SIGNING_PUBLIC_KEY = stringPreferencesKey("fork_artifact_signing_public_key")
@@ -134,6 +136,9 @@ class PreferencesRepository(private val context: Context) {
     val downloadMirrorBaseUrl: Flow<String> = context.dataStore.data.map { it[KEY_DOWNLOAD_MIRROR_BASE_URL] ?: "" }
     val downloadDirectory: Flow<String> = context.dataStore.data.map {
         DownloadDirectoryUtils.normalizeDirectoryPath(it[KEY_DOWNLOAD_DIRECTORY])
+    }
+    val downloadThreadCount: Flow<Int> = context.dataStore.data.map {
+        (it[KEY_DOWNLOAD_THREAD_COUNT] ?: DEFAULT_DOWNLOAD_THREAD_COUNT).coerceIn(1, 64)
     }
     val prebuiltGkiEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_PREBUILT_GKI_ENABLED] ?: true }
     val artifactSigningVerificationEnabled: Flow<Boolean> = context.dataStore.data.map {
@@ -286,6 +291,9 @@ class PreferencesRepository(private val context: Context) {
         } else {
             preferences[KEY_DOWNLOAD_DIRECTORY] = normalized
         }
+    }
+    suspend fun setDownloadThreadCount(value: Int) = context.dataStore.edit {
+        it[KEY_DOWNLOAD_THREAD_COUNT] = value.coerceIn(1, 64)
     }
     suspend fun setPrebuiltGkiEnabled(v: Boolean) = context.dataStore.edit { it[KEY_PREBUILT_GKI_ENABLED] = v }
     suspend fun setArtifactSigningVerificationEnabled(v: Boolean) = context.dataStore.edit {

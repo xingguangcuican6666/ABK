@@ -23,6 +23,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -35,6 +41,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 
 object DownloadUtils {
@@ -49,6 +56,8 @@ object DownloadUtils {
     private const val FLASH_DEPENDENCIES_FILE_NAME = "ABK_FLASH_DEPENDENCIES.json"
     private const val BUNDLE_DEPENDENCY_DIR_NAME = "magisk-dependencies"
     private const val NOTICE_STAGING_DIR_NAME = "__abk_notices"
+    const val DEFAULT_THREAD_COUNT = 8
+    private val downloadSlots = Semaphore(2)
 
     internal fun isBundledNoticeFileName(fileName: String): Boolean =
         fileName.equals(LICENSE_FILE_NAME, ignoreCase = true) ||
@@ -83,6 +92,7 @@ object DownloadUtils {
         runTitle: String,
         downloadDirectoryPath: String? = null,
         preserveDownloadedZip: Boolean = true,
+        downloadThreadCount: Int = DEFAULT_THREAD_COUNT,
     ): DownloadResult {
         return downloadDirectAsset(
             context = context,
@@ -96,7 +106,8 @@ object DownloadUtils {
             downloadDirectoryPath = downloadDirectoryPath,
             storageSubdirectory = "ABK",
             preserveDownloadedZip = preserveDownloadedZip,
-            bundleWithNotices = false
+            bundleWithNotices = false,
+            downloadThreadCount = downloadThreadCount
         )
     }
 
@@ -267,6 +278,7 @@ object DownloadUtils {
         downloadDirectoryPath: String? = null,
         bundleWithNotices: Boolean = false,
         resolveSigningPublicKeyPem: (suspend () -> String?)? = null,
+        downloadThreadCount: Int = DEFAULT_THREAD_COUNT,
         onProgress: (Int) -> Unit = {}
     ): DownloadResult = withContext(Dispatchers.IO) {
         var runDir: File? = null
@@ -279,36 +291,7 @@ object DownloadUtils {
                     errorMessage = downloadDirectoryErrorMessage(context, downloadDirectoryPath)
                 )
             val url = downloadUrl ?: artifact.archiveDownloadUrl
-            val request = Request.Builder()
-                .url(url)
-                .header("Accept", if (downloadUrl == null) "application/vnd.github+json" else "application/octet-stream")
-                .apply {
-                    if (downloadUrl == null && !token.isNullOrBlank()) {
-                        header("Authorization", "Bearer $token")
-                    }
-                }
-                .build()
-
-            val call = client.newCall(request)
-            val cancellationHandle = coroutineContext.job.invokeOnCompletion { cause ->
-                if (cause is CancellationException) {
-                    call.cancel()
-                }
-            }
-            try {
-                call.execute().use { handled ->
-                    if (!handled.isSuccessful) {
-                        return@withContext DownloadResult(
-                            errorMessage = downloadHttpErrorMessage(context, handled.code)
-                        )
-                    }
-                    val body = handled.body
-                        ?: return@withContext DownloadResult(
-                            errorMessage = context.getString(R.string.download_empty_response)
-                        )
-                    val totalBytes = artifact.sizeInBytes.coerceAtLeast(1L)
-
-                    val targetRunDir = File(downloadsRoot, runFolderName(run)).apply { mkdirs() }
+            val targetRunDir = File(downloadsRoot, runFolderName(run)).apply { mkdirs() }
                     runDir = targetRunDir
                     if (bundleWithNotices) {
                         outDir = File(targetRunDir, safeFileName(artifact.name)).apply {
@@ -321,13 +304,17 @@ object DownloadUtils {
                         zipFile = File(targetRunDir, "${artifact.name}.zip")
                     }
 
-                    body.byteStream().use { input ->
-                        writeStreamToFile(input, zipFile!!, totalBytes, onProgress)
-                    }
-                }
-            } finally {
-                cancellationHandle.dispose()
-            }
+            downloadUrlToFile(
+                        url = url,
+                        headers = buildMap {
+                            put("Accept", if (downloadUrl == null) "application/vnd.github+json" else "application/octet-stream")
+                            if (downloadUrl == null && !token.isNullOrBlank()) put("Authorization", "Bearer $token")
+                        },
+                        destination = zipFile!!,
+                        knownSize = artifact.sizeInBytes,
+                        threadCount = downloadThreadCount,
+                        onProgress = onProgress
+            )
 
             val downloadedZip = requireNotNull(zipFile)
             val records = if (bundleWithNotices) {
@@ -483,6 +470,7 @@ object DownloadUtils {
         storageSubdirectory: String? = "prebuilt-gki",
         preserveDownloadedZip: Boolean = false,
         bundleWithNotices: Boolean = false,
+        downloadThreadCount: Int = DEFAULT_THREAD_COUNT,
         onProgress: (Int) -> Unit = {}
     ): DownloadResult = downloadDirectAsset(
         context = context,
@@ -501,6 +489,7 @@ object DownloadUtils {
         ) ?: return DownloadResult(
             errorMessage = downloadDirectoryErrorMessage(context, downloadDirectoryPath)
         ),
+        downloadThreadCount = downloadThreadCount,
         onProgress = onProgress,
     )
 
@@ -514,6 +503,7 @@ object DownloadUtils {
         runTitle: String,
         sourceAssetId: Long = 0L,
         storage: DirectAssetStorage,
+        downloadThreadCount: Int = DEFAULT_THREAD_COUNT,
         onProgress: (Int) -> Unit = {}
     ): DownloadResult = withContext(Dispatchers.IO) {
         var assetDir: File? = storage.assetDir
@@ -521,40 +511,7 @@ object DownloadUtils {
         var outDir: File? = null
         var stageDir: File? = null
         try {
-            val request = Request.Builder()
-                .url(url)
-                .header("Accept", "application/octet-stream")
-                .apply {
-                    if (!token.isNullOrBlank()) {
-                        header("Authorization", "Bearer $token")
-                    }
-                }
-                .build()
-
-            val call = client.newCall(request)
-            val cancellationHandle = coroutineContext.job.invokeOnCompletion { cause ->
-                if (cause is CancellationException) {
-                    call.cancel()
-                }
-            }
-            try {
-                call.execute().use { handled ->
-                    if (!handled.isSuccessful) {
-                        return@withContext DownloadResult(
-                            errorMessage = downloadHttpErrorMessage(context, handled.code)
-                        )
-                    }
-                    val body = handled.body
-                        ?: return@withContext DownloadResult(
-                            errorMessage = context.getString(R.string.download_empty_response)
-                        )
-                    val totalBytes = when {
-                        sizeBytes > 0L -> sizeBytes
-                        body.contentLength() > 0L -> body.contentLength()
-                        else -> 1L
-                    }
-
-                    val targetAssetDir = requireNotNull(assetDir)
+            val targetAssetDir = requireNotNull(assetDir)
                     targetAssetDir.apply {
                         if (storage.bundleWithNotices && exists()) {
                             deleteRecursively()
@@ -569,13 +526,17 @@ object DownloadUtils {
                         file = File(targetAssetDir, safeFileName(name))
                     }
 
-                    body.byteStream().use { input ->
-                        writeStreamToFile(input, file!!, totalBytes, onProgress)
-                    }
-                }
-            } finally {
-                cancellationHandle.dispose()
-            }
+            downloadUrlToFile(
+                        url = url,
+                        headers = buildMap {
+                            put("Accept", "application/octet-stream")
+                            if (!token.isNullOrBlank()) put("Authorization", "Bearer $token")
+                        },
+                        destination = file!!,
+                        knownSize = sizeBytes,
+                        threadCount = downloadThreadCount,
+                        onProgress = onProgress
+            )
 
             val downloadedFile = requireNotNull(file)
             val records = if (storage.bundleWithNotices) {
@@ -736,6 +697,7 @@ object DownloadUtils {
         token: String?,
         url: String,
         preferredLine: String,
+        downloadThreadCount: Int = DEFAULT_THREAD_COUNT,
         onProgress: (Int) -> Unit = {}
     ): AppUpdatePackageResult = withContext(Dispatchers.IO) {
         var stageDir: File? = null
@@ -746,43 +708,17 @@ object DownloadUtils {
             }
             val fileName = safeFileName(url.substringAfterLast('/').ifBlank { "app-update.zip" })
             val archive = File(stageDir, fileName)
-            val request = Request.Builder()
-                .url(url)
-                .header("Accept", "application/octet-stream")
-                .apply {
-                    if (!token.isNullOrBlank()) {
-                        header("Authorization", "Bearer $token")
-                    }
-                }
-                .build()
-
-            val call = client.newCall(request)
-            val cancellationHandle = coroutineContext.job.invokeOnCompletion { cause ->
-                if (cause is CancellationException) {
-                    call.cancel()
-                }
-            }
-            try {
-                call.execute().use { handled ->
-                    if (!handled.isSuccessful) {
-                        return@withContext AppUpdatePackageResult(
-                            errorMessage = downloadHttpErrorMessage(context, handled.code)
-                        )
-                    }
-                    val body = handled.body
-                        ?: return@withContext AppUpdatePackageResult(
-                            errorMessage = context.getString(R.string.download_empty_response)
-                        )
-                    writeStreamToFile(
-                        input = body.byteStream(),
+            downloadUrlToFile(
+                        url = url,
+                        headers = buildMap {
+                            put("Accept", "application/octet-stream")
+                            if (!token.isNullOrBlank()) put("Authorization", "Bearer $token")
+                        },
                         destination = archive,
-                        totalBytes = body.contentLength().coerceAtLeast(1L),
+                        knownSize = 0L,
+                        threadCount = downloadThreadCount,
                         onProgress = onProgress
-                    )
-                }
-            } finally {
-                cancellationHandle.dispose()
-            }
+            )
 
             val apkFile = if (archive.extension.equals("apk", ignoreCase = true)) {
                 archive
@@ -951,6 +887,140 @@ object DownloadUtils {
                 onProgress(pct)
             }
         }
+    }
+
+    internal data class ByteRange(val start: Long, val end: Long) {
+        val length: Long get() = end - start + 1L
+    }
+
+    internal data class RangeInfo(val start: Long, val end: Long, val total: Long)
+
+    internal suspend fun downloadUrlToFile(
+        url: String,
+        headers: Map<String, String>,
+        destination: File,
+        knownSize: Long,
+        threadCount: Int,
+        onProgress: (Int) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        downloadSlots.withPermit {
+            destination.parentFile?.mkdirs()
+            val safeThreads = threadCount.coerceIn(1, 64)
+            var completed = false
+            if (safeThreads > 1) {
+                completed = try {
+                    downloadRanged(url, headers, destination, knownSize, safeThreads, onProgress)
+                } catch (cancel: CancellationException) {
+                    throw cancel
+                } catch (_: Exception) {
+                    false
+                }
+            }
+            if (!completed) {
+                destination.delete()
+                downloadSingle(url, headers, destination, knownSize, onProgress)
+            }
+        }
+    }
+
+    private suspend fun downloadRanged(
+        url: String,
+        headers: Map<String, String>,
+        destination: File,
+        knownSize: Long,
+        threadCount: Int,
+        onProgress: (Int) -> Unit
+    ): Boolean = coroutineScope {
+        val probeRequest = Request.Builder().url(url).apply { headers.forEach { (k, v) -> header(k, v) } }
+            .header("Range", "bytes=0-0").build()
+        client.newCall(probeRequest).execute().use { response ->
+            if (response.code != 206) return@coroutineScope false
+            val info = parseContentRange(response.header("Content-Range")) ?: return@coroutineScope false
+            if (info.start != 0L || info.end != 0L || info.total <= 1L) return@coroutineScope false
+            if (knownSize > 0L && knownSize != info.total) return@coroutineScope false
+            val total = info.total
+            val partCount = threadCount.toLong().coerceAtMost(total).toInt()
+            val ranges = planByteRanges(total, partCount)
+            val tempDir = File(destination.parentFile, ".${destination.name}.parts-${System.nanoTime()}").apply { mkdirs() }
+            val written = AtomicLong(0L)
+            try {
+                val parts = ranges.mapIndexed { index, range ->
+                    async(Dispatchers.IO) {
+                        val part = File(tempDir, "$index.part")
+                        var last: Throwable? = null
+                        repeat(3) { attempt ->
+                            try {
+                                downloadRangePart(url, headers, range, part)
+                                written.addAndGet(range.length)
+                                onProgress((written.get() * 100L / total).toInt().coerceIn(0, 100))
+                                return@async part
+                            } catch (error: Throwable) {
+                                last = error
+                                if (attempt < 2) delay(250L * (1L shl attempt))
+                            }
+                        }
+                        throw last ?: IllegalStateException("Range download failed")
+                    }
+                }.awaitAll()
+                val merged = File(tempDir, "merged")
+                FileOutputStream(merged).use { output ->
+                    parts.forEach { part -> part.inputStream().use { it.copyTo(output) } }
+                }
+                if (merged.length() != total) return@coroutineScope false
+                if (destination.exists()) destination.delete()
+                if (!merged.renameTo(destination)) merged.copyTo(destination, overwrite = true)
+                onProgress(100)
+                true
+            } finally {
+                tempDir.deleteRecursively()
+            }
+        }
+    }
+
+    private fun downloadRangePart(url: String, headers: Map<String, String>, range: ByteRange, destination: File) {
+        val request = Request.Builder().url(url).apply { headers.forEach { (k, v) -> header(k, v) } }
+            .header("Range", "bytes=${range.start}-${range.end}").build()
+        client.newCall(request).execute().use { response ->
+            if (response.code != 206) error("Range response ${response.code}")
+            val info = parseContentRange(response.header("Content-Range"))
+                ?: error("Missing Content-Range")
+            if (info.start != range.start || info.end != range.end || info.total < range.end + 1L) {
+                error("Invalid Content-Range")
+            }
+            val body = response.body ?: error("Empty response")
+            FileOutputStream(destination).use { output -> body.byteStream().use { it.copyTo(output) } }
+            if (destination.length() != range.length) error("Short range response")
+        }
+    }
+
+    private suspend fun downloadSingle(
+        url: String,
+        headers: Map<String, String>,
+        destination: File,
+        knownSize: Long,
+        onProgress: (Int) -> Unit
+    ) {
+        val request = Request.Builder().url(url).apply { headers.forEach { (k, v) -> header(k, v) } }.build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("HTTP ${response.code}")
+            val body = response.body ?: error("Empty response")
+            writeStreamToFile(body.byteStream(), destination, (if (knownSize > 0) knownSize else body.contentLength()).coerceAtLeast(1L), onProgress)
+        }
+    }
+
+    internal fun planByteRanges(total: Long, partCount: Int): List<ByteRange> =
+        (0 until partCount.coerceAtMost(total.coerceAtLeast(1L).toInt())).map { index ->
+            val start = total * index / partCount
+            val end = total * (index + 1) / partCount - 1L
+            ByteRange(start, end)
+        }
+
+    internal fun parseContentRange(value: String?): RangeInfo? {
+        val match = Regex("bytes (\\d+)-(\\d+)/(\\d+)").matchEntire(value?.trim().orEmpty()) ?: return null
+        val start = match.groupValues[1].toLongOrNull() ?: return null
+        val end = match.groupValues[2].toLongOrNull() ?: return null
+        val total = match.groupValues[3].toLongOrNull() ?: return null
+        return if (start <= end && end < total) RangeInfo(start, end, total) else null
     }
 
     private fun safeFileName(value: String): String =

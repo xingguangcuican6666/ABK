@@ -406,7 +406,8 @@ fun InstalledModulesScreen(
                     sizeBytes = 0L,
                     runId = RUNTIME_MODULE_DOWNLOAD_RUN_ID,
                     runTitle = target.module.displayName(),
-                    downloadDirectoryPath = downloadDirectoryPath
+                    downloadDirectoryPath = downloadDirectoryPath,
+                    downloadThreadCount = state.downloadThreadCount
                 )
             }
             val downloadedFile = downloadResult.artifacts.firstOrNull()?.filePath?.let(::File)

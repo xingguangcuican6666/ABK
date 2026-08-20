@@ -605,6 +605,8 @@
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
+    <string name="settings_download_threads">Download threads</string>
+    <string name="settings_download_threads_desc">Currently %1$d; 1 uses a single connection</string>
     <string name="settings_account">Account</string>
     <string name="settings_build">Build</string>
     <string name="settings_notification">Notifications</string>

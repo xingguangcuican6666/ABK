@@ -633,6 +633,8 @@
 
     <!-- Settings -->
     <string name="settings_title">设置</string>
+    <string name="settings_download_threads">下载线程数</string>
+    <string name="settings_download_threads_desc">当前 %1$d；1 表示单连接</string>
     <string name="settings_account">账户</string>
     <string name="settings_build">构建</string>
     <string name="settings_security">安全</string>

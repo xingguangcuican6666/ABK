@@ -211,6 +211,7 @@ data class MainUiState(
     val blurBackgroundExpEnabled: Boolean = false,
     val downloadDirectory: String = DownloadDirectoryUtils.defaultDirectoryPath(),
     val downloadMirrorBaseUrl: String = "",
+    val downloadThreadCount: Int = PreferencesRepository.DEFAULT_DOWNLOAD_THREAD_COUNT,
     val prebuiltGkiEnabled: Boolean = true,
     val artifactSigningVerificationEnabled: Boolean = true,
     val artifactSigningConfigured: Boolean = false,
@@ -627,6 +628,11 @@ class MainViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             prefs.downloadMirrorBaseUrl.collect { url ->
                 _uiState.update { it.copy(downloadMirrorBaseUrl = url) }
+            }
+        }
+        viewModelScope.launch {
+            prefs.downloadThreadCount.collect { count ->
+                _uiState.update { it.copy(downloadThreadCount = count) }
             }
         }
         viewModelScope.launch {
@@ -3004,7 +3010,8 @@ class MainViewModel @JvmOverloads constructor(
                 text(R.string.vm_prebuilt_gki_label),
                 sourceAssetId = asset.id,
                 downloadDirectory,
-                bundleWithNotices = true
+                bundleWithNotices = true,
+                downloadThreadCount = _uiState.value.downloadThreadCount
             ) { pct ->
                 NotificationUtils.notifyDownloadProgress(getApplication(), pct, asset.name)
                 _uiState.update { s ->
@@ -3078,6 +3085,7 @@ class MainViewModel @JvmOverloads constructor(
                 downloadUrl,
                 downloadDirectory,
                 bundleWithNotices = true,
+                downloadThreadCount = _uiState.value.downloadThreadCount,
                 resolveSigningPublicKeyPem = {
                     val state = _uiState.value
                     val fork = state.forkRepo
@@ -3522,6 +3530,9 @@ class MainViewModel @JvmOverloads constructor(
     fun setDownloadMirrorBaseUrl(url: String) = viewModelScope.launch {
         prefs.setDownloadMirrorBaseUrl(url)
     }
+    fun setDownloadThreadCount(value: Int) = viewModelScope.launch {
+        prefs.setDownloadThreadCount(value)
+    }
     fun setPredictiveBackEnabled(v: Boolean) = viewModelScope.launch { prefs.setPredictiveBackEnabled(v) }
     fun setPrebuiltGkiEnabled(v: Boolean) = viewModelScope.launch {
         if (!v) {
@@ -3646,7 +3657,8 @@ class MainViewModel @JvmOverloads constructor(
                     getApplication(),
                     token = token,
                     url = downloadUrl,
-                    preferredLine = info.line
+                    preferredLine = info.line,
+                    downloadThreadCount = _uiState.value.downloadThreadCount
                 ) { progress ->
                     _uiState.update { state ->
                         state.copy(appUpdateDownloading = true, appUpdateDownloadProgress = progress)
