@@ -182,6 +182,8 @@ import com.abk.kernel.data.model.WorkflowJob
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.WorkflowStep
 import com.abk.kernel.data.model.isActive
+import com.abk.kernel.data.model.isKernelBuild
+import com.abk.kernel.data.model.isManagerBuild
 import com.abk.kernel.data.model.isFailedFlashRun
 import com.abk.kernel.utils.FlashFilter
 import com.abk.kernel.utils.FlashFilterKernelKind
@@ -327,7 +329,10 @@ fun FlashScreen(
     }
     val allWorkflowGroups = remember(workflowGroups, state.sessionGhostFailedRuns, state.dismissedFailedRunIds, recentRunById) {
         val placeholderRunIds = state.recentRuns
-            .filter { it.isActive() || it.isSuccessfulKernelFlashRun() }
+            .filter {
+                (it.isActive() && (it.isKernelBuild() || it.isManagerBuild())) ||
+                    it.isSuccessfulKernelFlashRun()
+            }
             .map { it.id }
             .toSet()
         val extraGroups = placeholderRunIds
@@ -352,11 +357,13 @@ fun FlashScreen(
                 }
                 val run = recentRunById[group.runId]
                 if (run.isAbkManagerFlashRun(group.runTitle)) {
+                val isActiveFlashRun = isActive &&
+                    (run?.isKernelBuild() == true || run?.isManagerBuild() == true)
                     return@filter false
                 }
                 val isActive = run?.isActive() == true
                 val isSessionGhost = group.runId in state.sessionGhostFailedRuns
-                isActive || isSessionGhost || group.shouldAppearInWorkflowList(run)
+                isActiveFlashRun || isSessionGhost || group.shouldAppearInWorkflowList(run)
             }
             .sortedForWorkflowDisplay(recentRunById)
     }
