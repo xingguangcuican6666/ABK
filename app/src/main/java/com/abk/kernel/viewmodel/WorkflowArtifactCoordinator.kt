@@ -5,6 +5,7 @@ import com.abk.kernel.data.model.BuildArtifact
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.isActive
 import com.abk.kernel.data.model.isFailedFlashRun
+import com.abk.kernel.data.model.isKernelBuild
 import com.abk.kernel.data.model.isManagerBuild
 import com.abk.kernel.data.model.withRun
 import com.abk.kernel.data.repository.GitHubRepository
@@ -124,7 +125,8 @@ class WorkflowArtifactCoordinator(
             suspend fun fetchArtifacts(batch: List<WorkflowRun>): List<BuildArtifact> = coroutineScope {
                 batch.map { run ->
                     async {
-                        when (val artifacts = github.listArtifacts(owner, repoName, run.id)) {
+                        val retryWhenEmpty = run.status == "completed" && run.isKernelBuild()
+                        when (val artifacts = listArtifactsWithRetry(owner, repoName, run.id, retryWhenEmpty)) {
                             is Result.Success -> artifacts.data.map { it.withRun(run) }
                             else -> emptyList()
                         }

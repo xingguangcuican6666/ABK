@@ -112,6 +112,72 @@ class FlashRoutingTest {
         assertTrue(group.shouldAppearInWorkflowList(run))
     }
 
+    @Test
+    fun recognizesLineageKernelPackageFromSuccessfulRun() {
+        val run = successfulLineageKernelRun()
+        val groups = buildWorkflowGroups(
+            remoteArtifacts = listOf(
+                BuildArtifact(
+                    id = 9393097992L,
+                    name = "None_kernel-android12-5.10-256",
+                    sizeInBytes = 68658102L,
+                    archiveDownloadUrl = "https://api.github.com/repos/xingguangcuicanrec/ABK/actions/artifacts/9393097992/zip",
+                    expired = false,
+                    createdAt = "2026-08-20T04:17:01Z",
+                    runId = run.id,
+                    runTitle = run.displayTitle.orEmpty(),
+                    runNumber = run.runNumber,
+                    runCreatedAt = run.createdAt,
+                    runHtmlUrl = run.htmlUrl,
+                )
+            ),
+            downloadedArtifacts = emptyList(),
+            unlinkedWorkflowTitle = "Unlinked",
+            runs = mapOf(run.id to run),
+        )
+
+        val group = groups.single()
+        assertEquals(1, group.remote.size)
+        assertEquals(listOf(ArtifactCategory.KERNEL), group.categories.toList())
+        assertTrue(group.hasRemoteKernelArtifact())
+        assertTrue(group.shouldAppearInWorkflowList(run))
+    }
+
+    @Test
+    fun doesNotTreatCommitTitleAsKernelWorkflowName() {
+        val run = WorkflowRun(
+            id = 32264674101L,
+            name = "Build ABK CLI",
+            status = "completed",
+            conclusion = "success",
+            htmlUrl = "https://github.com/xingguangcuicanrec/ABK/actions/runs/32264674101",
+            createdAt = "2026-08-19T14:32:56Z",
+            updatedAt = "2026-08-19T14:43:00Z",
+            runNumber = 16,
+            workflowId = 288730750L,
+            headBranch = "dev",
+            displayTitle = "feat(ci): support custom Lineage-like kernel source builds (#233)",
+        )
+        val group = emptyWorkflowGroupFor(run, "Unlinked")
+
+        assertFalse(run.isSuccessfulKernelFlashRun())
+        assertFalse(group.shouldAppearInWorkflowList(run))
+    }
+
+    private fun successfulLineageKernelRun() = WorkflowRun(
+        id = 32330451402L,
+        name = "Android 内核构建-类 LineageOS 源码",
+        status = "completed",
+        conclusion = "success",
+        htmlUrl = "https://github.com/xingguangcuicanrec/ABK/actions/runs/32330451402",
+        createdAt = "2026-08-20T04:03:16Z",
+        updatedAt = "2026-08-20T04:17:07Z",
+        runNumber = 5,
+        workflowId = 337872312L,
+        headBranch = "dev",
+        displayTitle = "Android 内核构建-类 LineageOS 源码",
+    )
+
     private fun artifactTypeForGroup(group: WorkflowArtifactGroup): ArtifactType =
         group.remote.firstOrNull()?.let { com.abk.kernel.utils.DownloadUtils.classifyArtifact(it.name) }
             ?: group.local.firstOrNull()?.type
