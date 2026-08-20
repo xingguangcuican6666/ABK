@@ -181,6 +181,8 @@ import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.WorkflowStep
 import com.abk.kernel.data.model.isAbkManagerBuild
 import com.abk.kernel.data.model.isFailedFlashRun
+import com.abk.kernel.data.model.isKernelBuild
+import com.abk.kernel.data.model.isManagerBuild
 import com.abk.kernel.utils.FlashFilter
 import com.abk.kernel.utils.FlashFilterKernelKind
 import com.abk.kernel.utils.FlashFilterManagerKind
@@ -334,6 +336,14 @@ internal fun workflowTaskLabel(task: ActiveDownloadTask): String =
 
 internal fun WorkflowRun.isActiveFlashRun(): Boolean =
     status in setOf("queued", "waiting", "requested", "pending", "in_progress")
+
+/**
+ * A successful kernel run should remain visible while GitHub is still
+ * indexing its artifacts (or when the artifact request temporarily fails).
+ * Manager-only success runs are intentionally excluded from the flash page.
+ */
+internal fun WorkflowRun.isSuccessfulKernelFlashRun(): Boolean =
+    status == "completed" && conclusion == "success" && isKernelBuild() && !isManagerBuild()
 
 internal fun List<WorkflowArtifactGroup>.sortedForWorkflowDisplay(
     runs: Map<Long, WorkflowRun>
