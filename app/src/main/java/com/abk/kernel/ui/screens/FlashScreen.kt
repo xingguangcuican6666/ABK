@@ -542,7 +542,11 @@ fun FlashScreen(
 
     LaunchedEffect(state.isLoggedIn, state.forkRepo?.fullName) {
         if (state.isLoggedIn && state.forkRepo != null) {
-            vm.loadRecentRuns(showRefreshIndicator = false, lightweight = true)
+            vm.loadRecentRuns(
+                showRefreshIndicator = false,
+                lightweight = true,
+                includeCompletedArtifacts = true,
+            )
         }
     }
 

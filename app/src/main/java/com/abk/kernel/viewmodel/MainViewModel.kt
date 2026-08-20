@@ -303,6 +303,7 @@ class MainViewModel @JvmOverloads constructor(
     private var buildQueueJob: Job? = null
     private var recentRunsRefreshJob: Job? = null
     private var recentRunsRefreshGeneration = 0
+    private var recentRunsRefreshIncludesCompletedArtifacts = false
     private val lateFailedArtifactWatchJobs = mutableMapOf<Long, Job>()
     private var foregroundWorkflowRefreshJob: Job? = null
     private var foregroundWorkflowRefreshIntervalSec =
@@ -1922,17 +1923,25 @@ class MainViewModel @JvmOverloads constructor(
 
     fun loadRecentRuns(
         showRefreshIndicator: Boolean = true,
-        lightweight: Boolean = false
+        lightweight: Boolean = false,
+        includeCompletedArtifacts: Boolean = false,
     ) {
         val state = _uiState.value
         val username = state.user?.login ?: return
         val repoName = state.forkRepo?.name ?: return
         val userInitiatedFull = showRefreshIndicator && !lightweight
+        val shouldIncludeCompleted = shouldIncludeCompletedArtifacts(
+            lightweight = lightweight,
+            includeCompletedArtifacts = includeCompletedArtifacts,
+        )
         if (recentRunsRefreshJob?.isActive == true) {
-            if (!userInitiatedFull) return
+            if (!userInitiatedFull &&
+                (!shouldIncludeCompleted || recentRunsRefreshIncludesCompletedArtifacts)
+            ) return
             recentRunsRefreshJob?.cancel()
         }
         val generation = ++recentRunsRefreshGeneration
+        recentRunsRefreshIncludesCompletedArtifacts = shouldIncludeCompleted
         recentRunsRefreshJob = viewModelScope.launch {
             _uiState.update { it.copy(isRefreshingRecentRuns = true) }
             try {
@@ -1964,7 +1973,7 @@ class MainViewModel @JvmOverloads constructor(
                             username,
                             repoName,
                             r.data,
-                            includeCompleted = !lightweight,
+                            includeCompleted = shouldIncludeCompleted,
                             includeCompletedPureManagers = lightweight,
                         )
                     }
@@ -1974,6 +1983,7 @@ class MainViewModel @JvmOverloads constructor(
                 if (generation == recentRunsRefreshGeneration) {
                     _uiState.update { it.copy(isRefreshingRecentRuns = false) }
                     recentRunsRefreshJob = null
+                    recentRunsRefreshIncludesCompletedArtifacts = false
                 }
             }
         }
