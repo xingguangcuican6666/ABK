@@ -5,6 +5,7 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -34,7 +35,7 @@ class GitHubRepositoryNetworkTest {
     }
 
     @Test
-    fun getRepo_usesGitHubJsonAcceptByDefault() {
+    fun getRepo_usesGitHubJsonAcceptByDefault() = runBlocking {
         server.enqueue(
             MockResponse()
                 .setResponseCode(200)
@@ -53,16 +54,16 @@ class GitHubRepositoryNetworkTest {
                 )
         )
 
-        val result = repository.getRepo("owner", "repo")
+        val result = repository.getUserFork("owner", "repo", "owner")
 
-        assertTrue(result is Result.Success)
+        assertTrue(result is Result.Success<*>)
         val request = server.takeRequest()
         assertEquals("application/vnd.github+json", request.getHeader("Accept"))
         assertEquals("Bearer test-token", request.getHeader("Authorization"))
     }
 
     @Test
-    fun downloadReleaseAssetText_requestsOctetStreamAndReturnsPemBody() {
+    fun downloadReleaseAssetText_requestsOctetStreamAndReturnsPemBody() = runBlocking {
         val pem = """
             -----BEGIN PUBLIC KEY-----
             MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtestkeytestkeytest

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -13,6 +14,16 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!--
+      The miuix-blur AAR declares minSdk 33 while this app supports API 26+. The override
+      keeps the build working; safety is enforced at runtime. Every path into the library
+      (rememberBlurBackdrop, blurSource, blurEffect, blurSourceBody, isBlurActive) is gated
+      on isRuntimeShaderSupported() (API 33+), and the AAR registers no ContentProvider or
+      initializer, so nothing library-side executes on API 26-32. Keep these guards intact
+      if the dependency version or call sites change.
+    -->
+    <uses-sdk tools:overrideLibrary="top.yukonga.miuix.kmp.blur" />
 
     <application
         android:name=".AbkApplication"
@@ -80,12 +91,18 @@
         <activity
             android:name=".extensions.AbkExtensionManagerActivity"
             android:exported="false"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.ABK" />
 
         <service
             android:name=".utils.BuildMonitorService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+
+        <service
+            android:name=".agent.AbkAgentService"
+            android:foregroundServiceType="dataSync"
+            android:exported="true" />
 
         <receiver
             android:name=".extensions.AbkExtensionBootReceiver"

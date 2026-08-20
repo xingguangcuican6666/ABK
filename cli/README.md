@@ -134,13 +134,15 @@ abk build --matrix all-managers          # 全管理器全矩阵编译
 #### OnePlus 构建 / OnePlus Build
 
 ```bash
-abk build --oneplus --device oneplus_12_b
+abk build --oneplus --device oneplus_15
 ```
 
 **OnePlus 设备列表 / Device List：**
 
 | 设备名 | 设备 | CPU | Android | 内核 |
 |--------|------|-----|---------|------|
+| `oneplus_15` | OnePlus 15 | sm8850 | 16 | 6.12 |
+| `oneplus_15t` | OnePlus 15T | sm8850 | 16 | 6.12 |
 | `oneplus_13_b` | OnePlus 13 | sm8750 | 15 | 6.6 |
 | `oneplus_12_b` | OnePlus 12 | sm8650 | 14 | 6.1 |
 | `oneplus_11_b` | OnePlus 11 | sm8550 | 13 | 5.15 |
@@ -159,7 +161,8 @@ abk build --oneplus --device oneplus_12_b
 **OnePlus 构建限制：**
 - ZRAM / DDK / NTsync / 网络增强 / Re-Kernel / 虚拟化 / 自定义外部模块 → 自动禁用
 - MTK CPU 设备 → 代理优化自动禁用
-- SUSFS 仅支持 android14/6.1 和 android15/6.6
+- SUSFS 支持 android14/6.1、android15/6.6 和 android16/6.12
+- android16/6.12 自动关闭不兼容的 legacy lz4kd
 - KPM 仅对 SukiSU / ReSukiSU 生效；其他变体会自动禁用
 - 全管理器 OnePlus 矩阵由工作流按每个 KernelSU 变体独立决定 KPM
 

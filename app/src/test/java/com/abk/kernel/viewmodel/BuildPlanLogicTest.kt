@@ -6,12 +6,14 @@ import com.abk.kernel.data.model.CustomExternalModuleStage
 import com.abk.kernel.data.model.CustomKernelOption
 import com.abk.kernel.data.model.CustomKernelOptionMode
 import com.abk.kernel.data.model.BUILD_TARGET_GKI
+import com.abk.kernel.data.model.BUILD_TARGET_CUSTOM_SOURCE
 import com.abk.kernel.data.model.BUILD_TARGET_ONEPLUS
 import com.abk.kernel.data.model.KSU_BRANCH_CUSTOM
 import com.abk.kernel.data.model.KSU_BRANCH_STABLE
 import com.abk.kernel.data.model.KSU_VARIANT_NONE
 import com.abk.kernel.data.model.KSU_VARIANT_RESUKISU
 import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
+import com.abk.kernel.data.model.SOURCE_ACCESS_GITHUB_PRIVATE
 import com.abk.kernel.data.model.KernelBuildConfig
 import com.abk.kernel.data.model.KernelSupport
 import org.junit.Assert.assertEquals
@@ -116,6 +118,57 @@ class BuildPlanLogicTest {
         assertEquals(sharedFeatures.useZram, decoded.config.useZram)
         assertEquals(sharedFeatures.useNetworking, decoded.config.useNetworking)
         assertEquals(sharedFeatures.customKernelOptions, decoded.config.customKernelOptions)
+    }
+
+    @Test
+    fun customSourceFullPlanRoundTripsWithoutCredentials() {
+        val config = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_CUSTOM_SOURCE,
+                sourceUrl = "https://github.com/example/private-kernel.git",
+                sourceRef = "lineage-23.2",
+                sourceAccessMode = SOURCE_ACCESS_GITHUB_PRIVATE,
+                sourceDefconfigs = listOf(
+                    "gki_defconfig",
+                    "vendor/pineapple_GKI.config",
+                    "vendor/peridot_GKI.config"
+                ),
+                sourceDeviceLabel = "POCO F6 / peridot",
+                osPatchLevel = "2025-09",
+                kernelsuVariant = KSU_VARIANT_NONE,
+            )
+        )
+
+        val payload = encodeBuildPlanPayload(config, "private source", BuildPlanShareScope.FULL)
+        val decoded = decodeBuildPlanPayload(payload, KernelBuildConfig())
+
+        assertEquals(BUILD_TARGET_CUSTOM_SOURCE, decoded.config.buildTarget)
+        assertEquals(config.sourceUrl, decoded.config.sourceUrl)
+        assertEquals(config.sourceRef, decoded.config.sourceRef)
+        assertEquals(config.sourceAccessMode, decoded.config.sourceAccessMode)
+        assertEquals(config.sourceDefconfigs, decoded.config.sourceDefconfigs)
+        assertEquals(config.sourceDeviceLabel, decoded.config.sourceDeviceLabel)
+        assertEquals(config.osPatchLevel, decoded.config.osPatchLevel)
+    }
+
+    @Test
+    fun customSourceWorkflowInputMapMatchesTwentyFiveInputContract() {
+        val inputs = KernelBuildConfig(
+            buildTarget = BUILD_TARGET_CUSTOM_SOURCE,
+            sourceUrl = "https://github.com/LineageOS/android_kernel_xiaomi_sm8635.git",
+            sourceRef = "lineage-23.2",
+            sourceAccessMode = SOURCE_ACCESS_GITHUB_PRIVATE,
+            sourceDefconfigs = listOf("gki_defconfig", "vendor/peridot_GKI.config"),
+            sourceDeviceLabel = "POCO F6 / peridot",
+            osPatchLevel = "2025-09",
+            kernelsuVariant = KSU_VARIANT_NONE,
+        ).toInputMap()
+
+        assertEquals(25, inputs.size)
+        assertEquals("true", inputs["source_private"])
+        assertEquals("gki_defconfig\nvendor/peridot_GKI.config", inputs["defconfigs"])
+        assertEquals("None", inputs["kernelsu_variant"])
+        assertEquals(false, inputs.keys.any { it.contains("token", ignoreCase = true) || it.contains("credential", ignoreCase = true) })
     }
 
     @Test

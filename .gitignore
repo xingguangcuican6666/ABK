@@ -27,6 +27,7 @@ hympfs-dev.diff
 ehthumbs.db
 Thumbs.db
 desktop.ini
+desktop/target/
 
 # Build outputs
 *.o
@@ -77,6 +78,8 @@ action_build_comparison.md
 # Gradle
 .gradle/
 build/
+!desktop/flutter_app/lib/src/features/build/
+!desktop/flutter_app/lib/src/features/build/*.dart
 app/.cxx/
 app/build/
 app/build/generated/

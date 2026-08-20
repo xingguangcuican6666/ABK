@@ -19,7 +19,44 @@ data class SignedBundleManifest(
     @SerializedName("payload_name") val payloadName: String,
     @SerializedName("payload_sha256") val payloadSha256: String,
     @SerializedName("payload_size_bytes") val payloadSizeBytes: Long,
-    @SerializedName("created_at") val createdAt: String? = null
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("payload_kind") val payloadKind: String? = null,
+    @SerializedName("kernel_source") val kernelSource: KernelSourceManifest? = null,
+    @SerializedName("feature_status") val featureStatus: FeatureStatusManifest? = null,
+    @SerializedName("client_notice") val clientNotice: ClientNoticeManifest? = null
+)
+
+data class KernelSourceManifest(
+    val mode: String? = null,
+    val url: String? = null,
+    val access: String? = null,
+    @SerializedName("requested_ref") val requestedRef: String? = null,
+    @SerializedName("resolved_commit") val resolvedCommit: String? = null,
+    @SerializedName("kernel_version") val kernelVersion: String? = null,
+    @SerializedName("android_version") val androidVersion: String? = null,
+    @SerializedName("toolchain_patch_level") val toolchainPatchLevel: String? = null,
+    @SerializedName("device_label") val deviceLabel: String? = null,
+    val defconfigs: List<String> = emptyList()
+)
+
+data class FeatureStatusManifest(
+    val requested: Map<String, Any?> = emptyMap(),
+    val effective: Map<String, Any?> = emptyMap(),
+    val skipped: List<SkippedFeatureManifest> = emptyList()
+)
+
+data class SkippedFeatureManifest(
+    val id: String = "",
+    @SerializedName("reason_code") val reasonCode: String = "",
+    val message: String = ""
+)
+
+data class ClientNoticeManifest(
+    val type: String? = null,
+    val version: Int = 1,
+    val capability: String? = null,
+    val severity: String? = null,
+    @SerializedName("review_before_flash") val reviewBeforeFlash: Boolean = false
 )
 
 data class BundleVerificationResult(
@@ -48,6 +85,9 @@ object ArtifactVerification {
         ArtifactType.ANYKERNEL3 -> true
         else -> false
     }
+
+    fun requiresTrustedBundle(type: ArtifactType, manifest: SignedBundleManifest?): Boolean =
+        requiresTrustedBundle(type) || manifest?.payloadKind == "KERNEL_IMAGE_SET"
 
     fun readBundleManifest(bundleFile: File): SignedBundleManifest? = runCatching {
         ZipFile(bundleFile).use { zip ->

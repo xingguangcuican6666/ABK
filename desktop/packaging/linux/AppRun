@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/abk_launcher" "$@"

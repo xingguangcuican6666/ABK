@@ -60,6 +60,10 @@
     <string name="root_local_capability_desc">Root используется только при прошивке, установке модулей и проверке функций, связанных с root. Определение версии ядра не требует root.</string>
     <string name="root_after_auth_flow">После авторизации автоматически запустится вход в GitHub и проверка Fork.</string>
 
+    <!-- Local preferences recovery -->
+    <string name="preferences_reset_title">Локальные данные сброшены</string>
+    <string name="preferences_reset_message">ABK обнаружил повреждение локальных настроек и автоматически сбросил их. Сохранённые данные входа, конфигурацию сборки и другие локальные параметры может потребоваться настроить заново.</string>
+
     <!-- Auth -->
     <string name="login_title">Вход в GitHub</string>
     <string name="login_desc">ABK нужна авторизация GitHub, чтобы управлять Fork-репозиторием и запускать workflow-процессы сборки ядра.</string>
@@ -205,10 +209,11 @@
     <string name="build_kernel_option_clear_all_action">Очистить всё</string>
     <string name="build_enable_oneplus_8e">Включить поддержку OnePlus 8E</string>
     <string name="build_oneplus_lz4kd">Включить lz4kd</string>
+    <string name="build_oneplus_lz4kd_unsupported">Ядро 6.12 использует новый backend ZRAM и не поддерживает устаревший патч lz4kd.</string>
     <string name="build_oneplus_bbr">Включить BBR</string>
     <string name="build_oneplus_proxy_optimization">Включить оптимизацию прокси</string>
     <string name="build_oneplus_proxy_mtk_disabled">Для веток MTK оптимизация прокси принудительно отключена.</string>
-    <string name="build_oneplus_susfs_unsupported">Для текущего KMI OnePlus нет доступной ветки SUSFS upstream. Поддерживаются только android14/6.1 и android15/6.6; android12/5.10 и android13/5.15 отключаются автоматически.</string>
+    <string name="build_oneplus_susfs_unsupported">Для текущего KMI OnePlus нет доступной ветки SUSFS upstream. android12/5.10 и android13/5.15 отключаются автоматически.</string>
     <string name="build_oneplus_unicode_bypass">Включить исправление обхода нулевой ширины Unicode</string>
     <string name="build_oneplus_proxy_short">Оптимизация прокси</string>
     <string name="build_oneplus_unicode_short">Обход Unicode</string>
@@ -625,6 +630,7 @@
     <string name="settings_logout_desc">Выйти</string>
     <string name="settings_fork_repo">Fork-репозиторий</string>
     <string name="settings_not_logged_in">Не выполнен вход</string>
+    <string name="settings_login_hint">Нажмите, чтобы войти через GitHub</string>
     <string name="settings_auto_download_desc">Применяется только к следующей новой сборке. Если выключить, автозагрузки не будет.</string>
     <string name="settings_prebuilt_gki">Готовые сборки GKI</string>
     <string name="settings_prebuilt_gki_desc">Раздел готовых сборок GKI из Release репозитория. Скачивание вручную.</string>
@@ -671,6 +677,10 @@
     <string name="settings_remove_background_desc">Вернуться к сплошному фону темы Material</string>
     <string name="settings_ui_opacity">Непрозрачность интерфейса</string>
     <string name="settings_ui_opacity_desc">При уменьшении карточки, верхняя и нижняя панели начинают пропускать фон.</string>
+    <string name="settings_blur">Размытие</string>
+    <string name="settings_blur_desc">Включить эффекты матового стекла</string>
+    <string name="settings_blur_background">Рендерить пользовательский фон в размытие</string>
+    <string name="settings_blur_background_desc">При включении верхняя и нижняя панели, карточки и плитки размывают изображение пользовательского фона</string>
     <string name="settings_current_color">Текущий</string>
     <string name="settings_color_green">Зелёный</string>
     <string name="settings_color_blue">Синий</string>
@@ -722,6 +732,8 @@
     <string name="settings_group_about_desc">Версия приложения и сведения об исходном коде.</string>
     <string name="settings_group_backend_desc">Динамическая загрузка возможностей текущего %1$s-бэкенда.</string>
     <string name="settings_group_manager_settings_desc">Динамическая загрузка возможностей текущего KSU-бэкенда.</string>
+    <string name="settings_group_kernel_capabilities_desc">Динамическая загрузка по root-доступу и встроенным возможностям ядра.</string>
+    <string name="settings_group_tcp_congestion_control_desc">Динамическая загрузка по возможностям TCP congestion control, предоставленным ядром.</string>
     <string name="settings_group_system_tools_desc">Инструменты для SELinux и путей размонтирования модулей.</string>
     <string name="settings_group_allowlist_desc">Экспорт или импорт текущего списка авторизации root.</string>
     <string name="settings_group_tool_status_desc">Результат последней операции с инструментами.</string>
@@ -950,6 +962,16 @@
     <string name="settings_tools">Инструменты</string>
     <string name="settings_tools_desc">Больше расширенных функций</string>
     <string name="settings_manager_settings">Настройки менеджера</string>
+    <string name="settings_kernel_capabilities">Возможности ядра</string>
+    <string name="settings_kernel_capabilities_summary">TCP сейчас %1$s · алгоритмов: %2$d</string>
+    <string name="settings_kernel_capabilities_refreshing">Обновление возможностей ядра</string>
+    <string name="settings_kernel_capabilities_unavailable">Управляемые возможности ядра не обнаружены</string>
+    <string name="settings_kernel_capabilities_unavailable_desc">Текущее ядро не предоставляет дополнительных функций, которыми ABK может управлять.</string>
+    <string name="settings_tcp_congestion_control">TCP congestion control</string>
+    <string name="settings_tcp_congestion_current">Текущий алгоритм</string>
+    <string name="settings_tcp_congestion_available">Доступный алгоритм</string>
+    <string name="settings_tcp_congestion_selected">Используется сейчас</string>
+    <string name="settings_tcp_congestion_change_failed">Не удалось изменить TCP-алгоритм</string>
     <string name="settings_manager_loading_title">Чтение настроек бэкенда</string>
     <string name="settings_manager_loading_desc">Загрузка доступных функций из текущего KSU-бэкенда</string>
     <string name="settings_manager_load_failed">Не удалось прочитать настройки бэкенда</string>
@@ -1205,6 +1227,7 @@
     <string name="ru_lkm_module_not_bundled">Нет встроенного LKM-модуля для %1$s / %2$s</string>
     <string name="ru_log_using_bundled_lkm">[ABK] Используется встроенный в APK LKM: %1$s · %2$s</string>
     <string name="ru_log_using_local_lkm">[ABK] Используется локальный LKM: %1$s</string>
+    <string name="ru_log_output_dir">[ABK] Каталог вывода: %1$s</string>
     <string name="ru_log_no_root_shell_local_patch">[ABK] Root shell недоступен — переходим на встроенный в APK SukiSU-Ultra ksud для патча только локального образа boot</string>
     <string name="ru_no_embedded_ksud">Исполняемый встроенный в APK SukiSU-Ultra ksud не найден; без root можно только сгенерировать пропатченный образ после выбора boot.img.</string>
     <string name="ru_install_requires_root">Этот способ установки требует прав root.</string>
@@ -1213,6 +1236,10 @@
     <string name="ru_unknown_su_compat">Неизвестный режим совместимости su</string>
     <string name="ru_unknown_feature">Неизвестная функция</string>
     <string name="ru_invalid_template_name">Недопустимое имя шаблона</string>
+    <string name="ru_tcp_congestion_invalid_algorithm">Недопустимое имя TCP-алгоритма</string>
+    <string name="ru_tcp_congestion_unavailable">Текущее ядро не предоставляет TCP congestion control</string>
+    <string name="ru_tcp_congestion_unsupported_algorithm">Текущее ядро не поддерживает этот TCP-алгоритм</string>
+    <string name="ru_tcp_congestion_write_failed">Не удалось записать TCP-алгоритм</string>
     <string name="ru_ksud_args_empty">Аргументы ksud пусты</string>
     <string name="ru_legacy_su_toggle_failed">Не удалось переключить поддержку устаревшей команды su</string>
     <string name="ru_hide_selinux_toggle_failed">Не удалось переключить «Скрывать изменения SELinux»: %1$d</string>

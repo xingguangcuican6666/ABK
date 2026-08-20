@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ABK
+Comment=ABK desktop shell
+Exec=abk_launcher
+Icon=com.abk.abk_desktop
+Categories=Development;Utility;
+Terminal=false
+StartupNotify=true

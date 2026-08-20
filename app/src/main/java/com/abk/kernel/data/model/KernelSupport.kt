@@ -1,5 +1,6 @@
 package com.abk.kernel.data.model
 
+import java.net.URI
 import kotlin.math.abs
 
 data class KernelSupportEntry(
@@ -24,7 +25,7 @@ data class OnePlusDeviceProfile(
 )
 
 object KernelSupport {
-    val buildTargets = listOf(BUILD_TARGET_GKI, BUILD_TARGET_ONEPLUS)
+    val buildTargets = listOf(BUILD_TARGET_GKI, BUILD_TARGET_CUSTOM_SOURCE, BUILD_TARGET_ONEPLUS)
 
     val lines = listOf(
         KernelVersionLine("android12", "5.10"),
@@ -38,10 +39,12 @@ object KernelSupport {
         KernelVersionLine("android12", "5.10"),
         KernelVersionLine("android13", "5.15"),
         KernelVersionLine("android14", "6.1"),
-        KernelVersionLine("android15", "6.6")
+        KernelVersionLine("android15", "6.6"),
+        KernelVersionLine("android16", "6.12")
     )
 
     val onePlusCpuOptions = listOf(
+        "sm8850",
         "sm8750",
         "sm8735",
         "mt6991",
@@ -58,6 +61,8 @@ object KernelSupport {
     )
 
     val onePlusDeviceProfiles = listOf(
+        OnePlusDeviceProfile("oneplus_15", "OnePlus 15", "ColorOS/OxygenOS 16", "sm8850", "android16", "6.12"),
+        OnePlusDeviceProfile("oneplus_15t", "OnePlus 15T", "ColorOS/OxygenOS 16", "sm8850", "android16", "6.12"),
         OnePlusDeviceProfile("oneplus_13_b", "OnePlus 13", "ColorOS/OxygenOS 16", "sm8750", "android15", "6.6"),
         OnePlusDeviceProfile("oneplus_13s_b", "OnePlus 13s", "ColorOS/OxygenOS 16", "sm8750", "android15", "6.6"),
         OnePlusDeviceProfile("oneplus_13t_b", "OnePlus 13T", "ColorOS/OxygenOS 16", "sm8750", "android15", "6.6"),
@@ -242,11 +247,14 @@ object KernelSupport {
             ?: onePlusLines.first().androidVersion
 
     fun onePlusSusfsSupported(androidVersion: String, kernelVersion: String): Boolean =
-        "$androidVersion/$kernelVersion" in setOf("android14/6.1", "android15/6.6")
+        "$androidVersion/$kernelVersion" in setOf("android14/6.1", "android15/6.6", "android16/6.12")
+
+    fun onePlusLz4kdSupported(kernelVersion: String): Boolean = kernelVersion != "6.12"
 
     fun normalize(config: KernelBuildConfig): KernelBuildConfig {
         val target = normalizeBuildTarget(config.buildTarget)
         val isOnePlus = target == BUILD_TARGET_ONEPLUS
+        val isCustomSource = target == BUILD_TARGET_CUSTOM_SOURCE
         val requestedOnePlusManifest = config.onePlusDeviceManifest.orEmpty().trim().lowercase()
         val onePlusDeviceManifest = requestedOnePlusManifest
             .takeIf { it in onePlusDeviceManifestOptions }
@@ -261,12 +269,14 @@ object KernelSupport {
         }
         val ksuVariant = normalizeKsuVariant(config.kernelsuVariant, target)
         val subLevel = when {
+            isCustomSource -> config.subLevel.trim().ifBlank { "X" }
             config.subLevel == "X" -> "X"
             subLevels(line).contains(config.subLevel) -> config.subLevel
             else -> latestEntry(line).subLevel
         }
         val patchOptions = patchLevels(line, subLevel)
         val osPatch = when {
+            isCustomSource -> config.osPatchLevel.trim()
             config.osPatchLevel in patchOptions -> config.osPatchLevel
             else -> patchOptions.maxByOrNull(::patchMonthIndex) ?: latestEntry(line).osPatchLevel
         }
@@ -284,8 +294,16 @@ object KernelSupport {
         val gkiKpmSupported = isKpmSupported(BUILD_TARGET_GKI, ksuVariant, normalizedKsuBranch)
         val onePlusProxyAllowed = !onePlusCpu.startsWith("mt")
         val onePlusSusfsEnabled = onePlusSusfsSupported(line.androidVersion, line.kernelVersion)
+        val onePlusLz4kdEnabled = onePlusLz4kdSupported(line.kernelVersion)
         return config.copy(
             buildTarget = target,
+            sourceUrl = config.sourceUrl.trim(),
+            sourceRef = config.sourceRef.trim(),
+            sourceAccessMode = config.sourceAccessMode.trim().lowercase()
+                .takeIf { it in setOf(SOURCE_ACCESS_PUBLIC, SOURCE_ACCESS_GITHUB_PRIVATE) }
+                ?: SOURCE_ACCESS_PUBLIC,
+            sourceDefconfigs = config.sourceDefconfigs.orEmpty().map(String::trim).filter(String::isNotBlank),
+            sourceDeviceLabel = config.sourceDeviceLabel.trim(),
             androidVersion = line.androidVersion,
             kernelVersion = line.kernelVersion,
             subLevel = subLevel,
@@ -353,7 +371,7 @@ object KernelSupport {
             },
             onePlusCpu = if (isOnePlus) onePlusCpu else "sm8650",
             onePlusDeviceManifest = if (isOnePlus) onePlusDeviceManifest else "oneplus_12_b",
-            onePlusUseLz4kd = if (isOnePlus) config.onePlusUseLz4kd else false,
+            onePlusUseLz4kd = if (isOnePlus) onePlusLz4kdEnabled && config.onePlusUseLz4kd else false,
             onePlusUseBbr = if (isOnePlus) config.onePlusUseBbr else false,
             onePlusUseProxyOptimization = if (isOnePlus) {
                 onePlusProxyAllowed && config.onePlusUseProxyOptimization
@@ -366,6 +384,52 @@ object KernelSupport {
 
     fun normalizeBuildTarget(value: String?): String =
         value.orEmpty().trim().lowercase().takeIf { it in buildTargets } ?: BUILD_TARGET_GKI
+
+    fun validateCustomSource(config: KernelBuildConfig): String? {
+        if (normalizeBuildTarget(config.buildTarget) != BUILD_TARGET_CUSTOM_SOURCE) return null
+        val url = config.sourceUrl.trim()
+        val parsed = runCatching { URI(url) }.getOrNull()
+            ?: return "源码仓库 URL 无效"
+        if (parsed.scheme?.lowercase() != "https" || parsed.host.isNullOrBlank()) {
+            return "源码仓库必须使用 HTTPS"
+        }
+        if (parsed.userInfo != null || parsed.query != null || parsed.fragment != null) {
+            return "源码仓库 URL 不能包含凭据、查询参数或片段"
+        }
+        if (parsed.port !in setOf(-1, 443)) return "源码仓库必须使用默认 HTTPS 端口"
+        val pathParts = parsed.path.orEmpty().split('/').filter(String::isNotBlank)
+        if (pathParts.isEmpty() || pathParts.any { it == "." || it == ".." }) {
+            return "源码仓库路径无效"
+        }
+        if (config.sourceAccessMode == SOURCE_ACCESS_GITHUB_PRIVATE &&
+            (!parsed.host.equals("github.com", ignoreCase = true) || pathParts.size != 2)
+        ) {
+            return "私仓源码仅支持 github.com/OWNER/REPO"
+        }
+        val sourceRef = config.sourceRef.trim()
+        if (sourceRef.isBlank()) return "源码 ref 不能为空"
+        if (sourceRef.length > 512 || sourceRef.any { it.code < 0x20 } ||
+            sourceRef.startsWith("/") || sourceRef.endsWith("/") ||
+            sourceRef.contains("//") || sourceRef.contains("..")
+        ) {
+            return "源码 ref 格式无效"
+        }
+        if (!Regex("^\\d{4}-(0[1-9]|1[0-2])$").matches(config.osPatchLevel.trim())) {
+            return "补丁月份必须使用 YYYY-MM"
+        }
+        val configs = config.sourceDefconfigs.map(String::trim).filter(String::isNotBlank)
+        if (configs.isEmpty() || "gki_defconfig" !in configs) {
+            return "defconfig 列表必须包含 gki_defconfig"
+        }
+        configs.forEach { entry ->
+            if (entry.startsWith('/') || '\\' in entry ||
+                entry.split('/').any { it.isBlank() || it == "." || it == ".." }
+            ) {
+                return "defconfig 路径无效: $entry"
+            }
+        }
+        return null
+    }
 
     fun ksuVariantOptions(): List<String> = KSU_VARIANT_OPTIONS
 

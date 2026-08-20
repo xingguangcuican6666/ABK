@@ -581,6 +581,24 @@ class JsonContractTests(unittest.TestCase):
 
         self.assertEqual("request exposed ***", payload["error"])
 
+    def test_sensitive_json_keys_are_redacted_without_secret_inventory(self):
+        payload = abk._redact_json_secrets(
+            {
+                "token": "token-not-collected",
+                "nested": {
+                    "kpm_password": "password-not-collected",
+                    "private_key": "private-key-not-collected",
+                    "safe": "public-value",
+                },
+            },
+            set(),
+        )
+
+        self.assertEqual("***", payload["token"])
+        self.assertEqual("***", payload["nested"]["kpm_password"])
+        self.assertEqual("***", payload["nested"]["private_key"])
+        self.assertEqual("public-value", payload["nested"]["safe"])
+
     def test_login_json_never_starts_an_interactive_device_flow(self):
         with mock.patch.object(abk, "device_flow_login") as login:
             exit_code, payload, stderr = self._run_main(["abk", "--json", "login"])

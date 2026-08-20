@@ -2,6 +2,7 @@ package com.abk.kernel.data.repository
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.abk.kernel.data.model.APP_UPDATE_LINE_NORMAL
@@ -12,11 +13,21 @@ import com.abk.kernel.data.model.normalizeAppUpdateStability
 import com.abk.kernel.utils.DownloadDirectoryUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "abk_prefs")
+private val KEY_PREFERENCES_RESET_NOTICE = booleanPreferencesKey("preferences_reset_notice")
+
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "abk_prefs",
+    corruptionHandler = ReplaceFileCorruptionHandler {
+        // Keep a marker in the replacement file so the next UI session can
+        // explain why the local preferences disappeared.
+        preferencesOf(KEY_PREFERENCES_RESET_NOTICE to true)
+    },
+)
 
 class PreferencesRepository(private val context: Context) {
 
@@ -43,6 +54,8 @@ class PreferencesRepository(private val context: Context) {
         val KEY_CUSTOM_BACKGROUND_URI = stringPreferencesKey("custom_background_uri")
         val KEY_BACKGROUND_IMAGE_ENABLED = booleanPreferencesKey("background_image_enabled")
         val KEY_UI_SURFACE_ALPHA = floatPreferencesKey("ui_surface_alpha")
+        val KEY_BLUR_ENABLED = booleanPreferencesKey("blur_enabled")
+        val KEY_BLUR_BACKGROUND_EXP_ENABLED = booleanPreferencesKey("blur_background_exp_enabled")
         val KEY_BUILD_CONFIG = stringPreferencesKey("build_config_json")
         val KEY_BUILD_PLANS = stringPreferencesKey("build_plans_json")
         val KEY_BUILD_QUEUE = stringPreferencesKey("build_queue_json")
@@ -95,9 +108,16 @@ class PreferencesRepository(private val context: Context) {
     val dynamicColorEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_DYNAMIC_COLOR_ENABLED] ?: true }
     val customThemeColorArgb: Flow<Int?> = context.dataStore.data.map { it[KEY_CUSTOM_THEME_COLOR] }
     val customAccentColorArgb: Flow<Int?> = context.dataStore.data.map { it[KEY_CUSTOM_ACCENT_COLOR] }
-    val customBackgroundUri: Flow<String?> = context.dataStore.data.map { it[KEY_CUSTOM_BACKGROUND_URI] }
-    val backgroundImageEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_BACKGROUND_IMAGE_ENABLED] ?: false }
-    val uiSurfaceAlpha: Flow<Float> = context.dataStore.data.map { it[KEY_UI_SURFACE_ALPHA] ?: 1f }
+    val customBackgroundUri: Flow<String?> =
+        context.dataStore.data.map { it[KEY_CUSTOM_BACKGROUND_URI] }.distinctUntilChanged()
+    val backgroundImageEnabled: Flow<Boolean> =
+        context.dataStore.data.map { it[KEY_BACKGROUND_IMAGE_ENABLED] ?: false }.distinctUntilChanged()
+    val uiSurfaceAlpha: Flow<Float> =
+        context.dataStore.data.map { it[KEY_UI_SURFACE_ALPHA] ?: 1f }.distinctUntilChanged()
+    val blurEnabled: Flow<Boolean> =
+        context.dataStore.data.map { it[KEY_BLUR_ENABLED] ?: true }.distinctUntilChanged()
+    val blurBackgroundExpEnabled: Flow<Boolean> =
+        context.dataStore.data.map { it[KEY_BLUR_BACKGROUND_EXP_ENABLED] ?: false }.distinctUntilChanged()
     val buildConfigJson: Flow<String?> = context.dataStore.data.map { it[KEY_BUILD_CONFIG] }
     val buildPlansJson: Flow<String?> = context.dataStore.data.map { it[KEY_BUILD_PLANS] }
     val buildQueueJson: Flow<String?> = context.dataStore.data.map { it[KEY_BUILD_QUEUE] }
@@ -179,6 +199,9 @@ class PreferencesRepository(private val context: Context) {
             ?.toSet()
             .orEmpty()
     }
+    val preferencesResetNoticePending: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_PREFERENCES_RESET_NOTICE] ?: false
+    }
 
     suspend fun saveToken(token: String) = context.dataStore.edit { it[KEY_ACCESS_TOKEN] = token }
     suspend fun saveUsername(name: String) = context.dataStore.edit { it[KEY_USERNAME] = name }
@@ -233,6 +256,12 @@ class PreferencesRepository(private val context: Context) {
     }
     suspend fun setUiSurfaceAlpha(alpha: Float) = context.dataStore.edit {
         it[KEY_UI_SURFACE_ALPHA] = alpha.coerceIn(0f, 1f)
+    }
+    suspend fun setBlurEnabled(v: Boolean) = context.dataStore.edit {
+        it[KEY_BLUR_ENABLED] = v
+    }
+    suspend fun setBlurBackgroundExpEnabled(v: Boolean) = context.dataStore.edit {
+        it[KEY_BLUR_BACKGROUND_EXP_ENABLED] = v
     }
     suspend fun saveBuildConfigJson(json: String) = context.dataStore.edit { it[KEY_BUILD_CONFIG] = json }
     suspend fun saveBuildPlansJson(json: String) = context.dataStore.edit { it[KEY_BUILD_PLANS] = json }
@@ -331,6 +360,9 @@ class PreferencesRepository(private val context: Context) {
         preferences[KEY_ROOT_GRANT_PROFILE_READ_BLOCKED_PACKAGES] = current + cleanPackage
     }
     suspend fun clearPendingAutoDownloadRunId() = context.dataStore.edit { it.remove(KEY_PENDING_AUTO_DOWNLOAD_RUN_ID) }
+    suspend fun clearPreferencesResetNotice() = context.dataStore.edit {
+        it.remove(KEY_PREFERENCES_RESET_NOTICE)
+    }
 
     private fun workflowStepsVersionKey(lang: String) = intPreferencesKey("workflow_steps_version_$lang")
 

@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -69,8 +70,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -95,16 +96,27 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.abk.kernel.R
+import com.abk.kernel.ui.blur.BlurConfig
+import com.abk.kernel.ui.blur.BlurScreenScaffold
+import com.abk.kernel.ui.blur.blurredCardBackground
+import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AppPageBackground
 import com.abk.kernel.ui.components.ExpressiveListItem
 import com.abk.kernel.ui.components.ExpressiveTopBar
-import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.utils.RootUtils
+import com.abk.kernel.data.model.ArtifactType
+import com.abk.kernel.data.repository.PreferencesRepository
+import com.abk.kernel.utils.ArtifactVerification
+import com.abk.kernel.utils.DownloadUtils
+import com.abk.kernel.utils.ForkSigningManager
+import com.abk.kernel.utils.SignedBundleManifest
 import java.io.File
+import java.io.FileOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.zip.ZipFile
 
 private enum class LkmPatchInstallMode {
     SelectFile,
@@ -120,8 +132,11 @@ fun AbkRootPatchScreen(
     runtimeVariant: String,
     backgroundUri: String?,
     backgroundImageEnabled: Boolean,
+    blurEnabled: Boolean,
+    blurBackgroundExpEnabled: Boolean,
     onBack: () -> Unit,
-    onBackEnabledChange: (Boolean) -> Unit = {}
+    onBackEnabledChange: (Boolean) -> Unit = {},
+    downloadDirectory: String? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -164,6 +179,10 @@ fun AbkRootPatchScreen(
     var selectedBootName by rememberSaveable { mutableStateOf("") }
     var selectedAnyKernelPath by rememberSaveable { mutableStateOf("") }
     var selectedAnyKernelName by rememberSaveable { mutableStateOf("") }
+    var selectedAnyKernelManifest by remember { mutableStateOf<SignedBundleManifest?>(null) }
+    var showAnyKernelManifestNotice by remember { mutableStateOf(false) }
+    var showAnyKernelFlashConfirm by remember { mutableStateOf(false) }
+    val sessionManifestNoticeHashes = remember { mutableSetOf<String>() }
     var selectedLocalLkmPath by rememberSaveable { mutableStateOf("") }
     var selectedLocalLkmName by rememberSaveable { mutableStateOf("") }
     var selectedAnyKernelSlotTargetName by rememberSaveable {
@@ -309,15 +328,37 @@ fun AbkRootPatchScreen(
             return@rememberLauncherForActivityResult
         }
         scope.launch {
-            val staged = withContext(Dispatchers.IO) {
-                stageContentUri(context, uri, "abk-anykernel3", "AnyKernel3.zip")
+            val prepared = runCatching {
+                withContext(Dispatchers.IO) {
+                    val staged = stageContentUri(context, uri, "abk-anykernel3", "AnyKernel3.zip")
+                    prepareLocalAnyKernelSelection(context, staged.first, staged.second)
+                }
+            }.getOrElse { error ->
+                Toast.makeText(
+                    context,
+                    context.getString(
+                        R.string.root_patch_bundle_verification_failed,
+                        error.message ?: error::class.java.simpleName
+                    ),
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
             }
-            selectedAnyKernelPath = staged.first.absolutePath
-            selectedAnyKernelName = staged.second
+            selectedAnyKernelPath = prepared.payload.absolutePath
+            selectedAnyKernelName = prepared.displayName
+            selectedAnyKernelManifest = prepared.manifest
             selectedMode = LkmPatchInstallMode.AnyKernel3
             patchedImagePath = ""
             success = null
-            logLines = listOf(context.getString(R.string.root_patch_selected_file, staged.second))
+            logLines = listOf(context.getString(R.string.root_patch_selected_file, prepared.displayName))
+            val bundleHash = prepared.bundleFile?.let { bundle ->
+                withContext(Dispatchers.IO) { DownloadUtils.fileSha256Hex(bundle) }
+            }
+            if (prepared.manifest?.clientNotice != null &&
+                (bundleHash == null || sessionManifestNoticeHashes.add(bundleHash))
+            ) {
+                showAnyKernelManifestNotice = true
+            }
         }
     }
 
@@ -377,7 +418,8 @@ fun AbkRootPatchScreen(
                     allowShell = allowShell,
                     enableAdb = enableAdb,
                     localModulePath = modulePath,
-                    onOutput = ::appendLog
+                    onOutput = ::appendLog,
+                    downloadDirectory = downloadDirectory
                 )
             }
             finishPatchResult(result)
@@ -409,14 +451,15 @@ fun AbkRootPatchScreen(
                     allowShell = allowShell,
                     enableAdb = enableAdb,
                     localModulePath = modulePath,
-                    onOutput = ::appendLog
+                    onOutput = ::appendLog,
+                    downloadDirectory = downloadDirectory
                 )
             }
             finishPatchResult(result)
         }
     }
 
-    fun startAnyKernel3Flash() {
+    fun performAnyKernel3Flash() {
         if (!canFlashAnyKernel3) return
         beginOperation(
             action = actionFlashAnyKernel,
@@ -445,6 +488,15 @@ fun AbkRootPatchScreen(
             success = result.success
             if (result.output.isNotEmpty()) logLines = result.output
         }
+    }
+
+    fun startAnyKernel3Flash() {
+        if (!canFlashAnyKernel3) return
+        if (selectedAnyKernelManifest?.clientNotice != null) {
+            showAnyKernelFlashConfirm = true
+            return
+        }
+        performAnyKernel3Flash()
     }
 
     fun startFlashPatchedImage() {
@@ -480,12 +532,110 @@ fun AbkRootPatchScreen(
         }
     }
 
+    selectedAnyKernelManifest?.takeIf { it.clientNotice != null }?.let { manifest ->
+        val source = manifest.kernelSource
+        val feature = manifest.featureStatus
+        if (showAnyKernelManifestNotice || showAnyKernelFlashConfirm) {
+            AlertDialog(
+                onDismissRequest = {
+                    showAnyKernelManifestNotice = false
+                    showAnyKernelFlashConfirm = false
+                },
+                icon = {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                },
+                title = {
+                    Text(
+                        if (showAnyKernelFlashConfirm) {
+                            stringResource(R.string.flash_custom_source_review_before_flash)
+                        } else {
+                            stringResource(R.string.flash_custom_source_notice_title)
+                        }
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        source?.url?.let { Text(stringResource(R.string.flash_custom_source_url, it)) }
+                        if (source?.access == "github_private") {
+                            Text(
+                                stringResource(R.string.flash_custom_source_private_warning),
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        source?.access?.let { Text(stringResource(R.string.flash_custom_source_access, it)) }
+                        source?.requestedRef?.let { Text(stringResource(R.string.flash_custom_source_ref, it)) }
+                        source?.resolvedCommit?.let { Text(stringResource(R.string.flash_custom_source_commit, it)) }
+                        source?.kernelVersion?.let { kernel ->
+                            Text(stringResource(R.string.flash_custom_source_kernel, source.androidVersion.orEmpty(), kernel))
+                        }
+                        source?.toolchainPatchLevel?.let {
+                            Text(stringResource(R.string.flash_custom_source_toolchain, it))
+                        }
+                        source?.deviceLabel?.takeIf { it.isNotBlank() }?.let {
+                            Text(stringResource(R.string.flash_custom_source_device, it))
+                        }
+                        source?.defconfigs?.takeIf { it.isNotEmpty() }?.let { defconfigs ->
+                            Text(stringResource(R.string.flash_custom_source_defconfigs, defconfigs.joinToString(" -> ")))
+                        }
+                        feature?.requested?.takeIf { it.isNotEmpty() }?.let {
+                            Text(stringResource(R.string.flash_custom_source_requested, formatFeatureMap(it)))
+                        }
+                        feature?.effective?.takeIf { it.isNotEmpty() }?.let {
+                            Text(stringResource(R.string.flash_custom_source_effective, formatFeatureMap(it)))
+                        }
+                        feature?.skipped?.takeIf { it.isNotEmpty() }?.let { skippedFeatures ->
+                            Text(
+                                stringResource(R.string.flash_custom_source_skipped_title),
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            skippedFeatures.forEach { skipped ->
+                                Text(
+                                    "• ${skipped.id}: ${skipped.message}",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                        Text(
+                            stringResource(R.string.flash_custom_source_old_client_warning),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val confirmFlash = showAnyKernelFlashConfirm
+                            showAnyKernelManifestNotice = false
+                            showAnyKernelFlashConfirm = false
+                            if (confirmFlash) performAnyKernel3Flash()
+                        }
+                    ) {
+                        Text(stringResource(if (showAnyKernelFlashConfirm) R.string.flash_confirm else R.string.confirm))
+                    }
+                }
+            )
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         LkmPatchPageBackground(
             backgroundUri = backgroundUri,
             backgroundImageEnabled = backgroundImageEnabled
         )
-        Scaffold(
+        BlurScreenScaffold(
+            blurConfig = BlurConfig(
+                blurEnabled = blurEnabled,
+                backgroundExpEnabled = blurBackgroundExpEnabled,
+                backgroundUri = backgroundUri,
+                backgroundImageEnabled = backgroundImageEnabled,
+            ),
             containerColor = Color.Transparent,
             topBar = {
                 ExpressiveTopBar(
@@ -494,19 +644,19 @@ fun AbkRootPatchScreen(
                         IconButton(onClick = onBack, enabled = !running) {
                             Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
                         }
-                    }
+                    },
+                    enableBlur = blurEnabled
                 )
             }
-        ) { padding ->
+        ) { topBarHeight ->
             Column(
                 modifier = Modifier
-                    .padding(padding)
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = AbkScreenHorizontalPadding)
-                    .padding(top = 12.dp),
+                    .padding(horizontal = AbkScreenHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+            Spacer(Modifier.height(topBarHeight + 16.dp))
             PatchGroupCard {
                 PatchModeRow(
                     title = stringResource(R.string.root_patch_select_file),
@@ -847,10 +997,14 @@ private fun LkmPatchPageBackground(
 
 @Composable
 private fun PatchGroupCard(content: @Composable ColumnScope.() -> Unit) {
+    val shape = MaterialTheme.shapes.medium
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
@@ -935,12 +1089,16 @@ private fun PatchedImageCard(
     onCopy: () -> Unit,
     onFlash: () -> Unit
 ) {
+    val shape = MaterialTheme.shapes.medium
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -982,10 +1140,14 @@ private fun PatchLogCard(
     canReboot: Boolean,
     onReboot: () -> Unit
 ) {
+    val shape = MaterialTheme.shapes.medium
     Card(
-        colors = CardDefaults.cardColors(containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
+        colors = CardDefaults.cardColors(containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1034,6 +1196,62 @@ private fun PatchLogCard(
         }
     }
 }
+
+private data class LocalAnyKernelSelection(
+    val payload: File,
+    val displayName: String,
+    val manifest: SignedBundleManifest? = null,
+    val bundleFile: File? = null
+)
+
+private fun prepareLocalAnyKernelSelection(
+    context: Context,
+    stagedFile: File,
+    displayName: String
+): LocalAnyKernelSelection {
+    val manifest = ArtifactVerification.readBundleManifest(stagedFile)
+    if (manifest == null && !stagedFile.name.endsWith(".bundle.zip", ignoreCase = true)) {
+        return LocalAnyKernelSelection(stagedFile, displayName)
+    }
+    if (manifest == null) {
+        error("Missing signed bundle manifest")
+    }
+    val storedKey = PreferencesRepository(context).readForkArtifactSigningPublicKeyBlocking()
+    val publicKeyPem = storedKey?.let(ForkSigningManager::publicKeyPemFromStoredValue)
+    val verification = ArtifactVerification.verifyBundleFile(
+        bundleFile = stagedFile,
+        expectedType = ArtifactType.ANYKERNEL3,
+        publicKeyPem = publicKeyPem
+    )
+    if (!verification.success) {
+        error(verification.message)
+    }
+    val payloadName = verification.manifest.payloadName
+    val payloadFile = File(
+        stagedFile.parentFile ?: error("Selected bundle has no staging directory"),
+        "verified-${safeLocalFileName(payloadName)}"
+    )
+    ZipFile(stagedFile).use { zip ->
+        val payloadEntry = zip.getEntry(payloadName) ?: error("Missing signed AnyKernel3 payload")
+        zip.getInputStream(payloadEntry).use { input ->
+            FileOutputStream(payloadFile).use { output -> input.copyTo(output) }
+        }
+    }
+    return LocalAnyKernelSelection(
+        payload = payloadFile,
+        displayName = displayName,
+        manifest = verification.manifest,
+        bundleFile = stagedFile
+    )
+}
+
+private fun safeLocalFileName(value: String): String =
+    value.replace(Regex("""[^A-Za-z0-9._-]"""), "_").ifBlank { "payload.zip" }
+
+private fun formatFeatureMap(values: Map<String, Any?>): String =
+    values.entries
+        .sortedBy { it.key }
+        .joinToString(", ") { (key, value) -> "$key=${value ?: "null"}" }
 
 private suspend fun stageContentUri(
     context: Context,
