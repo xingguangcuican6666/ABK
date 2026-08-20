@@ -27,6 +27,32 @@ class RecentRunsArtifactRefreshTest {
         )
     }
 
+    @Test
+    fun flashRefreshSkipsCiRunsWhoseCommitTitleMentionsKernel() {
+        val run = WorkflowRun(
+            id = 32264674101L,
+            name = "Build ABK CLI",
+            status = "completed",
+            conclusion = "success",
+            htmlUrl = "https://github.com/xingguangcuicanrec/ABK/actions/runs/32264674101",
+            createdAt = "2026-08-19T14:32:56Z",
+            updatedAt = "2026-08-19T14:43:00Z",
+            runNumber = 16,
+            workflowId = 288730750L,
+            headBranch = "dev",
+            displayTitle = "feat(ci): support custom Lineage-like kernel source builds (#233)",
+        )
+
+        assertEquals(
+            emptyList<WorkflowRun>(),
+            runsNeedingArtifactRefresh(
+                runs = listOf(run),
+                includeCompleted = true,
+                includeCompletedPureManagers = false,
+            )
+        )
+    }
+
     private fun lineageLikeSuccessfulKernelRun() = WorkflowRun(
         id = 32330451402L,
         name = "Android 内核构建-类 LineageOS 源码",

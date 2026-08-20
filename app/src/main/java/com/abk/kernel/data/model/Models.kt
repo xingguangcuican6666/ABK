@@ -918,16 +918,11 @@ fun WorkflowRun.isFailedFlashRun(): Boolean =
  */
 fun WorkflowRun.isKernelBuild(): Boolean {
     val workflowName = name.orEmpty().lowercase()
-    val lower = "${name.orEmpty()} ${displayTitle.orEmpty()}".lowercase()
-    if (lower.hasUtilityWorkflowSignal()) return false
+    if (workflowName.hasUtilityWorkflowSignal()) return false
     // The workflow name is more reliable than displayTitle, which can contain
     // user/commit text from a different build type.
     if (workflowName.hasManagerBuildSignal()) return false
     if (workflowName.hasKernelBuildSignal()) return true
-    // Negative signals: app / manager / certificate / utility workflows.
-    if (lower.hasManagerBuildSignal()) return false
-    // Positive signals: kernel build.
-    if (lower.hasKernelBuildSignal()) return true
     // Unknown — be conservative and exclude it from the kernel-only tile.
     return false
 }
@@ -940,15 +935,12 @@ fun WorkflowRun.isKernelBuild(): Boolean {
  */
 fun WorkflowRun.isManagerBuild(): Boolean {
     val workflowName = name.orEmpty().lowercase()
-    val lower = "${name.orEmpty()} ${displayTitle.orEmpty()}".lowercase()
-    if (lower.hasUtilityWorkflowSignal()) return false
+    if (workflowName.hasUtilityWorkflowSignal()) return false
     // The GitHub run display title can contain kernel parameters from the
     // triggering commit/title. The workflow name is the primary classifier.
     if (workflowName.hasManagerBuildSignal()) return true
     if (workflowName.hasKernelBuildSignal()) return false
-    // Kernel workflows often bundle a manager APK but are not manager-primary.
-    if (lower.hasKernelBuildSignal()) return false
-    return lower.hasManagerBuildSignal()
+    return false
 }
 
 /** Manager-primary workflow (Build ABK App / Dev), not a kernel build that bundles a manager APK. */
