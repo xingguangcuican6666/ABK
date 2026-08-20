@@ -322,8 +322,11 @@ fun FlashScreen(
         buildWorkflowGroups(remoteArtifacts, workflowDownloadedArtifacts, unlinkedWorkflowTitle, recentRunById)
     }
     val allWorkflowGroups = remember(workflowGroups, state.sessionGhostFailedRuns, state.dismissedFailedRunIds, recentRunById) {
-        val activeRunIds = state.recentRuns.filter { it.isActive() }.map { it.id }.toSet()
-        val extraGroups = activeRunIds
+        val placeholderRunIds = state.recentRuns
+            .filter { it.isActive() || it.isSuccessfulKernelFlashRun() }
+            .map { it.id }
+            .toSet()
+        val extraGroups = placeholderRunIds
             .filter { id -> workflowGroups.none { it.runId == id } }
             .mapNotNull { id ->
                 val run = recentRunById[id] ?: return@mapNotNull null
@@ -333,7 +336,7 @@ fun FlashScreen(
             .filter { it !in state.dismissedFailedRunIds }
             .toSet()
         val extraGhostGroups = ghostRunIds
-            .filter { id -> workflowGroups.none { it.runId == id } && id !in activeRunIds }
+            .filter { id -> workflowGroups.none { it.runId == id } && id !in placeholderRunIds }
             .mapNotNull { id ->
                 val run = recentRunById[id] ?: return@mapNotNull null
                 emptyWorkflowGroupFor(run, unlinkedWorkflowTitle)

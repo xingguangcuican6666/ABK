@@ -310,8 +310,10 @@ internal fun hasDownloadedFilesForRun(
 }
 
 internal fun WorkflowArtifactGroup.shouldAppearInWorkflowList(run: WorkflowRun?): Boolean =
-    if (run.isAbkManagerFlashRun(runTitle) || (remote.isEmpty() && local.isEmpty())) {
+    if (run.isAbkManagerFlashRun(runTitle)) {
         false
+    } else if (remote.isEmpty() && local.isEmpty()) {
+        run?.isSuccessfulKernelFlashRun() == true
     } else when (
         FlashWorkflowFilter.primaryKind(
             run = run,

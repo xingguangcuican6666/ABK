@@ -91,6 +91,27 @@ class FlashRoutingTest {
         assertEquals(ArtifactType.KSU_MANAGER, artifactTypeForGroup(group))
     }
 
+    @Test
+    fun keepsSuccessfulLineageKernelRunVisibleBeforeArtifactsArrive() {
+        val run = WorkflowRun(
+            id = 32330451402L,
+            name = "Android 内核构建-类 LineageOS 源码",
+            status = "completed",
+            conclusion = "success",
+            htmlUrl = "https://github.com/xingguangcuicanrec/ABK/actions/runs/32330451402",
+            createdAt = "2026-08-20T04:03:16Z",
+            updatedAt = "2026-08-20T04:17:07Z",
+            runNumber = 5,
+            workflowId = 337872312L,
+            headBranch = "dev",
+            displayTitle = "Android 内核构建-类 LineageOS 源码"
+        )
+        val group = emptyWorkflowGroupFor(run, "Unlinked")
+
+        assertTrue(run.isSuccessfulKernelFlashRun())
+        assertTrue(group.shouldAppearInWorkflowList(run))
+    }
+
     private fun artifactTypeForGroup(group: WorkflowArtifactGroup): ArtifactType =
         group.remote.firstOrNull()?.let { com.abk.kernel.utils.DownloadUtils.classifyArtifact(it.name) }
             ?: group.local.firstOrNull()?.type
