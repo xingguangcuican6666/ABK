@@ -26,11 +26,11 @@
       "versionName": "1.2.6",
       "versionCode": 10026,
       "downloadUrl": "https://nightly.link/xingguangcuican6666/ABK/workflows/build-abk-app-dev/dev/abk-apks.zip",
-      "publishedAt": "2026-08-02T07:09:57Z",
-      "buildTimestampEpochMillis": 1785654597000,
+      "publishedAt": "2026-08-22T15:15:21Z",
+      "buildTimestampEpochMillis": 1787411721000,
       "sourceWorkflow": "Build ABK App Dev",
-      "commitSha": "129843ec90c4d57e51619b23bf13a47463ceb670",
-      "runId": 30737265305
+      "commitSha": "c8195a655148b0e174ac03d5515be1816611bf14",
+      "runId": 32581129567
     }
   }
 }
