@@ -351,6 +351,33 @@ fun BuildScreen(
         editingModuleSetMetadata = null
         editingModuleSetChildIds = emptyList()
         editingModuleSetStageSelections = emptyMap()
+        pendingCustomModuleUrl = ""
+    }
+
+    fun configureModuleSetEditor(
+        group: BuildCustomModuleGroup,
+        metadata: ExternalModuleMetadata,
+        currentGroupModules: List<CustomExternalModule>
+    ) {
+        val selectedChildIds = currentGroupModules
+            .mapNotNull { childId -> childId.childId.trim().takeIf { it.isNotBlank() } }
+            .distinct()
+        val stageSelections = metadata.children.associate { child ->
+            val existingStages = currentGroupModules
+                .filter { it.childId.equals(child.id, ignoreCase = true) }
+                .map { CustomExternalModuleStage.normalize(it.stage) }
+                .distinct()
+                .filter { it in child.supportedStages }
+            child.id to existingStages.ifEmpty {
+                child.recommendedStages
+                    .filter { it in child.supportedStages }
+                    .ifEmpty { listOf(child.defaultStage) }
+            }
+        }
+        editingModuleSetGroup = group
+        editingModuleSetMetadata = metadata
+        editingModuleSetChildIds = selectedChildIds
+        editingModuleSetStageSelections = stageSelections
     }
 
     fun openModuleSetEditor(group: BuildCustomModuleGroup) {
@@ -366,27 +393,9 @@ fun BuildScreen(
                     (
                         it.groupRepoUrl.equals(repoUrl, ignoreCase = true) ||
                             (it.groupRepoUrl.isBlank() && it.url.equals(repoUrl, ignoreCase = true))
-                        )
+                    )
             }
-            val selectedChildIds = currentGroupModules
-                .mapNotNull { childId -> childId.childId.trim().takeIf { it.isNotBlank() } }
-                .distinct()
-            val stageSelections = metadata.children.associate { child ->
-                val existingStages = currentGroupModules
-                    .filter { it.childId.equals(child.id, ignoreCase = true) }
-                    .map { CustomExternalModuleStage.normalize(it.stage) }
-                    .distinct()
-                    .filter { it in child.supportedStages }
-                child.id to existingStages.ifEmpty {
-                    child.recommendedStages
-                        .filter { it in child.supportedStages }
-                        .ifEmpty { listOf(child.defaultStage) }
-                }
-            }
-            editingModuleSetGroup = group
-            editingModuleSetMetadata = metadata
-            editingModuleSetChildIds = selectedChildIds
-            editingModuleSetStageSelections = stageSelections
+            configureModuleSetEditor(group, metadata, currentGroupModules)
         }
     }
 
@@ -1127,6 +1136,10 @@ fun BuildScreen(
                             }
                             .filter { (_, stages) -> stages.isNotEmpty() }
                         if (vm.replaceModuleSetSelection(repoUrl, moduleSetMetadata, selections)) {
+                            if (pendingCustomModuleUrl.equals(repoUrl, ignoreCase = true)) {
+                                customModuleUrl = ""
+                                pendingCustomModuleUrl = ""
+                            }
                             clearModuleSetEditor()
                         }
                     },
@@ -1981,11 +1994,34 @@ fun BuildScreen(
                                 if (cleanUrl.isNotEmpty()) {
                                     coroutineScope.launch {
                                         vm.checkCustomExternalModuleMetadata(cleanUrl)?.let { metadata ->
-                                            pendingCustomModuleUrl = cleanUrl
-                                            pendingCustomModuleMetadata = metadata
-                                            selectedCustomModuleStages = metadata.recommendedStages
-                                                .filter { it in metadata.supportedStages }
-                                                .ifEmpty { listOf(metadata.defaultStage) }
+                                            if (metadata.kind == ModuleCatalogItemKind.MODULE_SET) {
+                                                val group = BuildCustomModuleGroup(
+                                                    url = cleanUrl,
+                                                    stages = emptyList(),
+                                                    catalogModule = null,
+                                                    entryKind = CustomExternalModuleEntryKind.MODULE_SET_CHILD,
+                                                    groupRepoUrl = cleanUrl,
+                                                    groupName = metadata.name
+                                                )
+                                                val currentGroupModules = config.customExternalModules.filter {
+                                                    CustomExternalModuleEntryKind.normalize(it.entryKind) ==
+                                                        CustomExternalModuleEntryKind.MODULE_SET_CHILD &&
+                                                        (
+                                                            it.groupRepoUrl.equals(cleanUrl, ignoreCase = true) ||
+                                                                (it.groupRepoUrl.isBlank() && it.url.equals(cleanUrl, ignoreCase = true))
+                                                            )
+                                                }
+                                                pendingCustomModuleUrl = cleanUrl
+                                                pendingCustomModuleMetadata = null
+                                                selectedCustomModuleStages = emptyList()
+                                                configureModuleSetEditor(group, metadata, currentGroupModules)
+                                            } else {
+                                                pendingCustomModuleUrl = cleanUrl
+                                                pendingCustomModuleMetadata = metadata
+                                                selectedCustomModuleStages = metadata.recommendedStages
+                                                    .filter { it in metadata.supportedStages }
+                                                    .ifEmpty { listOf(metadata.defaultStage) }
+                                            }
                                         }
                                     }
                                 }
