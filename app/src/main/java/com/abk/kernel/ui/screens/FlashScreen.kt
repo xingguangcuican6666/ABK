@@ -827,8 +827,16 @@ fun FlashScreen(
         }
     }
 
-    LaunchedEffect(state.downloadedArtifacts) {
-        for (item in state.downloadedArtifacts.filter { it.verified && it.manifestClientNotice != null }) {
+    LaunchedEffect(state.downloadedArtifacts, flashDetailRouteActive, selectedRunId, allWorkflowGroups) {
+        // Manifest notices belong to a specific downloaded artifact. Do not
+        // interrupt the flash list as soon as the tab opens; wait until the
+        // user explicitly opens that workflow's detail page.
+        val candidates = manifestNoticeCandidates(flashDetailRouteActive, selectedRunId, allWorkflowGroups)
+        if (candidates.isEmpty()) {
+            manifestNoticeItem = null
+            return@LaunchedEffect
+        }
+        for (item in candidates) {
             val file = File(item.filePath)
             if (!file.isFile) continue
             val key = withContext(Dispatchers.IO) { DownloadUtils.fileSha256Hex(file) }

@@ -3,6 +3,7 @@ package com.abk.kernel.ui.screens.flash
 import com.abk.kernel.data.model.ArtifactCategory
 import com.abk.kernel.data.model.ArtifactType
 import com.abk.kernel.data.model.BuildArtifact
+import com.abk.kernel.data.model.DownloadedArtifact
 import com.abk.kernel.data.model.WorkflowRun
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -10,6 +11,33 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FlashRoutingTest {
+
+    @Test
+    fun doesNotSurfaceManifestNoticeWhenOpeningFlashList() {
+        val group = workflowGroupWithManifestNotice()
+
+        assertTrue(
+            manifestNoticeCandidates(
+                flashDetailRouteActive = false,
+                selectedRunId = null,
+                workflowGroups = listOf(group),
+            ).isEmpty()
+        )
+    }
+
+    @Test
+    fun surfacesManifestNoticeOnlyForOpenedWorkflowDetail() {
+        val group = workflowGroupWithManifestNotice()
+
+        assertEquals(
+            listOf(group.local.single()),
+            manifestNoticeCandidates(
+                flashDetailRouteActive = true,
+                selectedRunId = group.runId,
+                workflowGroups = listOf(group),
+            )
+        )
+    }
 
     @Test
     fun filtersAbkManagerArtifactsOutOfWorkflowGroups() {
@@ -177,6 +205,26 @@ class FlashRoutingTest {
         headBranch = "dev",
         displayTitle = "Android 内核构建-类 LineageOS 源码",
     )
+
+    private fun workflowGroupWithManifestNotice(): WorkflowArtifactGroup {
+        val run = successfulLineageKernelRun()
+        val artifact = DownloadedArtifact(
+            id = 1L,
+            name = "lineage-kernel.zip",
+            filePath = "/tmp/lineage-kernel.zip",
+            type = ArtifactType.KERNEL_PACKAGE,
+            sizeBytes = 1L,
+            runId = run.id,
+            verified = true,
+            manifestClientNotice = "{\"message\":\"custom source\"}",
+        )
+        return buildWorkflowGroups(
+            remoteArtifacts = emptyList(),
+            downloadedArtifacts = listOf(artifact),
+            unlinkedWorkflowTitle = "Unlinked",
+            runs = mapOf(run.id to run),
+        ).single()
+    }
 
     private fun artifactTypeForGroup(group: WorkflowArtifactGroup): ArtifactType =
         group.remote.firstOrNull()?.let { com.abk.kernel.utils.DownloadUtils.classifyArtifact(it.name) }

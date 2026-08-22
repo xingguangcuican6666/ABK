@@ -291,6 +291,20 @@ internal fun WorkflowArtifactGroup.hasRemoteKernelArtifact(): Boolean =
 internal fun WorkflowArtifactGroup.hasSusfsModuleArtifact(): Boolean =
     cachedHasSusfsModuleArtifact
 
+/** Manifest notices are scoped to an explicitly opened workflow detail page. */
+internal fun manifestNoticeCandidates(
+    flashDetailRouteActive: Boolean,
+    selectedRunId: Long?,
+    workflowGroups: List<WorkflowArtifactGroup>,
+): List<DownloadedArtifact> {
+    if (!flashDetailRouteActive || selectedRunId == null) return emptyList()
+    return workflowGroups
+        .firstOrNull { it.runId == selectedRunId }
+        ?.local
+        ?.filter { it.verified && it.manifestClientNotice != null }
+        .orEmpty()
+}
+
 internal fun WorkflowRun?.workflowState(): FlashFilterWorkflowState? = when {
     this == null -> null
     this.isActiveFlashRun() -> FlashFilterWorkflowState.Running
