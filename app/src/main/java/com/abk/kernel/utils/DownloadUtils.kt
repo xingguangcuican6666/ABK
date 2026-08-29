@@ -301,7 +301,7 @@ object DownloadUtils {
                         stageDir = createStageDir(context, "artifact-${safeFileName(artifact.name)}")
                         zipFile = File(requireNotNull(stageDir), "${safeFileName(artifact.name)}.zip")
                     } else {
-                        zipFile = File(targetRunDir, "${artifact.name}.zip")
+                        zipFile = File(targetRunDir, "${safeFileName(artifact.name)}.zip")
                     }
 
             downloadUrlToFile(
@@ -393,7 +393,8 @@ object DownloadUtils {
                         ArtifactVerification.verifyBundleFile(
                             candidate,
                             type,
-                            ForkSigningManager.publicKeyPemFromStoredValue(signingPublicKey)
+                            ForkSigningManager.publicKeyPemFromStoredValue(signingPublicKey),
+                            expectedRunId = run?.id
                         )
                     } else {
                         null
@@ -626,7 +627,8 @@ object DownloadUtils {
                             ArtifactVerification.verifyBundleFile(
                                 candidate,
                                 type,
-                                ForkSigningManager.publicKeyPemFromStoredValue(signingPublicKey)
+                                ForkSigningManager.publicKeyPemFromStoredValue(signingPublicKey),
+                                expectedRunId = runId
                             )
                         }
                     } else {
@@ -803,7 +805,8 @@ object DownloadUtils {
                 ArtifactVerification.verifyBundleFile(
                     source,
                     effectiveType,
-                    ForkSigningManager.publicKeyPemFromStoredValue(signingPublicKey)
+                    ForkSigningManager.publicKeyPemFromStoredValue(signingPublicKey),
+                    expectedRunId = artifact.runId
                 )
             }
             if (!verification.success) {
@@ -1509,7 +1512,8 @@ object DownloadUtils {
         val verification = ArtifactVerification.verifyBundleFile(
             source,
             effectiveType,
-            ForkSigningManager.publicKeyPemFromStoredValue(signingPublicKey)
+            ForkSigningManager.publicKeyPemFromStoredValue(signingPublicKey),
+            expectedRunId = artifact.runId
         )
         if (verification.success) return null
         val kind = when (verification.failureReason) {
