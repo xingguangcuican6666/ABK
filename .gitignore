@@ -1,5 +1,6 @@
 # Claude Code
 .claude/
+/CLAUDE.md
 
 # Gemini
 .gemini/
@@ -69,14 +70,17 @@ node_modules/
 # Other
 .ace-tool/
 AGENTS.md
+docs/superpowers/
 web/serve.sh
 .omc/
+.omo/
 web/dist/
 wild_kernel_comparison.md
 action_build_comparison.md
 
 # Gradle
 .gradle/
+.gradle-review/
 build/
 !desktop/flutter_app/lib/src/features/build/
 !desktop/flutter_app/lib/src/features/build/*.dart
@@ -95,3 +99,6 @@ captures/
 local.properties
 local.properties.*
 !local.properties.example
+
+# Local analytics/telemetry opt-out (machine-specific user id)
+analytics.settings

@@ -78,7 +78,6 @@ import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
 import com.abk.kernel.ui.components.ExpressiveHeroCard
 import com.abk.kernel.ui.components.ExpressiveListItem
 import com.abk.kernel.ui.components.ExpressiveSectionCard
-import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveSwitchItem
 import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
@@ -426,6 +425,8 @@ fun SettingsScreen(
                         onBackgroundImageChange = { uri -> vm.setBackgroundImageUri(uri) },
                         onBackgroundImageEnabledChange = { enabled -> vm.setBackgroundImageEnabled(enabled) },
                         onUiSurfaceAlphaChange = { alpha -> vm.setUiSurfaceAlpha(alpha) },
+                        uiStyle = state.uiStyle,
+                        onUiStyleChange = { style -> vm.setUiStyle(style) },
                         onUiSurfaceAlphaPreviewChange = { alpha -> vm.setUiSurfaceAlphaPreview(alpha) },
                         onBlurEnabledChange = vm::setBlurEnabled,
                         onBlurBackgroundExpEnabledChange = vm::setBlurBackgroundExpEnabled,
@@ -963,44 +964,43 @@ private fun SettingsMainContent(
                 trailingContent = {
                     if (state.appUpdateChecking) {
                         LoadingIndicator(Modifier.size(22.dp))
-                    } else {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.settings_check_app_update))
                     }
                 },
                 onClick = vm::checkAppUpdate
             )
-            state.appUpdateInfo?.let { info ->
-                ExpressiveListItem(
-                    title = if (info.hasUpdate) {
-                        stringResource(R.string.settings_app_update_available)
-                    } else {
-                        stringResource(R.string.settings_app_update_latest)
-                    },
-                    subtitle = appUpdateResultSubtitle(info),
-                    leadingIcon = if (info.hasUpdate) Icons.Default.Download else Icons.Default.Verified
-                )
-                if (info.hasUpdate) {
+            // Update info display (merged: available-status row + download-install action)
+            AnimatedVisibility(visible = state.appUpdateInfo != null) {
+                state.appUpdateInfo?.let { info ->
                     val downloadUrl = info.remote.downloadUrl
                     ExpressiveListItem(
-                        title = stringResource(R.string.settings_download_install_update),
+                        title = if (info.hasUpdate) {
+                            stringResource(R.string.settings_app_update_available)
+                        } else {
+                            stringResource(R.string.settings_app_update_latest)
+                        },
                         subtitle = when {
                             state.appUpdateDownloading -> stringResource(
                                 R.string.settings_app_update_downloading_progress,
                                 state.appUpdateDownloadProgress
                             )
-                            downloadUrl.isBlank() -> stringResource(R.string.settings_app_update_link_missing)
-                            else -> downloadUrl
+                            info.hasUpdate -> {
+                                if (downloadUrl.isBlank()) stringResource(R.string.settings_app_update_link_missing) else downloadUrl
+                            }
+                            else -> appUpdateResultSubtitle(info)
                         },
-                        leadingIcon = Icons.Default.InstallMobile,
-                        enabled = downloadUrl.isNotBlank(),
+                        leadingIcon = if (info.hasUpdate) Icons.Default.Download else Icons.Default.Verified,
+                        enabled = info.hasUpdate && downloadUrl.isNotBlank(),
                         trailingContent = {
-                            if (state.appUpdateDownloading) {
-                                LoadingIndicator(Modifier.size(22.dp))
-                            } else if (downloadUrl.isNotBlank()) {
-                                Icon(Icons.Default.Download, contentDescription = stringResource(R.string.settings_download_install_update))
+                            if (info.hasUpdate) {
+                                if (state.appUpdateDownloading) {
+                                    LoadingIndicator(Modifier.size(22.dp))
+                                } else if (downloadUrl.isNotBlank()) {
+                                    Icon(Icons.Default.Download, contentDescription = stringResource(R.string.settings_download_install_update))
+                                }
                             }
                         },
-                        onClick = downloadUrl.takeIf { it.isNotBlank() }?.let { { vm.downloadAndInstallAppUpdate() } }
+                        onClick = downloadUrl.takeIf { it.isNotBlank() && info.hasUpdate }
+                            ?.let { { vm.downloadAndInstallAppUpdate() } }
                     )
                 }
             }
@@ -2113,6 +2113,8 @@ private fun ThemeSettingsScreen(
     onBackgroundImageChange: (String?) -> Unit,
     onBackgroundImageEnabledChange: (Boolean) -> Unit,
     onUiSurfaceAlphaChange: (Float) -> Unit,
+    uiStyle: String = "material",
+    onUiStyleChange: (String) -> Unit = {},
     onUiSurfaceAlphaPreviewChange: (Float) -> Unit,
     onBlurEnabledChange: (Boolean) -> Unit,
     onBlurBackgroundExpEnabledChange: (Boolean) -> Unit,
@@ -2158,6 +2160,52 @@ private fun ThemeSettingsScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Spacer(Modifier.height(topBarHeight + 16.dp))
+        SettingsGroup(title = stringResource(R.string.settings_ui_style)) {
+            var uiStyleExpanded by remember { mutableStateOf(false) }
+            val uiStyleOptions = remember { listOf("material", "miuix") }
+            val uiStyleLabels = remember {
+                mapOf("material" to "Material 3", "miuix" to "MIUIX")
+            }
+            val currentUiLabel = uiStyleLabels[uiStyle] ?: uiStyle
+            ExpressiveListItem(
+                title = currentUiLabel,
+                subtitle = stringResource(R.string.settings_ui_style_miuix_subtitle),
+                leadingIcon = Icons.Default.Style,
+                trailingContent = {
+                    Box {
+                        TextButton(
+                            onClick = { uiStyleExpanded = true },
+                            modifier = Modifier.offset(x = 8.dp)
+                        ) {
+                            Text(currentUiLabel)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = uiStyleExpanded,
+                            onDismissRequest = { uiStyleExpanded = false }
+                        ) {
+                            uiStyleOptions.forEach { option ->
+                                val label = uiStyleLabels[option] ?: option
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    leadingIcon = {
+                                        if (option == uiStyle) {
+                                            Icon(Icons.Default.Check, contentDescription = null)
+                                        }
+                                    },
+                                    onClick = {
+                                        if (option != uiStyle) onUiStyleChange(option)
+                                        uiStyleExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
+                onClick = { uiStyleExpanded = true }
+            )
+        }
+
         SettingsGroup(title = stringResource(R.string.settings_appearance_mode)) {
             themes.forEach { (key, label, icon) ->
                 val selected = themeMode == key
@@ -2737,11 +2785,15 @@ private fun openSourceNoticeGroups(): List<OpenSourceNoticeGroup> = listOf(
 )
 
 private fun androidDependencyNotices(): List<OpenSourceNotice> = listOf(
+    OpenSourceNotice("compose-miuix-ui (MIUIX) 0.9.2", "Apache-2.0", "top.yukonga.miuix.kmp", "https://github.com/compose-miuix-ui/miuix"),
+    OpenSourceNotice("Kyant0 Backdrop (AndroidLiquidGlass) 2.0.0", "Apache-2.0", "io.github.kyant0:backdrop", "https://github.com/Kyant0/AndroidLiquidGlass"),
     OpenSourceNotice("Android Gradle Plugin 9.1.1", "Apache-2.0", "com.android.application"),
-    OpenSourceNotice("Kotlin Gradle/Compose plugin 2.3.21", "Apache-2.0", "org.jetbrains.kotlin.plugin.compose"),
+    OpenSourceNotice("Kotlin Gradle/Compose plugin 2.4.0", "Apache-2.0", "org.jetbrains.kotlin.plugin.compose"),
     OpenSourceNotice("androidx.core:core-ktx 1.15.0", "Apache-2.0", "Gradle direct dependency"),
     OpenSourceNotice("androidx.lifecycle:lifecycle-runtime-ktx 2.8.7", "Apache-2.0", "Gradle direct dependency"),
     OpenSourceNotice("androidx.lifecycle:lifecycle-viewmodel-compose 2.8.7", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("androidx.lifecycle:lifecycle-process 2.8.7", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("androidx.lifecycle:lifecycle-viewmodel-navigation3 2.10.0", "Apache-2.0", "Gradle direct dependency"),
     OpenSourceNotice("androidx.activity:activity-compose 1.9.3", "Apache-2.0", "Gradle direct dependency"),
     OpenSourceNotice("androidx.compose:compose-bom 2026.05.00", "Apache-2.0", "Gradle direct dependency"),
     OpenSourceNotice("androidx.compose.ui:ui", "Apache-2.0", "Gradle direct dependency"),
@@ -2751,6 +2803,7 @@ private fun androidDependencyNotices(): List<OpenSourceNotice> = listOf(
     OpenSourceNotice("androidx.compose.material:material-icons-extended", "Apache-2.0", "Gradle direct dependency"),
     OpenSourceNotice("com.google.android.material:material 1.12.0", "Apache-2.0", "Gradle direct dependency"),
     OpenSourceNotice("androidx.navigation:navigation-compose 2.8.5", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("androidx.navigation3:navigation3-runtime 1.1.2", "Apache-2.0", "Gradle direct dependency"),
     OpenSourceNotice("Retrofit 2.11.0", "Apache-2.0", "com.squareup.retrofit2:retrofit"),
     OpenSourceNotice("Retrofit Gson converter 2.11.0", "Apache-2.0", "com.squareup.retrofit2:converter-gson"),
     OpenSourceNotice("OkHttp 4.12.0", "Apache-2.0", "com.squareup.okhttp3:okhttp"),
@@ -2895,43 +2948,6 @@ private fun openUrl(context: android.content.Context, url: String) {
     }
 }
 
-private fun launchAppUpdateInstaller(context: android.content.Context, apkPath: String) {
-    val apkFile = File(apkPath)
-    if (!apkFile.isFile) {
-        Toast.makeText(context, context.getString(R.string.ru_apk_not_found, apkPath), Toast.LENGTH_SHORT).show()
-        return
-    }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-        !context.packageManager.canRequestPackageInstalls()
-    ) {
-        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-            data = Uri.parse("package:${context.packageName}")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        runCatching { context.startActivity(intent) }
-            .onFailure {
-                Toast.makeText(context, context.getString(R.string.settings_app_update_install_permission), Toast.LENGTH_LONG).show()
-            }
-        return
-    }
-    val uri = FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.fileprovider",
-        apkFile
-    )
-    val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-        data = uri
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
-        putExtra(Intent.EXTRA_RETURN_RESULT, false)
-    }
-    runCatching { context.startActivity(intent) }
-        .onFailure {
-            Toast.makeText(context, context.getString(R.string.settings_app_update_install_failed), Toast.LENGTH_LONG).show()
-        }
-}
-
 private fun shareDiagnosticBundle(context: Context, zipFile: File) {
     val uri = FileProvider.getUriForFile(
         context,
@@ -2947,42 +2963,6 @@ private fun shareDiagnosticBundle(context: Context, zipFile: File) {
     context.startActivity(
         Intent.createChooser(intent, context.getString(R.string.settings_export_diagnostics_share))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    )
-}
-
-@Composable
-private fun SettingsHero(
-    login: String?,
-    forkName: String?,
-    themeMode: String
-) {
-    ExpressiveHeroCard(
-        title = login?.let { stringResource(R.string.settings_connected_github, it) }
-            ?: stringResource(R.string.settings_center_title),
-        subtitle = forkName ?: stringResource(R.string.settings_center_subtitle),
-        icon = Icons.Default.Tune,
-        containerColor = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        badge = {
-            ExpressiveStatusChip(
-                label = when (themeMode) {
-                    "dark" -> stringResource(R.string.settings_dark_theme)
-                    "light" -> stringResource(R.string.settings_light_theme)
-                    else -> stringResource(R.string.settings_theme_system)
-                },
-                icon = Icons.Default.Palette,
-                color = MaterialTheme.colorScheme.primary
-            )
-            ExpressiveStatusChip(
-                label = if (forkName != null) {
-                    stringResource(R.string.settings_fork_connected)
-                } else {
-                    stringResource(R.string.settings_waiting_fork)
-                },
-                icon = Icons.Default.ForkRight,
-                color = if (forkName != null) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
-            )
-        }
     )
 }
 
@@ -3123,10 +3103,6 @@ private fun AppUpdateLinePicker(
 
 @Composable
 private fun appUpdateCheckSubtitle(state: MainUiState): String = when {
-    state.appUpdateDownloading -> stringResource(
-        R.string.settings_app_update_downloading_progress,
-        state.appUpdateDownloadProgress
-    )
     state.appUpdateChecking -> stringResource(R.string.settings_app_update_checking)
     state.appUpdateInfo != null -> appUpdateResultSubtitle(state.appUpdateInfo)
     state.appUpdateError?.isNotBlank() == true -> state.appUpdateError

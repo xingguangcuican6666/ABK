@@ -106,6 +106,10 @@
     <string name="oobe_flash_detail">Артефакты workflow, доступ к fork и записи Actions появятся после входа и проверки fork.</string>
     <string name="oobe_continue_setup">Продолжить настройку GitHub</string>
     <string name="oobe_skip_for_now">Пропустить</string>
+    <string name="oobe_theme_title">Выберите стиль интерфейса</string>
+    <string name="oobe_theme_m3e">Material 3 Expressive</string>
+    <string name="oobe_theme_miuix">MIUIX</string>
+    <string name="oobe_theme_confirm">Подтвердить</string>
 
     <!-- Build -->
     <string name="build_title">Сборка ядра</string>
@@ -417,7 +421,6 @@
     <string name="flash_conclusion_failure">failure</string>
     <string name="flash_chip_kernel_kind">Ядро: %1$s</string>
     <string name="flash_chip_susfs">SUSFS</string>
-    <string name="flash_chip_kernel_unknown">?</string>
     <string name="flash_kernel_resukisu">ReSukiSU</string>
     <string name="flash_kernel_sukisu">SukiSU</string>
     <string name="flash_kernel_official">Official</string>
@@ -551,6 +554,15 @@
     <string name="flash_category_module">Модули</string>
     <string name="empty_state_build_artifacts_hint">После завершения следующей сборки доступные артефакты автоматически появятся здесь.</string>
 
+    <!-- Flash terminal -->
+    <string name="flash_terminal_status_flashing">Выполняется...</string>
+    <string name="flash_terminal_status_success">Успешно</string>
+    <string name="flash_terminal_status_failed">Ошибка</string>
+    <string name="flash_terminal_reboot">Перезагрузить</string>
+    <string name="flash_terminal_back_confirm_title">Подтвердить выход</string>
+    <string name="flash_terminal_back_confirm_msg">Операция выполняется, выйти?</string>
+    <string name="flash_terminal_save_log">Сохранить лог</string>
+
     <!-- Status -->
     <string name="status_title">Текущее состояние</string>
     <string name="status_root">Статус root</string>
@@ -564,6 +576,10 @@
     <string name="status_no_build">Записей о сборках нет</string>
     <string name="status_working">Работает</string>
     <string name="status_partially_active">Частично активен</string>
+    <string name="status_hero_activated_title">Работает в режиме Root</string>
+    <string name="status_hero_activated_subtitle_repo_synced">Ваш репозиторий синхронизирован</string>
+    <string name="status_hero_deactivated_title">Система частично готова</string>
+    <string name="status_hero_deactivated_hint">Предоставьте root, чтобы включить все функции приложения</string>
     <string name="status_build_number">Сборка: #%1$d</string>
     <string name="status_parallel_build_number">Сборка: %1$d workflow параллельно</string>
     <string name="status_version">Версия: %1$s</string>
@@ -655,12 +671,17 @@
     <string name="settings_export_diagnostics_failed">Не удалось экспортировать диагностический пакет: %1$s</string>
     <string name="settings_open_source_licenses">Лицензии открытого ПО</string>
     <string name="settings_open_source_licenses_desc">Лицензии ссылок репозитория, встроенного кода и зависимостей</string>
+    <string name="settings_oss_visit_homepage">Посетить главную</string>
+    <string name="settings_oss_source_label">Источник</string>
     <string name="settings_enter_open_source_licenses">Открыть лицензии открытого ПО</string>
     <string name="settings_appearance_mode">Режим внешнего вида</string>
     <string name="settings_color_source">Источник цвета</string>
     <string name="settings_monet">Цвета Monet</string>
     <string name="settings_monet_desc">Использовать динамические цвета Material You, сгенерированные из системных обоев</string>
     <string name="settings_monet_unavailable_desc">Доступно на Android 12 и выше. Сейчас используется собственная палитра.</string>
+    <string name="settings_dynamic_color">Динамический цвет</string>
+    <string name="settings_dynamic_color_unavailable">Динамический цвет недоступен</string>
+    <string name="settings_custom">Свой</string>
     <string name="settings_custom_colors">Свои цвета</string>
     <string name="settings_theme_color">Цвет темы</string>
     <string name="settings_theme_color_desc">Основные действия, выделение и главные акценты</string>
@@ -677,10 +698,20 @@
     <string name="settings_remove_background_desc">Вернуться к сплошному фону темы Material</string>
     <string name="settings_ui_opacity">Непрозрачность интерфейса</string>
     <string name="settings_ui_opacity_desc">При уменьшении карточки, верхняя и нижняя панели начинают пропускать фон.</string>
+    <string name="settings_ui_style">Стиль интерфейса</string>
+    <string name="settings_ui_style_miuix_subtitle">Использовать язык дизайна Xiaomi HyperOS</string>
     <string name="settings_blur">Размытие</string>
     <string name="settings_blur_desc">Включить эффекты матового стекла</string>
     <string name="settings_blur_background">Рендерить пользовательский фон в размытие</string>
     <string name="settings_blur_background_desc">При включении верхняя и нижняя панели, карточки и плитки размывают изображение пользовательского фона</string>
+    <string name="settings_floating_bottom_bar">Плавающая нижняя панель</string>
+    <string name="settings_visual_effects">Визуальные эффекты</string>
+    <string name="settings_blur_summary">Включить размытие верхней и нижней панели</string>
+    <string name="settings_floating_bottom_bar_summary">Плавающая нижняя панель в стиле Apple</string>
+    <string name="settings_liquid_glass">Жидкое стекло</string>
+    <string name="settings_liquid_glass_summary">Включить эффект жидкого стекла на плавающей панели</string>
+    <string name="settings_predictive_back_gesture">Прогнозируемый жест назад</string>
+    <string name="settings_predictive_back_summary">Включить поддержку прогнозируемого жеста назад</string>
     <string name="settings_current_color">Текущий</string>
     <string name="settings_color_green">Зелёный</string>
     <string name="settings_color_blue">Синий</string>
@@ -829,6 +860,7 @@
     <string name="runtime_pending_update">Ожидает обновления</string>
     <string name="runtime_update_available">Доступно обновление</string>
     <string name="runtime_update_module">Обновить модуль</string>
+    <string name="module_update">Обновить</string>
     <string name="runtime_update_version_change">Версия: %1$s → %2$s</string>
     <string name="runtime_update_source">Источник: %1$s</string>
     <string name="runtime_update_changelog">Журнал изменений</string>
@@ -1276,4 +1308,12 @@
     <string name="gh_root_must_be_object">Корневой узел должен быть JSON-объектом</string>
     <string name="gh_missing_module_name">Отсутствует ABK_MODULE_NAME</string>
     <string name="gh_catalog_fallback_name">Репозиторий модулей</string>
+
+    <!-- Search -->
+    <string name="search_cancel">Отмена</string>
+
+    <!-- Sort options -->
+    <string name="sort_default">По умолчанию</string>
+    <string name="sort_name_asc">Имя А-Я</string>
+    <string name="sort_name_desc">Имя Я-А</string>
 </resources>

@@ -106,6 +106,10 @@
     <string name="oobe_flash_detail">工作流构建产物、fork 仓库和 Actions 记录会在登录并完成 fork 检查后恢复可用。</string>
     <string name="oobe_continue_setup">继续配置 GitHub</string>
     <string name="oobe_skip_for_now">暂时跳过</string>
+    <string name="oobe_theme_title">选择界面风格</string>
+    <string name="oobe_theme_m3e">Material 3 Expressive</string>
+    <string name="oobe_theme_miuix">MIUIX</string>
+    <string name="oobe_theme_confirm">确认</string>
 
     <!-- Build -->
     <string name="build_title">构建内核</string>
@@ -183,7 +187,7 @@
     <string name="build_no_root_scheme_desc">不注入任何 Root 授权方案；KSU 分支、SUSFS 和 KPM 会自动关闭。</string>
     <string name="build_oneplus_no_root_scheme_desc">构建无 Root 的 OnePlus 内核；SUSFS 和 KPM 会自动关闭。</string>
     <string name="build_oneplus_ksu_branch_desc">OnePlus 构建使用对应 KernelSU 上游默认分支。</string>
-    <string name="build_ksu_none">None（无 Root 方案）</string>
+    <string name="build_ksu_none">None</string>
     <string name="build_standard">标准</string>
     <string name="build_development">开发</string>
     <string name="build_features">功能开关</string>
@@ -445,7 +449,6 @@
     <string name="flash_conclusion_failure">failure</string>
     <string name="flash_chip_kernel_kind">内核: %1$s</string>
     <string name="flash_chip_susfs">SUSFS</string>
-    <string name="flash_chip_kernel_unknown">?</string>
     <string name="flash_kernel_resukisu">ReSukiSU</string>
     <string name="flash_kernel_sukisu">SukiSU</string>
     <string name="flash_kernel_official">Official</string>
@@ -579,6 +582,15 @@
     <string name="flash_category_module">模块</string>
     <string name="empty_state_build_artifacts_hint">等待下一次构建完成后，这里会自动整理可用产物。</string>
 
+    <!-- Flash terminal -->
+    <string name="flash_terminal_status_flashing">正在执行...</string>
+    <string name="flash_terminal_status_success">执行成功</string>
+    <string name="flash_terminal_status_failed">执行失败</string>
+    <string name="flash_terminal_reboot">重启</string>
+    <string name="flash_terminal_back_confirm_title">确认退出</string>
+    <string name="flash_terminal_back_confirm_msg">操作正在执行，确定要退出吗？</string>
+    <string name="flash_terminal_save_log">保存日志</string>
+
     <!-- Status -->
     <string name="status_title">当前状态</string>
     <string name="status_root">Root 状态</string>
@@ -592,6 +604,10 @@
     <string name="status_no_build">暂无构建记录</string>
     <string name="status_working">工作中</string>
     <string name="status_partially_active">部分激活</string>
+    <string name="status_hero_activated_title">正在以 Root 模式工作</string>
+    <string name="status_hero_activated_subtitle_repo_synced">你的仓库已同步</string>
+    <string name="status_hero_deactivated_title">系统部分功能就绪</string>
+    <string name="status_hero_deactivated_hint">点击授权后可启用应用完整功能</string>
     <string name="status_build_number">构建：#%1$d</string>
     <string name="status_parallel_build_number">构建：%1$d 个工作流并行</string>
     <string name="status_version">版本：%1$s</string>
@@ -687,12 +703,17 @@
     <string name="settings_export_diagnostics_failed">诊断包导出失败：%1$s</string>
     <string name="settings_open_source_licenses">开放源代码许可</string>
     <string name="settings_open_source_licenses_desc">本仓库引用、内嵌源码和依赖包的许可证清单</string>
+    <string name="settings_oss_visit_homepage">访问主页</string>
+    <string name="settings_oss_source_label">来源</string>
     <string name="settings_enter_open_source_licenses">进入开放源代码许可</string>
     <string name="settings_appearance_mode">外观模式</string>
     <string name="settings_color_source">颜色来源</string>
     <string name="settings_monet">莫奈取色</string>
     <string name="settings_monet_desc">使用系统壁纸生成的 Material You 动态颜色</string>
     <string name="settings_monet_unavailable_desc">Android 12 及以上可用，当前使用自定义色板</string>
+    <string name="settings_dynamic_color">动态色</string>
+    <string name="settings_dynamic_color_unavailable">动态色不可用</string>
+    <string name="settings_custom">自定义</string>
     <string name="settings_custom_colors">自定义颜色</string>
     <string name="settings_theme_color">主题色</string>
     <string name="settings_theme_color_desc">主操作、选中状态和主要强调区域</string>
@@ -709,10 +730,20 @@
     <string name="settings_remove_background_desc">恢复纯色 Material 主题背景</string>
     <string name="settings_ui_opacity">界面不透明度</string>
     <string name="settings_ui_opacity_desc">调低后卡片、顶部栏和底部栏会透出背景。</string>
+    <string name="settings_ui_style">UI 风格</string>
+    <string name="settings_ui_style_miuix_subtitle">使用小米 HyperOS 设计语言</string>
     <string name="settings_blur">模糊</string>
     <string name="settings_blur_desc">为界面启用毛玻璃模糊效果</string>
     <string name="settings_blur_background">将自定义背景渲染到模糊</string>
     <string name="settings_blur_background_desc">开启后，顶栏、底栏、卡片和磁贴会模糊自定义背景图片</string>
+    <string name="settings_floating_bottom_bar">悬浮底栏</string>
+    <string name="settings_visual_effects">视觉效果</string>
+    <string name="settings_blur_summary">启用顶栏和底栏的模糊效果</string>
+    <string name="settings_floating_bottom_bar_summary">使用 Apple 风格的悬浮底栏</string>
+    <string name="settings_liquid_glass">液态玻璃</string>
+    <string name="settings_liquid_glass_summary">启用悬浮底栏的液态玻璃效果</string>
+    <string name="settings_predictive_back_gesture">预测性返回手势</string>
+    <string name="settings_predictive_back_summary">启用对预测性返回手势的支持</string>
     <string name="settings_current_color">当前</string>
     <string name="settings_color_green">绿</string>
     <string name="settings_color_blue">蓝</string>
@@ -722,6 +753,19 @@
     <string name="settings_color_cyan">青</string>
     <string name="settings_monet_unavailable">莫奈取色不可用</string>
     <string name="settings_custom_palette">自定义色板</string>
+    <string name="settings_key_color">强调色</string>
+    <string name="settings_key_color_default">默认</string>
+    <string name="color_red">红</string>
+    <string name="color_deep_purple">深紫</string>
+    <string name="color_indigo">靛蓝</string>
+    <string name="color_teal">青绿</string>
+    <string name="color_yellow">黄</string>
+    <string name="color_amber">琥珀</string>
+    <string name="color_brown">棕</string>
+    <string name="color_blue_grey">灰蓝</string>
+    <string name="color_sakura">樱</string>
+    <string name="settings_color_style">色彩风格</string>
+    <string name="settings_color_spec">色彩标准</string>
     <string name="settings_about_title">关于 AnyBase Kernel</string>
     <string name="settings_about_intro">AnyBase Kernel 是用于构建、分发和管理 GKI KernelSU / SUSFS 内核的自动化仓库与 Android 应用。</string>
     <string name="settings_about_version">当前版本：%1$s</string>
@@ -868,6 +912,7 @@
     <string name="runtime_pending_update">待更新</string>
     <string name="runtime_update_available">发现更新</string>
     <string name="runtime_update_module">更新模块</string>
+    <string name="module_update">更新</string>
     <string name="runtime_update_version_change">版本：%1$s → %2$s</string>
     <string name="runtime_update_source">来源：%1$s</string>
     <string name="runtime_update_changelog">更新日志</string>
@@ -1421,6 +1466,14 @@
     <string name="gh_root_must_be_object">根节点必须是 JSON 对象</string>
     <string name="gh_missing_module_name">缺少 ABK_MODULE_NAME</string>
     <string name="gh_catalog_fallback_name">模块仓库</string>
+
+    <!-- Search -->
+    <string name="search_cancel">取消</string>
+
+    <!-- Sort options -->
+    <string name="sort_default">默认排序</string>
+    <string name="sort_name_asc">名称 A-Z</string>
+    <string name="sort_name_desc">名称 Z-A</string>
     <string name="build_target_custom_source">类 LOS 源码</string>
     <string name="build_source_hero_desc">从指定的类 LineageOS 内核仓库构建，并在签名产物中记录来源</string>
     <string name="build_source_repo_url">源码仓库 HTTPS URL</string>

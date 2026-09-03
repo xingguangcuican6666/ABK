@@ -1,7 +1,6 @@
 package com.abk.kernel
 
 import android.Manifest
-import android.app.Activity
 import android.content.Context
 import com.abk.kernel.utils.LocaleHelper
 import com.abk.kernel.utils.findActivity
@@ -16,7 +15,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -28,9 +30,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -47,8 +52,8 @@ import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -87,7 +92,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.abk.kernel.ui.components.AppBackgroundHost
 import com.abk.kernel.ui.components.AbkSnackbarHost
-import com.abk.kernel.ui.components.animateBottomNavForChildPage
 import com.abk.kernel.ui.components.showAbkSnackbar
 import com.abk.kernel.extensions.AbkExtensionBootstrapActivity
 import com.abk.kernel.ui.blur.LocalBlurBackgroundAnchor
@@ -104,14 +108,22 @@ import com.abk.kernel.ui.screens.FlashScreen
 import com.abk.kernel.ui.screens.InstalledModulesScreen
 import com.abk.kernel.ui.screens.ModuleRepositoryScreen
 import com.abk.kernel.ui.screens.OobeScreen
+import com.abk.kernel.miuix.ui.screens.OobeScreenMiuix
 import com.abk.kernel.ui.screens.RootAuthorizationScreen
 import com.abk.kernel.ui.screens.RuntimeHomeScreen
 import com.abk.kernel.ui.screens.SettingsScreen
 import com.abk.kernel.ui.screens.StatusScreen
+import com.abk.kernel.miuix.AbkMiuixMainContent
+import com.abk.kernel.miuix.theme.AbkMiuixTheme
 import com.abk.kernel.ui.theme.AbkTheme
+import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
+import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.window.WindowDialog
 import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
 import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
+import com.abk.kernel.miuix.viewmodel.MiuixSettingsViewModel
 import com.abk.kernel.viewmodel.MainViewModel
 
 class MainActivity : ComponentActivity() {
@@ -133,6 +145,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             val vm: MainViewModel = viewModel()
             val state by vm.uiState.collectAsState()
+            val miuixVm: MiuixSettingsViewModel = viewModel()
+            val miuixState by miuixVm.state.collectAsState()
             val uiSurfaceAlphaPreview by vm.uiSurfaceAlphaPreview.collectAsState(initial = state.uiSurfaceAlpha)
             var extensionBootstrapIssued by rememberSaveable { mutableStateOf(false) }
 
@@ -163,12 +177,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            AbkTheme(
-                themeMode = state.themeMode,
-                dynamicColorEnabled = state.dynamicColorEnabled,
-                customThemeColorArgb = state.customThemeColorArgb,
-                customAccentColorArgb = state.customAccentColorArgb
-            ) {
+            val themeContent: @Composable () -> Unit = {
                 AppBackgroundHost(
                     backgroundUri = state.customBackgroundUri,
                     backgroundEnabled = state.backgroundImageEnabled,
@@ -188,20 +197,43 @@ class MainActivity : ComponentActivity() {
                             onDecline = { finishAffinity() }
                         )
                         else -> Box(modifier = Modifier.fillMaxSize()) {
-                            AbkMainScaffold(
-                                vm = vm,
-                                pendingModuleInstallUri = pendingModuleInstallUri,
-                                onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
-                            )
-                            if (!state.showOobe) {
-                                val rootGrantRecoveryNotice = state.rootGrantRecoveryNotice
-                                if (rootGrantRecoveryNotice != null) {
+                            if (state.uiStyle == "miuix") {
+                                AbkMiuixMainContent(
+                                    vm = vm,
+                                    miuixVm = miuixVm,
+                                    pendingModuleInstallUri = pendingModuleInstallUri,
+                                    onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
+                                )
+                            } else {
+                                AbkMainScaffold(
+                                    vm = vm,
+                                    pendingModuleInstallUri = pendingModuleInstallUri,
+                                    onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
+                                )
+                            }
+                            val rootGrantRecoveryNotice = state.rootGrantRecoveryNotice
+                            if (rootGrantRecoveryNotice != null && !state.showOobe) {
+                                if (state.uiStyle == "miuix") {
+                                    RootGrantRecoveryDialogMiuix(
+                                        title = rootGrantRecoveryNotice.title,
+                                        message = rootGrantRecoveryNotice.message,
+                                        onDismiss = vm::dismissRootGrantRecoveryNotice
+                                    )
+                                } else {
                                     RootGrantRecoveryDialog(
                                         title = rootGrantRecoveryNotice.title,
                                         message = rootGrantRecoveryNotice.message,
                                         onDismiss = vm::dismissRootGrantRecoveryNotice
                                     )
-                                } else if (state.showSyncPrompt) {
+                                }
+                            } else if (state.showSyncPrompt && !state.showOobe) {
+                                if (state.uiStyle == "miuix") {
+                                    SyncPromptDialogMiuix(
+                                        behindBy = state.behindBy,
+                                        onSync = vm::syncFork,
+                                        onDismiss = vm::dismissSyncPrompt
+                                    )
+                                } else {
                                     SyncPromptDialog(
                                         behindBy = state.behindBy,
                                         onSync = vm::syncFork,
@@ -222,16 +254,38 @@ class MainActivity : ComponentActivity() {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .background(MaterialTheme.colorScheme.surface)
+                                            .background(androidx.compose.material3.MaterialTheme.colorScheme.surface)
                                             .zIndex(4f)
                                     ) {
-                                        OobeScreen(vm)
+                                        if (state.uiStyle == "miuix" && state.oobeFromBuild) {
+                                            OobeScreenMiuix(vm)
+                                        } else {
+                                            OobeScreen(vm)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
+            }
+
+            when (state.uiStyle) {
+                "miuix" -> AbkMiuixTheme(
+                    themeMode = state.themeMode,
+                    dynamicColorEnabled = miuixState.miuixDynamicColorEnabled,
+                    customThemeColorArgb = miuixState.miuixThemeColorArgb,
+                    colorStyleName = miuixState.miuixColorStyle,
+                    colorSpecName = miuixState.miuixColorSpec,
+                    content = themeContent
+                )
+                else -> AbkTheme(
+                    themeMode = state.themeMode,
+                    dynamicColorEnabled = state.dynamicColorEnabled,
+                    customThemeColorArgb = state.customThemeColorArgb,
+                    customAccentColorArgb = state.customAccentColorArgb,
+                    content = themeContent
+                )
             }
         }
     }
@@ -278,6 +332,33 @@ private fun RootGrantRecoveryDialog(
 }
 
 @Composable
+private fun RootGrantRecoveryDialogMiuix(
+    title: String,
+    message: String,
+    onDismiss: () -> Unit
+) {
+    WindowDialog(
+        show = true,
+        title = title,
+        onDismissRequest = onDismiss
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            top.yukonga.miuix.kmp.basic.Text(
+                text = message,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(12.dp))
+            MiuixTextButton(
+                modifier = Modifier.fillMaxWidth(),
+                text = stringResource(android.R.string.ok),
+                colors = MiuixButtonDefaults.textButtonColorsPrimary(),
+                onClick = onDismiss
+            )
+        }
+    }
+}
+
+@Composable
 private fun SyncPromptDialog(
     behindBy: Int,
     onSync: () -> Unit,
@@ -303,6 +384,47 @@ private fun SyncPromptDialog(
             }
         }
     )
+}
+
+@Composable
+private fun SyncPromptDialogMiuix(
+    behindBy: Int,
+    onSync: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    WindowDialog(
+        show = true,
+        title = stringResource(R.string.sync_title),
+        onDismissRequest = onDismiss,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            top.yukonga.miuix.kmp.basic.Card(modifier = Modifier.fillMaxWidth()) {
+                top.yukonga.miuix.kmp.basic.Text(
+                    text = "${stringResource(R.string.sync_desc)}\n\n${stringResource(R.string.sync_behind_commits, behindBy)}",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                MiuixTextButton(
+                    modifier = Modifier.weight(1f),
+                    text = stringResource(R.string.skip),
+                    onClick = onDismiss
+                )
+                MiuixTextButton(
+                    modifier = Modifier.weight(1f),
+                    text = stringResource(R.string.sync_action),
+                    onClick = onSync,
+                    colors = MiuixButtonDefaults.textButtonColorsPrimary()
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -416,7 +538,7 @@ private fun TermsText(text: String) {
     )
 }
 
-private enum class AbkTab(@StringRes val labelRes: Int) {
+internal enum class AbkTab(@StringRes val labelRes: Int) {
     Status(R.string.nav_status),
     Build(R.string.nav_build),
     Modules(R.string.nav_modules),
@@ -530,8 +652,6 @@ private fun AbkMainScaffold(
                 settingsChildPageVisible = false
                 rootAuthDetailPageVisible = false
                 managerPatchPageVisible = false
-                // Flash NavHost is recreated on tab entry — clear stale saveable
-                // state so the bottom bar does not hide until a detail opens.
                 flashDetailPageVisible = false
             }
             AbkTab.Modules -> {
@@ -579,13 +699,15 @@ private fun AbkMainScaffold(
         }
     }
 
+    val pressAgainExitLabel = stringResource(R.string.press_again_exit)
+
     fun handleTopLevelBack() {
         val now = System.currentTimeMillis()
         if (now - lastBackAt <= EXIT_BACK_INTERVAL_MS) {
             context.findActivity()?.finish()
         } else {
             lastBackAt = now
-            Toast.makeText(context, context.getString(R.string.press_again_exit), Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, pressAgainExitLabel, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -595,9 +717,12 @@ private fun AbkMainScaffold(
 
     val navProgressAnim = remember { Animatable(1f) }
     LaunchedEffect(childPageVisible) {
-        navProgressAnim.animateBottomNavForChildPage(
-            childPageVisible = childPageVisible,
-            motionScheme = motionScheme,
+        navProgressAnim.animateTo(
+            targetValue = if (childPageVisible) 0f else 1f,
+            animationSpec = tween(
+                durationMillis = 300,
+                easing = FastOutSlowInEasing
+            )
         )
     }
     val navProgress = navProgressAnim.value
@@ -847,7 +972,7 @@ private fun AbkMainScaffold(
 }
 
 @Composable
-private fun AbkTab.displayLabel(rootGranted: Boolean): String = when (this) {
+internal fun AbkTab.displayLabel(rootGranted: Boolean): String = when (this) {
     AbkTab.Flash -> stringResource(if (rootGranted) labelRes else R.string.nav_files)
     else -> stringResource(labelRes)
 }

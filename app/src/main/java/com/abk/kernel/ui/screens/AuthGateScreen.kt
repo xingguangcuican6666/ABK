@@ -76,6 +76,25 @@ fun OobeScreen(vm: MainViewModel) {
         }
     }
 
+    /**
+     * Confirming the theme step. A style that differs from the current one makes
+     * MainActivity swap the theme wrapper, which tears down this whole tree, so the
+     * exit animation is deliberately skipped: it would spend its 280ms sliding the
+     * overlay off the *outgoing* theme's main UI, and that reveal is the visual
+     * residue users see before MIUIX appears. Handing off in a single frame leaves
+     * nothing of the old theme on screen. Picking the current style changes no
+     * wrapper, so that keeps the normal animated exit.
+     */
+    fun confirmUiStyle(selected: String) {
+        if (skipInFlight) return
+        if (selected == state.uiStyle) {
+            requestSkip()
+            return
+        }
+        skipInFlight = true
+        vm.completeOobeWithUiStyle(selected)
+    }
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -105,7 +124,7 @@ fun OobeScreen(vm: MainViewModel) {
                     onContinue = {
                         if (!skipInFlight) {
                             if (state.isLoggedIn) {
-                                vm.openBuildOobe()
+                                vm.continueOobeFromIntro()
                             } else {
                                 vm.continueOobeToLogin()
                             }
@@ -123,6 +142,10 @@ fun OobeScreen(vm: MainViewModel) {
                     onSkip = ::requestSkip,
                     skipInFlight = skipInFlight,
                     onClearError = { vm.clearError() }
+                )
+                AuthStep.THEME_SELECT -> ThemeSelectScreen(
+                    currentStyle = state.uiStyle,
+                    onConfirm = ::confirmUiStyle
                 )
                 AuthStep.FORK_CHECK -> ForkCheckScreen(
                     isLoading = state.isLoading,
@@ -477,6 +500,93 @@ private fun DeviceCodeCard(
                     )
                 }
             }
+        }
+    }
+}
+
+// ── Theme Select ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun ThemeSelectScreen(
+    currentStyle: String,
+    onConfirm: (String) -> Unit
+) {
+    var selected by remember { mutableStateOf(currentStyle) }
+
+    AuthShell {
+        Text(
+            text = stringResource(R.string.oobe_theme_title),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Card(
+            onClick = { selected = "material" },
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (selected == "material")
+                    MaterialTheme.colorScheme.primaryContainer
+                else
+                    MaterialTheme.colorScheme.surfaceContainer
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(
+                    selected = selected == "material",
+                    onClick = { selected = "material" }
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = stringResource(R.string.oobe_theme_m3e),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+
+        Card(
+            onClick = { selected = "miuix" },
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (selected == "miuix")
+                    MaterialTheme.colorScheme.primaryContainer
+                else
+                    MaterialTheme.colorScheme.surfaceContainer
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(
+                    selected = selected == "miuix",
+                    onClick = { selected = "miuix" }
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = stringResource(R.string.oobe_theme_miuix),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+
+        Button(
+            onClick = { onConfirm(selected) },
+            modifier = Modifier.fillMaxWidth().height(52.dp)
+        ) {
+            Text(stringResource(R.string.oobe_theme_confirm))
         }
     }
 }

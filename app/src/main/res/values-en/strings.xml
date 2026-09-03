@@ -106,6 +106,10 @@
     <string name="oobe_flash_detail">Workflow artifacts, fork repository access, and Actions records return after sign-in and fork checks complete.</string>
     <string name="oobe_continue_setup">Continue GitHub setup</string>
     <string name="oobe_skip_for_now">Skip for now</string>
+    <string name="oobe_theme_title">Select UI Style</string>
+    <string name="oobe_theme_m3e">Material 3 Expressive</string>
+    <string name="oobe_theme_miuix">MIUIX</string>
+    <string name="oobe_theme_confirm">Confirm</string>
 
     <!-- Build -->
     <string name="build_title">Build Kernel</string>
@@ -118,6 +122,41 @@
     <string name="build_target_gki">GKI</string>
     <string name="build_target_oneplus">OnePlus</string>
     <string name="build_target_line">Build target: %1$s</string>
+    <string name="build_target_custom_source">Lineage-like source</string>
+    <string name="build_source_hero_desc">Builds from a specified LineageOS-like kernel repository and records the source in the signed artifact</string>
+    <string name="build_source_repo_url">Source repository HTTPS URL</string>
+    <string name="build_source_ref">Source branch, tag, or commit</string>
+    <string name="build_source_access">Repository access method</string>
+    <string name="build_source_public">Public HTTPS Git</string>
+    <string name="build_source_private">GitHub private repository</string>
+    <string name="build_source_patch_month">Toolchain / manifest month</string>
+    <string name="build_source_device_label">Device name or codename (optional)</string>
+    <string name="build_source_defconfigs">Ordered defconfig list</string>
+    <string name="build_source_defconfig_base_hint">Relative to arch/arm64/configs; each later entry overrides earlier ones</string>
+    <string name="build_source_defconfig_empty">No defconfig yet. Add at least one.</string>
+    <string name="build_source_add_defconfig">Add defconfig path</string>
+    <string name="build_source_move_up">Move up</string>
+    <string name="build_source_move_down">Move down</string>
+    <string name="build_source_secret_exists">A private-source credential already exists in the fork; it is reused by default, or replaced at submit confirmation.</string>
+    <string name="build_source_secret_missing">No private-source credential is configured in the fork yet; provide a fine-grained read-only PAT before submitting.</string>
+    <string name="build_source_manifest_notice">This build\'s signed ABK manifest will publicly record the full source repository, ref, commit, defconfig, and feature-downgrade status.</string>
+    <string name="build_source_repo_line">Source: %1$s</string>
+    <string name="build_source_ref_line">Ref: %1$s</string>
+    <string name="build_source_patch_line">Toolchain month: %1$s</string>
+    <string name="build_source_device_line">Device: %1$s</string>
+    <string name="build_source_defconfig_line">Defconfig: %1$s</string>
+    <string name="build_source_private_credential_title">GitHub private repository credential</string>
+    <string name="build_source_secret_reuse_desc">The existing Secret is reused by default. Only fill in a new PAT when you need to replace it.</string>
+    <string name="build_source_secret_required_desc">Enter a fine-grained PAT authorized for the target source repo with Contents read-only.</string>
+    <string name="build_source_pat">Fine-grained read-only PAT (never stored locally)</string>
+    <string name="build_source_credential_advanced">Advanced credential options</string>
+    <string name="build_source_use_device_token">Use current GitHub sign-in token</string>
+    <string name="build_source_device_token_risk">This token usually carries repo scope and may access multiple private repos under the account. It will be written into the fork\'s Actions Secret until you delete it manually.</string>
+    <string name="build_source_device_token_confirm_title">Confirm uploading high-privilege sign-in token</string>
+    <string name="build_source_device_token_confirm_desc">Continuing encrypts the current Device Flow token into the fork\'s ABK_CUSTOM_SOURCE_GITHUB_TOKEN. This Secret is not deleted automatically on sign-out.</string>
+    <string name="build_source_private_credential_required">ABK_CUSTOM_SOURCE_GITHUB_TOKEN is not configured. Provide a fine-grained read-only PAT, or confirm using the current sign-in token in advanced options.</string>
+    <string name="build_source_private_plan_share_title">Confirm exporting private-source build plan</string>
+    <string name="build_source_private_plan_share_desc">A full plan keeps the source URL %1$s, which exposes the private repo identity; credentials are not included in the plan. Continue exporting?</string>
     <string name="build_submit">Submit build</string>
     <string name="build_running">Build running</string>
     <string name="build_success">Build succeeded</string>
@@ -137,7 +176,9 @@
     <string name="build_sync_network_line">NTsync: %1$s · Networking: %2$s</string>
     <string name="build_virtualization_line">Virtualization support: %1$s</string>
     <string name="build_external_modules_line">External modules: %1$s</string>
+    <string name="build_kernel_options_line">Kernel options: %1$s</string>
     <string name="build_external_modules_count">%1$d</string>
+    <string name="build_kernel_options_count">%1$d</string>
     <string name="build_oneplus_device_line">OnePlus device: %1$s</string>
     <string name="build_oneplus_kernel_line">OnePlus KMI: %1$s · Kernel %2$s</string>
     <string name="build_oneplus_feature_line">SUSFS: %1$s · lz4kd: %2$s · KPM: %3$s</string>
@@ -195,6 +236,30 @@
     <string name="build_enable_rekernel">Enable Re-Kernel driver (test)</string>
     <string name="build_virtualization_support">Virtualization support</string>
     <string name="build_section_kernel_options_desc">Override defconfig entry by entry. Supports y / m / off / ignore / raw value, and takes priority over the built-in page switches.</string>
+    <string name="build_kernel_options_title">Custom kernel options</string>
+    <string name="build_kernel_option_add">Add entry</string>
+    <string name="build_kernel_option_edit">Edit entry</string>
+    <string name="build_kernel_option_empty">No custom kernel options yet. Add manually or import a Kconfig / defconfig snippet.</string>
+    <string name="build_kernel_option_symbol">Config symbol</string>
+    <string name="build_kernel_option_symbol_invalid">Config symbol must be a valid CONFIG_* name</string>
+    <string name="build_kernel_option_mode">Entry mode</string>
+    <string name="build_kernel_option_mode_y">On (=y)</string>
+    <string name="build_kernel_option_mode_m">Module (=m)</string>
+    <string name="build_kernel_option_mode_disabled">Off (is not set)</string>
+    <string name="build_kernel_option_mode_ignore">Ignore (no change)</string>
+    <string name="build_kernel_option_mode_raw">Raw value</string>
+    <string name="build_kernel_option_raw_value">Raw value</string>
+    <string name="build_kernel_option_raw_placeholder">e.g. 65534 or "bbr"</string>
+    <string name="build_kernel_option_raw_required">Raw value mode requires a value</string>
+    <string name="build_kernel_option_raw_summary">Raw value: %1$s</string>
+    <string name="build_kernel_option_import_title">Import custom kernel options</string>
+    <string name="build_kernel_option_import_desc">Supports `CONFIG_FOO=y`, `CONFIG_FOO=m`, `# CONFIG_FOO is not set`, `CONFIG_FOO=123`, `CONFIG_BAR="x"`, and bare `CONFIG_FOO`.</string>
+    <string name="build_kernel_option_import_text">Kernel option text</string>
+    <string name="build_kernel_option_pick_file">Pick file</string>
+    <string name="build_kernel_option_import_summary">Imported %1$d · overwrote %2$d duplicates · skipped %3$d lines</string>
+    <string name="build_kernel_option_import_failed">Failed to import custom kernel options</string>
+    <string name="build_kernel_option_import_read_failed">Failed to read imported file</string>
+    <string name="build_kernel_option_save_failed">Failed to save custom kernel options</string>
     <string name="build_kernel_options_summary">%1$d total · enabled %2$d · disabled %3$d · ignored %4$d</string>
     <string name="build_kernel_option_search">Search CONFIG_*, raw value, or mode</string>
     <string name="build_kernel_option_no_matching">No kernel options match the current search.</string>
@@ -327,6 +392,7 @@
     <string name="build_feature_virtualization">Virtualization %1$s</string>
     <string name="build_base_config">Base config</string>
     <string name="build_summary_external_modules">External modules %1$d</string>
+    <string name="build_summary_kernel_options">Kernel options %1$d</string>
     <string name="build_hero_desc">Triggers GitHub Actions and automatically organizes img, AK3, manager, and SUSFS modules.</string>
     <string name="build_oneplus_hero_desc">Builds a device-specific AnyKernel3 package from the OnePlus/Oplus manifest.</string>
     <string name="build_susfs_on">SUSFS on</string>
@@ -396,6 +462,7 @@
     <string name="flash_delete_workflow_msg">Cached artifact records for this workflow and downloaded local files will be deleted.\n\nWorkflow %1$s</string>
     <string name="flash_delete_remote_workflow">Also delete remote GitHub Actions workflow record</string>
     <string name="flash_refresh_artifacts">Refresh build artifacts online</string>
+    <string name="flash_refreshing_artifacts">Refreshing build artifacts</string>
     <string name="flash_filter_title">Filter</string>
     <string name="flash_chip_building">Building</string>
     <string name="flash_build_failed_chip">Build failed</string>
@@ -417,7 +484,6 @@
     <string name="flash_conclusion_failure">failure</string>
     <string name="flash_chip_kernel_kind">Kernel: %1$s</string>
     <string name="flash_chip_susfs">SUSFS</string>
-    <string name="flash_chip_kernel_unknown">?</string>
     <string name="flash_kernel_resukisu">ReSukiSU</string>
     <string name="flash_kernel_sukisu">SukiSU</string>
     <string name="flash_kernel_official">Official</string>
@@ -551,6 +617,15 @@
     <string name="flash_category_module">Modules</string>
     <string name="empty_state_build_artifacts_hint">After the next build finishes, available artifacts will be organized here automatically.</string>
 
+    <!-- Flash terminal -->
+    <string name="flash_terminal_status_flashing">Executing...</string>
+    <string name="flash_terminal_status_success">Success</string>
+    <string name="flash_terminal_status_failed">Failed</string>
+    <string name="flash_terminal_reboot">Reboot</string>
+    <string name="flash_terminal_back_confirm_title">Confirm Exit</string>
+    <string name="flash_terminal_back_confirm_msg">Operation in progress, exit?</string>
+    <string name="flash_terminal_save_log">Save Log</string>
+
     <!-- Status -->
     <string name="status_title">Current status</string>
     <string name="status_root">Root status</string>
@@ -564,6 +639,10 @@
     <string name="status_no_build">No build records</string>
     <string name="status_working">Working</string>
     <string name="status_partially_active">Partially active</string>
+    <string name="status_hero_activated_title">Working in Root mode</string>
+    <string name="status_hero_activated_subtitle_repo_synced">Your repository is synced</string>
+    <string name="status_hero_deactivated_title">System partially ready</string>
+    <string name="status_hero_deactivated_hint">Grant root to enable full app features</string>
     <string name="status_build_number">Build: #%1$d</string>
     <string name="status_parallel_build_number">Build: %1$d workflows in parallel</string>
     <string name="status_version">Version: %1$s</string>
@@ -609,6 +688,7 @@
     <string name="settings_download_threads_desc">Currently %1$d; 1 uses a single connection</string>
     <string name="settings_account">Account</string>
     <string name="settings_build">Build</string>
+    <string name="settings_security">Security</string>
     <string name="settings_notification">Notifications</string>
     <string name="settings_about">About</string>
     <string name="settings_extensions_title">Extensions</string>
@@ -649,6 +729,7 @@
     <string name="settings_color_appearance">Color and appearance</string>
     <string name="settings_enter_color_appearance">Open color and appearance</string>
     <string name="settings_about_desc">Repository entry points, version information, and contributors</string>
+    <string name="settings_security_requires_fork">You must sign in to GitHub and finish fork preparation before managing signature verification and keys.</string>
     <string name="settings_enter_about">Open about</string>
     <string name="settings_export_diagnostics">Export diagnostics bundle</string>
     <string name="settings_export_diagnostics_desc">Package current-startup ABK logs, kernel logs, module state, and module logs into a zip and share it</string>
@@ -657,12 +738,17 @@
     <string name="settings_export_diagnostics_failed">Diagnostics export failed: %1$s</string>
     <string name="settings_open_source_licenses">Open source licenses</string>
     <string name="settings_open_source_licenses_desc">Licenses for repository references, embedded source, and dependencies</string>
+    <string name="settings_oss_visit_homepage">Visit Homepage</string>
+    <string name="settings_oss_source_label">Source</string>
     <string name="settings_enter_open_source_licenses">Open open source licenses</string>
     <string name="settings_appearance_mode">Appearance mode</string>
     <string name="settings_color_source">Color source</string>
     <string name="settings_monet">Monet colors</string>
     <string name="settings_monet_desc">Use Material You dynamic colors generated from the system wallpaper</string>
     <string name="settings_monet_unavailable_desc">Available on Android 12 and later. Custom palette is used now.</string>
+    <string name="settings_dynamic_color">Dynamic color</string>
+    <string name="settings_dynamic_color_unavailable">Dynamic color unavailable</string>
+    <string name="settings_custom">Custom</string>
     <string name="settings_custom_colors">Custom colors</string>
     <string name="settings_theme_color">Theme color</string>
     <string name="settings_theme_color_desc">Primary actions, selected states, and main accents</string>
@@ -679,10 +765,20 @@
     <string name="settings_remove_background_desc">Restore the solid Material theme background</string>
     <string name="settings_ui_opacity">UI opacity</string>
     <string name="settings_ui_opacity_desc">Lower values let cards, top bars, and bottom bars reveal the background.</string>
+    <string name="settings_ui_style">UI style</string>
+    <string name="settings_ui_style_miuix_subtitle">Use Xiaomi HyperOS design language</string>
     <string name="settings_blur">Blur</string>
     <string name="settings_blur_desc">Enable frosted-glass blur effects</string>
     <string name="settings_blur_background">Render custom background into blur</string>
     <string name="settings_blur_background_desc">When enabled, top bars, bottom bars, cards, and tiles blur the custom background image</string>
+    <string name="settings_floating_bottom_bar">Floating bottom bar</string>
+    <string name="settings_visual_effects">Visual effects</string>
+    <string name="settings_blur_summary">Enable blur effect on top bar and bottom bar</string>
+    <string name="settings_floating_bottom_bar_summary">Use Apple-style floating bottom bar</string>
+    <string name="settings_liquid_glass">Liquid glass</string>
+    <string name="settings_liquid_glass_summary">Enable liquid glass effect on floating bottom bar</string>
+    <string name="settings_predictive_back_gesture">Predictive back gesture</string>
+    <string name="settings_predictive_back_summary">Enable support for predictive back gesture</string>
     <string name="settings_current_color">Current</string>
     <string name="settings_color_green">Green</string>
     <string name="settings_color_blue">Blue</string>
@@ -692,6 +788,19 @@
     <string name="settings_color_cyan">Cyan</string>
     <string name="settings_monet_unavailable">Monet unavailable</string>
     <string name="settings_custom_palette">Custom palette</string>
+    <string name="settings_key_color">Accent color</string>
+    <string name="settings_key_color_default">Default</string>
+    <string name="color_red">Red</string>
+    <string name="color_deep_purple">Deep Purple</string>
+    <string name="color_indigo">Indigo</string>
+    <string name="color_teal">Teal</string>
+    <string name="color_yellow">Yellow</string>
+    <string name="color_amber">Amber</string>
+    <string name="color_brown">Brown</string>
+    <string name="color_blue_grey">Blue Grey</string>
+    <string name="color_sakura">Sakura</string>
+    <string name="settings_color_style">Color style</string>
+    <string name="settings_color_spec">Color spec</string>
     <string name="settings_about_title">About AnyBase Kernel</string>
     <string name="settings_about_intro">AnyBase Kernel is an automation repository and Android app for building, distributing, and managing GKI KernelSU / SUSFS kernels.</string>
     <string name="settings_about_version">Current version: %1$s</string>
@@ -724,6 +833,48 @@
     <string name="settings_waiting_fork">Waiting for fork</string>
     <string name="settings_group_account_desc">GitHub account, fork repository, and sign out.</string>
     <string name="settings_group_build_desc">Control automation after builds succeed.</string>
+    <string name="settings_group_security_desc">Manage flash bundle signature verification and the current fork\'s signing key pair.</string>
+    <string name="settings_custom_source_secret_configured">ABK_CUSTOM_SOURCE_GITHUB_TOKEN already exists. The Secret is a write-only interface and cannot identify which repo the original credential authorized.</string>
+    <string name="settings_custom_source_secret_delete">Delete private-source credential</string>
+    <string name="settings_custom_source_secret_delete_confirm">After deletion, builds using GitHub private source will fail authentication at the preflight stage until credentials are reconfigured.</string>
+    <string name="settings_custom_source_secret_delete_desc">Delete the fork\'s ABK_CUSTOM_SOURCE_GITHUB_TOKEN; leaving the app will not do this automatically.</string>
+    <string name="settings_custom_source_secret_dialog_desc">The value is uploaded encrypted to the fork\'s Actions Secret; it is not stored locally, in build plans, or in the manifest.</string>
+    <string name="settings_custom_source_secret_dialog_title">Update private-source PAT</string>
+    <string name="settings_custom_source_secret_missing">Not configured yet. A fine-grained PAT authorized only for the target repo with Contents read-only is recommended.</string>
+    <string name="settings_custom_source_secret_operation">Updating GitHub Actions Secret…</string>
+    <string name="settings_custom_source_secret_title">Private-source credential</string>
+    <string name="settings_security_disable_dialog_message_1">Disabling skips signature verification during download and flashing. For safety, the current remote private key and local public key will be deleted.</string>
+    <string name="settings_security_disable_dialog_message_2">Confirming deletes the local public key, remote private-key Secret, and remote public-key asset. Old signed bundles become invalid immediately.</string>
+    <string name="settings_security_disable_dialog_title_1">Disable signature verification?</string>
+    <string name="settings_security_disable_dialog_title_2">Final confirmation to delete the key pair</string>
+    <string name="settings_security_import_dialog_title">Import custom public/private key</string>
+    <string name="settings_security_import_done">Custom signing key pair imported and published.</string>
+    <string name="settings_security_import_invalid_private_key">Private key PEM could not be parsed.</string>
+    <string name="settings_security_import_invalid_public_key">Public key PEM could not be parsed.</string>
+    <string name="settings_security_import_key_pair_mismatch">Public and private keys do not match.</string>
+    <string name="settings_security_import_keys">Import custom public/private key</string>
+    <string name="settings_security_import_keys_desc">Import a custom PEM public and private key, overriding the current fork\'s signing material.</string>
+    <string name="settings_security_import_pick_private_key">Pick private key file</string>
+    <string name="settings_security_import_pick_public_key">Pick public key file</string>
+    <string name="settings_security_import_private_key">Private key PEM</string>
+    <string name="settings_security_import_private_key_required">Please fill in the private key PEM.</string>
+    <string name="settings_security_import_public_key">Public key PEM</string>
+    <string name="settings_security_import_public_key_required">Please fill in the public key PEM.</string>
+    <string name="settings_security_import_read_failed">Failed to read key file.</string>
+    <string name="settings_security_import_requires_enabled">Re-enable signature verification before importing a custom key pair.</string>
+    <string name="settings_security_keys_reset_done">A new signing key pair was generated and published.</string>
+    <string name="settings_security_operation_running">Processing security settings…</string>
+    <string name="settings_security_reset_dialog_message">A new remote private key and local public key will be regenerated and published. All existing old signed bundles become invalid.</string>
+    <string name="settings_security_reset_dialog_title">Reset signing key pair</string>
+    <string name="settings_security_reset_keys">Reset remote private key and local public key</string>
+    <string name="settings_security_reset_keys_desc">Regenerate a new key pair and overwrite the remote Secret, public-key asset, and local cache. Old bundles all become invalid.</string>
+    <string name="settings_security_signing_disabled">Signature verification is off, key pair deleted.</string>
+    <string name="settings_security_signing_enabled">Signature verification re-enabled and a new key pair generated.</string>
+    <string name="settings_security_signing_status">Key status</string>
+    <string name="settings_security_signing_title">Signature verification</string>
+    <string name="settings_security_status_disabled">Signature verification off, key pair deleted.</string>
+    <string name="settings_security_status_enabled_configured">Signature verification on, key pair configured.</string>
+    <string name="settings_security_status_enabled_pending">Signature verification on, waiting to initialize a new signing key pair.</string>
     <string name="settings_group_notification_desc">Sync workflow status to system notifications.</string>
     <string name="settings_group_navigation_desc">Control back gesture and page transition behavior.</string>
     <string name="settings_group_theme_desc">Material 3 Expressive theme display mode.</string>
@@ -780,13 +931,34 @@
     <string name="download_unknown_error">Download failed</string>
     <string name="flash_bundle_legacy_requires_confirmation">This is a legacy flash bundle. Continuing enters the high-risk flow.</string>
     <string name="flash_bundle_unverified_requires_confirmation">This flash bundle has not passed signature verification. Continuing enters the high-risk flow.</string>
+    <string name="flash_bundle_verification_disabled">Signature verification is disabled in security settings.</string>
+    <string name="flash_bundle_missing_signature_message">This flash bundle is missing its signature file. Continuing enters the high-risk flow.</string>
+    <string name="flash_bundle_signature_mismatch_message">This flash bundle\'s signature does not match the current public key. Continuing enters the high-risk flow.</string>
+    <string name="flash_bundle_missing_public_key_message">No public key is available to verify this flash bundle. Continuing enters the high-risk flow.</string>
+    <string name="flash_custom_source_notice_title">Lineage-like source artifact info</string>
+    <string name="flash_custom_source_url">Source: %1$s</string>
+    <string name="flash_custom_source_ref">Requested ref: %1$s</string>
+    <string name="flash_custom_source_commit">Actual commit: %1$s</string>
+    <string name="flash_custom_source_kernel">Kernel mapping: %1$s / %2$s</string>
+    <string name="flash_custom_source_access">Repository access: %1$s</string>
+    <string name="flash_custom_source_toolchain">Toolchain month: %1$s</string>
+    <string name="flash_custom_source_device">Device: %1$s</string>
+    <string name="flash_custom_source_defconfigs">Defconfig order: %1$s</string>
+    <string name="flash_custom_source_requested">Requested features: %1$s</string>
+    <string name="flash_custom_source_effective">Resulting features</string>
+    <string name="flash_custom_source_skipped_title">Skipped features</string>
+    <string name="flash_custom_source_private_warning">This is a GitHub private-source build. Sharing the bundle exposes the private repo URL, ref, and commit.</string>
+    <string name="flash_custom_source_old_client_warning">Older clients may not show the source origin or feature-downgrade info.</string>
+    <string name="flash_custom_source_review_before_flash">Before flashing, confirm the source origin and feature-downgrade status:</string>
     <string name="settings_download_mirror">Download mirror</string>
     <string name="settings_download_mirror_desc">Leave empty to connect directly to GitHub. If set, artifacts mirror to releases before download.</string>
 
     <!-- Runtime / modules -->
     <string name="runtime_refresh">Refresh runtime info</string>
+    <string name="runtime_refreshing_status">Refreshing runtime info</string>
     <string name="runtime_installed_modules_title">Installed Modules</string>
     <string name="runtime_refresh_installed_modules">Refresh installed modules</string>
+    <string name="runtime_refreshing_modules">Refreshing installed modules</string>
     <string name="runtime_install_module">Install module</string>
     <string name="runtime_copying_module">Copying module file...</string>
     <string name="runtime_wait_root_shell">Waiting for root shell. Do not leave the app...</string>
@@ -831,6 +1003,7 @@
     <string name="runtime_pending_update">Pending update</string>
     <string name="runtime_update_available">Update available</string>
     <string name="runtime_update_module">Update module</string>
+    <string name="module_update">Update</string>
     <string name="runtime_update_version_change">Version: %1$s → %2$s</string>
     <string name="runtime_update_source">Source: %1$s</string>
     <string name="runtime_update_changelog">Changelog</string>
@@ -938,6 +1111,7 @@
     <string name="module_repo_no_central">No central repositories yet</string>
     <string name="module_repo_building_list">Building module list</string>
     <string name="module_repo_refresh_hint">Modules appear after refreshing a central repository</string>
+    <string name="module_repo_refreshing_repository">Refreshing repository</string>
     <string name="module_repo_no_display">No modules to show</string>
     <string name="module_repo_manage_central">Manage central repositories</string>
     <string name="module_repo_joined">Added</string>
@@ -963,6 +1137,7 @@
     <string name="settings_app_profile_templates_full_desc">Manage local and online App Profile templates</string>
     <string name="settings_tools">Tools</string>
     <string name="settings_tools_desc">More advanced features</string>
+    <string name="settings_tools_refreshing">Refreshing tool status</string>
     <string name="settings_manager_settings">Manager settings</string>
     <string name="settings_kernel_capabilities">Kernel capabilities</string>
     <string name="settings_kernel_capabilities_summary">TCP current %1$s · %2$d algorithms</string>
@@ -1164,6 +1339,7 @@
     <string name="build_status_run_id">Run %1$d</string>
     <string name="vm_plan_bad_version">Unsupported plan code version</string>
     <string name="vm_plan_too_many_modules">External module count exceeds the limit</string>
+    <string name="vm_plan_too_many_kernel_options">Custom kernel option count exceeds the limit</string>
     <string name="vm_plan_negative_number">Negative numbers can not be written to a plan code</string>
     <string name="vm_plan_field_too_long">Plan field is too long</string>
     <string name="vm_plan_incomplete">Plan code content is incomplete</string>
@@ -1349,4 +1525,13 @@
     <string name="gh_root_must_be_object">Root node must be a JSON object</string>
     <string name="gh_missing_module_name">Missing ABK_MODULE_NAME</string>
     <string name="gh_catalog_fallback_name">Module repository</string>
+
+    <!-- Search -->
+    <string name="search_cancel">Cancel</string>
+
+    <!-- Sort options -->
+    <string name="sort_default">Default</string>
+    <string name="sort_name_asc">Name A-Z</string>
+    <string name="sort_name_desc">Name Z-A</string>
+    <string name="root_patch_bundle_verification_failed">Signature bundle verification failed: %1$s</string>
 </resources>

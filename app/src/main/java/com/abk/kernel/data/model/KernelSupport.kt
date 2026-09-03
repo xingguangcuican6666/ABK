@@ -329,7 +329,7 @@ object KernelSupport {
                 else -> config.cancelSusfs
             },
             kpmPassword = if (isOnePlus || ksuVariant == KSU_VARIANT_NONE || !gkiKpmSupported) "" else config.kpmPassword,
-            virtualizationSupport = if (isOnePlus) "off" else normalizeVirtualizationSupport(line.kernelVersion, config.virtualizationSupport),
+            virtualizationSupport = if (isOnePlus) "off" else normalizeVirtualizationSupport(config.virtualizationSupport),
             customKernelOptions = if (isOnePlus) {
                 emptyList()
             } else {
@@ -513,16 +513,12 @@ object KernelSupport {
         }
     }
 
-    fun virtualizationSupportOptions(kernelVersion: String): List<String> =
-        if (kernelVersion == "6.12") listOf("off", "on") else listOf("off", "678", "123", "345")
+    fun virtualizationSupportOptions(): List<String> =
+        listOf("off", "678", "123", "345")
 
-    private fun normalizeVirtualizationSupport(kernelVersion: String, value: String): String {
+    private fun normalizeVirtualizationSupport(value: String): String {
         val normalized = value.trim().lowercase()
-        return when {
-            normalized in virtualizationSupportOptions(kernelVersion) -> normalized
-            kernelVersion == "6.12" && normalized in setOf("678", "123", "345") -> "on"
-            else -> "off"
-        }
+        return if (normalized in setOf("off", "678", "123", "345", "on")) normalized else "off"
     }
 
     fun subLevelOptions(androidVersion: String, kernelVersion: String): List<String> =

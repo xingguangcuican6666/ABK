@@ -3,6 +3,8 @@ import java.util.zip.ZipFile
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.parcelize)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 val githubClientId = providers.gradleProperty("ABK_GITHUB_CLIENT_ID")
@@ -76,7 +78,7 @@ android {
 
     defaultConfig {
         applicationId = "com.abk.kernel"
-        minSdk = 26
+        minSdk = 33
         targetSdk = 35
         versionCode = 10027
         versionName = "1.2.7"
@@ -145,6 +147,9 @@ android {
         }
     }
     packaging {
+        dex {
+            useLegacyPackaging = true
+        }
         jniLibs {
             useLegacyPackaging = true
         }
@@ -203,16 +208,27 @@ dependencies {
 
     // Blur / glass
     implementation(libs.miuix.blur)
+    implementation(libs.kyant.backdrop)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation("io.mockk:mockk:1.13.14")
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+
+    // MIUIX HyperOS theme
+    implementation(libs.miuix.core)
+    implementation(libs.miuix.icons)
+    implementation(libs.miuix.preference)
+    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+    implementation(libs.miuix.navigation3.ui)
+
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }

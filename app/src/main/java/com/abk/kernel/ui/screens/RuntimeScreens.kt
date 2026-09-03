@@ -130,7 +130,7 @@ fun RuntimeHomeScreen(
     val motionScheme = MaterialTheme.motionScheme
 
     LaunchedEffect(state.runtimeNavigationEnabled, state.rootGranted) {
-        if (state.runtimeNavigationEnabled) vm.refreshAbkRuntimeStatus()
+        if (state.runtimeNavigationEnabled && state.rootGranted) vm.refreshAbkRuntimeStatus()
     }
 
     fun closeManagerPatchPage() {
@@ -513,7 +513,7 @@ fun InstalledModulesScreen(
     }
 
     LaunchedEffect(state.runtimeNavigationEnabled, state.rootGranted) {
-        if (state.runtimeNavigationEnabled) vm.refreshAbkRuntimeStatus()
+        if (state.runtimeNavigationEnabled && state.rootGranted) vm.refreshAbkRuntimeStatus()
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -1733,17 +1733,17 @@ private fun RuntimeModuleChip(label: String, secondary: Boolean = false) {
     }
 }
 
-private fun AbkRuntimeModule.matchesRuntimeModuleQuery(query: String): Boolean {
+internal fun AbkRuntimeModule.matchesRuntimeModuleQuery(query: String): Boolean {
     val cleanQuery = query.trim()
     if (cleanQuery.isBlank()) return true
     return listOf(id, name, version, description, repoUrl, stage, type, source, author)
         .any { it.contains(cleanQuery, ignoreCase = true) }
 }
 
-private fun AbkRuntimeModule.displayName(): String =
+internal fun AbkRuntimeModule.displayName(): String =
     name.ifBlank { id.ifBlank { repoName() } }
 
-private fun AbkRuntimeModule.repoName(): String =
+internal fun AbkRuntimeModule.repoName(): String =
     repoUrl
         .trim()
         .trimEnd('/')
@@ -1827,7 +1827,7 @@ private fun runtimeModuleTypeLabel(module: AbkRuntimeModule): String = when (mod
     else -> module.normalizedType()
 }
 
-private fun AbkRuntimeModule.normalizedType(): String =
+internal fun AbkRuntimeModule.normalizedType(): String =
     type.ifBlank {
         when {
             source.split(',').any { it.trim() == "kpm" } -> "kpm"
@@ -1836,16 +1836,23 @@ private fun AbkRuntimeModule.normalizedType(): String =
         }
     }
 
-private fun AbkRuntimeModule.canUninstallRuntimeModule(): Boolean =
+internal fun AbkRuntimeModule.canUninstallRuntimeModule(): Boolean =
     normalizedType() == "standard" && controllable && !readonly
 
-private data class RuntimeModuleDisplayGroup(
+internal fun AbkRuntimeModule.typeOrder(): Int = when (normalizedType()) {
+    "builtin" -> 0
+    "standard" -> 1
+    "kpm" -> 2
+    else -> 3
+}
+
+internal data class RuntimeModuleDisplayGroup(
     val groupName: String? = null,
     val groupDescription: String? = null,
     val modules: List<AbkRuntimeModule> = emptyList()
 )
 
-private fun groupRuntimeModulesForDisplay(modules: List<AbkRuntimeModule>): List<RuntimeModuleDisplayGroup> =
+internal fun groupRuntimeModulesForDisplay(modules: List<AbkRuntimeModule>): List<RuntimeModuleDisplayGroup> =
     modules
         .groupBy { module ->
             module.groupRepoUrl.trim()
@@ -1869,12 +1876,12 @@ private fun groupRuntimeModulesForDisplay(modules: List<AbkRuntimeModule>): List
         }
         .sortedBy { it.groupName.orEmpty().lowercase() }
 
-private fun internalRuntimeControlCapability(): String =
+internal fun internalRuntimeControlCapability(): String =
     intArrayOf(97, 98, 107, 95, 99, 111, 110, 116, 114, 111, 108)
         .map { it.toChar() }
         .joinToString("")
 
-private val MODULE_INSTALL_MIME_TYPES = arrayOf(
+internal val MODULE_INSTALL_MIME_TYPES = arrayOf(
     "application/zip",
     "application/x-zip",
     "application/octet-stream",
@@ -1882,10 +1889,10 @@ private val MODULE_INSTALL_MIME_TYPES = arrayOf(
     "*/*"
 )
 
-private fun hasRuntimeModuleFileAccess(): Boolean =
+internal fun hasRuntimeModuleFileAccess(): Boolean =
     Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
 
-private fun runtimeModuleUriDisplayName(context: Context, uri: Uri): String {
+internal fun runtimeModuleUriDisplayName(context: Context, uri: Uri): String {
     context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
         val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
         if (index >= 0 && cursor.moveToFirst()) {
@@ -1898,7 +1905,7 @@ private fun runtimeModuleUriDisplayName(context: Context, uri: Uri): String {
         ?: "module.zip"
 }
 
-private fun copyRuntimeModuleUriToCache(context: Context, uri: Uri): File {
+internal fun copyRuntimeModuleUriToCache(context: Context, uri: Uri): File {
     val cacheDir = File(context.cacheDir, "runtime-module-install").apply {
         mkdirs()
     }

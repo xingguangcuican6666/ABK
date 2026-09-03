@@ -29,23 +29,33 @@ class AuthOobeCoordinator(
         updateState {
             it.copy(
                 showOobe = true,
+                oobeFromBuild = false,
                 authStep = AuthStep.INTRO,
                 error = null,
             )
         }
     }
 
-    fun openBuildOobe() = enterOobeFlow()
+/** Build page entry: a re-entry, so first-run onboarding must not resume. */
+    fun openBuildOobe() = enterOobeFlow(fromBuild = true)
 
     /** Settings account entry: jump back into the OOBE flow so the user can sign in again. */
-    fun openLoginOobe() = enterOobeFlow()
+    fun openLoginOobe() = enterOobeFlow(fromBuild = true)
 
-    private fun enterOobeFlow() {
+    /**
+     * Intro "continue" for a user who is already signed in. This is still the
+     * first-run flow, so it keeps [MainUiState.oobeFromBuild] false and reaches
+     * [AuthStep.THEME_SELECT] once the fork check settles.
+     */
+    fun continueOobeFromIntro() = enterOobeFlow(fromBuild = false)
+
+    private fun enterOobeFlow(fromBuild: Boolean) {
         val state = readState()
         val nextStep = if (state.isLoggedIn && state.user != null) AuthStep.FORK_CHECK else AuthStep.LOGIN
         updateState {
             it.copy(
                 showOobe = true,
+                oobeFromBuild = fromBuild,
                 authStep = nextStep,
                 error = null,
             )
@@ -80,6 +90,33 @@ class AuthOobeCoordinator(
         }
     }
 
+    /**
+     * Finish onboarding with the UI style picked on [AuthStep.THEME_SELECT].
+     *
+     * MainActivity picks the theme wrapper off `uiStyle` while the OOBE overlay draws
+     * with Material colors, so the two must move together. Letting the style arrive
+     * on its own - it is normally mirrored in from `prefs.uiStyle` - leaves the
+     * overlay a frame of M3 content inside the MIUIX theme with no `AbkTheme`
+     * provider, which reads as a full-screen flash of the default light scheme.
+     *
+     * Both updates are applied back to back before the next frame, so the overlay
+     * disappears and the theme swaps in one step. Writing `uiStyle` into state here
+     * is only optimistic; the collector re-emits the same value once the store
+     * settles.
+     */
+    fun completeOobeWithUiStyle(style: String) {
+        closeOobe()
+        updateState { it.copy(uiStyle = style) }
+        scope.launch {
+            // Style first: it is what the theme wrapper keys off, so it should reach
+            // the store before any other write can republish the old value.
+            prefs.setUiStyle(style)
+            if (!readState().oobeCompleted) {
+                prefs.setOobeCompleted(true)
+            }
+        }
+    }
+
     fun startDeviceFlow() {
         scope.launch {
             updateState { it.copy(isLoading = true, error = null) }
@@ -104,7 +141,12 @@ class AuthOobeCoordinator(
 
     fun completeIfRequested(closeOobeWhenReady: Boolean) {
         if (closeOobeWhenReady) {
-            completeOobe()
+            val state = readState()
+            if (!state.oobeCompleted && !state.oobeFromBuild) {
+                updateState { it.copy(authStep = AuthStep.THEME_SELECT) }
+            } else {
+                completeOobe()
+            }
         }
     }
 
@@ -165,6 +207,7 @@ class AuthOobeCoordinator(
         updateState {
             it.copy(
                 showOobe = false,
+                oobeFromBuild = false,
                 authStep = AuthStep.INTRO,
                 deviceCode = null,
                 userCode = null,

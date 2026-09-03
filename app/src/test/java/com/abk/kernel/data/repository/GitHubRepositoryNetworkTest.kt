@@ -1,14 +1,13 @@
 package com.abk.kernel.data.repository
 
 import com.abk.kernel.data.api.NetworkClient
+import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
-import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -35,7 +34,7 @@ class GitHubRepositoryNetworkTest {
     }
 
     @Test
-    fun getRepo_usesGitHubJsonAcceptByDefault() = runBlocking {
+    fun getUserFork_usesGitHubJsonAcceptByDefault() = runTest {
         server.enqueue(
             MockResponse()
                 .setResponseCode(200)
@@ -45,25 +44,34 @@ class GitHubRepositoryNetworkTest {
                       "id": 1,
                       "name": "repo",
                       "full_name": "owner/repo",
-                      "fork": false,
+                      "fork": true,
                       "default_branch": "main",
                       "private": false,
-                      "html_url": "https://github.com/owner/repo"
+                      "html_url": "https://github.com/owner/repo",
+                      "parent": {
+                        "id": 2,
+                        "name": "repo",
+                        "full_name": "upstream/repo",
+                        "fork": false,
+                        "private": false,
+                        "html_url": "https://github.com/upstream/repo"
+                      }
                     }
                     """.trimIndent()
                 )
         )
 
-        val result = repository.getUserFork("owner", "repo", "owner")
+        val result = repository.getUserFork("upstream", "repo", "owner")
 
-        assertTrue(result is Result.Success<*>)
+        assertEquals("owner/repo", (result as Result.Success).data?.fullName)
         val request = server.takeRequest()
+        assertEquals("/repos/owner/repo", request.path)
         assertEquals("application/vnd.github+json", request.getHeader("Accept"))
         assertEquals("Bearer test-token", request.getHeader("Authorization"))
     }
 
     @Test
-    fun downloadReleaseAssetText_requestsOctetStreamAndReturnsPemBody() = runBlocking {
+    fun downloadReleaseAssetText_requestsOctetStreamAndReturnsPemBody() = runTest {
         val pem = """
             -----BEGIN PUBLIC KEY-----
             MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtestkeytestkeytest

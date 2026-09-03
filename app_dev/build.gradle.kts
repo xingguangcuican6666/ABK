@@ -3,6 +3,8 @@ import java.util.zip.ZipFile
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.parcelize)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 val githubClientId = providers.gradleProperty("ABK_GITHUB_CLIENT_ID")
@@ -76,7 +78,7 @@ android {
 
     defaultConfig {
         applicationId = "com.abk.kernel"
-        minSdk = 26
+        minSdk = 33
         targetSdk = 35
         versionCode = 10027
         versionName = "1.2.7-dev"
@@ -201,8 +203,15 @@ dependencies {
     // Preferences
     implementation(libs.datastore.preferences)
 
-    // Blur / glass
+    // MIUIX HyperOS theme
+    implementation(libs.miuix.core)
+    implementation(libs.miuix.icons)
+    implementation(libs.miuix.preference)
     implementation(libs.miuix.blur)
+    implementation(libs.kyant.backdrop)
+    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+    implementation(libs.miuix.navigation3.ui)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

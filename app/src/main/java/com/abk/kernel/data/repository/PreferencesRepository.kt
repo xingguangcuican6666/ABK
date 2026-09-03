@@ -78,6 +78,7 @@ class PreferencesRepository(private val context: Context) {
         val KEY_APP_UPDATE_STABILITY = stringPreferencesKey("app_update_stability")
         val KEY_APP_UPDATE_LINE = stringPreferencesKey("app_update_line")
         val KEY_PREDICTIVE_BACK_ENABLED = booleanPreferencesKey("predictive_back_enabled")
+        val KEY_MIUIX_PREDICTIVE_BACK_ENABLED = booleanPreferencesKey("miuix_predictive_back_enabled")
         val KEY_RUNTIME_NAVIGATION_ENABLED = booleanPreferencesKey("runtime_navigation_enabled")
         val KEY_WEBVIEW_DEBUG_ENABLED = booleanPreferencesKey("webview_debug_enabled")
         val KEY_TERMS_ACCEPTED_VERSION = intPreferencesKey("terms_accepted_version")
@@ -89,6 +90,15 @@ class PreferencesRepository(private val context: Context) {
         val KEY_PENDING_ROOT_GRANT_RECOVERY_UID = intPreferencesKey("pending_root_grant_recovery_uid")
         val KEY_PENDING_ROOT_GRANT_RECOVERY_LABEL = stringPreferencesKey("pending_root_grant_recovery_label")
         val KEY_ROOT_GRANT_PROFILE_READ_BLOCKED_PACKAGES = stringSetPreferencesKey("root_grant_profile_read_blocked_packages")
+        val KEY_UI_STYLE = stringPreferencesKey("ui_style") // "material" | "miuix"
+        val KEY_MIUIX_THEME_COLOR = intPreferencesKey("miuix_theme_color_argb")
+        val KEY_MIUIX_ACCENT_COLOR = intPreferencesKey("miuix_accent_color_argb")
+        val KEY_MIUIX_DYNAMIC_COLOR_ENABLED = booleanPreferencesKey("miuix_dynamic_color_enabled")
+        val KEY_MIUIX_COLOR_STYLE = stringPreferencesKey("miuix_color_style")
+        val KEY_MIUIX_COLOR_SPEC = stringPreferencesKey("miuix_color_spec")
+        val KEY_MIUIX_BLUR_ENABLED = booleanPreferencesKey("miuix_blur_enabled")
+        val KEY_MIUIX_FLOATING_BOTTOM_BAR_ENABLED = booleanPreferencesKey("miuix_floating_bottom_bar_enabled")
+        val KEY_MIUIX_LIQUID_GLASS_ENABLED = booleanPreferencesKey("miuix_liquid_glass_enabled")
     }
 
     val accessToken: Flow<String?> = context.dataStore.data.map { it[KEY_ACCESS_TOKEN] }
@@ -154,6 +164,7 @@ class PreferencesRepository(private val context: Context) {
         normalizeAppUpdateLine(it[KEY_APP_UPDATE_LINE] ?: APP_UPDATE_LINE_NORMAL)
     }
     val predictiveBackEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_PREDICTIVE_BACK_ENABLED] ?: true }
+    val miuixPredictiveBackEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_MIUIX_PREDICTIVE_BACK_ENABLED] ?: true }
     val runtimeNavigationEnabled: Flow<Boolean> = context.dataStore.data.map {
         it[KEY_RUNTIME_NAVIGATION_ENABLED] ?: false
     }
@@ -204,6 +215,22 @@ class PreferencesRepository(private val context: Context) {
             ?.toSet()
             .orEmpty()
     }
+    // distinctUntilChanged matters here: dataStore.data re-emits on every write to any
+    // key, so without it an unrelated write republishes the stored style and overwrites
+    // an in-memory value that has been set ahead of the store - see
+    // AuthOobeCoordinator.completeOobeWithUiStyle, where that showed up as the theme
+    // bouncing back to the old one mid-handoff.
+    val uiStyle: Flow<String> = context.dataStore.data
+        .map { it[KEY_UI_STYLE] ?: "material" }
+        .distinctUntilChanged()
+    val miuixThemeColorArgb: Flow<Int?> = context.dataStore.data.map { it[KEY_MIUIX_THEME_COLOR] }
+    val miuixAccentColorArgb: Flow<Int?> = context.dataStore.data.map { it[KEY_MIUIX_ACCENT_COLOR] }
+    val miuixDynamicColorEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_MIUIX_DYNAMIC_COLOR_ENABLED] ?: false }
+    val miuixColorStyle: Flow<String> = context.dataStore.data.map { it[KEY_MIUIX_COLOR_STYLE] ?: "TonalSpot" }
+    val miuixColorSpec: Flow<String> = context.dataStore.data.map { it[KEY_MIUIX_COLOR_SPEC] ?: "Spec2021" }
+    val miuixBlurEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_MIUIX_BLUR_ENABLED] ?: true }
+    val miuixFloatingBottomBarEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_MIUIX_FLOATING_BOTTOM_BAR_ENABLED] ?: false }
+    val miuixLiquidGlassEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_MIUIX_LIQUID_GLASS_ENABLED] ?: true }
     val preferencesResetNoticePending: Flow<Boolean> = context.dataStore.data.map {
         it[KEY_PREFERENCES_RESET_NOTICE] ?: false
     }
@@ -329,6 +356,7 @@ class PreferencesRepository(private val context: Context) {
         it[KEY_APP_UPDATE_LINE] = normalizeAppUpdateLine(value)
     }
     suspend fun setPredictiveBackEnabled(v: Boolean) = context.dataStore.edit { it[KEY_PREDICTIVE_BACK_ENABLED] = v }
+    suspend fun setMiuixPredictiveBackEnabled(v: Boolean) = context.dataStore.edit { it[KEY_MIUIX_PREDICTIVE_BACK_ENABLED] = v }
     suspend fun setRuntimeNavigationEnabled(v: Boolean) = context.dataStore.edit {
         it[KEY_RUNTIME_NAVIGATION_ENABLED] = v
     }
@@ -367,6 +395,15 @@ class PreferencesRepository(private val context: Context) {
         val current = preferences[KEY_ROOT_GRANT_PROFILE_READ_BLOCKED_PACKAGES].orEmpty()
         preferences[KEY_ROOT_GRANT_PROFILE_READ_BLOCKED_PACKAGES] = current + cleanPackage
     }
+    suspend fun setUiStyle(style: String) = context.dataStore.edit { it[KEY_UI_STYLE] = style }
+    suspend fun setMiuixThemeColor(argb: Int) = context.dataStore.edit { it[KEY_MIUIX_THEME_COLOR] = argb }
+    suspend fun setMiuixAccentColor(argb: Int) = context.dataStore.edit { it[KEY_MIUIX_ACCENT_COLOR] = argb }
+    suspend fun setMiuixDynamicColorEnabled(v: Boolean) = context.dataStore.edit { it[KEY_MIUIX_DYNAMIC_COLOR_ENABLED] = v }
+    suspend fun setMiuixColorStyle(name: String) = context.dataStore.edit { it[KEY_MIUIX_COLOR_STYLE] = name }
+    suspend fun setMiuixColorSpec(name: String) = context.dataStore.edit { it[KEY_MIUIX_COLOR_SPEC] = name }
+    suspend fun setMiuixBlurEnabled(v: Boolean) = context.dataStore.edit { it[KEY_MIUIX_BLUR_ENABLED] = v }
+    suspend fun setMiuixFloatingBottomBarEnabled(v: Boolean) = context.dataStore.edit { it[KEY_MIUIX_FLOATING_BOTTOM_BAR_ENABLED] = v }
+    suspend fun setMiuixLiquidGlassEnabled(v: Boolean) = context.dataStore.edit { it[KEY_MIUIX_LIQUID_GLASS_ENABLED] = v }
     suspend fun clearPendingAutoDownloadRunId() = context.dataStore.edit { it.remove(KEY_PENDING_AUTO_DOWNLOAD_RUN_ID) }
     suspend fun clearPreferencesResetNotice() = context.dataStore.edit {
         it.remove(KEY_PREFERENCES_RESET_NOTICE)

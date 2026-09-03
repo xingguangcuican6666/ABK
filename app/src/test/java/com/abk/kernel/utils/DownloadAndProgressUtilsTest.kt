@@ -1,6 +1,7 @@
 package com.abk.kernel.utils
 
 import com.abk.kernel.data.model.ArtifactType
+import com.abk.kernel.data.model.toArtifactCategory
 import com.abk.kernel.data.model.Artifact
 import com.abk.kernel.data.model.APP_UPDATE_LINE_DEV
 import com.abk.kernel.data.model.APP_UPDATE_LINE_NORMAL
@@ -238,3 +239,5 @@ class DownloadAndProgressUtilsTest {
         assertEquals(2, progress.totalSteps)
     }
 }
+
+

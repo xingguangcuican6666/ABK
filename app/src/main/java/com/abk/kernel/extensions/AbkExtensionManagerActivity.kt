@@ -622,36 +622,5 @@ private fun ExtensionCard(
     }
 }
 
-private suspend fun installExtensionCompanion(
-    context: Context,
-    extension: AbkManagedExtension,
-): RootUtils.ShellResult {
-    val url = extension.companionDownloadUrl.trim()
-    if (url.isBlank()) {
-        return RootUtils.ShellResult(false, listOf(context.getString(R.string.extension_download_missing)))
-    }
-    val download = DownloadUtils.downloadDirectAsset(
-        context = context,
-        token = null,
-        url = url,
-        name = extension.companionAssetName.ifBlank { "${extension.extensionId}.apk" },
-        sizeBytes = 1L,
-        runId = -1L,
-        runTitle = extension.name,
-    )
-    val apkFile = download.artifacts.firstOrNull()?.filePath
-    return if (apkFile.isNullOrBlank()) {
-        RootUtils.ShellResult(
-            false,
-            listOf(download.errorMessage ?: context.getString(R.string.extension_install_failed))
-        )
-    } else {
-        RootUtils.installApk(context, apkFile)
-    }
-}
-
 private val AbkManagedExtension.canLaunchOobe: Boolean
     get() = isCompanionInstalled && discoveredApp?.oobeComponent != null
-
-private fun AbkManagedExtension.companionLabel(): String =
-    companionDisplayName.ifBlank { companionPackage.ifBlank { "Unknown" } }

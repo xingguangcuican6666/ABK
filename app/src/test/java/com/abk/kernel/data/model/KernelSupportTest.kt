@@ -63,7 +63,7 @@ class KernelSupportTest {
         assertFalse(normalized.useKpm)
         assertTrue(normalized.cancelSusfs)
         assertEquals("", normalized.kpmPassword)
-        assertEquals("on", normalized.virtualizationSupport)
+        assertEquals("678", normalized.virtualizationSupport)
         assertEquals(
             listOf(CustomExternalModule("https://github.com/example/module.git", CustomExternalModuleStage.BEFORE_BUILD)),
             normalized.customExternalModules
@@ -97,9 +97,8 @@ class KernelSupportTest {
     }
 
     @Test
-    fun virtualizationOptionsDependOnKernelLine() {
-        assertEquals(listOf("off", "on"), KernelSupport.virtualizationSupportOptions("6.12"))
-        assertEquals(listOf("off", "678", "123", "345"), KernelSupport.virtualizationSupportOptions("6.1"))
+    fun virtualizationOptionsAreUniformAcrossKernelLines() {
+        assertEquals(listOf("off", "678", "123", "345"), KernelSupport.virtualizationSupportOptions())
     }
 
     @Test
