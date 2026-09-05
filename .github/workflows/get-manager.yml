@@ -98,12 +98,15 @@ jobs:
           elif [ "${{ inputs.kernelsu_variant }}" == "Official" ]; then
             echo "This is the Official"
             git clone https://github.com/tiann/KernelSU.git KernelSU
+          elif [ "${{ inputs.kernelsu_variant }}" == "ApkeSU" ]; then
+            echo "This is the ApkeSU variant"
+            git clone https://github.com/fixz232/ApkeSU.git KernelSU
           else
             echo "Unknown variant"
             exit 1
           fi
 
-          VAR=$([[ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]] && echo 700 || echo 200)
+          VAR=$([[ "${{ inputs.kernelsu_variant }}" == "SukiSU" || "${{ inputs.kernelsu_variant }}" == "ApkeSU" ]] && echo 700 || echo 200)
 
           cd KernelSU
           git fetch origin "$BRANCH"
@@ -118,6 +121,8 @@ jobs:
             KSU_VERSION=$((30700 + KSU_GIT_VERSION))
           elif [ "${{ inputs.kernelsu_variant }}" == "Official" ]; then
             KSU_VERSION=$((30000 + KSU_GIT_VERSION))
+          elif [ "${{ inputs.kernelsu_variant }}" == "ApkeSU" ]; then
+            KSU_VERSION=$((40000 + KSU_GIT_VERSION - 2815))
           fi
           echo $KSU_VERSION
           echo "KSU_VERSION=$KSU_VERSION" >> $GITHUB_ENV
@@ -214,6 +219,21 @@ jobs:
             "ReSukiSU")
               # ReSukiSU has no release APKs; Actions build-manager (fallback to main latest in script).
               download_manager_for_repo "ReSukiSU/ReSukiSU" "ReSukiSU"
+              ;;
+            "ApkeSU")
+              # ApkeSU 管理器仅通过 GitHub Releases 发布，直接拉取 latest release APK
+              mkdir -p "manager-artifacts/ApkeSU"
+              APKESU_LATEST_URL="$(curl -fsSL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/fixz232/ApkeSU/releases/latest" \
+                | jq -r '.assets[] | select(.name | ascii_downcase | endswith(".apk")) | .browser_download_url' | head -1)"
+              if [ -z "$APKESU_LATEST_URL" ] || [ "$APKESU_LATEST_URL" = "null" ]; then
+                echo "::error::ApkeSU latest release 中未找到 APK 资源"
+                exit 1
+              fi
+              APKESU_APK_NAME="$(basename "$APKESU_LATEST_URL")"
+              echo "下载 ApkeSU 管理器: $APKESU_APK_NAME"
+              curl -fL -o "manager-artifacts/ApkeSU/${APKESU_APK_NAME}" "$APKESU_LATEST_URL"
               ;;
             *)
               echo "::error::未知 KernelSU 变体: ${{ inputs.kernelsu_variant }}"

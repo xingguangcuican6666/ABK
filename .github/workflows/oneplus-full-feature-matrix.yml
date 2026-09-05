@@ -15,6 +15,7 @@ on:
           - Official
           - SukiSU
           - ReSukiSU
+          - ApkeSU
           - None
         default: SukiSU
       enable_susfs:
@@ -236,7 +237,7 @@ jobs:
 
           effective_use_kpm = (
               os.environ.get("MATRIX_USE_KPM", "").lower() == "true"
-              and os.environ.get("MATRIX_KSU_VARIANT", "") in {"SukiSU", "ReSukiSU"}
+              and os.environ.get("MATRIX_KSU_VARIANT", "") in {"SukiSU", "ReSukiSU", "ApkeSU"}
           )
 
           supported_manifest_set = set(SUPPORTED_MANIFESTS)
@@ -335,7 +336,7 @@ jobs:
               summary.write(f"- 总任务数: {len(matrix)}\n")
               summary.write(f"- KernelSU 变体: {os.environ.get('MATRIX_KSU_VARIANT', '')}\n")
               summary.write(f"- SUSFS: {env_enabled('MATRIX_ENABLE_SUSFS')}（android14/6.1、android15/6.6、android16/6.12）\n")
-              summary.write(f"- KPM: {'on' if effective_use_kpm else 'off'}（仅 SukiSU/ReSukiSU 生效）\n")
+              summary.write(f"- KPM: {'on' if effective_use_kpm else 'off'}（仅 SukiSU/ReSukiSU/ApkeSU 生效）\n")
               summary.write(f"- lz4kd: {env_enabled('MATRIX_USE_LZ4KD')}\n")
               summary.write(f"- BBG: {env_enabled('MATRIX_USE_BBG')}\n")
               summary.write(f"- BBR: {env_enabled('MATRIX_USE_BBR')}\n")
@@ -369,7 +370,7 @@ jobs:
       kernel_version: ${{ matrix.kernel_version }}
       ksu_variant: ${{ inputs.kernelsu_variant }}
       enable_susfs: ${{ matrix.enable_susfs }}
-      use_kpm: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ReSukiSU') }}
+      use_kpm: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ReSukiSU' || inputs.kernelsu_variant == 'ApkeSU') }}
       use_lz4kd: ${{ inputs.use_lz4kd }}
       use_bbg: ${{ inputs.use_bbg }}
       use_bbr: ${{ inputs.use_bbr }}

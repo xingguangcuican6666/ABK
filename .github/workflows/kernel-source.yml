@@ -40,7 +40,7 @@ on:
         description: "KernelSU 变体"
         required: true
         type: choice
-        options: [None, Official, SukiSU, ReSukiSU]
+        options: [None, Official, SukiSU, ReSukiSU, ApkeSU]
         default: None
       kernelsu_branch:
         description: "KernelSU 分支"

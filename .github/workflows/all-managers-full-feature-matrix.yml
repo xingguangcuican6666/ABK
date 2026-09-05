@@ -172,7 +172,7 @@ jobs:
           import re
           import sys
 
-          variant_order = ["Official", "SukiSU", "ReSukiSU", "None"]
+          variant_order = ["Official", "SukiSU", "ReSukiSU", "ApkeSU", "None"]
           variant_aliases = {
               "official": "Official",
               "sukisu": "SukiSU",

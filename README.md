@@ -1,6 +1,9 @@
 <div align="center">
 
-# ABK
+# MekeABK
+> 仓库地址：https://github.com/Mocheng778/MekeABK
+> 本仓库为ABK衍生分支，**仅个人研究自用、不对外分发**，仅增加 ApkeSU 内核变体与管理器适配。
+> 如果你们不小心进入了我仓库链接，原版项目请访问原作者仓库下载，希望你们理解一下。
 
 **AnyBase Kernel**
 
@@ -16,11 +19,11 @@
 
 </div>
 
-## 支持我的工作
+## 支持我的工作（原作者）
 
-如果你喜欢这个项目，欢迎在 Ko-fi 上为我点一杯咖啡喵
+如果你喜欢这个项目，欢迎在 Ko‑fi 上为原作者点一杯咖啡喵
 
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/xingguangcuican)
+[![Ko‑fi](https://img.shields.io/badge/Ko--fi-F16061?style=for‑the‑badge&logo=ko‑fi&logoColor=white)](https://ko‑fi.com/xingguangcuican)
 
 ## 项目定位
 
@@ -28,9 +31,12 @@ ABK 的目标是把手动 fork、启用 Actions、填写 GKI 或 OnePlus/Oplus �
 
 仓库侧提供 GitHub Actions 构建工作流；App 侧提供 Root 检查、GitHub 授权、fork 检查/同步、构建提交、进度通知、产物下载和刷写/安装入口。
 
+> 🔖本 MekeABK 分支新增：**ApkeSU 变体适配，支持 GKI、SUSFS、KPM 构建，来源：https://github.com/fixz232/ApkeSU**
+
 ## 快速入口
 
-- 仓库主页：https://github.com/xingguangcuican6666/ABK
+- 上游原版仓库主页：https://github.com/xingguangcuican6666/ABK
+- 本衍生分支仓库：https://github.com/Mocheng778/MekeABK
 - Releases：https://github.com/xingguangcuican6666/ABK/releases
 - Actions：https://github.com/xingguangcuican6666/ABK/actions
 - Pages：https://xingguangcuican6666.github.io/ABK/
@@ -39,18 +45,24 @@ ABK 的目标是把手动 fork、启用 Actions、填写 GKI 或 OnePlus/Oplus �
 ## 支持范围
 
 - Android 12 / 13 / 14 / 15 / 16 GKI 构建流程，以及 OnePlus/Oplus 机型构建流程。
-- KernelSU Official、KernelSU Next、SukiSU、ReSukiSU 构建分支。
-- SUSFS、ZRAM、BBG、KPM、Re-Kernel、lz4kd、BBR、代理优化、Unicode 绕过和一加 8E 支持等可选功能。
+- KernelSU Official、KernelSU Next、SukiSU、ReSukiSU、**ApkeSU（本分支新增）** 构建分支。
+- SUSFS、ZRAM、BBG、**KPM（Kernel Patch Modules）**、Re‑Kernel、lz4kd、BBR、代理优化、Unicode 绕过和一加 8E 支持等可选功能。
 - AnyKernel3 包、kernel img、KernelSU 管理器和 SUSFS 模块产物整理。
+
+> 📜组件说明声明
+> 1. **KPM**：内核补丁模块，用于在内核运行时加载内核模块，不同SU变体兼容性存在差异；
+> 2. **SUSFS / susfs4ksu**：内核级root隐藏补丁项目，项目地址：https://gitlab.com/simonpunk/susfs4ksu，提供内核补丁与用户态工具；
+> 3. **susfs4oki**：面向OnePlus/Oplus设备的SUSFS适配补丁；
+> 4. **AnyKernel3**：通用安卓内核刷写打包工具，用于打包boot镜像实现无刷机分区刷写内核。
 
 实际可用性取决于目标设备、内核版本、上游分支状态和当前补丁兼容性。
 
 ## 使用方式
 
-1. Fork 本仓库到自己的 GitHub 账号。
+1. 使用本仓库对应 `forABK` 分支。
 2. 首次进入 fork 仓库的 Actions 页面并启用工作流。
-3. 使用 ABK App 登录 GitHub，授权后让 App 检查 fork 与上游同步状态。
-4. 在 App 的“构建内核”页确认或调整设备推荐参数。
+3. 使用修改后的ABK App登录GitHub，指向本fork仓库，分支选择`forABK`。
+4. 在 App 的“构建内核”页确认或调整设备推荐参数，变体可选择`ApkeSU`。
 5. 提交构建后等待通知栏和 App 内进度更新。
 6. 构建完成后下载需要的 img、AnyKernel3、管理器或 SUSFS 模块。
 7. 在确认风险后按需刷写 boot 镜像或安装模块/APK。
@@ -59,15 +71,13 @@ ABK 的目标是把手动 fork、启用 Actions、填写 GKI 或 OnePlus/Oplus �
 
 ## OnePlus/Oplus 机型构建
 
-App 的“构建内核”页可在 `GKI` 和 `OnePlus` 两种目标间切换。选择 `OnePlus` 后，App 会派发 [`oneplus-custom.yml`](.github/workflows/oneplus-custom.yml)，并通过 OnePlus/Oplus manifest 拉取对应 CPU 分支和机型 XML。
+App 的“构建内核”页可在 `GKI` 和 `OnePlus` 两种目标间切换。选择 `OnePlus` 后，App 会派发 [`oneplus‑custom.yml`](.github/workflows/oneplus‑custom.yml)，并通过 OnePlus/Oplus manifest 拉取对应 CPU 分支和机型 XML。
 ABK 不再把 `_b/_v/_u/_t` 当作用户选择规则；App、工作流摘要和矩阵任务名会直接显示机型、ColorOS/OxygenOS 系统线、Android KMI 和 CPU，上游 XML 名称只保留为仓库初始化参数。
 
-OnePlus 构建支持 `android12/5.10`、`android13/5.15`、`android14/6.1`、`android15/6.6`、`android16/6.12`，其中 OnePlus 15/15T 使用 `sm8850` 的 `android16/6.12` manifest。可选 KernelSU Official、SukiSU、ReSukiSU 或无 Root 内核。OnePlus 专用开关包括 SUSFS、KPM、lz4kd、BBG、BBR、代理优化和 Unicode 零宽绕过修复；SUSFS 在 `android14/6.1`、`android15/6.6` 与 `android16/6.12` 生效，6.12 会自动关闭不兼容的 legacy lz4kd，MTK CPU 分支会强制关闭代理优化。
+OnePlus 构建支持 `android12/5.10`、`android13/5.15`、`android14/6.1`、`android15/6.6`、`android16/6.12`，其中 OnePlus 15/15T 使用 `sm8850` 的 `android16/6.12` manifest。可选 KernelSU Official、SukiSU、ReSukiSU、ApkeSU 或无 Root 内核。OnePlus 专用开关包括 SUSFS、KPM、lz4kd、BBG、BBR、代理优化和 Unicode 零宽绕过修复；SUSFS 在 `android14/6.1`、`android15/6.6` 与 `android16/6.12` 生效，6.12 会自动关闭不兼容的 legacy lz4kd，MTK CPU 分支会强制关闭代理优化。
 
-需要批量构建当前支持的全部 OnePlus/Oplus 机型时，可在 GitHub Actions 手动触发 [`oneplus-full-feature-matrix.yml`](.github/workflows/oneplus-full-feature-matrix.yml)。矩阵会读取上游 manifest，按 CPU 分支和 KMI 线生成构建任务。
-如果要一次性触发 GKI 与 OnePlus 的全部管理器类型全矩阵编译，可使用 [`all-managers-full-feature-matrix.yml`](.github/workflows/all-managers-full-feature-matrix.yml)，并通过输入项控制是否包含某个变体、是否跑 GKI 或 OnePlus，以及常用构建自定义项。
-
-## 风险提示
+需要批量构建当前支持的全部 OnePlus/Oplus 机型时，可在 GitHub Actions 手动触发 [`oneplus‑full‑feature‑matrix.yml`](.github/workflows/oneplus‑full‑feature‑matrix.yml)。矩阵会读取上游 manifest，按 CPU 分支和 KMI 线生成构建任务。
+如果要一次性触发 GKI 与 OnePlus 的全部管理器类型全矩阵编译，可使用 [`all‑managers‑full‑feature‑matrix.yml`](.github/workflows/all‑managers‑full‑feature‑matrix.yml)，并通过输入项控制是否包含某个变体、是否跑 GKI 或 OnePlus，以及常用构建自定义项。
 
 ## 🧪 虚拟化支持（实验性）
 
@@ -94,7 +104,7 @@ OnePlus 构建支持 `android12/5.10`、`android13/5.15`、`android14/6.1`、`an
 - 刷写内核属于高风险操作，可能导致无法开机、数据损坏或需要恢复出厂 boot 镜像。
 - 不建议在不确定设备分区、内核版本、Android 版本和安全补丁级别时强行构建或刷写。
 - 一加 ColorOS/OxygenOS 13 / 14 / 15 / 16 等设备兼容性仍需自行验证，异常情况下可能需要清除数据。
-- 如果构建失败，优先检查 SukiSU / SUSFS / ReSukiSU 等上游分支是否刚更新且尚未互相适配。
+- 如果构建失败，优先检查 SukiSU / SUSFS / ReSukiSU / ApkeSU 等上游分支是否刚更新且尚未互相适配。
 - 自定义外部模块会执行第三方仓库根目录的 `setup.sh`。启用前请审查脚本内容和来源可信度，避免执行未知或恶意代码。
 - ABK 仅面向合法授权设备和合法研究/自用场景。禁止用于灰黑产、未授权访问、绕过风控、作弊、窃取数据、破坏服务或其他违法违规用途。
 
@@ -105,142 +115,14 @@ OnePlus 构建支持 `android12/5.10`、`android13/5.15`、`android14/6.1`、`an
 ```ini
 custom=true
 
-gki-android12-5.10=
-gki-android13-5.15=
-gki-android14-6.1=
-gki-android15-6.6=
+gki‑android12‑5.10=
+gki‑android13‑5.15=
+gki‑android14‑6.1=
+gki‑android15‑6.6=
 
 sukisu=
-```
-
-留空表示使用对应分支的最新提交。
-
-## KSU 分支 `Latest(最新)`（仅 GKI）
-
-适用于所有 GKI 的 `workflow_dispatch` 工作流（[`kernel-custom.yml`](.github/workflows/kernel-custom.yml)、[`kernel-a12-5-10.yml`](.github/workflows/kernel-a12-5-10.yml)、[`kernel-a13-5-15.yml`](.github/workflows/kernel-a13-5-15.yml)、[`kernel-a14-6-1.yml`](.github/workflows/kernel-a14-6-1.yml)、[`kernel-a15-6-6.yml`](.github/workflows/kernel-a15-6-6.yml)、[`kernel-a16-6-12.yml`](.github/workflows/kernel-a16-6-12.yml) 及 [`kernel-full-feature-matrix.yml`](.github/workflows/kernel-full-feature-matrix.yml)）。App 派发的是 [`kernel-custom.yml`](.github/workflows/kernel-custom.yml)；在 GitHub 网页上也可对固定版本工作流手动选择 **Latest(最新)**。
-
-在 GitHub Actions 与 App 的 GKI 构建界面中，**Latest(最新)** 位于 **Dev** 与 **Custom** 之间，由 [`resolve-ksu-ref.sh`](.github/scripts/resolve-ksu-ref.sh) 在运行时解析上游 KernelSU 来源：
-
-- **Official / SukiSU / ReSukiSU（GKI）：** 优先使用上游 `main` 的 **HEAD**，当该提交存在成功的 `release.yml`（标签发布）或独立的 `build-manager.yml` 时，内核与管理器共用该 `head_sha`；否则回退到 `main` 上最近一次成功的独立 `build-manager`。管理器经 [nightly.link](https://nightly.link/) 拉取（`manager.zip` 或 `Manager-release.zip`）；下载时同样会查找 `release.yml` 的 run。若 `main` 上两者皆无可用 CI，Latest 解析失败。
-
-若管理器下载失败，管理器 job 对应步骤会失败，但**内核构建仍会继续**。Latest 不会回退到 `releases/latest`（Stable/Dev 用的发布包路径）。
-
-## Stock Config
-
-如果需要让构建产物中的 `/proc/config.gz` 更接近官方内核配置，可以将设备官方内核导出的配置解压并命名为 `stock_defconfig`，提交到 [`config/`](config/) 目录。
-
-构建流程会自动检测并应用该文件；不存在时会跳过，不需要额外开关。
-
-## 自定义外部模块开发
-
-自定义外部模块用于在 ABK 内置补丁流程之外插入额外仓库逻辑。该功能默认关闭；在 App 或 GitHub Actions 中启用后，工作流会按配置 clone 外部仓库并执行仓库根目录的 `setup.sh`。
-
-工作流输入格式：
-
-```text
-https://github.com/user/module-a;after_patch|https://github.com/user/module-b;before_build
-```
-
-- 用 `|` 分隔多个模块。
-- 每个模块用 `链接;阶段` 表示。
-- 支持阶段：
-  - `after_patch`：在内置补丁、ZRAM、BBG、DDK、Re-Kernel 等源码集成之后执行。
-  - `before_build`：在内核名称、构建时间等最终配置之后，正式编译前执行。
-- 工作流会将模块 clone 到 `$GITHUB_WORKSPACE/custom_external_module_XX-name`，与 `$KERNEL_ROOT`、`susfs4ksu`、`kernel_patches` 等目录同级。
-- 执行 `setup.sh` 时，当前工作目录是模块仓库根目录。
-- 脚本可使用 GitHub Actions 标准环境变量，以及 ABK 在前序步骤写入 `$GITHUB_ENV` 的变量。GitHub Actions 表达式（如 `${{ inputs.xxx }}`）不会在模块脚本中直接展开。
-
-两个阶段都可用的常用变量：
-
-| 变量 | 含义 |
-| --- | --- |
-| `GITHUB_WORKSPACE` | 当前 Actions 工作区，也是 ABK 仓库根目录。 |
-| `CONFIG` | 构建组合名，格式为 `android版本-内核版本-子版本`，例如 `android14-6.1-162`。 |
-| `KERNEL_ROOT` | 内核源码同步目录，例如 `$GITHUB_WORKSPACE/$CONFIG`。 |
-| `DEFCONFIG` | 当前 GKI defconfig 路径：`$KERNEL_ROOT/common/arch/arm64/configs/gki_defconfig`。 |
-| `ZZH_PATCHES` | ABK 仓库根目录，等同 `$GITHUB_WORKSPACE`。 |
-| `SUSFS4KSU` | SUSFS 仓库预期路径；只有启用 SUSFS 时目录一定存在。 |
-| `KERNEL_PATCHES` | `WildKernels/kernel_patches` 克隆目录。 |
-| `SUKISU_PATCHES` | `ShirkNeko/SukiSU_patch` 克隆目录。 |
-| `ANYKERNEL3` | AnyKernel3 克隆目录。 |
-| `ACTION_BUILD` | `Numbersf/Action-Build` 克隆目录。 |
-| `CUSTOM_EXTERNAL_MODULES_MANIFEST` | 已解析的自定义模块清单 TSV 文件。 |
-| `CUSTOM_EXTERNAL_MODULE_STAGE` | 当前执行阶段，值为 `after_patch` 或 `before_build`。 |
-| `REPO` | Android `repo` 工具路径。 |
-| `REMOTE_BRANCH` | `kernel/common` 目标分支查询结果。 |
-| `ACTUAL_SUBLEVEL` | 从内核 `Makefile` 提取到的实际子版本号。 |
-| `BRANCH` | KernelSU setup 使用的分支参数，例如 `-s main`。 |
-| `KSU_LATEST_COMMIT_DATE` | 当前 KernelSU 仓库最新提交时间；未知时为 `未知`。 |
-| `SUSFS_LATEST_COMMIT_DATE` | 当前 SUSFS 仓库最新提交时间；禁用时为 `禁用`。 |
-| `ABK_MANAGER_PACKAGE` | 内核信任的 ABK 管理器包名，默认来自 `app/signing/abk-manager-cert.env`。 |
-| `ABK_MANAGER_CERT_SIZE` | 内核信任的 ABK 管理器签名证书 DER 大小。 |
-| `ABK_MANAGER_CERT_SHA256` | 内核信任的 ABK 管理器签名证书 SHA-256。 |
-| `AVBTOOL` / `MKBOOTIMG` / `UNPACK_BOOTIMG` / `BOOT_SIGN_KEY_PATH` | 后续打包/签名工具路径。 |
-| `CCACHE_DIR` | ccache 目录。 |
-
-条件变量：
-
-- `KSU_VERSION`：仅 KernelSU Official 分支会设置。
-- `KBUILD_BUILD_TIMESTAMP`、`KBUILD_BUILD_VERSION`：只在 `before_build` 阶段可用，因为它们在“设置自定义构建时间”步骤后才写入环境。
-- GitHub Actions 标准变量如 `GITHUB_REPOSITORY`、`GITHUB_REF`、`GITHUB_SHA`、`GITHUB_RUN_ID`、`RUNNER_OS`、`RUNNER_TEMP`、`HOME`、`PATH` 也可使用。
-
-ABK Control 管理器识别说明：
-
-- 如果使用 `ABK_control_module` 让 ABK 直接作为 KernelSU / SukiSU / ReSukiSU 管理器，建议同时配置 `after_patch` 和 `before_build` 两个阶段。
-- 手机上安装的 ABK APK 必须与内核构建日志中打印的 `ABK_MANAGER_PACKAGE` 和 `ABK_MANAGER_CERT_SHA256` 一致。默认 debug / 本地临时签名 APK 不会匹配仓库内的正式签名证书。
-- 构建会在编译前校验 ABK Control 桥接标记和 `CONFIG_ABK_CONTROL=y`；失败时优先检查是否遗漏 `before_build` 阶段，或是否使用了与 APK 不一致的证书元数据。
-
-最小模块结构：
-
-```text
-your-module/
-└── setup.sh
-```
-
-最小 `setup.sh` 示例：
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-echo "Running custom module from: $PWD"
-echo "Kernel root: $KERNEL_ROOT"
-
-# 示例：向 defconfig 追加一个选项，实际模块应先确认目标内核支持该符号。
-grep -q '^CONFIG_EXAMPLE_FEATURE=y$' "$DEFCONFIG" || echo 'CONFIG_EXAMPLE_FEATURE=y' >> "$DEFCONFIG"
-```
-
-开发建议：
-
-- 保持脚本幂等：重复执行不应产生重复配置或破坏源码树。
-- 明确失败：关键文件不存在、补丁未应用或版本不匹配时应直接 `exit 1`。
-- 限定修改范围：优先只修改 `$KERNEL_ROOT`、`$DEFCONFIG` 或模块自己的临时目录。
-- 不要假设固定内核版本：需要时读取 `${CONFIG}` 或 `${KERNEL_ROOT}/common/Makefile` 判断。
-- 不要在脚本中提交密钥、token、隐私数据或不可审计的二进制逻辑。
-
-## App
-
-ABK App 使用 Material 3 Expressive 风格设计，面向手机端完成完整构建闭环：
-
-- 启动后检查 Root 权限。
-- 使用 GitHub Device Flow 登录并请求用户确认授权。
-- 检查用户是否 fork 了本仓库，必要时创建 fork。
-- 检查 fork 是否落后上游，并提示同步。
-- 根据当前内核版本生成推荐构建参数。
-- 触发 GitHub Actions 工作流并同步进度。
-- 构建完成后下载产物并提供刷写/安装入口。
-
-App 编译由 [`Build ABK App`](.github/workflows/build-abk-app.yml) 工作流完成。
-
-### 内置 ksud
-
-- APK 构建工作流会在构建时从 `SukiSU-Ultra/SukiSU-Ultra` 源码编译 `userspace/ksud`，并把生成的 `ksud` 二进制打包进 APK。
-- 当前工作流默认打包 `arm64-v8a`、`armeabi-v7a`、`x86_64` 三个 ABI；运行时会优先使用 APK 内置 `ksud`，不可用时再回退到 `/data/adb/ksud` 或系统 `ksud`。
-- 仓库不直接提交预编译 `ksud` 二进制；来源、构建方式和许可证说明见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
-
-### Self-hosted Runner（可选）
-
-App 编译工作流（`Build ABK App` / `Build ABK App (dev)`）通过仓库变量 `APP_RUNNER` 选择 runner。**未设置时默认使用 GitHub 托管的 `ubuntu-latest`**，Fork 无需任何配置即可工作。需要在自己的服务器上构建时，请参考 [`docs/self-hosted-runner.md`](docs/self-hosted-runner.md)。
+# apkesu= 可在这里固定ApkeSU上游commit
+ [`docs/self-hosted-runner.md`](docs/self-hosted-runner.md)。
 
 ## 贡献者
 

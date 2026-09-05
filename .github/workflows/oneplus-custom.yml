@@ -97,6 +97,7 @@ on:
           - Official
           - SukiSU
           - ReSukiSU
+          - ApkeSU
           - None
         default: SukiSU
       enable_susfs:
@@ -105,7 +106,7 @@ on:
         type: boolean
         default: false
       use_kpm:
-        description: "启用 KPM（仅 SukiSU/ReSukiSU）"
+        description: "启用 KPM（仅 SukiSU/ReSukiSU/ApkeSU）"
         required: false
         type: boolean
         default: false

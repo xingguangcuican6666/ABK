@@ -15,6 +15,7 @@ on:
           - Official
           - ReSukiSU
           - SukiSU
+          - ApkeSU
           - None
         default: ReSukiSU
       kernelsu_branch:
@@ -239,8 +240,8 @@ jobs:
         env:
           MATRIX_KSU_VARIANT: ${{ inputs.kernelsu_variant }}
           MATRIX_KSU_BRANCH: ${{ inputs.kernelsu_branch }}
-          MATRIX_EFFECTIVE_USE_KPM: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
-          MATRIX_EFFECTIVE_KPM_PASSWORD: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
+          MATRIX_EFFECTIVE_USE_KPM: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ApkeSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
+          MATRIX_EFFECTIVE_KPM_PASSWORD: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ApkeSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
           MATRIX_REVISION: ${{ inputs.revision || '' }}
           MATRIX_BUILD_TIME: ${{ inputs.build_time || '' }}
           MATRIX_ENABLE_SUSFS: ${{ inputs.enable_susfs }}
@@ -390,14 +391,14 @@ jobs:
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync }}
       use_networking: ${{ inputs.use_networking }}
-      use_kpm: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
+      use_kpm: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ApkeSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
       use_rekernel: ${{ inputs.use_rekernel }}
       enable_susfs: ${{ inputs.enable_susfs }}
       supp_op: ${{ inputs.supp_op }}
       virtualization_support: ${{ inputs.virtualization_support == 'off' && 'off' || (matrix.kernel_version == '6.12' && 'on' || (inputs.virtualization_support == 'on' && '678' || inputs.virtualization_support)) }}
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
+      kpm_password: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ApkeSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       upload_aux_artifacts: ${{ inputs.upload_aux_artifacts }}
@@ -426,8 +427,8 @@ jobs:
       ZRAM_EXTRA_ALGOS: ${{ inputs.zram_extra_algos || '' }}
       USE_BBG: ${{ inputs.use_bbg }}
       USE_DDK: ${{ inputs.use_ddk }}
-      KPM_PASSWORD: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
-      USE_KPM: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
+      KPM_PASSWORD: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ApkeSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
+      USE_KPM: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ApkeSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
       USE_REKERNEL: ${{ inputs.use_rekernel }}
       SUPP_OP: ${{ inputs.supp_op }}
       CUSTOM_EXTERNAL_MODULES: ${{ inputs.custom_external_modules || '' }}
