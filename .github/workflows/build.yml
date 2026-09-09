@@ -613,6 +613,14 @@ jobs:
 
       - name: 安装编译依赖
         run: |
+          disable_broken_chrome_source() {
+            local source
+            while IFS= read -r source; do
+              echo "::warning::禁用与构建无关的 Chrome APT 源: $source"
+              sudo rm -f "$source"
+            done < <(sudo grep -RIl 'dl.google.com/linux/chrome' /etc/apt/sources.list.d 2>/dev/null || true)
+          }
+
           apt_update_retry() {
             local attempt
             for attempt in 1 2 3; do
@@ -628,6 +636,7 @@ jobs:
             return 1
           }
 
+          disable_broken_chrome_source
           apt_update_retry
           sudo apt-get install -y ccache python3 git curl build-essential libssl-dev bison flex libelf-dev dwarves
 
@@ -661,8 +670,25 @@ jobs:
         run: |
           AOSP_MIRROR=https://android.googlesource.com
           BRANCH=main-kernel-build-2024
-          git clone $AOSP_MIRROR/kernel/prebuilts/build-tools -b $BRANCH --depth 1 kernel-build-tools
-          git clone $AOSP_MIRROR/platform/system/tools/mkbootimg -b $BRANCH --depth 1 mkbootimg
+
+          retry_toolchain_clone() {
+            local repo_url="$1"
+            local target_dir="$2"
+            local attempt
+            for attempt in 1 2 3; do
+              rm -rf "$target_dir"
+              if git clone "$repo_url" -b "$BRANCH" --depth 1 "$target_dir"; then
+                return 0
+              fi
+              echo "::warning::工具链克隆失败: $repo_url (attempt ${attempt}/3)"
+              sleep "$((attempt * 5))"
+            done
+            echo "::error::工具链克隆连续失败: $repo_url"
+            return 1
+          }
+
+          retry_toolchain_clone "$AOSP_MIRROR/kernel/prebuilts/build-tools" kernel-build-tools
+          retry_toolchain_clone "$AOSP_MIRROR/platform/system/tools/mkbootimg" mkbootimg
 
       - name: 生成签名密钥
         run: |
@@ -1058,7 +1084,24 @@ jobs:
 
           $REPO init --depth=1 -u https://android.googlesource.com/kernel/manifest -b common-${FORMATTED_BRANCH} --repo-rev=v2.16
 
-          REMOTE_BRANCH=$(git ls-remote https://android.googlesource.com/kernel/common ${FORMATTED_BRANCH})
+          retry_git_ls_remote() {
+            local repo_url="$1"
+            local ref="$2"
+            local attempt
+            local output
+            for attempt in 1 2 3; do
+              if output=$(git ls-remote "$repo_url" "$ref"); then
+                printf '%s\n' "$output"
+                return 0
+              fi
+              echo "::warning::git ls-remote 失败: $repo_url $ref (attempt ${attempt}/3)" >&2
+              sleep "$((attempt * 5))"
+            done
+            echo "::error::git ls-remote 连续失败: $repo_url $ref" >&2
+            return 1
+          }
+
+          REMOTE_BRANCH=$(retry_git_ls_remote https://android.googlesource.com/kernel/common "$FORMATTED_BRANCH")
           DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
 
           if grep -q deprecated <<< $REMOTE_BRANCH; then

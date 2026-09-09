@@ -230,6 +230,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          disable_broken_chrome_source() {
+            local source
+            while IFS= read -r source; do
+              echo "::warning::禁用与构建无关的 Chrome APT 源: $source"
+              sudo rm -f "$source"
+            done < <(sudo grep -RIl 'dl.google.com/linux/chrome' /etc/apt/sources.list.d 2>/dev/null || true)
+          }
+
           apt_update_retry() {
             local attempt
             for attempt in 1 2 3; do
@@ -245,6 +253,7 @@ jobs:
             return 1
           }
 
+          disable_broken_chrome_source
           apt_update_retry
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
             python3 git curl ccache libelf-dev libdw-dev build-essential flex bison libssl-dev \
