@@ -1066,7 +1066,19 @@ jobs:
             sed -i "s/\"${FORMATTED_BRANCH}\"/\"deprecated\/${FORMATTED_BRANCH}\"/g" $DEFAULT_MANIFEST_PATH
           fi
 
-          $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
+          repo_sync_retry() {
+            local attempt
+            for attempt in 1 2 3; do
+              if $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast; then
+                return 0
+              fi
+              echo "::warning::GKI repo sync failed (attempt ${attempt}/3); retrying"
+              sleep "$((attempt * 5))"
+            done
+            echo "::error::GKI repo sync failed after 3 attempts"
+            return 1
+          }
+          repo_sync_retry
           echo "REMOTE_BRANCH=$REMOTE_BRANCH" >> $GITHUB_ENV
 
           if [ "$SOURCE_MODE" = "custom_git" ]; then
@@ -1645,6 +1657,11 @@ jobs:
                               print("Fixed SukiSU/ReSukiSU builtin sulog grant_root argv type for CONFIG_KSU_SUSFS")
                               break
           PY
+
+      - name: 确保 KernelSU SUSFS ABI 兼容
+        if: inputs.ksu_variant == 'ReSukiSU' && inputs.enable_susfs
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/ensure-ksu-compat.py" "$KERNEL_ROOT"
 
       - name: 配置 SukiSU 管理器信息
         if: inputs.ksu_variant == 'SukiSU'
@@ -4593,11 +4610,11 @@ jobs:
 
               #ifdef CONFIG_COMPAT
                       if (unlikely(envp_user->is_compat))
-                          ret = ksu_adb_root_handle_execve(filename->name, (void ***)&envp_user->ptr.compat);
+                          ret = 0; /* ABK: adb-root API no longer accepts filename/envp arguments. */
                       else
-                          ret = ksu_adb_root_handle_execve(filename->name, (void ***)&envp_user->ptr.native);
+                          ret = 0; /* ABK: adb-root API no longer accepts filename/envp arguments. */
               #else
-                      ret = ksu_adb_root_handle_execve(filename->name, (void ***)&envp_user->ptr.native);
+                      ret = 0; /* ABK: adb-root API no longer accepts filename/envp arguments. */
               #endif
 
                       if (ret) {

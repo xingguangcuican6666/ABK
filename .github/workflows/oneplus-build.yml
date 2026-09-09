@@ -297,7 +297,19 @@ jobs:
               python3 "$GITHUB_WORKSPACE/.github/scripts/sanitize-oneplus-manifest.py" "$manifest_path"
               ;;
           esac
-          repo sync -c -j"$(nproc --all)" --no-tags --no-clone-bundle --force-sync
+          repo_sync_retry() {
+            local attempt
+            for attempt in 1 2 3; do
+              if repo sync -c -j"$(nproc --all)" --no-tags --no-clone-bundle --force-sync; then
+                return 0
+              fi
+              echo "::warning::OnePlus repo sync failed (attempt ${attempt}/3); retrying"
+              sleep "$((attempt * 5))"
+            done
+            echo "::error::OnePlus repo sync failed after 3 attempts"
+            return 1
+          }
+          repo_sync_retry
 
       - name: 准备 KernelSU 和补丁
         shell: bash
@@ -428,6 +440,11 @@ jobs:
             [ -f "50_add_susfs_in_gki-${ANDROID_VERSION}-${KERNEL_VERSION}.patch" ] && \
               patch -p1 < "50_add_susfs_in_gki-${ANDROID_VERSION}-${KERNEL_VERSION}.patch" || true
           fi
+
+      - name: 确保 KernelSU ABI 兼容
+        if: ${{ inputs.ksu_variant != 'None' }}
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/ensure-ksu-compat.py" "$GITHUB_WORKSPACE/oneplus_workspace/kernel_workspace/kernel_platform"
 
       - name: 修复 SukiSU SUSFS 源码兼容
         if: ${{ inputs.ksu_variant == 'SukiSU' }}
