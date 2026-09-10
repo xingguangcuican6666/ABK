@@ -2322,7 +2322,7 @@ jobs:
               fix_proc_base_missing_vma_decl
               fix_namei_set_nameidata_arity
               # 修复 5.10 Official: statfs.c 使用 SUSFS kstat spoof helper，但头部补丁可能因上下文变化漏打
-              if [[ "${{ inputs.ksu_variant }}" == "Official" ]] \
+              if [[ "$ABK_KSU_VARIANT" == "Official" ]] \
                 && grep -qF 'susfs_sus_kstat_spoof_vfs_statfs' ./fs/statfs.c \
                 && ! grep -qF '#include <linux/susfs_def.h>' ./fs/statfs.c; then
                 sed -i '/#include <linux\/security.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT\n#include <linux\/susfs_def.h>\n#endif' ./fs/statfs.c
