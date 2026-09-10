@@ -1337,7 +1337,36 @@ jobs:
               ;;
             "SukiSU")
               echo "添加 SukiSU..."
-              curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s $BRANCH
+              requested_ref="${BRANCH#-s }"
+              if [ -z "$requested_ref" ] || [ "$requested_ref" = "$BRANCH" ]; then
+                echo "::error::SukiSU 请求 ref 无效: $BRANCH"
+                exit 1
+              fi
+
+              setup_script="$(mktemp)"
+              curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" -o "$setup_script"
+              if grep -qF 'git checkout "$1" && echo "[-] Checked out $1." || echo "[-] Checkout default branch"' "$setup_script"; then
+                sed -i 's|git checkout "$1" && echo "\[-\] Checked out $1\." || echo "\[-\] Checkout default branch"|git checkout "$1" \&\& echo "[-] Checked out $1."|' "$setup_script"
+              fi
+              bash "$setup_script" "$requested_ref"
+              rm -f "$setup_script"
+
+              if [ ! -d KernelSU/.git ]; then
+                echo "::error::SukiSU setup 完成后未找到 KernelSU Git 仓库"
+                exit 1
+              fi
+              requested_head="$(git -C KernelSU rev-parse "${requested_ref}^{commit}" 2>/dev/null)" || {
+                echo "::error::SukiSU 无法解析请求 ref: $requested_ref"
+                exit 1
+              }
+              resolved_head="$(git -C KernelSU rev-parse HEAD)"
+              echo "SukiSU 请求 ref: $requested_ref"
+              echo "SukiSU 请求 HEAD: $requested_head"
+              echo "SukiSU 最终 HEAD: $resolved_head"
+              if [ "$requested_head" != "$resolved_head" ]; then
+                echo "::error::SukiSU setup 静默回退或检出错误: 请求 $requested_head，实际 $resolved_head"
+                exit 1
+              fi
               ;;
             "ReSukiSU")
               echo "添加 ReSukiSU..."
@@ -2292,6 +2321,17 @@ jobs:
               fi
               fix_proc_base_missing_vma_decl
               fix_namei_set_nameidata_arity
+              # 修复 5.10 Official: statfs.c 使用 SUSFS kstat spoof helper，但头部补丁可能因上下文变化漏打
+              if [[ "${{ inputs.ksu_variant }}" == "Official" ]] \
+                && grep -qF 'susfs_sus_kstat_spoof_vfs_statfs' ./fs/statfs.c \
+                && ! grep -qF '#include <linux/susfs_def.h>' ./fs/statfs.c; then
+                sed -i '/#include <linux\/security.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT\n#include <linux\/susfs_def.h>\n#endif' ./fs/statfs.c
+                grep -qF '#include <linux/susfs_def.h>' ./fs/statfs.c || {
+                  echo "::error::无法向 fs/statfs.c 注入 susfs_def.h"
+                  exit 1
+                }
+                echo "已修复 android12-5.10 Official fs/statfs.c 缺少 susfs_def.h"
+              fi
             fi
 
             # Android 13 - 5.15 修复
@@ -2393,7 +2433,7 @@ jobs:
               fi
 
               # 修复 6.12.58+: exec.c 头部上下文变化导致 SUSFS 补丁漏掉 susfs_def.h
-              if grep -q 'susfs_is_current_proc_umounted' ./fs/exec.c && ! grep -qF '#include <linux/susfs_def.h>' ./fs/exec.c; then
+              if grep -qE 'susfs_is_current_proc_(no_su|umounted)' ./fs/exec.c && ! grep -qF '#include <linux/susfs_def.h>' ./fs/exec.c; then
                 if grep -qF '#include <linux/dma-buf.h>' ./fs/exec.c; then
                   sed -i '/#include <linux\/dma-buf.h>/a #ifdef CONFIG_KSU_SUSFS\n#include <linux\/susfs_def.h>\n#endif' ./fs/exec.c
                 else
@@ -2693,12 +2733,38 @@ jobs:
           }
 
           echo "启用 NTsync 补丁"
-          echo "应用基础补丁: ntsync_base.patch..."
-          patch -p1 --forward < $KERNEL_PATCHES/common/ntsync/ntsync_base.patch || true
-          # 根据 Android 版本和 Kernel 版本应用对应的兼容性补丁
+          BASE_PATCH="$KERNEL_PATCHES/common/ntsync/ntsync_base.patch"
           PATCH_FILE="$KERNEL_PATCHES/common/ntsync/ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
-          echo "应用版本补丁: ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
-          patch -p1 --forward < "$PATCH_FILE" || true
+
+          for patch_file in "$BASE_PATCH" "$PATCH_FILE"; do
+            [ -f "$patch_file" ] || {
+              echo "::error::NTsync 补丁不存在: $patch_file"
+              exit 1
+            }
+            echo "检查并应用 NTsync 补丁: $(basename "$patch_file")"
+            if patch -p1 --forward --dry-run < "$patch_file" >/dev/null 2>&1; then
+              patch -p1 --forward < "$patch_file"
+            elif patch -p1 --reverse --dry-run < "$patch_file" >/dev/null 2>&1; then
+              echo "NTsync 补丁已应用: $(basename "$patch_file")"
+            else
+              echo "::error::NTsync 补丁既无法应用，也不是已应用状态: $patch_file"
+              exit 1
+            fi
+          done
+
+          NTSYNC_SOURCE="drivers/misc/ntsync.c"
+          [ -f "$NTSYNC_SOURCE" ] || {
+            echo "::error::NTsync 补丁完成后未生成 $NTSYNC_SOURCE"
+            exit 1
+          }
+
+          if [[ "${{ inputs.android_version }}" == "android14" && "${{ inputs.kernel_version }}" == "6.1" ]] \
+            && grep -qF '__vfs_setxattr_noperm' "$NTSYNC_SOURCE" \
+            && ! grep -RqsE 'EXPORT_SYMBOL(_GPL)?\(__vfs_setxattr_noperm\)' fs include; then
+            echo "::error::android14-6.1 的 NTsync 作为模块引用 __vfs_setxattr_noperm，但该符号未导出，拒绝启用 CONFIG_NTSYNC 以避免链接失败"
+            exit 1
+          fi
+
           ensure_defconfig_value CONFIG_NTSYNC y
           echo "应用 NTsync 补丁完成"
 
