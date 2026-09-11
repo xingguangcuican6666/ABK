@@ -1339,7 +1339,7 @@ jobs:
               echo "添加 SukiSU..."
               requested_ref="$BRANCH"
               if [ -z "$requested_ref" ]; then
-                echo "::error::SukiSU 请求 ref 无效: $BRANCH"
+                echo "::error::SukiSU 请求 ref 为空"
                 exit 1
               fi
 
@@ -2321,16 +2321,17 @@ jobs:
               fi
               fix_proc_base_missing_vma_decl
               fix_namei_set_nameidata_arity
-              # 修复 5.10 Official: statfs.c 使用 SUSFS kstat spoof helper，但头部补丁可能因上下文变化漏打
+              # Android 12/5.10 的上游补丁在 statfs.c 本地声明该 helper；
+              # 某些分支头部 hunk 漏打，且 susfs_def.h 并不提供该原型。
               if [[ "$ABK_KSU_VARIANT" == "Official" ]] \
                 && grep -qF 'susfs_sus_kstat_spoof_vfs_statfs' ./fs/statfs.c \
-                && ! grep -qF '#include <linux/susfs_def.h>' ./fs/statfs.c; then
-                sed -i '/#include <linux\/security.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT\n#include <linux\/susfs_def.h>\n#endif' ./fs/statfs.c
-                grep -qF '#include <linux/susfs_def.h>' ./fs/statfs.c || {
-                  echo "::error::无法向 fs/statfs.c 注入 susfs_def.h"
+                && ! grep -qF 'extern int susfs_sus_kstat_spoof_vfs_statfs(' ./fs/statfs.c; then
+                sed -i '/#include <linux\/security.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT\nextern int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf, bool *is_fuse);\n#endif' ./fs/statfs.c
+                grep -qF 'extern int susfs_sus_kstat_spoof_vfs_statfs(' ./fs/statfs.c || {
+                  echo "::error::无法向 fs/statfs.c 注入 SUSFS statfs helper 原型"
                   exit 1
                 }
-                echo "已修复 android12-5.10 Official fs/statfs.c 缺少 susfs_def.h"
+                echo "已修复 android12-5.10 Official fs/statfs.c 缺少 SUSFS statfs helper 原型"
               fi
             fi
 
@@ -2710,8 +2711,8 @@ jobs:
         env:
           BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
           ABK_FEATURE_ID: ntsync
-          ABK_FEATURE_END: "true"
-          ABK_FEATURE_FAILURE_MESSAGE: "NTsync patch failed"
+          ABK_ANDROID_VERSION: ${{ inputs.android_version }}
+          ABK_KERNEL_VERSION: ${{ inputs.kernel_version }}
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
           set -euo pipefail
@@ -2734,9 +2735,11 @@ jobs:
 
           echo "启用 NTsync 补丁"
           BASE_PATCH="$KERNEL_PATCHES/common/ntsync/ntsync_base.patch"
-          PATCH_FILE="$KERNEL_PATCHES/common/ntsync/ntsync_compat_${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+          PATCH_FILE="$KERNEL_PATCHES/common/ntsync/ntsync_compat_${ABK_ANDROID_VERSION}-${ABK_KERNEL_VERSION}.patch"
+          NTSYNC_SOURCE="drivers/misc/ntsync.c"
 
-          for patch_file in "$BASE_PATCH" "$PATCH_FILE"; do
+          apply_ntsync_patch() {
+            local patch_file="$1"
             [ -f "$patch_file" ] || {
               echo "::error::NTsync 补丁不存在: $patch_file"
               exit 1
@@ -2750,21 +2753,27 @@ jobs:
               echo "::error::NTsync 补丁既无法应用，也不是已应用状态: $patch_file"
               exit 1
             fi
-          done
+          }
 
-          NTSYNC_SOURCE="drivers/misc/ntsync.c"
+          # Android 16/6.12 已带原生 ntsync.c 与 UAPI；基础补丁是新增文件式补丁，
+          # 对原生源码既不能正向应用，也不能用反向 dry-run 判定为已应用。
+          if [[ "$ABK_ANDROID_VERSION" != "android16" || "$ABK_KERNEL_VERSION" != "6.12" ]]; then
+            apply_ntsync_patch "$BASE_PATCH"
+          elif [ -f "$NTSYNC_SOURCE" ] && [ -f include/uapi/linux/ntsync.h ]; then
+            echo "NTsync 基础源码已由 android16-6.12 内核提供"
+          else
+            echo "::error::android16-6.12 内核缺少原生 NTsync 源码或 UAPI"
+            exit 1
+          fi
+          apply_ntsync_patch "$PATCH_FILE"
+
           [ -f "$NTSYNC_SOURCE" ] || {
             echo "::error::NTsync 补丁完成后未生成 $NTSYNC_SOURCE"
             exit 1
           }
 
-          if [[ "${{ inputs.android_version }}" == "android14" && "${{ inputs.kernel_version }}" == "6.1" ]] \
-            && grep -qF '__vfs_setxattr_noperm' "$NTSYNC_SOURCE" \
-            && ! grep -RqsE 'EXPORT_SYMBOL(_GPL)?\(__vfs_setxattr_noperm\)' fs include; then
-            echo "::error::android14-6.1 的 NTsync 作为模块引用 __vfs_setxattr_noperm，但该符号未导出，拒绝启用 CONFIG_NTSYNC 以避免链接失败"
-            exit 1
-          fi
-
+          # 强制内建可避免 Android 14/6.1 将 ntsync.ko modpost 为独立模块；
+          # __vfs_setxattr_noperm 在该内核树中存在但未导出，内建对象可合法引用。
           ensure_defconfig_value CONFIG_NTSYNC y
           echo "应用 NTsync 补丁完成"
 
