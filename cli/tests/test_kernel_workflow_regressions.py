@@ -123,10 +123,11 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
     def test_android12_statfs_repair_injects_verified_declaration(self):
         block = self._step_run_block("应用 SUSFS 补丁")
         self.assertIn(
-            "extern int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, "
-            "struct kstatfs *buf, bool *is_fuse);",
+            'declaration = "extern int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, '
+            'struct kstatfs *buf, bool *is_fuse);"',
             block,
         )
+        self.assertIn("declared > call", block)
         self.assertNotIn(
             "android12-5.10 Official fs/statfs.c 缺少 susfs_def.h",
             block,

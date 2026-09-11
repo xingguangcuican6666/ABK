@@ -2326,15 +2326,22 @@ jobs:
               fix_namei_set_nameidata_arity
               # Android 12/5.10 的上游补丁在 statfs.c 本地声明该 helper；
               # 某些分支头部 hunk 漏打，且 susfs_def.h 并不提供该原型。
-              if grep -qF 'susfs_sus_kstat_spoof_vfs_statfs' ./fs/statfs.c \
-                && ! grep -qF 'extern int susfs_sus_kstat_spoof_vfs_statfs(' ./fs/statfs.c; then
-                sed -i '/#include <linux\/security.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT\nextern int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf, bool *is_fuse);\n#endif' ./fs/statfs.c
-                grep -qF 'extern int susfs_sus_kstat_spoof_vfs_statfs(' ./fs/statfs.c || {
-                  echo "::error::无法向 fs/statfs.c 注入 SUSFS statfs helper 原型"
-                  exit 1
-                }
-                echo "已修复 android12-5.10 fs/statfs.c 缺少 SUSFS statfs helper 原型"
-              fi
+              python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("./fs/statfs.c")
+          text = path.read_text()
+          declaration = "extern int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf, bool *is_fuse);"
+          call = text.find("susfs_sus_kstat_spoof_vfs_statfs(")
+          declared = text.find(declaration)
+          if call >= 0 and (declared < 0 or declared > call):
+              block = f"#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT\n{declaration}\n#endif\n"
+              anchor = "#include <linux/security.h>\n"
+              if anchor not in text:
+                  raise SystemExit(f"无法定位 {path} 的 SUSFS statfs helper 声明插入点")
+              path.write_text(text.replace(anchor, anchor + block, 1))
+              print("已修复 android12-5.10 fs/statfs.c 缺少前置 SUSFS statfs helper 原型")
+          PY
             fi
 
             # Android 13 - 5.15 修复
