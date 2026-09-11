@@ -1731,7 +1731,7 @@ jobs:
           PY
 
       - name: 确保 KernelSU SUSFS ABI 兼容
-        if: inputs.ksu_variant == 'ReSukiSU' && inputs.enable_susfs
+        if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU') && inputs.enable_susfs
         working-directory: ${{ env.KERNEL_ROOT }}
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/ensure-ksu-compat.py" "$KERNEL_ROOT"
 
@@ -2751,8 +2751,55 @@ jobs:
               echo "NTsync 补丁已应用: $(basename "$patch_file")"
             else
               echo "::error::NTsync 补丁既无法应用，也不是已应用状态: $patch_file"
+              patch -p1 --forward --dry-run < "$patch_file" || true
               exit 1
             fi
+          }
+
+          apply_android12_ntsync_compat() {
+            local patch_file="$1"
+            local filtered_patch
+            filtered_patch="$(mktemp)"
+            # Android 12 GKI lacks lockdep_assert_none_held_once(), so the
+            # upstream backport hunk never matches. Replace that hunk with the
+            # equivalent macros needed by ntsync and apply the remaining patch.
+            python3 - "$patch_file" "$filtered_patch" <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path(sys.argv[1]).read_text()
+          start = source.find("@@ -305,25 +310,29")
+          end = source.find("@@ -394,8 +403,12", start)
+          if start < 0 or end < 0:
+              raise SystemExit("unexpected android12 NTsync compatibility patch layout")
+          Path(sys.argv[2]).write_text(source[:start] + source[end:])
+          PY
+            apply_ntsync_patch "$filtered_patch"
+            rm -f "$filtered_patch"
+
+            python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("include/linux/lockdep.h")
+          text = path.read_text()
+          if "#define lockdep_assert(cond)" not in text:
+              marker = "#define lockdep_depth(tsk)\t(debug_locks ? (tsk)->lockdep_depth : 0)\n"
+              if marker not in text:
+                  raise SystemExit(f"missing lockdep assertion anchor: {path}")
+              block = """
+
+          #define lockdep_assert(cond) \
+              do { WARN_ON(debug_locks && !(cond)); } while (0)
+
+          #define lockdep_assert_once(cond) \
+              do { WARN_ON_ONCE(debug_locks && !(cond)); } while (0)
+          """
+              path.write_text(text.replace(marker, marker + block, 1))
+          PY
+            grep -qF '#define lockdep_assert(cond)' include/linux/lockdep.h || {
+              echo "::error::Android 12 NTsync lockdep_assert 兼容修复失败"
+              exit 1
+            }
           }
 
           # Android 16/6.12 已带原生 ntsync.c 与 UAPI；基础补丁是新增文件式补丁，
@@ -2765,7 +2812,11 @@ jobs:
             echo "::error::android16-6.12 内核缺少原生 NTsync 源码或 UAPI"
             exit 1
           fi
-          apply_ntsync_patch "$PATCH_FILE"
+          if [[ "$ABK_ANDROID_VERSION" == "android12" && "$ABK_KERNEL_VERSION" == "5.10" ]]; then
+            apply_android12_ntsync_compat "$PATCH_FILE"
+          else
+            apply_ntsync_patch "$PATCH_FILE"
+          fi
 
           [ -f "$NTSYNC_SOURCE" ] || {
             echo "::error::NTsync 补丁完成后未生成 $NTSYNC_SOURCE"

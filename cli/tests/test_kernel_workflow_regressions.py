@@ -1,4 +1,6 @@
+import importlib.util
 import re
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -6,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = ROOT / ".github" / "workflows" / "build.yml"
 REF_SCRIPT_PATH = ROOT / ".github" / "scripts" / "resolve-ksu-ref.sh"
+KSU_COMPAT_PATH = ROOT / ".github" / "scripts" / "ensure-ksu-compat.py"
 
 
 class KernelWorkflowRegressionTests(unittest.TestCase):
@@ -13,6 +16,9 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
     def setUpClass(cls):
         cls.workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
         cls.ref_script = REF_SCRIPT_PATH.read_text(encoding="utf-8")
+        spec = importlib.util.spec_from_file_location("ensure_ksu_compat", KSU_COMPAT_PATH)
+        cls.ksu_compat = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.ksu_compat)
 
     def test_sukisu_setup_accepts_resolved_bare_sha(self):
         block = self._step_run_block("添加 KernelSU")
@@ -40,6 +46,54 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
         self.assertIn(
             'emit_env "RESOLVED_KSU_SHA" "${RESOLVED_KSU_SHA:-$BRANCH}"',
             self.ref_script,
+        )
+
+    def test_susfs_compatibility_step_covers_sukisu_variants(self):
+        self.assertIn(
+            "if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU') && inputs.enable_susfs",
+            self.workflow,
+        )
+
+    def test_sukisu_nested_supercall_gets_susfs_fd_compatibility(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            ksu = root / "KernelSU" / "kernel"
+            supercall = ksu / "supercall"
+            feature = ksu / "feature"
+            supercall.mkdir(parents=True)
+            feature.mkdir()
+            (ksu / "Kbuild").write_text("obj-y += supercall/\n", encoding="utf-8")
+            source = supercall / "supercall.c"
+            header = supercall / "supercall.h"
+            source.write_text(
+                "int ksu_install_fd(void) { return 0; }\n"
+                "void __init ksu_supercalls_init(void) {}\n",
+                encoding="utf-8",
+            )
+            header.write_text("int ksu_install_fd(void);\n", encoding="utf-8")
+            (feature / "kernel_umount.c").write_text(
+                "int ksu_kernel_umount_enabled;\n"
+                "\nstatic const struct ksu_feature_handler kernel_umount_handler = {};\n",
+                encoding="utf-8",
+            )
+
+            self.ksu_compat.main(str(root))
+
+            self.assertIn("int ksu_install_su_fd(void)", source.read_text(encoding="utf-8"))
+            self.assertIn("int ksu_install_su_fd(void);", header.read_text(encoding="utf-8"))
+            self.assertIn(
+                "static int kernel_umount_feature_set(u64 value)",
+                (feature / "kernel_umount.c").read_text(encoding="utf-8"),
+            )
+
+    def test_android12_ntsync_compat_filters_incompatible_lockdep_hunk(self):
+        block = self._step_run_block("应用 NTsync 补丁")
+        self.assertIn("apply_android12_ntsync_compat", block)
+        self.assertIn('source.find("@@ -305,25 +310,29")', block)
+        self.assertIn("#define lockdep_assert(cond)", block)
+        self.assertIn(
+            'if [[ "$ABK_ANDROID_VERSION" == "android12" && "$ABK_KERNEL_VERSION" == "5.10" ]]',
+            block,
         )
 
     def test_android12_statfs_repair_injects_verified_declaration(self):
