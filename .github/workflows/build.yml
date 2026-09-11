@@ -1346,7 +1346,7 @@ jobs:
               setup_script="$(mktemp)"
               curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" -o "$setup_script"
               if grep -qF 'git checkout "$1" && echo "[-] Checked out $1." || echo "[-] Checkout default branch"' "$setup_script"; then
-                sed -i 's|git checkout "$1" && echo "\[-\] Checked out $1\." || echo "\[-\] Checkout default branch"|git checkout "$1" \&\& echo "[-] Checked out $1."|' "$setup_script"
+                sed -i '/git checkout "\$1" && echo /c\        git checkout "$1" && echo "[-] Checked out $1."' "$setup_script"
               fi
               bash "$setup_script" "$requested_ref"
               rm -f "$setup_script"
