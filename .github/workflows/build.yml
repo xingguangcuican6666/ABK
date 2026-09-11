@@ -2246,7 +2246,7 @@ jobs:
               fi
             }
 
-            fix_fdinfo_mask_decl() {
+            fix_fdinfo_declarations() {
               local file="./fs/notify/fdinfo.c"
               [ -f "$file" ] || return 0
 
@@ -2296,18 +2296,17 @@ jobs:
               line for line in lines[brace_line + 1:end]
               if not decl_re.match(line)
           ]
-          new_lines = (
-              lines[:brace_line + 1]
-              + ["\tu32 mask = mark->mask & IN_ALL_EVENTS;\n"]
-              + new_body
-              + lines[end:]
-          )
+          declarations = ["\tu32 mask = mark->mask & IN_ALL_EVENTS;\n"]
+          if re.search(r"(?m)^\s*mnt\s*=\s*real_mount\(", "".join(new_body)) \
+                  and not re.search(r"\bstruct\s+mount\s*\*\s*mnt\b", "".join(new_body)):
+              declarations.append("\tstruct mount *mnt;\n")
+          new_lines = lines[:brace_line + 1] + declarations + new_body + lines[end:]
 
           if new_lines != lines:
               path.write_text("".join(new_lines))
-              print("已修复 fdinfo.c 中 mask 声明作用域")
+              print("已修复 fdinfo.c 中局部变量声明")
           else:
-              print("fdinfo.c mask 声明无需修改")
+              print("fdinfo.c 局部变量声明无需修改")
           PY
             }
 
@@ -2316,22 +2315,21 @@ jobs:
               if sub_in_range "$CURRENT_SUB" 43 117; then
                 fix_task_mmu_show_pad
                 apply_susfs_optional_patch "Android 12 - 5.10 fdinfo.c" "a12-5.10/fdinfo.c.patch"
-                fix_fdinfo_mask_decl
+                fix_fdinfo_declarations
                 apply_susfs_base_patch "Android 12 - 5.10 base.c" "a12-5.10/base.c.patch"
               fi
               fix_proc_base_missing_vma_decl
               fix_namei_set_nameidata_arity
               # Android 12/5.10 的上游补丁在 statfs.c 本地声明该 helper；
               # 某些分支头部 hunk 漏打，且 susfs_def.h 并不提供该原型。
-              if [[ "$ABK_KSU_VARIANT" == "Official" ]] \
-                && grep -qF 'susfs_sus_kstat_spoof_vfs_statfs' ./fs/statfs.c \
+              if grep -qF 'susfs_sus_kstat_spoof_vfs_statfs' ./fs/statfs.c \
                 && ! grep -qF 'extern int susfs_sus_kstat_spoof_vfs_statfs(' ./fs/statfs.c; then
                 sed -i '/#include <linux\/security.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT\nextern int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf, bool *is_fuse);\n#endif' ./fs/statfs.c
                 grep -qF 'extern int susfs_sus_kstat_spoof_vfs_statfs(' ./fs/statfs.c || {
                   echo "::error::无法向 fs/statfs.c 注入 SUSFS statfs helper 原型"
                   exit 1
                 }
-                echo "已修复 android12-5.10 Official fs/statfs.c 缺少 SUSFS statfs helper 原型"
+                echo "已修复 android12-5.10 fs/statfs.c 缺少 SUSFS statfs helper 原型"
               fi
             fi
 
@@ -2366,7 +2364,7 @@ jobs:
                   fi
                 fi
                 apply_susfs_optional_patch "Android 13 - 5.15 fdinfo.c" "a13-5.15/fdinfo.c.patch"
-                fix_fdinfo_mask_decl
+                fix_fdinfo_declarations
                 apply_susfs_optional_patch "Android 13 - 5.15 open.c" "a13-5.15/open.c.patch"
                 if [[ "$ABK_OS_PATCH_LEVEL" != "2024-05" ]]; then
                   fix_task_mmu_show_pad
@@ -2772,7 +2770,18 @@ jobs:
           end = source.find("@@ -394,8 +403,12", start)
           if start < 0 or end < 0:
               raise SystemExit("unexpected android12 NTsync compatibility patch layout")
-          Path(sys.argv[2]).write_text(source[:start] + source[end:])
+          source = source[:start] + source[end:]
+
+          lockdep = Path("kernel/locking/lockdep.c").read_text()
+          function_pos = lockdep.find("int __lock_is_held")
+          function_line = lockdep[:function_pos].count("\n") + 1 if function_pos >= 0 else 99999
+          if function_line < 5250:
+              lockdep_start = source.find("@@ -5308,13 +5309,13")
+              lockdep_end = source.find("@@ -5593,10 +5594,14", lockdep_start)
+              if lockdep_start < 0 or lockdep_end < 0:
+                  raise SystemExit("unexpected android12 NTsync lockdep.c patch layout")
+              source = source[:lockdep_start] + source[lockdep_end:]
+          Path(sys.argv[2]).write_text(source)
           PY
             apply_ntsync_patch "$filtered_patch"
             rm -f "$filtered_patch"
@@ -2795,6 +2804,17 @@ jobs:
               do { WARN_ON_ONCE(debug_locks && !(cond)); } while (0)
           """
               path.write_text(text.replace(marker, marker + block, 1))
+
+          lockdep_path = Path("kernel/locking/lockdep.c")
+          lockdep = lockdep_path.read_text()
+          function_start = lockdep.find("int __lock_is_held(const struct lockdep_map *lock, int read)")
+          function_end = lockdep.find("static struct pin_cookie __lock_pin_lock", function_start)
+          if function_start >= 0 and function_end >= 0:
+              body = lockdep[function_start:function_end]
+              if "return LOCK_STATE_HELD;" not in body:
+                  body = body.replace("return 1;", "return LOCK_STATE_HELD;", 1)
+                  body = body.replace("return 0;", "return LOCK_STATE_NOT_HELD;")
+                  lockdep_path.write_text(lockdep[:function_start] + body + lockdep[function_end:])
           PY
             grep -qF '#define lockdep_assert(cond)' include/linux/lockdep.h || {
               echo "::error::Android 12 NTsync lockdep_assert 兼容修复失败"

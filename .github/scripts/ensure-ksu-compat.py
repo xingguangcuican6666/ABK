@@ -23,7 +23,10 @@ def ensure_su_fd(ksu: Path) -> bool:
         marker = "\nvoid __init ksu_supercalls_init(void)"
         if marker not in text:
             raise SystemExit(f"missing supercall init anchor: {source}")
-        compat = "\n/* ABK: SUSFS fs/exec.c expects the su-session fd entry point. */\nint ksu_install_su_fd(void)\n{\n    return ksu_install_fd();\n}\n"
+        if "ksu_install_fd_with_permissions(" in text:
+            compat = "\nint ksu_install_su_fd(void)\n{\n    /* Install the scoped descriptor after exec enters ksud. */\n    return ksu_install_fd_with_permissions(O_CLOEXEC, KSU_DRIVER_PERMISSION_SU_SESSION);\n}\n"
+        else:
+            compat = "\n/* ABK: legacy SukiSU has no scoped driver contexts yet. */\nint ksu_install_su_fd(void)\n{\n    return ksu_install_fd();\n}\n"
         source.write_text(text.replace(marker, compat + marker, 1))
         changed = True
 

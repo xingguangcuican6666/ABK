@@ -86,11 +86,32 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
                 (feature / "kernel_umount.c").read_text(encoding="utf-8"),
             )
 
+    def test_scoped_su_fd_compatibility_preserves_session_permission(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ksu = Path(temp_dir)
+            source = ksu / "supercall.c"
+            source.write_text(
+                "#define KSU_DRIVER_PERMISSION_SU_SESSION (1UL << 0)\n"
+                "static int ksu_install_fd_with_permissions(unsigned int flags, unsigned long permissions) { return 0; }\n"
+                "int ksu_install_fd(void) { return ksu_install_fd_with_permissions(O_CLOEXEC, 0); }\n"
+                "void __init ksu_supercalls_init(void) {}\n",
+                encoding="utf-8",
+            )
+
+            self.ksu_compat.ensure_su_fd(ksu)
+
+            self.assertIn(
+                "ksu_install_fd_with_permissions(O_CLOEXEC, KSU_DRIVER_PERMISSION_SU_SESSION)",
+                source.read_text(encoding="utf-8"),
+            )
+
     def test_android12_ntsync_compat_filters_incompatible_lockdep_hunk(self):
         block = self._step_run_block("应用 NTsync 补丁")
         self.assertIn("apply_android12_ntsync_compat", block)
         self.assertIn('source.find("@@ -305,25 +310,29")', block)
+        self.assertIn('source.find("@@ -5308,13 +5309,13")', block)
         self.assertIn("#define lockdep_assert(cond)", block)
+        self.assertIn("return LOCK_STATE_HELD;", block)
         self.assertIn(
             'if [[ "$ABK_ANDROID_VERSION" == "android12" && "$ABK_KERNEL_VERSION" == "5.10" ]]',
             block,
@@ -107,6 +128,10 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
             "android12-5.10 Official fs/statfs.c 缺少 susfs_def.h",
             block,
         )
+        statfs_repair = block.split("# Android 12/5.10 的上游补丁", 1)[1].split("# Android 13 - 5.15 修复", 1)[0]
+        self.assertNotIn('[[ "$ABK_KSU_VARIANT" == "Official" ]]', statfs_repair)
+        self.assertIn("fix_fdinfo_declarations", block)
+        self.assertIn('declarations.append("\\tstruct mount *mnt;\\n")', block)
 
     def test_android16_uses_native_ntsync_source(self):
         block = self._step_run_block("应用 NTsync 补丁")
