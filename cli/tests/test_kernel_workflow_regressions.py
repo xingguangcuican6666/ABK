@@ -128,6 +128,8 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
             block,
         )
         self.assertIn("declared > call", block)
+        self.assertIn('#include <linux/security.h>', block)
+        self.assertIn('security_sb_statfs(', block)
         self.assertNotIn(
             "android12-5.10 Official fs/statfs.c 缺少 susfs_def.h",
             block,
@@ -136,6 +138,13 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
         self.assertNotIn('[[ "$ABK_KSU_VARIANT" == "Official" ]]', statfs_repair)
         self.assertIn("fix_fdinfo_declarations", block)
         self.assertIn('declarations.append("\\tstruct mount *mnt;\\n")', block)
+
+    def test_sukisu_post_exec_wrapper_installs_su_session_fd(self):
+        block = self._step_run_block("最终修复 SukiSU/ReSukiSU 源码兼容")
+        self.assertIn("ensure_post_execveat_wrapper", block)
+        self.assertIn('#include "supercall/supercall.h"', block)
+        self.assertIn("int ksu_handle_post_execveat_sucompat(", block)
+        self.assertIn("(void)ksu_install_su_fd();", block)
 
     def test_android16_uses_native_ntsync_source(self):
         block = self._step_run_block("应用 NTsync 补丁")
