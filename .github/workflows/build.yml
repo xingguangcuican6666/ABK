@@ -1337,8 +1337,8 @@ jobs:
               ;;
             "SukiSU")
               echo "添加 SukiSU..."
-              requested_ref="${BRANCH#-s }"
-              if [ -z "$requested_ref" ] || [ "$requested_ref" = "$BRANCH" ]; then
+              requested_ref="$BRANCH"
+              if [ -z "$requested_ref" ]; then
                 echo "::error::SukiSU 请求 ref 无效: $BRANCH"
                 exit 1
               fi
