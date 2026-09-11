@@ -2342,6 +2342,12 @@ jobs:
               path.write_text(text.replace(anchor, anchor + block, 1))
               print("已修复 android12-5.10 fs/statfs.c 缺少前置 SUSFS statfs helper 原型")
 
+          PY
+            fi
+
+            python3 - <<'PY'
+          from pathlib import Path
+
           susfs_path = Path("./fs/susfs.c")
           if susfs_path.is_file():
               susfs_text = susfs_path.read_text()
@@ -2350,9 +2356,8 @@ jobs:
                   if anchor not in susfs_text:
                       raise SystemExit(f"无法定位 {susfs_path} 的 security.h 插入点")
                   susfs_path.write_text(susfs_text.replace(anchor, anchor + "#include <linux/security.h>\n", 1))
-                  print("已修复 android12-5.10 fs/susfs.c 缺少 security_sb_statfs 原型")
+                  print("已修复 fs/susfs.c 缺少 security_sb_statfs 原型")
           PY
-            fi
 
             # Android 13 - 5.15 修复
             if [[ "$ABK_ANDROID_VERSION" == "android13" && "$ABK_KERNEL_VERSION" == "5.15" ]]; then
