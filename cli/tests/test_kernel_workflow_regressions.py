@@ -49,10 +49,13 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
         )
 
     def test_susfs_compatibility_step_covers_sukisu_variants(self):
+        step = self.workflow.split("- name: 确保 KernelSU SUSFS ABI 兼容", 1)[1].split("- name: 配置 SukiSU 管理器信息", 1)[0]
         self.assertIn(
             "if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU') && inputs.enable_susfs",
-            self.workflow,
+            step,
         )
+        self.assertIn("custom-source-feature-env.sh", step)
+        self.assertIn("ABK_FEATURE_ID: kernelsu", step)
 
     def test_sukisu_nested_supercall_gets_susfs_fd_compatibility(self):
         with tempfile.TemporaryDirectory() as temp_dir:

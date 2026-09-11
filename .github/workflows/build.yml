@@ -1732,6 +1732,10 @@ jobs:
 
       - name: 确保 KernelSU SUSFS ABI 兼容
         if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU') && inputs.enable_susfs
+        env:
+          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
+          ABK_FEATURE_ID: kernelsu
+          ABK_FEATURE_FAILURE_MESSAGE: "KernelSU SUSFS ABI compatibility integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/ensure-ksu-compat.py" "$KERNEL_ROOT"
 
