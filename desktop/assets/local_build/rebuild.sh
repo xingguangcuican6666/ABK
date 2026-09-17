@@ -1164,6 +1164,41 @@ apply_networking() {
     ensure_defconfig_value CONFIG_DEFAULT_TCP_CONG '"bbr"'
     ensure_defconfig_value CONFIG_NET_SCH_FQ y
     ensure_defconfig_value CONFIG_NET_SCH_FQ_CODEL y
+
+    case "$KERNEL_VERSION" in
+        5.10|5.15|6.1)
+            # 内核树内 BBR 为 v1,回移植 WildKernels BBRv3(前置 sysctl 补丁不适用时跳过)
+            log_info "applying BBRv3 backport patches"
+            local bbr_patch_dir="$KERNEL_PATCHES_SOURCE/common/bbrv3"
+            local bbr_patch bbr_main_patch
+            (
+                cd "$KERNEL_ROOT/common"
+                for bbr_patch in sysctl_add_proc_dou8vec_minmax.patch sysctl_fix_data-races_in_proc_dou8vec_minmax.patch; do
+                    [[ -f "$bbr_patch_dir/$bbr_patch" ]] || continue
+                    if patch -p1 --forward --dry-run <"$bbr_patch_dir/$bbr_patch" >/dev/null 2>&1; then
+                        patch -p1 --forward <"$bbr_patch_dir/$bbr_patch"
+                        log_info "applied BBRv3 prereq patch: $bbr_patch"
+                    else
+                        log_info "skipping BBRv3 prereq patch: $bbr_patch (not applicable)"
+                    fi
+                done
+                bbr_main_patch="$bbr_patch_dir/0001-net-tcp-backport-BBRv3-to-${ANDROID_VERSION}-${KERNEL_VERSION}.patch"
+                if [[ ! -f "$bbr_main_patch" ]]; then
+                    log_warn "BBRv3 backport patch not found: $(basename "$bbr_main_patch"), keeping in-tree BBR"
+                elif patch -p1 --forward --dry-run <"$bbr_main_patch" >/dev/null 2>&1; then
+                    patch -p1 --forward <"$bbr_main_patch"
+                    log_info "applied BBRv3 backport patch"
+                elif patch -p1 --reverse --dry-run <"$bbr_main_patch" >/dev/null 2>&1; then
+                    log_info "BBRv3 backport patch already applied"
+                else
+                    log_warn "BBRv3 backport patch failed to apply, keeping in-tree BBR"
+                fi
+            ) || log_warn "BBRv3 patch application incomplete, keeping in-tree BBR"
+            ;;
+        6.6|6.12)
+            log_info "in-tree BBR is already v3 (Linux 6.4+), skipping backport patches"
+            ;;
+    esac
 }
 
 apply_virtualization_support() {

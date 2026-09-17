@@ -245,7 +245,7 @@ jobs:
           echo "BBG 补丁      : ${{ inputs.use_bbg }}"
           echo "DDK LSM       : ${{ inputs.use_ddk }}"
           echo "NTsync 补丁   : ${{ inputs.use_ntsync }}"
-          echo "Networing 增强: ${{ inputs.use_networking }}"
+          echo "Networking 增强: ${{ inputs.use_networking }} (BBRv3 + fq/fq_codel)"
           echo "KPM 功能      : ${{ inputs.use_kpm }}"
           echo "KPM 密码      : ${{ inputs.kpm_password && '已自定义' || '默认' }}"
           echo "Re-Kernel     : ${{ inputs.use_rekernel }}"
@@ -3057,14 +3057,44 @@ jobs:
             sed -i 's/CONFIG_IP_SET_MAX/65534/g' net/netfilter/ipset/ip_set_core.c
           fi
 
-          echo " 添加 TCP Congestion Control (BBR) 支持"
-          # 应用 BBRv3 补丁仅有6.1版本
-          if [ "${{ inputs.kernel_version }}" = "6.1" && false ]; then
-            echo "应用 BBRv3 补丁"
-            PATCH_FILE="$KERNEL_PATCHES/bbr/bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
-            echo "→ 应用补丁: bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
-            patch -p1 --forward < "$PATCH_FILE" || true
-          fi
+          echo " 添加 TCP Congestion Control (BBRv3) 支持"
+          try_apply_patch() {
+            local patch_file="$1"
+            local name
+            name="$(basename "$patch_file")"
+            if patch -p1 --forward --dry-run < "$patch_file" >/dev/null 2>&1; then
+              patch -p1 --forward < "$patch_file"
+              echo "已应用 BBRv3 patch: $name"
+              return 0
+            fi
+            if patch -p1 --reverse --dry-run < "$patch_file" >/dev/null 2>&1; then
+              echo "BBRv3 patch 已应用: $name"
+              return 0
+            fi
+            return 1
+          }
+
+          case "${{ inputs.kernel_version }}" in
+            5.10|5.15|6.1)
+              # 内核树内 BBR 为 v1,回移植 WildKernels BBRv3(前置 sysctl 补丁不适用时静默跳过)
+              BBR_PATCH_DIR="$KERNEL_PATCHES/common/bbrv3"
+              for bbr_patch in sysctl_add_proc_dou8vec_minmax.patch sysctl_fix_data-races_in_proc_dou8vec_minmax.patch; do
+                [ -f "$BBR_PATCH_DIR/$bbr_patch" ] || continue
+                if ! try_apply_patch "$BBR_PATCH_DIR/$bbr_patch"; then
+                  echo "BBRv3 前置补丁 $bbr_patch 不适用(内核已包含所需改动),跳过"
+                fi
+              done
+              BBR_MAIN_PATCH="$BBR_PATCH_DIR/0001-net-tcp-backport-BBRv3-to-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch"
+              if [ ! -f "$BBR_MAIN_PATCH" ]; then
+                echo "::warning::BBRv3: 未找到回移植补丁 $(basename "$BBR_MAIN_PATCH"),保留内核树内 BBR"
+              elif ! try_apply_patch "$BBR_MAIN_PATCH"; then
+                echo "::warning::BBRv3: 回移植补丁未能应用,保留内核树内 BBR"
+              fi
+              ;;
+            6.6|6.12)
+              echo "内核树内 BBR 已是 v3(Linux 6.4+),无需回移植补丁"
+              ;;
+          esac
 
           ensure_defconfig_value CONFIG_TCP_CONG_ADVANCED y
           if [ -f net/ipv4/Kconfig ] && grep -q '^config TCP_CONG_BIC$' net/ipv4/Kconfig; then

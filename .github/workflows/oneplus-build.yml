@@ -179,7 +179,7 @@ jobs:
           echo "BBG 补丁      : $USE_BBG"
           echo "DDK LSM       : false"
           echo "NTsync 补丁   : false"
-          echo "Networking 增强: BBR=$USE_BBR, proxy=$effective_proxy"
+          echo "Networking 增强: BBR=$USE_BBR (BBRv3 + fq/fq_codel), proxy=$effective_proxy"
           echo "KPM 功能      : $effective_kpm"
           echo "KPM 密码      : 默认"
           echo "Re-Kernel     : false"
@@ -361,9 +361,12 @@ jobs:
           fi
 
           cd "$WORKSPACE"
-          rm -rf kernel_patches SukiSU_patch susfs4oki
+          rm -rf kernel_patches SukiSU_patch susfs4oki wild_kernel_patches
           git clone https://github.com/Xiaomichael/kernel_patches.git --depth=1
           git clone https://github.com/ShirkNeko/SukiSU_patch.git --depth=1
+          if [ "$USE_BBR" = "true" ]; then
+            git clone https://github.com/WildKernels/kernel_patches.git wild_kernel_patches --depth=1
+          fi
           if [ "$EFFECTIVE_ENABLE_SUSFS" = "true" ]; then
             git clone https://github.com/cctv18/susfs4oki.git \
               -b "oki-${ANDROID_VERSION}-${KERNEL_VERSION}" \
@@ -913,10 +916,52 @@ jobs:
           EOF
           fi
           if [ "$USE_BBR" = "true" ]; then
+              try_apply_patch() {
+                  local patch_file="$1"
+                  local name
+                  name="$(basename "$patch_file")"
+                  if patch -p1 --forward --dry-run < "$patch_file" >/dev/null 2>&1; then
+                      patch -p1 --forward < "$patch_file"
+                      echo "已应用 BBRv3 patch: $name"
+                      return 0
+                  fi
+                  if patch -p1 --reverse --dry-run < "$patch_file" >/dev/null 2>&1; then
+                      echo "BBRv3 patch 已应用: $name"
+                      return 0
+                  fi
+                  return 1
+              }
+
+              case "$KERNEL_VERSION" in
+                  5.10|5.15|6.1)
+                      # 内核树内 BBR 为 v1,回移植 WildKernels BBRv3(前置 sysctl 补丁不适用时静默跳过)
+                      BBR_PATCH_DIR="$WORKSPACE/wild_kernel_patches/common/bbrv3"
+                      (
+                          cd "$COMMON_ROOT"
+                          for bbr_patch in sysctl_add_proc_dou8vec_minmax.patch sysctl_fix_data-races_in_proc_dou8vec_minmax.patch; do
+                              [ -f "$BBR_PATCH_DIR/$bbr_patch" ] || continue
+                              if ! try_apply_patch "$BBR_PATCH_DIR/$bbr_patch"; then
+                                  echo "BBRv3 前置补丁 $bbr_patch 不适用(内核已包含所需改动),跳过"
+                              fi
+                          done
+                          BBR_MAIN_PATCH="$BBR_PATCH_DIR/0001-net-tcp-backport-BBRv3-to-${ANDROID_VERSION}-${KERNEL_VERSION}.patch"
+                          if [ ! -f "$BBR_MAIN_PATCH" ]; then
+                              echo "::warning::BBRv3: 未找到回移植补丁 $(basename "$BBR_MAIN_PATCH"),保留内核树内 BBR"
+                          elif ! try_apply_patch "$BBR_MAIN_PATCH"; then
+                              echo "::warning::BBRv3: 回移植补丁未能应用,保留内核树内 BBR"
+                          fi
+                      )
+                      ;;
+                  6.6|6.12)
+                      echo "内核树内 BBR 已是 v3(Linux 6.4+),无需回移植补丁"
+                      ;;
+              esac
+
               cat >> "$DEFCONFIG_PATH" <<'EOF'
           CONFIG_TCP_CONG_ADVANCED=y
           CONFIG_TCP_CONG_BBR=y
           CONFIG_NET_SCH_FQ=y
+          CONFIG_NET_SCH_FQ_CODEL=y
           CONFIG_TCP_CONG_BIC=n
           CONFIG_TCP_CONG_WESTWOOD=n
           CONFIG_TCP_CONG_HTCP=n

@@ -40,7 +40,7 @@ ABK 的目标是把手动 fork、启用 Actions、填写 GKI 或 OnePlus/Oplus �
 
 - Android 12 / 13 / 14 / 15 / 16 GKI 构建流程，以及 OnePlus/Oplus 机型构建流程。
 - KernelSU Official、KernelSU Next、SukiSU、ReSukiSU 构建分支。
-- SUSFS、ZRAM、BBG、KPM、Re-Kernel、lz4kd、BBR、代理优化、Unicode 绕过和一加 8E 支持等可选功能。
+- SUSFS、ZRAM、BBG、KPM、Re-Kernel、lz4kd、BBRv3（含 fq/fq_codel 调度器）、代理优化、Unicode 绕过和一加 8E 支持等可选功能。
 - AnyKernel3 包、kernel img、KernelSU 管理器和 SUSFS 模块产物整理。
 
 实际可用性取决于目标设备、内核版本、上游分支状态和当前补丁兼容性。
