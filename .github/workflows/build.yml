@@ -178,6 +178,8 @@ jobs:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
       CCACHE_HARDLINK: "true"
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_SLOPPINESS: "locale,time_macros,include_file_ctime,include_file_mtime"
 
     steps:
       - name: 构建信息摘要
@@ -640,21 +642,41 @@ jobs:
           apt_update_retry
           sudo apt-get install -y ccache python3 git curl build-essential libssl-dev bison flex libelf-dev dwarves
 
+      - name: 计算缓存周期
+        id: cache-week
+        run: echo "w=$(date -u +%Y-W%V)" >> "$GITHUB_OUTPUT"
+
       - name: 配置 ccache
+        if: inputs.kernel_version == '5.10' || inputs.kernel_version == '5.15'
         run: |
-          mkdir -p ~/.cache/bazel
           ccache --version
-          ccache --max-size=2G
+          ccache --max-size=4G
           ccache --set-config=compression=true
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
 
       - name: 恢复 ccache 缓存
+        if: inputs.kernel_version == '5.10' || inputs.kernel_version == '5.15'
         uses: actions/cache@v5
         with:
           path: ~/.ccache
-          key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-${{ github.sha }}
+          key: ccache-${{ inputs.android_version }}-${{ inputs.kernel_version }}-v2-${{ steps.cache-week.outputs.w }}
           restore-keys: |
-            ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-
+            ccache-${{ inputs.android_version }}-${{ inputs.kernel_version }}-v2-
+
+      - name: 清零 ccache 统计
+        if: inputs.kernel_version == '5.10' || inputs.kernel_version == '5.15'
+        run: ccache -z || true
+
+      - name: 恢复 bazel 缓存
+        if: inputs.kernel_version != '5.10' && inputs.kernel_version != '5.15'
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            ~/.cache/bazel-disk
+            ~/.cache/bazel-repo
+          key: bazel-${{ inputs.android_version }}-${{ inputs.kernel_version }}-v1-${{ steps.cache-week.outputs.w }}
+          restore-keys: |
+            bazel-${{ inputs.android_version }}-${{ inputs.kernel_version }}-v1-
 
       - name: 缓存工具链
         id: cache-toolchain
@@ -723,7 +745,7 @@ jobs:
           }
 
           echo "克隆 AnyKernel3..."
-          git clone https://github.com/WildKernels/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
+          git clone https://github.com/WildKernels/AnyKernel3.git -b "$ANYKERNEL_BRANCH" --depth 1
           rm -rf AnyKernel3/.git
 
           if [ "${{ inputs.enable_susfs }}" == "true" ]; then
@@ -753,8 +775,8 @@ jobs:
           fi
 
           echo "准备补丁资源..."
-          git clone https://github.com/WildKernels/kernel_patches.git
-          git clone https://github.com/ShirkNeko/SukiSU_patch.git
+          git clone --depth 1 https://github.com/WildKernels/kernel_patches.git
+          git clone --depth 1 https://github.com/ShirkNeko/SukiSU_patch.git
           echo "使用当前仓库补丁目录: $ZZH_PATCHES"
           git clone https://github.com/Numbersf/Action-Build.git --depth=1
 
@@ -1077,7 +1099,6 @@ jobs:
           SOURCE_PATCH_LEVEL: ${{ inputs.os_patch_level }}
         run: |
           set -euo pipefail
-          git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1.git gcc
 
           FORMATTED_BRANCH="${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.os_patch_level }}"
           echo "初始化 repo，分支: common-${FORMATTED_BRANCH}"
@@ -1112,7 +1133,7 @@ jobs:
           repo_sync_retry() {
             local attempt
             for attempt in 1 2 3; do
-              if $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast; then
+              if $REPO --trace sync -c -j8 --no-tags --fail-fast; then
                 return 0
               fi
               echo "::warning::GKI repo sync failed (attempt ${attempt}/3); retrying"
@@ -6212,7 +6233,7 @@ jobs:
       - name: 编译内核
         uses: nick-fields/retry@v4
         with:
-          timeout_minutes: 30
+          timeout_minutes: 40
           max_attempts: 3
           retry_on: timeout
           command: |
@@ -6452,13 +6473,42 @@ jobs:
               if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
                 LTO_FLAG="--lto=none"
               fi
-              tools/bazel build --disk_cache=/home/runner/.cache/bazel --config=fast $LTO_FLAG $FRAG_FLAG //common:kernel_aarch64_dist || exit 1
+              tools/bazel build --disk_cache="$HOME/.cache/bazel-disk" --repository_cache="$HOME/.cache/bazel-repo" --config=fast $LTO_FLAG $FRAG_FLAG //common:kernel_aarch64_dist || exit 1
               strings ./bazel-bin/common/kernel_aarch64/Image | grep 'Linux version'
             fi
 
             echo "当前 KSU 最新提交日期: ${KSU_LATEST_COMMIT_DATE}"
             echo "当前 SUSFS 最新提交日期: ${SUSFS_LATEST_COMMIT_DATE}"
             echo "如果日期不同或相差过远则补丁失效、编译失败"
+
+      - name: ccache 统计
+        if: always() && (inputs.kernel_version == '5.10' || inputs.kernel_version == '5.15')
+        run: ccache --show-stats || true
+
+      - name: 修剪 bazel 缓存
+        if: always() && inputs.kernel_version != '5.10' && inputs.kernel_version != '5.15'
+        id: prune-bazel
+        run: |
+          if [ -d "$HOME/.cache/bazel-disk" ]; then
+            find "$HOME/.cache/bazel-disk" -type f -mtime +21 -delete || true
+            SIZE=$(du -sm "$HOME/.cache/bazel-disk" 2>/dev/null | awk '{print $1}')
+            SIZE=${SIZE:-0}
+            echo "bazel 磁盘缓存修剪后大小: ${SIZE} MB"
+            if [ "$SIZE" -le 6144 ]; then
+              echo "save=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::warning::bazel 磁盘缓存超过 6G，跳过本次保存"
+            fi
+          fi
+
+      - name: 保存 bazel 缓存
+        if: always() && steps.prune-bazel.outputs.save == 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            ~/.cache/bazel-disk
+            ~/.cache/bazel-repo
+          key: bazel-${{ inputs.android_version }}-${{ inputs.kernel_version }}-v1-${{ steps.cache-week.outputs.w }}
 
       - name: 应用 KPM 补丁 (SukiSU/ReSukiSU)
         if: inputs.use_kpm && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU')
@@ -6656,7 +6706,7 @@ jobs:
             ABK_FLASH_DEPENDENCIES.json
             LICENSE
             THIRD_PARTY_NOTICES.md
-          compression-level: 9
+          compression-level: 0
 
       - name: 上传补丁冲突文件
         if: always() && env.REJ_COUNT > 0
