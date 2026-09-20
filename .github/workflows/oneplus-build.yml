@@ -345,7 +345,7 @@ jobs:
                 curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/refs/heads/main/kernel/setup.sh" | bash -s main
                 ;;
               SukiSU)
-                curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/builtin/kernel/setup.sh" | bash -s builtin
+                curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
                 ;;
               ReSukiSU)
                 curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s main
@@ -1025,7 +1025,7 @@ jobs:
           set -euo pipefail
           WORKSPACE="$GITHUB_WORKSPACE/oneplus_workspace"
           cd "$WORKSPACE"
-          git clone https://github.com/Xiaomichael/AnyKernel3 --depth=1
+          git clone --depth=1 --branch main https://github.com/WildKernels/AnyKernel3.git AnyKernel3
           rm -rf AnyKernel3/.git
 
           IMAGE_PATH="$(find "$WORKSPACE/kernel_workspace/kernel_platform/common/out" -name Image | head -n 1)"

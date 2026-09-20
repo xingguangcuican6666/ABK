@@ -12,7 +12,7 @@ on:
       ksu_branch:
         required: false
         type: string
-        default: Stable(标准)
+        default: Latest(最新)
       custom_ref:
         required: false
         type: string
