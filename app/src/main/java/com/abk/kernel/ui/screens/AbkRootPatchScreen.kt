@@ -104,6 +104,9 @@ import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AppPageBackground
 import com.abk.kernel.ui.components.ExpressiveListItem
 import com.abk.kernel.ui.components.ExpressiveTopBar
+import com.abk.kernel.ui.theme.AbkInsets
+import com.abk.kernel.ui.theme.AbkRadius
+import com.abk.kernel.ui.theme.AbkSpacing
 import com.abk.kernel.utils.RootUtils
 import com.abk.kernel.data.model.ArtifactType
 import com.abk.kernel.data.repository.PreferencesRepository
@@ -654,9 +657,9 @@ fun AbkRootPatchScreen(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = AbkScreenHorizontalPadding),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(AbkSpacing.md)
             ) {
-            Spacer(Modifier.height(topBarHeight + 16.dp))
+            Spacer(Modifier.height(topBarHeight + AbkInsets.contentTopGap))
             PatchGroupCard {
                 PatchModeRow(
                     title = stringResource(R.string.root_patch_select_file),
@@ -844,8 +847,8 @@ fun AbkRootPatchScreen(
                     exit = shrinkVertically() + fadeOut()
                 ) {
                     Column(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        modifier = Modifier.padding(horizontal = AbkSpacing.lg, vertical = AbkSpacing.md),
+                        verticalArrangement = Arrangement.spacedBy(AbkSpacing.md)
                     ) {
                         Row(
                             modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -910,7 +913,7 @@ fun AbkRootPatchScreen(
                             text = stringResource(R.string.root_patch_advanced_desc),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            modifier = Modifier.padding(horizontal = AbkSpacing.lg, vertical = AbkSpacing.md)
                         )
                         PatchDivider()
                         PatchCheckboxItem(
@@ -978,7 +981,7 @@ fun AbkRootPatchScreen(
                 )
             }
 
-                Spacer(Modifier.height(80.dp))
+                Spacer(Modifier.height(AbkInsets.contentBottomGap))
             }
         }
     }
@@ -997,7 +1000,7 @@ private fun LkmPatchPageBackground(
 
 @Composable
 private fun PatchGroupCard(content: @Composable ColumnScope.() -> Unit) {
-    val shape = MaterialTheme.shapes.medium
+    val shape = AbkRadius.large
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1062,7 +1065,7 @@ private fun PatchCheckboxItem(
 @Composable
 private fun PatchDivider() {
     HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 14.dp),
+        modifier = Modifier.padding(horizontal = AbkSpacing.lg),
         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
     )
 }
@@ -1089,7 +1092,7 @@ private fun PatchedImageCard(
     onCopy: () -> Unit,
     onFlash: () -> Unit
 ) {
-    val shape = MaterialTheme.shapes.medium
+    val shape = AbkRadius.large
     Card(
         colors = CardDefaults.cardColors(
             containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
@@ -1100,8 +1103,8 @@ private fun PatchedImageCard(
             .blurredCardBackground(shape),
         shape = shape
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(AbkSpacing.lg), verticalArrangement = Arrangement.spacedBy(AbkSpacing.md)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AbkSpacing.sm)) {
                 Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(20.dp))
                 Text(
                     text = stringResource(R.string.root_patch_result),
@@ -1140,7 +1143,7 @@ private fun PatchLogCard(
     canReboot: Boolean,
     onReboot: () -> Unit
 ) {
-    val shape = MaterialTheme.shapes.medium
+    val shape = AbkRadius.large
     Card(
         colors = CardDefaults.cardColors(containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
@@ -1149,8 +1152,8 @@ private fun PatchLogCard(
             .blurredCardBackground(shape),
         shape = shape
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(AbkSpacing.lg), verticalArrangement = Arrangement.spacedBy(AbkSpacing.md)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AbkSpacing.sm)) {
                 val icon = when {
                     running -> Icons.Default.Terminal
                     success == true -> Icons.Default.CheckCircle

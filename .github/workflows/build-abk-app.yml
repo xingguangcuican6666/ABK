@@ -36,6 +36,12 @@ jobs:
       SUKISU_ULTRA_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
       SUKISU_ULTRA_REF: main
       SUKISU_KSUD_ABIS: arm64-v8a,armeabi-v7a,x86_64
+      # TEMPORARY: the upstream Kernel-SU org (and its adb_client / ksu_props
+      # crates that ksud depends on) went 404, so ksud can no longer be built
+      # from SukiSU-Ultra source. While that outage lasts we bundle the last
+      # good prebuilt ksud binaries from .github/prebuilt/ksud instead of
+      # compiling. Set to "0" (or drop this) once upstream is reachable again.
+      ABK_KSUD_USE_PREBUILT: "1"
     steps:
       - name: Checkout pull request merge ref
         if: ${{ github.event_name == 'pull_request' }}
@@ -64,6 +70,10 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Default is "tools platform-tools"; the legacy "tools" package was
+          # removed from newer cmdline-tools and now fails the setup step.
+          packages: platform-tools
 
       - name: Install Android SDK packages
         run: sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0" "cmake;3.22.1" "ndk;28.2.13676358"
@@ -124,8 +134,47 @@ jobs:
             echo "needs_rebuild=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Use prebuilt ksud assets (temporary upstream outage fallback)
+        if: steps.ksud-verify.outputs.needs_rebuild == 'true' && env.ABK_KSUD_USE_PREBUILT == '1'
+        run: |
+          set -euo pipefail
+
+          prebuilt_dir="$GITHUB_WORKSPACE/.github/prebuilt/ksud"
+          target_dir="$GITHUB_WORKSPACE/app/build/generated/abk-assets/main/ksud"
+          jni_target_dir="$GITHUB_WORKSPACE/app/build/generated/abk-jniLibs/main"
+
+          if [ ! -f "$prebuilt_dir/source.properties" ]; then
+            echo "::error::prebuilt ksud assets missing at $prebuilt_dir"
+            exit 1
+          fi
+
+          rm -rf "$target_dir" "$jni_target_dir"
+          mkdir -p "$target_dir" "$jni_target_dir"
+          install -Dm644 "$prebuilt_dir/source.properties" "$target_dir/source.properties"
+
+          IFS=',' read -ra abi_list <<< "$SUKISU_KSUD_ABIS"
+          for abi in "${abi_list[@]}"; do
+            abi="$(printf '%s' "$abi" | xargs)"
+            [ -n "$abi" ] || continue
+            src="$prebuilt_dir/$abi/libksud.so"
+            if [ ! -f "$src" ]; then
+              echo "::error::prebuilt ksud binary missing for $abi ($src)"
+              exit 1
+            fi
+            install -Dm755 "$src" "$jni_target_dir/$abi/libksud.so"
+          done
+
+          {
+            echo "### Bundled ksud (prebuilt fallback)"
+            echo
+            echo "- Upstream Kernel-SU deps are unavailable; ksud was not built from source."
+            echo "- Using last-good prebuilt binaries from .github/prebuilt/ksud."
+            echo "- ABIs: $SUKISU_KSUD_ABIS"
+            grep '^commit=' "$prebuilt_dir/source.properties" | sed 's/^/- Prebuilt SukiSU /'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build bundled SukiSU-Ultra ksud assets
-        if: steps.ksud-verify.outputs.needs_rebuild == 'true'
+        if: steps.ksud-verify.outputs.needs_rebuild == 'true' && env.ABK_KSUD_USE_PREBUILT != '1'
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
         run: |

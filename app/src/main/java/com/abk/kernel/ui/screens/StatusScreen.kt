@@ -29,17 +29,18 @@ import com.abk.kernel.BuildConfig
 import com.abk.kernel.R
 import com.abk.kernel.data.model.BuildStatus
 import com.abk.kernel.data.model.WorkflowRun
-import com.abk.kernel.ui.blur.BlurScreenScaffold
 import com.abk.kernel.ui.blur.blurredCardBackground
 import com.abk.kernel.ui.blur.blurredCardSurfaceColor
+import com.abk.kernel.ui.components.AbkPageScaffold
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.ExpressiveHeroCard
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
-import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.ui.components.ShimmerLinearProgress
-import com.abk.kernel.ui.theme.appPageBackgroundColor
-import com.abk.kernel.ui.theme.uiSurfaceColor
+import com.abk.kernel.ui.components.abkPageEnter
+import com.abk.kernel.ui.theme.AbkInsets
+import com.abk.kernel.ui.theme.AbkRadius
+import com.abk.kernel.ui.theme.AbkSpacing
 import com.abk.kernel.utils.RootUtils
 import com.abk.kernel.viewmodel.MainViewModel
 
@@ -57,39 +58,35 @@ fun StatusScreen(
 
     LaunchedEffect(Unit) { vm.loadRecentRuns() }
 
-    BlurScreenScaffold(
+    AbkPageScaffold(
+        title = stringResource(R.string.app_name),
         blurConfig = state.blurConfig,
-        containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
-        topBar = {
-            ExpressiveTopBar(
-                title = stringResource(R.string.app_name),
-                compactTitle = true,
-                scrollBehavior = scrollBehavior,
-                enableBlur = state.blurEnabled,
-                actions = {
-                    IconButton(onClick = onToggleRuntimeNavigation) {
-                        Icon(
-                            imageVector = if (runtimeNavigationEnabled) Icons.Default.SwapHoriz else Icons.Default.Home,
-                            contentDescription = if (runtimeNavigationEnabled) {
-                                stringResource(R.string.nav_status)
-                            } else {
-                                stringResource(R.string.nav_home)
-                            }
-                        )
+        blurEnabled = state.blurEnabled,
+        compactTitle = true,
+        scrollBehavior = scrollBehavior,
+        actions = {
+            IconButton(onClick = onToggleRuntimeNavigation) {
+                Icon(
+                    imageVector = if (runtimeNavigationEnabled) Icons.Default.SwapHoriz else Icons.Default.Home,
+                    contentDescription = if (runtimeNavigationEnabled) {
+                        stringResource(R.string.nav_status)
+                    } else {
+                        stringResource(R.string.nav_home)
                     }
-                }
-            )
+                )
+            }
         }
     ) { topBarHeight ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .abkPageEnter()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AbkScreenHorizontalPadding),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(AbkSpacing.md)
         ) {
-            Spacer(Modifier.height(topBarHeight + 16.dp))
+            Spacer(Modifier.height(topBarHeight + AbkInsets.contentTopGap))
             val ksuVersion = remember(state.rootGranted) {
                 if (state.rootGranted) RootUtils.getKsuVersion() else "N/A"
             }
@@ -151,8 +148,7 @@ fun StatusScreen(
             ExpressiveSectionCard(
                 title = stringResource(R.string.status_build),
                 subtitle = stringResource(R.string.status_progress_sync),
-                icon = Icons.Default.RunCircle,
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                icon = Icons.Default.RunCircle
             ) {
                 when (state.kernelBuildStatus) {
                     BuildStatus.IDLE -> StatusRow(Icons.Default.HourglassEmpty, stringResource(R.string.status_no_running_build), false)
@@ -257,8 +253,7 @@ fun StatusScreen(
                 ExpressiveSectionCard(
                     title = stringResource(R.string.status_manager_build),
                     subtitle = stringResource(R.string.status_manager_progress_sync),
-                    icon = Icons.Default.Shield,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    icon = Icons.Default.Shield
                 ) {
                     val managerProgress = state.managerBuildProgress
                     when (state.managerBuildStatus) {
@@ -410,7 +405,7 @@ fun StatusScreen(
                     }
                 }
             }
-            Spacer(Modifier.height(80.dp + outerPadding.calculateBottomPadding()))
+            Spacer(Modifier.height(AbkInsets.contentBottomGap + outerPadding.calculateBottomPadding()))
         }
     }
 }
@@ -502,8 +497,8 @@ private fun StatusMetricGrid(
     ksuVersion: String,
     buildStatus: BuildStatus
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+    Column(verticalArrangement = Arrangement.spacedBy(AbkSpacing.md)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(AbkSpacing.md), modifier = Modifier.fillMaxWidth()) {
             StatusMetricCard(
                 label = "Root",
                 value = if (rootGranted) stringResource(R.string.status_authorized) else stringResource(R.string.status_partially_active),
@@ -519,7 +514,7 @@ private fun StatusMetricGrid(
                 modifier = Modifier.weight(1f)
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(AbkSpacing.md), modifier = Modifier.fillMaxWidth()) {
             StatusMetricCard(
                 label = "KernelSU",
                 value = if (ksuVersion == "N/A") stringResource(R.string.status_not_detected) else stringResource(R.string.status_detected),
@@ -551,7 +546,7 @@ private fun StatusMetricCard(
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "metric-color"
     )
-    val shape = MaterialTheme.shapes.medium
+    val shape = AbkRadius.medium
     Card(
         modifier = modifier.blurredCardBackground(shape = shape, enabled = true),
         shape = shape,
@@ -560,7 +555,7 @@ private fun StatusMetricCard(
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(AbkSpacing.lg), verticalArrangement = Arrangement.spacedBy(AbkSpacing.sm)) {
             Icon(icon, null, tint = animatedColor, modifier = Modifier.size(22.dp))
             Column {
                 Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)

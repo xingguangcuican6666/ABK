@@ -106,6 +106,12 @@
     <string name="oobe_flash_detail">工作流构建产物、fork 仓库和 Actions 记录会在登录并完成 fork 检查后恢复可用。</string>
     <string name="oobe_continue_setup">继续配置 GitHub</string>
     <string name="oobe_skip_for_now">暂时跳过</string>
+    <string name="oobe_get_started">开始设置</string>
+    <string name="oobe_back">上一步</string>
+    <string name="oobe_next">下一步</string>
+    <string name="oobe_finish">进入 ABK</string>
+    <string name="oobe_setup_progress">第 %1$d / %2$d 步</string>
+    <string name="oobe_welcome_tagline">让我们花一点时间完成 AnyBase Kernel 的初始配置。</string>
 
     <!-- Build -->
     <string name="build_title">构建内核</string>
@@ -1387,6 +1393,10 @@
     <string name="susfs_hint_open_redirect">格式：&lt;original&gt; &lt;redirected&gt; &lt;boot_completed|service&gt; [uid_scheme]</string>
     <string name="susfs_section_output">最后输出</string>
     <string name="susfs_section_output_desc">最近一次保存或应用 SUSFS 配置时的 shell 输出。</string>
+    <string name="susfs_status_error_title">状态</string>
+    <string name="susfs_status_error_desc">SUSFS 探测或应用过程返回了错误。</string>
+    <string name="susfs_form_error_title">表单错误</string>
+    <string name="susfs_form_error_desc">请先修正配置格式，再重新应用。</string>
     <string name="susfs_label_kernel_version">内核 SUSFS 版本：%1$s</string>
     <string name="susfs_label_bundled_binary">预置二进制：%1$s</string>
     <string name="susfs_label_installed_binary">已安装 binary：%1$s</string>

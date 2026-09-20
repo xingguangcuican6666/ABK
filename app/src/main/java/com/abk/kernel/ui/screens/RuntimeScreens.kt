@@ -25,7 +25,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -72,11 +71,12 @@ import com.abk.kernel.data.model.AbkRuntimeBuildInfo
 import com.abk.kernel.data.model.AbkRuntimeModule
 import com.abk.kernel.data.model.AbkRuntimeStatus
 import com.abk.kernel.data.model.downloadFileName
-import com.abk.kernel.ui.blur.BlurScreenScaffold
 import com.abk.kernel.ui.blur.blurredCardBackground
 import com.abk.kernel.ui.blur.blurredCardSurfaceColor
+import com.abk.kernel.ui.components.AbkPageScaffold
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AbkInlineLoadingPill
+import com.abk.kernel.ui.components.abkPageEnter
 import com.abk.kernel.ui.components.ObserveChildPageVisibility
 import com.abk.kernel.ui.components.childPageOverlayEnterTransition
 import com.abk.kernel.ui.components.childPageOverlayExitTransition
@@ -87,10 +87,11 @@ import com.abk.kernel.ui.components.ExpressiveSwitch
 import com.abk.kernel.ui.components.ExpressiveHeroCard
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
-import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.ui.components.ShimmerLinearProgress
 import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
-import com.abk.kernel.ui.theme.appPageBackgroundColor
+import com.abk.kernel.ui.theme.AbkInsets
+import com.abk.kernel.ui.theme.AbkRadius
+import com.abk.kernel.ui.theme.AbkSpacing
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.ui.webui.ModuleWebUiActivity
 import com.abk.kernel.utils.DownloadUtils
@@ -166,38 +167,34 @@ fun RuntimeHomeScreen(
             .fillMaxWidth()
             .height(maxHeight + childPageBottomInset)
 
-        BlurScreenScaffold(
+        AbkPageScaffold(
+            title = "AnyBase Kernel",
             blurConfig = state.blurConfig,
-            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
-            topBar = {
-                ExpressiveTopBar(
-                    title = "AnyBase Kernel",
-                    compactTitle = true,
-                    scrollBehavior = scrollBehavior,
-                    enableBlur = state.blurEnabled,
-                    actions = {
-                        IconButton(onClick = {
-                            refreshPresentation.beginRefresh()
-                            vm.refreshAbkRuntimeStatus()
-                        }) {
-                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.runtime_refresh))
-                        }
-                        IconButton(onClick = onSwitchToClassic) {
-                            Icon(Icons.Default.SwapHoriz, contentDescription = stringResource(R.string.nav_status))
-                        }
-                    }
-                )
+            blurEnabled = state.blurEnabled,
+            compactTitle = true,
+            scrollBehavior = scrollBehavior,
+            actions = {
+                IconButton(onClick = {
+                    refreshPresentation.beginRefresh()
+                    vm.refreshAbkRuntimeStatus()
+                }) {
+                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.runtime_refresh))
+                }
+                IconButton(onClick = onSwitchToClassic) {
+                    Icon(Icons.Default.SwapHoriz, contentDescription = stringResource(R.string.nav_status))
+                }
             }
         ) { topBarHeight ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .abkPageEnter()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = AbkScreenHorizontalPadding),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(AbkSpacing.md)
             ) {
-                Spacer(Modifier.height(topBarHeight + 16.dp))
+                Spacer(Modifier.height(topBarHeight + AbkInsets.contentTopGap))
                 RuntimeStatusHeader(
                     runtimeStatus = state.abkRuntimeStatus,
                     hasNativeManagerPermission = state.hasNativeManagerPermission,
@@ -231,7 +228,7 @@ fun RuntimeHomeScreen(
                     }
                 }
 
-                Spacer(Modifier.height(80.dp + outerPadding.calculateBottomPadding()))
+                Spacer(Modifier.height(AbkInsets.contentBottomGap + outerPadding.calculateBottomPadding()))
             }
         }
 
@@ -517,34 +514,30 @@ fun InstalledModulesScreen(
     }
 
     Box(Modifier.fillMaxSize()) {
-        BlurScreenScaffold(
+        AbkPageScaffold(
+            title = stringResource(R.string.runtime_installed_modules_title),
             blurConfig = state.blurConfig,
-            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
-            topBar = {
-                ExpressiveTopBar(
-                    title = stringResource(R.string.runtime_installed_modules_title),
-                    scrollBehavior = scrollBehavior,
-                    enableBlur = state.blurEnabled,
-                    actions = {
-                        IconButton(onClick = {
-                            refreshPresentation.beginRefresh()
-                            vm.refreshAbkRuntimeStatus()
-                        }) {
-                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.runtime_refresh_installed_modules))
-                        }
-                    }
-                )
+            blurEnabled = state.blurEnabled,
+            scrollBehavior = scrollBehavior,
+            actions = {
+                IconButton(onClick = {
+                    refreshPresentation.beginRefresh()
+                    vm.refreshAbkRuntimeStatus()
+                }) {
+                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.runtime_refresh_installed_modules))
+                }
             }
         ) { topBarHeight ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .abkPageEnter()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = AbkScreenHorizontalPadding),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(AbkSpacing.md)
             ) {
-                Spacer(Modifier.height(topBarHeight + 16.dp))
+                Spacer(Modifier.height(topBarHeight + AbkInsets.contentTopGap))
                 RuntimeModuleSearchField(query, onValueChange = { query = it })
 
             when {
@@ -644,7 +637,7 @@ fun InstalledModulesScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .navigationBarsPadding()
-                .padding(end = 16.dp, bottom = 16.dp + outerPadding.calculateBottomPadding()),
+                .padding(end = AbkSpacing.lg, bottom = AbkSpacing.lg + outerPadding.calculateBottomPadding()),
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
         ) {
@@ -949,19 +942,20 @@ private fun RuntimeErrorCard(
     message: String,
     onRefresh: () -> Unit
 ) {
-    val shape = RoundedCornerShape(8.dp)
-    ElevatedCard(
+    val shape = AbkRadius.medium
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .blurredCardBackground(shape),
         shape = shape,
-        colors = CardDefaults.elevatedCardColors(
+        colors = CardDefaults.cardColors(
             containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.errorContainer)
-        )
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(AbkSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(AbkSpacing.sm)
         ) {
             Text(
                 text = message,
@@ -984,7 +978,7 @@ private fun RuntimeModuleSearchField(value: String, onValueChange: (String) -> U
         leadingIcon = { Icon(Icons.Default.Search, null) },
         placeholder = { Text(stringResource(R.string.runtime_search_installed_modules)) },
         singleLine = true,
-        shape = RoundedCornerShape(14.dp)
+        shape = AbkRadius.small
     )
 }
 
@@ -1000,7 +994,7 @@ private fun InstalledRuntimeModuleCard(
     onOpenWebUi: () -> Unit
 ) {
     val canUninstall = module.canUninstallRuntimeModule()
-    val shape = RoundedCornerShape(8.dp)
+    val shape = AbkRadius.medium
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1012,8 +1006,8 @@ private fun InstalledRuntimeModuleCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(AbkSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(AbkSpacing.sm)
         ) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(
@@ -1335,7 +1329,7 @@ private fun RuntimeModuleUpdateChangelog(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 180.dp, max = 360.dp),
-        shape = RoundedCornerShape(12.dp),
+        shape = AbkRadius.medium,
         color = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainerHighest),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
@@ -1656,7 +1650,7 @@ private fun RuntimeModuleInstallDialog(
         text = {
             Surface(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 190.dp, max = 360.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = AbkRadius.medium,
                 color = terminalContainer,
                 contentColor = colorScheme.onSurface,
                 border = BorderStroke(1.dp, colorScheme.outlineVariant)
@@ -1709,7 +1703,7 @@ private fun RuntimeModuleChip(label: String, secondary: Boolean = false) {
         MaterialTheme.colorScheme.primary
     }
     Surface(
-        shape = RoundedCornerShape(7.dp),
+        shape = AbkRadius.small,
         color = accentColor.copy(alpha = 0.10f),
         contentColor = accentColor,
         border = BorderStroke(1.dp, accentColor.copy(alpha = 0.62f))

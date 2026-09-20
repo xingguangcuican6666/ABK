@@ -959,6 +959,8 @@ class MainViewModel @JvmOverloads constructor(
 
     fun skipOobe() = authOobe.skipOobe()
 
+    fun finishOobe() = authOobe.finishOobe()
+
     // ── GitHub Auth (Device Flow) ─────────────────────────────────────────
 
     fun startDeviceFlow() = authOobe.startDeviceFlow()
@@ -1174,7 +1176,10 @@ class MainViewModel @JvmOverloads constructor(
                         }
                         ensureForkArtifactSigningReady(username, fork)
                         onForkContextReady()
-                        authOobe.completeIfRequested(closeOobeWhenReady)
+                        // Do NOT auto-complete OOBE here: the fork check runs during
+                        // login/continue too, and silently persisting completion would
+                        // make OOBE vanish forever if the app is killed mid-flow. The
+                        // user finishes explicitly via finishOobe() on the fork step.
                         if (behind <= 0) {
                             maybeOpenForkI18nGate()
                         }
@@ -1202,7 +1207,8 @@ class MainViewModel @JvmOverloads constructor(
                     }
                     ensureForkArtifactSigningReady(readStateUserLogin() ?: return@launch, r.data)
                     onForkContextReady()
-                    authOobe.completeIfRequested(closeOobeWhenReady = true)
+                    // Fork created: stay on the fork step showing the "ready" state so
+                    // the user can review it and finish explicitly (finishOobe()).
                     maybeOpenForkI18nGate()
                 }
                 is Result.Error -> _uiState.update { it.copy(isLoading = false, error = r.message) }

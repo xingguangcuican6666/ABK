@@ -106,6 +106,12 @@
     <string name="oobe_flash_detail">Артефакты workflow, доступ к fork и записи Actions появятся после входа и проверки fork.</string>
     <string name="oobe_continue_setup">Продолжить настройку GitHub</string>
     <string name="oobe_skip_for_now">Пропустить</string>
+    <string name="oobe_get_started">Начать настройку</string>
+    <string name="oobe_back">Назад</string>
+    <string name="oobe_next">Далее</string>
+    <string name="oobe_finish">Войти в ABK</string>
+    <string name="oobe_setup_progress">Шаг %1$d из %2$d</string>
+    <string name="oobe_welcome_tagline">Давайте потратим немного времени на настройку AnyBase Kernel.</string>
 
     <!-- Build -->
     <string name="build_title">Сборка ядра</string>

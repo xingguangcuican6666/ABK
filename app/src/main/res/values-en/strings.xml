@@ -106,6 +106,12 @@
     <string name="oobe_flash_detail">Workflow artifacts, fork repository access, and Actions records return after sign-in and fork checks complete.</string>
     <string name="oobe_continue_setup">Continue GitHub setup</string>
     <string name="oobe_skip_for_now">Skip for now</string>
+    <string name="oobe_get_started">Get started</string>
+    <string name="oobe_back">Back</string>
+    <string name="oobe_next">Next</string>
+    <string name="oobe_finish">Enter ABK</string>
+    <string name="oobe_setup_progress">Step %1$d of %2$d</string>
+    <string name="oobe_welcome_tagline">Let\'s take a moment to set up AnyBase Kernel.</string>
 
     <!-- Build -->
     <string name="build_title">Build Kernel</string>
@@ -1315,6 +1321,10 @@
     <string name="susfs_hint_open_redirect">Format: &lt;original&gt; &lt;redirected&gt; &lt;boot_completed|service&gt; [uid_scheme]</string>
     <string name="susfs_section_output">Last Output</string>
     <string name="susfs_section_output_desc">Shell output collected from the latest save/apply operation.</string>
+    <string name="susfs_status_error_title">Status</string>
+    <string name="susfs_status_error_desc">SUSFS probing or applying returned an error.</string>
+    <string name="susfs_form_error_title">Form Error</string>
+    <string name="susfs_form_error_desc">Fix the configuration format before applying again.</string>
     <string name="susfs_label_kernel_version">Kernel SUSFS version: %1$s</string>
     <string name="susfs_label_bundled_binary">Bundled binary: %1$s</string>
     <string name="susfs_label_installed_binary">Installed binary: %1$s</string>

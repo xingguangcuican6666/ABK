@@ -210,6 +210,7 @@ import com.abk.kernel.ui.blur.blurredCardBackground
 import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveTopBar
+import com.abk.kernel.ui.theme.AbkRadius
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.RootUtils
@@ -473,8 +474,8 @@ internal fun BuildErrorLogPanel(text: String) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .blurredCardBackground(RoundedCornerShape(12.dp)),
-        shape = RoundedCornerShape(12.dp),
+            .blurredCardBackground(AbkRadius.small),
+        shape = AbkRadius.small,
         color = blurredCardSurfaceColor(colorScheme.surfaceContainerHighest),
     ) {
         SelectionContainer {
@@ -623,7 +624,7 @@ internal fun FailedWorkflowDetail(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
+                shape = AbkRadius.large,
             ) {
                 Icon(Icons.Default.RunCircle, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
@@ -651,7 +652,7 @@ internal fun FailedWorkflowStepRow(
             .graphicsLayer { this.alpha = alpha }
             .background(
                 color = rowBackground,
-                shape = RoundedCornerShape(10.dp),
+                shape = AbkRadius.small,
             )
             .then(
                 if (failed) {
@@ -910,7 +911,7 @@ internal fun BuildingWorkflowDetail(
             Button(
                 onClick = onCancel,
                 enabled = !cancelling,
-                shape = RoundedCornerShape(28.dp),
+                shape = AbkRadius.large,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.errorContainer,
                     contentColor = MaterialTheme.colorScheme.onErrorContainer

@@ -102,11 +102,14 @@ class AuthOobeCoordinator(
         }
     }
 
-    fun completeIfRequested(closeOobeWhenReady: Boolean) {
-        if (closeOobeWhenReady) {
-            completeOobe()
-        }
-    }
+    /**
+     * Explicit "finish onboarding" action, triggered only when the user taps the
+     * finish button on the last step. OOBE completion is intentionally NOT persisted
+     * automatically when the fork check resolves — otherwise killing the app mid-flow
+     * (or a background fork check during login) would silently mark OOBE done and it
+     * would never reappear on the next launch.
+     */
+    fun finishOobe() = completeOobe()
 
     private fun pollToken(deviceCode: String, intervalSeconds: Long) {
         scope.launch {

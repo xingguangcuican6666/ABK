@@ -46,6 +46,9 @@ import com.abk.kernel.ui.components.AbkSingleChoiceSegmentedButtonRow
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveSwitchItem
+import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.theme.AbkInsets
+import com.abk.kernel.ui.theme.AbkSpacing
 import com.abk.kernel.utils.SUSFS_HIDE_MOUNTS_ALL
 import com.abk.kernel.utils.SUSFS_HIDE_MOUNTS_NON_SU
 import com.abk.kernel.utils.SUSFS_HIDE_MOUNTS_OFF
@@ -188,10 +191,10 @@ internal fun SusfsControlScreen(
     Column(
         modifier = Modifier
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = AbkScreenHorizontalPadding),
+        verticalArrangement = Arrangement.spacedBy(AbkSpacing.md)
     ) {
-        Spacer(Modifier.height(topBarHeight + 16.dp))
+        Spacer(Modifier.height(topBarHeight + AbkInsets.contentTopGap))
         if (showRefreshLoading) {
             AbkInlineLoadingPill(
                 text = stringResource(R.string.settings_manager_loading_title),
@@ -201,8 +204,8 @@ internal fun SusfsControlScreen(
         }
         state.susfsError?.takeIf { it.isNotBlank() }?.let { error ->
             ExpressiveSectionCard(
-                title = "状态",
-                subtitle = "SUSFS 探测或应用过程返回了错误",
+                title = stringResource(R.string.susfs_status_error_title),
+                subtitle = stringResource(R.string.susfs_status_error_desc),
                 icon = Icons.Default.Info
             ) {
                 Text(error, style = MaterialTheme.typography.bodyMedium)
@@ -210,8 +213,8 @@ internal fun SusfsControlScreen(
         }
         formError?.takeIf { it.isNotBlank() }?.let { error ->
             ExpressiveSectionCard(
-                title = "表单错误",
-                subtitle = "请先修正配置格式，再重新应用",
+                title = stringResource(R.string.susfs_form_error_title),
+                subtitle = stringResource(R.string.susfs_form_error_desc),
                 icon = Icons.Default.Info
             ) {
                 Text(error, style = MaterialTheme.typography.bodyMedium)
@@ -423,7 +426,7 @@ internal fun SusfsControlScreen(
             )
         }
 
-        Spacer(Modifier.height(80.dp))
+        Spacer(Modifier.height(AbkInsets.contentBottomGap))
     }
 }
 
@@ -435,8 +438,13 @@ private fun <T> SegmentedSetting(
     onSelect: (T) -> Unit,
     equalWidth: Boolean = true
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    Column(verticalArrangement = Arrangement.spacedBy(AbkSpacing.sm)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         AbkSingleChoiceSegmentedButtonRow(
             options = options,
             selectedValue = selected,
@@ -456,8 +464,13 @@ private fun TextAreaSetting(
     hint: String? = null,
     minLines: Int = 4
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    Column(verticalArrangement = Arrangement.spacedBy(AbkSpacing.sm)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,

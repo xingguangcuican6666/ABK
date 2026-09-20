@@ -649,10 +649,14 @@ private fun AbkMainScaffold(
                     modifier = Modifier
                         .fillMaxSize()
                         .then(if (blurActive) Modifier.blurEffect() else Modifier),
+                    // Match the top bar + content surface so there is no seam between the
+                    // rail and the page. The selected item's indicator pill (not a bar
+                    // color block) marks the active tab, following Android 17's one-surface
+                    // navigation look.
                     containerColor = if (blurActive) {
                         Color.Transparent
                     } else {
-                        uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+                        uiSurfaceColor(MaterialTheme.colorScheme.surface)
                     }
                 ) {
                     visibleTabs.forEach { tab ->
@@ -701,10 +705,13 @@ private fun AbkMainScaffold(
                         alpha = 1f - (hidden * 0.15f)
                     }
                     .then(if (blurActive) Modifier.blurEffect() else Modifier),
+                // Same surface as the top bar + content so top/content/bottom read as one
+                // continuous sheet; the active tab is shown by the indicator pill, not a
+                // distinct bar color. Fixes the color seam between content and bottom bar.
                 containerColor = if (blurActive) {
                     Color.Transparent
                 } else {
-                    uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+                    uiSurfaceColor(MaterialTheme.colorScheme.surface)
                 },
                 tonalElevation = 0.dp
             ) {

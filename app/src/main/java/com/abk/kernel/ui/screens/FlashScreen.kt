@@ -52,7 +52,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
@@ -191,8 +190,9 @@ import com.abk.kernel.utils.FlashFilterManagerKind
 import com.abk.kernel.utils.FlashFilterWorkflowState
 import com.abk.kernel.utils.FlashWorkflowFilter
 import com.abk.kernel.utils.WorkflowPrimary
-import com.abk.kernel.ui.blur.BlurScreenScaffold
+import com.abk.kernel.ui.components.AbkPageScaffold
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.components.abkPageEnter
 import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
 import com.abk.kernel.ui.components.ObserveChildPageVisibility
 import com.abk.kernel.ui.components.childPageOverlayEnterTransition
@@ -213,7 +213,8 @@ import com.abk.kernel.ui.components.ExpressiveEmptyState
 import com.abk.kernel.ui.components.ExpressiveHeroCard
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
-import com.abk.kernel.ui.components.ExpressiveTopBar
+import com.abk.kernel.ui.theme.AbkInsets
+import com.abk.kernel.ui.theme.AbkSpacing
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.RootUtils
@@ -1248,25 +1249,22 @@ fun FlashScreen(
         )
         val showPrebuiltReleaseRefreshLoading =
             prebuiltReleaseRefreshPresentation.showLoading && state.prebuiltGkiReleases.isNotEmpty()
-        BlurScreenScaffold(
+        AbkPageScaffold(
+            title = if (rootGranted) stringResource(R.string.flash_title) else stringResource(R.string.flash_files_title),
             blurConfig = state.blurConfig,
+            blurEnabled = state.blurEnabled,
             containerColor = Color.Transparent,
-            topBar = {
-                ExpressiveTopBar(
-                    title = if (rootGranted) stringResource(R.string.flash_title) else stringResource(R.string.flash_files_title),
-                    scrollBehavior = scrollBehavior,
-                    enableBlur = state.blurEnabled
-                )
-            }
+            scrollBehavior = scrollBehavior
         ) { topBarHeight ->
             LazyColumn(
                 state = listScrollState,
                 modifier = Modifier
                     .fillMaxSize()
+                    .abkPageEnter()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .padding(horizontal = AbkScreenHorizontalPadding),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(top = topBarHeight + 16.dp, bottom = 96.dp + outerPadding.calculateBottomPadding())
+                verticalArrangement = Arrangement.spacedBy(AbkSpacing.md),
+                contentPadding = PaddingValues(top = topBarHeight + AbkInsets.contentTopGap, bottom = AbkInsets.contentBottomGap + outerPadding.calculateBottomPadding())
             ) {
                 item {
                     FlashHero(
@@ -1686,8 +1684,8 @@ fun FlashScreen(
                             .fillMaxSize()
                             .statusBarsPadding()
                             .padding(horizontal = AbkScreenHorizontalPadding),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(bottom = 32.dp)
+                        verticalArrangement = Arrangement.spacedBy(AbkSpacing.md),
+                        contentPadding = PaddingValues(bottom = AbkSpacing.xxl)
                     ) {
                         if (group != null) {
                             val detailRun = recentRunById[group.runId]
@@ -1830,8 +1828,8 @@ fun FlashScreen(
                             .fillMaxSize()
                             .statusBarsPadding()
                             .padding(horizontal = AbkScreenHorizontalPadding),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(bottom = 32.dp)
+                        verticalArrangement = Arrangement.spacedBy(AbkSpacing.md),
+                        contentPadding = PaddingValues(bottom = AbkSpacing.xxl)
                     ) {
                         if (release != null) {
                             item {

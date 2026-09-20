@@ -57,6 +57,10 @@ jobs:
       - name: Set up Android SDK
         if: ${{ matrix.language == 'java-kotlin' || matrix.language == 'c-cpp' }}
         uses: android-actions/setup-android@v3
+        with:
+          # Default is "tools platform-tools"; the legacy "tools" package was
+          # removed from newer cmdline-tools and now fails the setup step.
+          packages: platform-tools
 
       - name: Install Android SDK packages
         if: ${{ matrix.language == 'java-kotlin' || matrix.language == 'c-cpp' }}

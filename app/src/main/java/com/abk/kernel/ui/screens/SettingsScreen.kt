@@ -63,7 +63,6 @@ import com.abk.kernel.extensions.AbkExtensionManagerScreen
 import com.abk.kernel.utils.DownloadDirectoryUtils
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.LocaleHelper
-import com.abk.kernel.ui.blur.BlurScreenScaffold
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AbkSegmentedButtonOption
 import com.abk.kernel.ui.components.AbkSingleChoiceSegmentedButtonRow
@@ -75,15 +74,14 @@ import com.abk.kernel.ui.components.childPageOverlayExitTransition
 import com.abk.kernel.ui.components.childPageScrimExitTransition
 import com.abk.kernel.ui.components.rememberChildPageBackController
 import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
+import com.abk.kernel.ui.components.ExpressiveCollapsibleSectionCard
 import com.abk.kernel.ui.components.ExpressiveHeroCard
 import com.abk.kernel.ui.components.ExpressiveListItem
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveSwitchItem
-import com.abk.kernel.ui.components.ExpressiveTopBar
+import com.abk.kernel.ui.components.AbkPageScaffold
 import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
-import com.abk.kernel.ui.theme.appPageBackgroundColor
-import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.data.model.APP_UPDATE_LINE_DEV
 import com.abk.kernel.data.model.APP_UPDATE_LINE_NORMAL
 import com.abk.kernel.data.model.APP_UPDATE_STABILITY_STABLE
@@ -330,16 +328,11 @@ fun SettingsScreen(
             .fillMaxWidth()
             .height(maxHeight + childPageTopInset + childPageBottomInset)
             .offset(y = -childPageTopInset)
-        BlurScreenScaffold(
+        AbkPageScaffold(
+            title = stringResource(R.string.settings_title),
             blurConfig = state.blurConfig,
-            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
-            topBar = {
-                ExpressiveTopBar(
-                    title = stringResource(R.string.settings_title),
-                    scrollBehavior = scrollBehavior,
-                    enableBlur = state.blurEnabled
-                )
-            }
+            blurEnabled = state.blurEnabled,
+            scrollBehavior = scrollBehavior
         ) { topBarHeight ->
             SettingsMainContent(
                 topBarHeight = topBarHeight,
@@ -390,19 +383,15 @@ fun SettingsScreen(
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
-                BlurScreenScaffold(
+                AbkPageScaffold(
+                    title = stringResource(R.string.settings_theme),
                     blurConfig = state.blurConfig,
+                    blurEnabled = state.blurEnabled,
                     containerColor = Color.Transparent,
-                    topBar = {
-                        ExpressiveTopBar(
-                            title = stringResource(R.string.settings_theme),
-                            navigationIcon = {
-                                IconButton(onClick = childPageBack::requestDismiss) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
-                                }
-                            },
-                            enableBlur = state.blurEnabled
-                        )
+                    navigationIcon = {
+                        IconButton(onClick = childPageBack::requestDismiss) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                        }
                     }
                 ) { topBarHeight ->
                     ThemeSettingsScreen(
@@ -451,27 +440,23 @@ fun SettingsScreen(
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
-                BlurScreenScaffold(
+                AbkPageScaffold(
+                    title = stringResource(R.string.settings_app_profile_templates),
                     blurConfig = state.blurConfig,
+                    blurEnabled = state.blurEnabled,
                     containerColor = Color.Transparent,
-                    topBar = {
-                        ExpressiveTopBar(
-                            title = stringResource(R.string.settings_app_profile_templates),
-                            navigationIcon = {
-                                IconButton(onClick = childPageBack::requestDismiss) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
-                                }
-                            },
-                            enableBlur = state.blurEnabled,
-                            actions = {
-                                IconButton(onClick = {
-                                    refreshPresentation.beginRefresh()
-                                    vm.refreshAppProfileTemplates()
-                                }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
-                                }
-                            }
-                        )
+                    navigationIcon = {
+                        IconButton(onClick = childPageBack::requestDismiss) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            refreshPresentation.beginRefresh()
+                            vm.refreshAppProfileTemplates()
+                        }) {
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                        }
                     }
                 ) { topBarHeight ->
                     AppProfileTemplateSettingsScreen(
@@ -535,27 +520,23 @@ fun SettingsScreen(
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
-                BlurScreenScaffold(
+                AbkPageScaffold(
+                    title = stringResource(R.string.settings_tools),
                     blurConfig = state.blurConfig,
+                    blurEnabled = state.blurEnabled,
                     containerColor = Color.Transparent,
-                    topBar = {
-                        ExpressiveTopBar(
-                            title = stringResource(R.string.settings_tools),
-                            navigationIcon = {
-                                IconButton(onClick = childPageBack::requestDismiss) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
-                                }
-                            },
-                            enableBlur = state.blurEnabled,
-                            actions = {
-                                IconButton(onClick = {
-                                    refreshPresentation.beginRefresh()
-                                    vm.refreshManagerTools(force = true)
-                                }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
-                                }
-                            }
-                        )
+                    navigationIcon = {
+                        IconButton(onClick = childPageBack::requestDismiss) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            refreshPresentation.beginRefresh()
+                            vm.refreshManagerTools(force = true)
+                        }) {
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                        }
                     }
                 ) { topBarHeight ->
                     ManagerToolsSettingsScreen(
@@ -586,27 +567,23 @@ fun SettingsScreen(
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
-                BlurScreenScaffold(
+                AbkPageScaffold(
+                    title = stringResource(R.string.settings_kernel_capabilities),
                     blurConfig = state.blurConfig,
+                    blurEnabled = state.blurEnabled,
                     containerColor = Color.Transparent,
-                    topBar = {
-                        ExpressiveTopBar(
-                            title = stringResource(R.string.settings_kernel_capabilities),
-                            navigationIcon = {
-                                IconButton(onClick = childPageBack::requestDismiss) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
-                                }
-                            },
-                            enableBlur = state.blurEnabled,
-                            actions = {
-                                IconButton(onClick = {
-                                    refreshPresentation.beginRefresh()
-                                    vm.refreshKernelCapabilities(force = true)
-                                }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
-                                }
-                            }
-                        )
+                    navigationIcon = {
+                        IconButton(onClick = childPageBack::requestDismiss) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            refreshPresentation.beginRefresh()
+                            vm.refreshKernelCapabilities(force = true)
+                        }) {
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                        }
                     }
                 ) { topBarHeight ->
                     KernelCapabilitiesSettingsScreen(
@@ -639,27 +616,23 @@ fun SettingsScreen(
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
-                BlurScreenScaffold(
+                AbkPageScaffold(
+                    title = stringResource(R.string.susfs_title),
                     blurConfig = state.blurConfig,
+                    blurEnabled = state.blurEnabled,
                     containerColor = Color.Transparent,
-                    topBar = {
-                        ExpressiveTopBar(
-                            title = stringResource(R.string.susfs_title),
-                            navigationIcon = {
-                                IconButton(onClick = childPageBack::requestDismiss) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
-                                }
-                            },
-                            enableBlur = state.blurEnabled,
-                            actions = {
-                                IconButton(onClick = {
-                                    refreshPresentation.beginRefresh()
-                                    vm.refreshSusfsState(force = true)
-                                }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
-                                }
-                            }
-                        )
+                    navigationIcon = {
+                        IconButton(onClick = childPageBack::requestDismiss) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            refreshPresentation.beginRefresh()
+                            vm.refreshSusfsState(force = true)
+                        }) {
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                        }
                     }
                 ) { topBarHeight ->
                     SusfsControlScreen(
@@ -692,19 +665,15 @@ fun SettingsScreen(
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
-                BlurScreenScaffold(
+                AbkPageScaffold(
+                    title = stringResource(R.string.settings_about_title),
                     blurConfig = state.blurConfig,
+                    blurEnabled = state.blurEnabled,
                     containerColor = Color.Transparent,
-                    topBar = {
-                        ExpressiveTopBar(
-                            title = stringResource(R.string.settings_about_title),
-                            navigationIcon = {
-                                IconButton(onClick = childPageBack::requestDismiss) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
-                                }
-                            },
-                            enableBlur = state.blurEnabled
-                        )
+                    navigationIcon = {
+                        IconButton(onClick = childPageBack::requestDismiss) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                        }
                     }
                 ) { topBarHeight ->
                     AboutRepositoryScreen(
@@ -731,19 +700,15 @@ fun SettingsScreen(
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
-                BlurScreenScaffold(
+                AbkPageScaffold(
+                    title = stringResource(R.string.settings_open_source_licenses),
                     blurConfig = state.blurConfig,
+                    blurEnabled = state.blurEnabled,
                     containerColor = Color.Transparent,
-                    topBar = {
-                        ExpressiveTopBar(
-                            title = stringResource(R.string.settings_open_source_licenses),
-                            navigationIcon = {
-                                IconButton(onClick = childPageBack::requestDismiss) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
-                                }
-                            },
-                            enableBlur = state.blurEnabled
-                        )
+                    navigationIcon = {
+                        IconButton(onClick = childPageBack::requestDismiss) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                        }
                     }
                 ) { topBarHeight ->
                     OpenSourceLicensesScreen(
@@ -2988,8 +2953,9 @@ private fun SettingsHero(
 
 @Composable
 private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
-    ExpressiveSectionCard(
+    ExpressiveCollapsibleSectionCard(
         title = title,
+        stateKey = "settings-group:$title",
         subtitle = when (title) {
             stringResource(R.string.settings_account) -> stringResource(R.string.settings_group_account_desc)
             stringResource(R.string.settings_build) -> stringResource(R.string.settings_group_build_desc)

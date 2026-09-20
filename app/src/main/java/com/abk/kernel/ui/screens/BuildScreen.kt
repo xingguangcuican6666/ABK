@@ -26,7 +26,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -83,7 +82,6 @@ import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.isKernelBuild
 import com.abk.kernel.data.model.isManagerBuild
 import com.abk.kernel.data.model.isManagerDevBuild
-import com.abk.kernel.ui.blur.BlurScreenScaffold
 import com.abk.kernel.ui.blur.blurredCardBackground
 import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
@@ -102,9 +100,11 @@ import com.abk.kernel.ui.components.ExpressiveListItem
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveSwitchItem
-import com.abk.kernel.ui.components.ExpressiveTopBar
-import com.abk.kernel.ui.theme.appPageBackgroundColor
-import com.abk.kernel.ui.theme.uiSurfaceColor
+import com.abk.kernel.ui.components.AbkPageScaffold
+import com.abk.kernel.ui.components.abkPageEnter
+import com.abk.kernel.ui.theme.AbkInsets
+import com.abk.kernel.ui.theme.AbkRadius
+import com.abk.kernel.ui.theme.AbkSpacing
 import com.abk.kernel.viewmodel.BuildPlanImportPreview
 import com.abk.kernel.viewmodel.BuildPlanShareScope
 import com.abk.kernel.viewmodel.CustomKernelOptionSummary
@@ -1203,25 +1203,21 @@ fun BuildScreen(
 
     if (!state.isLoggedIn || state.forkRepo == null) {
         val needsLogin = !state.isLoggedIn
-        BlurScreenScaffold(
+        AbkPageScaffold(
+            title = stringResource(R.string.build_title),
             blurConfig = state.blurConfig,
-            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
-            topBar = {
-                ExpressiveTopBar(
-                    title = stringResource(R.string.build_title),
-                    scrollBehavior = scrollBehavior,
-                    enableBlur = state.blurEnabled
-                )
-            }
+            blurEnabled = state.blurEnabled,
+            scrollBehavior = scrollBehavior
         ) { topBarHeight ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .abkPageEnter()
                     .padding(horizontal = AbkScreenHorizontalPadding)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(AbkSpacing.lg)
             ) {
-                Spacer(Modifier.height(topBarHeight + 16.dp))
+                Spacer(Modifier.height(topBarHeight + AbkInsets.contentTopGap))
                 ExpressiveHeroCard(
                     title = stringResource(
                         if (needsLogin) {
@@ -1285,26 +1281,22 @@ fun BuildScreen(
             .fillMaxWidth()
             .height(maxHeight + childPageTopInset + childPageBottomInset)
             .offset(y = -childPageTopInset)
-        BlurScreenScaffold(
+        AbkPageScaffold(
+            title = stringResource(R.string.build_title),
             blurConfig = state.blurConfig,
-            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
-            topBar = {
-                ExpressiveTopBar(
-                    title = stringResource(R.string.build_title),
-                    scrollBehavior = scrollBehavior,
-                    enableBlur = state.blurEnabled
-                )
-            }
+            blurEnabled = state.blurEnabled,
+            scrollBehavior = scrollBehavior
         ) { topBarHeight ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .abkPageEnter()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = AbkScreenHorizontalPadding),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(AbkSpacing.lg)
             ) {
-                Spacer(Modifier.height(topBarHeight + 16.dp))
+                Spacer(Modifier.height(topBarHeight + AbkInsets.contentTopGap))
                 BuildPlanHero(
                     config,
                     recommended,
@@ -2048,7 +2040,7 @@ fun BuildScreen(
                         }
 
                         state.customExternalModuleError?.let { err ->
-                            val shape = MaterialTheme.shapes.medium
+                            val shape = AbkRadius.large
                             Card(
                                 modifier = Modifier.blurredCardBackground(shape),
                                 shape = shape,
@@ -2132,7 +2124,7 @@ fun BuildScreen(
                 )
             }
 
-            Spacer(Modifier.height(80.dp + outerPadding.calculateBottomPadding()))
+            Spacer(Modifier.height(AbkInsets.contentBottomGap + outerPadding.calculateBottomPadding()))
             }
         }
 
@@ -2164,24 +2156,22 @@ fun BuildScreen(
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
-                BlurScreenScaffold(
+                AbkPageScaffold(
+                    title = when {
+                        showBuildQueuePage -> stringResource(R.string.build_queue_title)
+                        showKernelOptionsPage -> stringResource(R.string.build_kernel_options_title)
+                        showDefconfigEditorPage -> stringResource(R.string.build_source_defconfigs)
+                        else -> stringResource(R.string.build_plan_library)
+                    },
                     blurConfig = state.blurConfig,
+                    blurEnabled = state.blurEnabled,
                     containerColor = Color.Transparent,
-                    topBar = {
-                        ExpressiveTopBar(
-                            title = when {
-                                showBuildQueuePage -> stringResource(R.string.build_queue_title)
-                                showKernelOptionsPage -> stringResource(R.string.build_kernel_options_title)
-                                showDefconfigEditorPage -> stringResource(R.string.build_source_defconfigs)
-                                else -> stringResource(R.string.build_plan_library)
-                            },
-                            navigationIcon = {
-                                IconButton(onClick = childPageBack::requestDismiss) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.build_back_to_config))
-                                }
-                            },
-                            enableBlur = state.blurEnabled,
-                            actions = {
+                    navigationIcon = {
+                        IconButton(onClick = childPageBack::requestDismiss) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.build_back_to_config))
+                        }
+                    },
+                    actions = {
                                 if (showKernelOptionsPage) {
                                     Box {
                                         IconButton(onClick = { showKernelOptionActionMenu = true }) {
@@ -2230,8 +2220,6 @@ fun BuildScreen(
                                     }
                                 }
                             }
-                        )
-                    }
                 ) { topBarHeight ->
                     if (showBuildQueuePage) {
                         BuildQueuePage(
@@ -2589,7 +2577,7 @@ private fun BuildPlanLibraryPage(
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Spacer(Modifier.height(topBarHeight + 16.dp))
+        Spacer(Modifier.height(topBarHeight + AbkInsets.contentTopGap))
         if (plans.isEmpty()) {
             ExpressiveSectionCard(
                 title = stringResource(R.string.build_no_plans),
@@ -2689,7 +2677,7 @@ private fun BuildQueuePage(
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Spacer(Modifier.height(topBarHeight + 16.dp))
+        Spacer(Modifier.height(topBarHeight + AbkInsets.contentTopGap))
         ExpressiveSectionCard(
             title = stringResource(R.string.build_queue_status),
             subtitle = if (queue.isEmpty()) {
@@ -3035,7 +3023,7 @@ private fun BuildKernelOptionsPage(
             .fillMaxSize()
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(top = topBarHeight + 16.dp, bottom = bottomPadding + 24.dp)
+        contentPadding = PaddingValues(top = topBarHeight + AbkInsets.contentTopGap, bottom = bottomPadding + AbkSpacing.xl)
     ) {
         item(key = "search") {
             BuildKernelOptionSearchField(
@@ -3089,7 +3077,7 @@ private fun BuildKernelOptionSearchField(
         leadingIcon = { Icon(Icons.Default.Search, null) },
         placeholder = { Text(stringResource(R.string.build_kernel_option_search)) },
         singleLine = true,
-        shape = RoundedCornerShape(14.dp)
+        shape = AbkRadius.small
     )
 }
 
@@ -3369,7 +3357,7 @@ private fun BuildDefconfigEditorPage(
     LazyColumn(
         modifier = modifier.padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(top = topBarHeight + 16.dp, bottom = bottomPadding + 24.dp)
+        contentPadding = PaddingValues(top = topBarHeight + AbkInsets.contentTopGap, bottom = bottomPadding + AbkSpacing.xl)
     ) {
         item(key = "hint") {
             Text(
@@ -3763,7 +3751,7 @@ private fun BuildStatusBanner(
         BuildStatus.CANCELLED -> Triple(Icons.Default.Cancel, stringResource(R.string.build_cancelled), MaterialTheme.colorScheme.outline)
         else -> return
     }
-    val shape = MaterialTheme.shapes.medium
+    val shape = AbkRadius.large
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -3835,7 +3823,7 @@ private fun BuildProgressCard(
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "build-progress"
     )
-    val shape = MaterialTheme.shapes.medium
+    val shape = AbkRadius.large
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -3976,7 +3964,7 @@ private fun BuildRunChipView(chip: BuildRunChip) {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
     Surface(
-        shape = RoundedCornerShape(10.dp),
+        shape = AbkRadius.small,
         color = containerColor,
         contentColor = contentColor
     ) {

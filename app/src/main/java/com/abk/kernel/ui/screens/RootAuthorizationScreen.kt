@@ -86,7 +86,6 @@ import coil.compose.AsyncImage
 import com.abk.kernel.R
 import com.abk.kernel.data.model.RootGrantApp
 import com.abk.kernel.data.model.RootGrantProfile
-import com.abk.kernel.ui.blur.BlurScreenScaffold
 import com.abk.kernel.ui.blur.blurredCardBackground
 import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.components.AbkCenteredLoadingTransition
@@ -105,9 +104,11 @@ import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveSwitch
-import com.abk.kernel.ui.components.ExpressiveTopBar
-import com.abk.kernel.ui.theme.appPageBackgroundColor
-import com.abk.kernel.ui.theme.uiSurfaceColor
+import com.abk.kernel.ui.components.AbkPageScaffold
+import com.abk.kernel.ui.components.abkPageEnter
+import com.abk.kernel.ui.theme.AbkInsets
+import com.abk.kernel.ui.theme.AbkRadius
+import com.abk.kernel.ui.theme.AbkSpacing
 import com.abk.kernel.viewmodel.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -188,30 +189,25 @@ fun RootAuthorizationScreen(
             .height(maxHeight + childPageTopInset + childPageBottomInset)
             .offset(y = -childPageTopInset)
 
-        BlurScreenScaffold(
+        AbkPageScaffold(
+            title = stringResource(R.string.root_auth_title),
             blurConfig = state.blurConfig,
-            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
-            topBar = {
-                ExpressiveTopBar(
-                    title = stringResource(R.string.root_auth_title),
-                    scrollBehavior = scrollBehavior,
-                    enableBlur = state.blurEnabled,
-                    actions = {
-                        IconButton(
-                            onClick = {
-                                refreshPresentation.beginRefresh()
-                                vm.refreshRootGrantApps(force = true)
-                            },
-                            enabled = !state.rootGrantLoading
-                        ) {
-                            if (state.rootGrantLoading) {
-                                LoadingIndicator(Modifier.size(22.dp))
-                            } else {
-                                Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.root_auth_refresh_list))
-                            }
-                        }
+            blurEnabled = state.blurEnabled,
+            scrollBehavior = scrollBehavior,
+            actions = {
+                IconButton(
+                    onClick = {
+                        refreshPresentation.beginRefresh()
+                        vm.refreshRootGrantApps(force = true)
+                    },
+                    enabled = !state.rootGrantLoading
+                ) {
+                    if (state.rootGrantLoading) {
+                        LoadingIndicator(Modifier.size(22.dp))
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.root_auth_refresh_list))
                     }
-                )
+                }
             }
         ) { topBarHeight ->
             if (showInitialLoading) {
@@ -224,17 +220,18 @@ fun RootAuthorizationScreen(
                     onShowSystemAppsChange = { showSystemApps = it },
                     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
                 )
-                return@BlurScreenScaffold
+                return@AbkPageScaffold
             }
 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .abkPageEnter()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .padding(horizontal = AbkScreenHorizontalPadding),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(AbkSpacing.md)
             ) {
-                Spacer(Modifier.height(topBarHeight + 16.dp))
+                Spacer(Modifier.height(topBarHeight + AbkInsets.contentTopGap))
                 RootGrantSearchField(
                     query = query,
                     onQueryChange = { query = it }
@@ -348,22 +345,18 @@ fun RootAuthorizationScreen(
                         backgroundUri = state.customBackgroundUri,
                         backgroundImageEnabled = state.backgroundImageEnabled
                     )
-                    BlurScreenScaffold(
+                    AbkPageScaffold(
+                        title = headerApp?.label?.ifBlank { packageName } ?: packageName,
                         blurConfig = state.blurConfig,
+                        blurEnabled = state.blurEnabled,
                         containerColor = Color.Transparent,
-                        topBar = {
-                            ExpressiveTopBar(
-                                title = headerApp?.label?.ifBlank { packageName } ?: packageName,
-                                navigationIcon = {
-                                    IconButton(
-                                        enabled = canLeaveDetail,
-                                        onClick = childPageBack::requestDismiss
-                                    ) {
-                                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.root_auth_back_to_list))
-                                    }
-                                },
-                                enableBlur = state.blurEnabled
-                            )
+                        navigationIcon = {
+                            IconButton(
+                                enabled = canLeaveDetail,
+                                onClick = childPageBack::requestDismiss
+                            ) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.root_auth_back_to_list))
+                            }
                         }
                     ) { topBarHeight ->
                         when {
@@ -404,11 +397,11 @@ private fun RootGrantInitialLoadingScreen(
             .fillMaxSize()
             .padding(
                 start = AbkScreenHorizontalPadding,
-                top = topBarHeight + 16.dp,
+                top = topBarHeight + AbkInsets.contentTopGap,
                 end = AbkScreenHorizontalPadding,
-                bottom = 80.dp + outerPadding.calculateBottomPadding()
+                bottom = AbkInsets.contentBottomGap + outerPadding.calculateBottomPadding()
             ),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(AbkSpacing.md)
     ) {
         RootGrantSearchField(
             query = query,
@@ -441,7 +434,7 @@ private fun RootGrantSearchField(
         leadingIcon = { Icon(Icons.Default.Search, null) },
         placeholder = { Text(stringResource(R.string.root_auth_search_apps)) },
         singleLine = true,
-        shape = RoundedCornerShape(14.dp)
+        shape = AbkRadius.small
     )
 }
 
@@ -496,7 +489,7 @@ private fun RootGrantDetailLoadingPage(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = AbkScreenHorizontalPadding)
-            .padding(top = topBarHeight + 16.dp)
+            .padding(top = topBarHeight + AbkInsets.contentTopGap)
     )
 }
 
@@ -509,7 +502,7 @@ private fun RootGrantDetailMessagePage(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = AbkScreenHorizontalPadding)
-            .padding(top = topBarHeight + 16.dp),
+            .padding(top = topBarHeight + AbkInsets.contentTopGap),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -539,7 +532,7 @@ private fun RootGrantAppCard(
     onToggle: (Boolean) -> Unit,
     onOpen: () -> Unit
 ) {
-    val shape = RoundedCornerShape(8.dp)
+    val shape = AbkRadius.medium
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -552,8 +545,8 @@ private fun RootGrantAppCard(
         onClick = onOpen
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(AbkSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(AbkSpacing.sm)
         ) {
             Row(verticalAlignment = Alignment.Top) {
                 AppIcon(
@@ -712,9 +705,9 @@ private fun RootGrantProfilePage(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = AbkScreenHorizontalPadding),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(AbkSpacing.lg)
     ) {
-        Spacer(Modifier.height(topBarHeight + 16.dp))
+        Spacer(Modifier.height(topBarHeight + AbkInsets.contentTopGap))
         if (!warning.isNullOrBlank()) {
             ExpressiveSectionCard(
                 title = stringResource(R.string.root_auth_profile_read_disabled_title),
@@ -855,7 +848,7 @@ private fun RootGrantProfilePage(
             }
         }
 
-        Spacer(Modifier.height(80.dp))
+        Spacer(Modifier.height(AbkInsets.contentBottomGap))
     }
 }
 
@@ -905,7 +898,7 @@ private fun RootGrantChip(label: String) {
 
 @Composable
 private fun RootGrantMessageCard(message: String, onRefresh: () -> Unit) {
-    val shape = RoundedCornerShape(8.dp)
+    val shape = AbkRadius.medium
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -916,8 +909,8 @@ private fun RootGrantMessageCard(message: String, onRefresh: () -> Unit) {
         )
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(AbkSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(AbkSpacing.sm)
         ) {
             Text(
                 text = message,
