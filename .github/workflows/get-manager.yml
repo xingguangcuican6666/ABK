@@ -9,6 +9,13 @@ on:
       kernelsu_variant:
         required: true
         type: string
+      ksu_branch:
+        required: false
+        type: string
+        default: Latest(最新)
+      custom_ref:
+        required: false
+        type: string
     outputs:
       susVer:
         description: "The fetched SUSFS version number"
@@ -60,16 +67,29 @@ jobs:
       - name: 安装依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y git curl jq
+          sudo apt-get install -y git curl jq unzip
+
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            .github/scripts
+
+      - name: 确定 KernelSU 分支
+        if: inputs.kernelsu_variant != 'None'
+        id: ksu-branch
+        env:
+          KSU_VARIANT: ${{ inputs.kernelsu_variant }}
+          KSU_BRANCH: ${{ inputs.ksu_branch }}
+          CUSTOM_REF: ${{ inputs.custom_ref }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bash .github/scripts/resolve-ksu-ref.sh
 
       - name: 获取 KSU & SUSFS 版本
         id: get_version
         run: |
 
-          if [ "${{ inputs.kernelsu_variant }}" == "Next" ]; then
-            echo "This is the Next variant"
-            git clone https://github.com/KernelSU-Next/KernelSU-Next.git KernelSU
-          elif [ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]; then
+          if [ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]; then
             echo "This is the SukiSU variant"
             git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
           elif [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
@@ -80,11 +100,14 @@ jobs:
             git clone https://github.com/tiann/KernelSU.git KernelSU
           else
             echo "Unknown variant"
+            exit 1
           fi
 
           VAR=$([[ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]] && echo 700 || echo 200)
 
           cd KernelSU
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
 
           # 计算KSU版本号
           KSU_GIT_VERSION=$(git rev-list --count HEAD)
@@ -94,8 +117,6 @@ jobs:
           elif [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
             KSU_VERSION=$((30700 + KSU_GIT_VERSION))
           elif [ "${{ inputs.kernelsu_variant }}" == "Official" ]; then
-            KSU_VERSION=$((20000 + KSU_GIT_VERSION))
-          elif [ "${{ inputs.kernelsu_variant }}" == "Next" ]; then
             KSU_VERSION=$((30000 + KSU_GIT_VERSION))
           fi
           echo $KSU_VERSION
@@ -116,16 +137,33 @@ jobs:
         run: |
           set -euo pipefail
 
-          download_latest_release_apk() {
-            local repo="$1"
-            local variant="$2"
-            local release_json apk_name apk_url
+          resolve_ref_to_sha() {
+          local repo="$1"
+          local ref="$2"
+          local sha=""
 
-            echo "从 $repo releases/latest 获取 $variant Manager APK..."
+          # 尝试当作 branch
+          sha="$(curl -fsSL \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${repo}/branches/${ref}" \
+            | jq -r '.commit.sha // empty')"
+          if [ -n "$sha" ]; then
+            echo "$sha"
+            return
+          fi
+          echo "::error::无法解析 $ref 为 SHA"
+          exit 1
+          }
+
+          download_tag_release_apk() {
+            local repo="$1"
+            local tag="$2"
+            local variant="$3"
+            local release_json apk_name apk_url
+            echo "从 $repo releases/${tag} 获取 $variant Manager APK..."
             release_json="$(curl -fsSL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${repo}/releases/latest")"
-
+              "https://api.github.com/repos/${repo}/releases/tags/${tag}")"
             apk_name="$(echo "$release_json" | jq -r '
               (.assets | map(select(((.name | ascii_downcase) | endswith(".apk")) and ((.name | ascii_downcase) | contains("release")))) | .[0].name // empty) as $release_apk |
               if $release_apk != "" then $release_apk
@@ -133,32 +171,49 @@ jobs:
               end
             ')"
             apk_url="$(echo "$release_json" | jq -r --arg name "$apk_name" '.assets[] | select(.name == $name) | .browser_download_url')"
-
             if [ -z "$apk_name" ] || [ -z "$apk_url" ]; then
-              echo "::error::${repo} latest release 中未找到 APK 资源"
+              echo "::error::${repo} ${tag} release 中未找到 APK 资源"
               echo "$release_json" | jq -r '.assets[]?.name'
               exit 1
             fi
-
             mkdir -p "manager-artifacts/${variant}"
             echo "下载 $apk_name"
             curl -fL -o "manager-artifacts/${variant}/${apk_name}" "$apk_url"
+            }
+
+          download_manager_for_repo() {
+          local repo="$1"
+          local variant="$2"
+          local sha="$BRANCH"
+          if ! [[ "$sha" =~ ^[A-Fa-f0-9]{40}$ ]]; then
+            sha="$(resolve_ref_to_sha "$repo" "$sha")"
+            BRANCH="$sha"
+          fi
+          echo "→ Download manager for ${repo} at head_sha=${sha}"
+          GITHUB_REPOSITORY="${{ github.repository }}" \
+          GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
+            bash .github/scripts/download-manager-from-actions.sh \
+              "$repo" "$sha" "manager-artifacts/${variant}"
           }
 
           case "${{ inputs.kernelsu_variant }}" in
             "Official")
-              download_latest_release_apk "tiann/KernelSU" "Official"
+              if [[ "$BRANCH" =~ ^[Vv]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                download_tag_release_apk "tiann/KernelSU" "$BRANCH" "Official"
+              else
+                download_manager_for_repo "tiann/KernelSU" "Official"
+              fi
               ;;
             "SukiSU")
-              download_latest_release_apk "SukiSU-Ultra/SukiSU-Ultra" "SukiSU"
+              if [[ "$BRANCH" =~ ^[Vv]?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                download_tag_release_apk "SukiSU-Ultra/SukiSU-Ultra" "$BRANCH" "SukiSU"
+              else
+                download_manager_for_repo "SukiSU-Ultra/SukiSU-Ultra" "SukiSU"
+              fi
               ;;
             "ReSukiSU")
-              echo "直接下载 ReSukiSU Manager-release.zip，不做匹配..."
-              mkdir -p "manager-artifacts/ReSukiSU"
-              curl -fL -o "ReSukiSU-Manager-release.zip" \
-                "https://nightly.link/ReSukiSU/ReSukiSU/workflows/build-manager/main/Manager-release.zip"
-              unzip -o "ReSukiSU-Manager-release.zip" -d "manager-artifacts/ReSukiSU"
-              rm -f "ReSukiSU-Manager-release.zip"
+              # ReSukiSU has no release APKs; Actions build-manager (fallback to main latest in script).
+              download_manager_for_repo "ReSukiSU/ReSukiSU" "ReSukiSU"
               ;;
             *)
               echo "::error::未知 KernelSU 变体: ${{ inputs.kernelsu_variant }}"
@@ -259,8 +314,8 @@ jobs:
           cat > "$PROP" << EOF
           id=abk_extension
           name=ABK-Extension
-          version=1.1.0
-          versionCode=10010
+          version=1.2.0
+          versionCode=10020
           EOF
 
           AUTHORS=""

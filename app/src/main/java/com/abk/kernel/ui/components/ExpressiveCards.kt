@@ -28,15 +28,24 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.abk.kernel.R
+import com.abk.kernel.ui.blur.LocalBlurredCardBackgroundEnabled
+import com.abk.kernel.ui.blur.blurredCardBackground
+import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 
 @Composable
@@ -51,9 +60,14 @@ fun ExpressiveHeroCard(
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .blurredCardBackground(
+                shape = MaterialTheme.shapes.medium,
+                enabled = true,
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(containerColor),
+            containerColor = blurredCardSurfaceColor(containerColor),
             contentColor = contentColor
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -112,12 +126,18 @@ fun ExpressiveSectionCard(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     icon: ImageVector? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = uiSurfaceColor(containerColor)),
+        modifier = modifier
+            .fillMaxWidth()
+            .blurredCardBackground(
+                shape = MaterialTheme.shapes.large,
+                enabled = true,
+            ),
+        colors = CardDefaults.cardColors(containerColor = blurredCardSurfaceColor(containerColor)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
@@ -154,6 +174,9 @@ fun ExpressiveSectionCard(
                         )
                     }
                 }
+                if (trailingContent != null) {
+                    trailingContent()
+                }
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp), content = content)
         }
@@ -173,8 +196,13 @@ fun ExpressiveListItem(
     onClick: (() -> Unit)? = null
 ) {
     val colors = MaterialTheme.colorScheme
+    // Follow the synchronous "feature enabled" signal, not the async bitmap readiness, so
+    // rows keep a surface tint from the first frame and don't flash transparent→tinted
+    // while the pre-blurred background loads.
+    val drawsOwnBlurSurface = LocalBlurredCardBackgroundEnabled.current
     val containerColor = when {
-        selected -> uiSurfaceColor(colors.primaryContainer)
+        selected -> blurredCardSurfaceColor(colors.primaryContainer)
+        drawsOwnBlurSurface -> blurredCardSurfaceColor(colors.surfaceContainer)
         else -> Color.Transparent
     }
     val titleColor = when {
@@ -201,6 +229,10 @@ fun ExpressiveListItem(
         modifier = modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
+            .blurredCardBackground(
+                shape = MaterialTheme.shapes.large,
+                enabled = true,
+            )
             .then(clickableModifier),
         headlineContent = {
             Text(
@@ -350,7 +382,7 @@ fun ExpressiveEmptyState(
         modifier = modifier
     ) {
         Text(
-            text = "等待下一次构建完成后，这里会自动整理可用产物。",
+            text = stringResource(R.string.empty_state_build_artifacts_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

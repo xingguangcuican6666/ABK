@@ -39,7 +39,40 @@ body:
         - SUSFS Version / SUSFS版本:
     validations:
       required: true
-
+  - type: textarea
+    id: workflow_config
+    attributes:
+      label: "Workflow Config / 编译工作流参数"
+      description: "Config List / 参数列表"
+      placeholder: |
+        You can copy it at 构建信息摘要 in workflow. Like this.
+        ========================================
+               内核构建配置摘要
+        ========================================
+        Android 版本  : android15
+        内核版本      : 6.6
+        子版本号      : 66
+        补丁级别      : 2025-02
+        KSU 变体      : Official
+        KSU 分支      : Dev(开发)
+        管理器包名    : app/signing/abk-manager-cert.env
+        构建时间      : Sun Dec 01 08:10:00 UTC 2024
+        SUSFS 状态    : true
+        ZRAM 增强     : true
+        ZRAM 完整算法 : true
+        ZRAM 额外算法 : 无
+        BBG 补丁      : true
+        DDK LSM       : false
+        NTsync 补丁   : true
+        Networing 增强: false
+        KPM 功能      : true
+        KPM 密码      : 默认
+        Re-Kernel     : false
+        虚拟化支持   : 678
+        自定义注入    : true
+        Stock Config  : 自动检测 config/stock_defconfig
+        ========================================
+  
   - type: textarea
     id: logs
     attributes:

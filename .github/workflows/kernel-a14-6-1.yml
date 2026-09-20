@@ -14,7 +14,6 @@ on:
         options:
           - None
           - Official
-          #- Next
           - SukiSU
           - ReSukiSU
         default: ReSukiSU
@@ -25,8 +24,9 @@ on:
         options:
           - Stable(标准)
           - Dev(开发)
+          - Latest(最新)
           - Custom(自定义)
-        default: Stable(标准)
+        default: Latest(最新)
       custom_ref:
         description: "自定义引用 (仅在KSU分支为'Custom(自定义)'时使用)"
         required: false
@@ -91,17 +91,27 @@ on:
         type: boolean
         default: false
       zram_full_algo:
-        description: "启用 ZRAM 完整算法支持（LZO/LZ4/LZ4HC/LZ4K/LZ4KD/DEFLATE/842/ZSTD，默认 lzo-rle）"
+        description: "启用 ZRAM 完整算法支持（6.12 自动跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS）"
         required: false
         type: boolean
         default: false
       zram_extra_algos:
-        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；仅在未启用完整算法时生效）"
+        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；6.12 会忽略 lz4k/lz4kd/lz4k_oplus）"
         required: false
         type: string
         default: ""
       kpm_password:
         description: "自定义 KPM 超级密码（留空=使用默认密码）"
+        required: false
+        type: string
+        default: ""
+      custom_external_modules:
+        description: "自定义外部模块（兼容旧 repo;stage，也支持 module:repo;stage 与 set:repo#child;stage，用 | 分隔）"
+        required: false
+        type: string
+        default: ""
+      custom_kernel_options:
+        description: "自定义内核选项（每行一条 Kconfig/defconfig 片段）"
         required: false
         type: string
         default: ""
@@ -165,6 +175,14 @@ on:
         type: string
         default: ""
       kpm_password:
+        required: false
+        type: string
+        default: ""
+      custom_external_modules:
+        required: false
+        type: string
+        default: ""
+      custom_kernel_options:
         required: false
         type: string
         default: ""
@@ -252,6 +270,8 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo || false }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
+      custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       upload_aux_artifacts: false
 
   # 仅在直接触发时运行，从 main.yml 调用时跳过
@@ -261,3 +281,5 @@ jobs:
     secrets: inherit
     with:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
+      ksu_branch: ${{ inputs.kernelsu_branch }}
+      custom_ref: ${{ inputs.custom_ref || '' }}

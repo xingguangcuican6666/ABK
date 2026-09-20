@@ -1,0 +1,377 @@
+name: OnePlus 全矩阵内核构建
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernelsu_variant:
+        description: "KernelSU 变体"
+        required: true
+        type: choice
+        options:
+          - Official
+          - SukiSU
+          - ReSukiSU
+          - None
+        default: SukiSU
+      enable_susfs:
+        description: "启用 SUSFS（android14/6.1、android15/6.6、android16/6.12）"
+        required: false
+        type: boolean
+        default: false
+      use_kpm:
+        description: "启用 KPM（仅 SukiSU/ReSukiSU 生效）"
+        required: false
+        type: boolean
+        default: false
+      use_lz4kd:
+        description: "启用 lz4kd"
+        required: false
+        type: boolean
+        default: false
+      use_bbg:
+        description: "启用 BBG 基带防护"
+        required: false
+        type: boolean
+        default: true
+      use_bbr:
+        description: "启用 BBR"
+        required: false
+        type: boolean
+        default: false
+      use_proxy_optimization:
+        description: "启用代理相关网络优化（MTK 会自动关闭）"
+        required: false
+        type: boolean
+        default: true
+      use_unicode_bypass:
+        description: "启用 Unicode 零宽绕过修复"
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      kernelsu_variant:
+        required: true
+        type: string
+      enable_susfs:
+        required: false
+        type: boolean
+        default: false
+      use_kpm:
+        required: false
+        type: boolean
+        default: false
+      use_lz4kd:
+        required: false
+        type: boolean
+        default: false
+      use_bbg:
+        required: false
+        type: boolean
+        default: true
+      use_bbr:
+        required: false
+        type: boolean
+        default: false
+      use_proxy_optimization:
+        required: false
+        type: boolean
+        default: true
+      use_unicode_bypass:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  get-manager:
+    name: 上传管理器和 SUSFS 模块
+    if: ${{ inputs.kernelsu_variant != 'None' }}
+    uses: ./.github/workflows/get-manager.yml
+    secrets: inherit
+    with:
+      kernelsu_variant: ${{ inputs.kernelsu_variant }}
+
+  prepare-matrix:
+    name: 准备 OnePlus 机型矩阵
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.oneplus-matrix.outputs.matrix }}
+      count: ${{ steps.oneplus-matrix.outputs.count }}
+    steps:
+      - name: 检出代码仓库
+        uses: actions/checkout@v6
+
+      - name: 生成矩阵
+        id: oneplus-matrix
+        shell: bash
+        env:
+          MATRIX_KSU_VARIANT: ${{ inputs.kernelsu_variant }}
+          MATRIX_ENABLE_SUSFS: ${{ inputs.enable_susfs }}
+          MATRIX_USE_KPM: ${{ inputs.use_kpm }}
+          MATRIX_USE_LZ4KD: ${{ inputs.use_lz4kd }}
+          MATRIX_USE_BBG: ${{ inputs.use_bbg }}
+          MATRIX_USE_BBR: ${{ inputs.use_bbr }}
+          MATRIX_USE_PROXY_OPTIMIZATION: ${{ inputs.use_proxy_optimization }}
+          MATRIX_USE_UNICODE_BYPASS: ${{ inputs.use_unicode_bypass }}
+        run: |
+          set -euo pipefail
+
+          python3 <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import tempfile
+          from collections import Counter
+          from pathlib import Path
+
+          SUPPORTED_CPUS = [
+              "sm8850",
+              "sm8750",
+              "sm8735",
+              "mt6991",
+              "sm8650",
+              "mt6989",
+              "sm8635",
+              "sm8550",
+              "sm8450",
+              "sm8475",
+              "sm7675",
+              "sm7635",
+              "sm7550",
+              "sm6375",
+          ]
+
+          SUPPORTED_MANIFESTS = [
+              "oneplus_15",
+              "oneplus_15t",
+              "oneplus_13_b",
+              "oneplus_13s_b",
+              "oneplus_13t_b",
+              "oneplus_ace5_pro_b",
+              "oneplus_ace_6",
+              "oneplus_pad_2_pro_b",
+              "oneplus_pad_3_b",
+              "oneplus_ace5_ultra_b",
+              "oneplus_turbo_6",
+              "oneplus_12_b",
+              "oneplus_ace3_pro_b",
+              "oneplus_ace5_b",
+              "oneplus_13r_b",
+              "oneplus_pad2_b",
+              "oneplus_pad_pro_b",
+              "oneplus_ace5_race_b",
+              "oneplus_nord_5_b",
+              "oneplus_11_b",
+              "oneplus_12r_b",
+              "oneplus_ace2_pro_b",
+              "oneplus_ace3_b",
+              "oneplus_open_b",
+              "oneplus_10t_v",
+              "oneplus_11r_b",
+              "oneplus_ace2_b",
+              "oneplus_ace_pro_v",
+              "oneplus_10_pro_b",
+              "oneplus_ace_3v_b",
+              "oneplus_turbo_6v",
+              "oneplus_nord_4_b",
+              "oneplus_nord_ce4_lite_5g",
+              "oneplus_nord_ce4_b",
+          ]
+
+          PROFILE_MAP = {
+              "oneplus_15": ("OnePlus 15", "ColorOS/OxygenOS 16"),
+              "oneplus_15t": ("OnePlus 15T", "ColorOS/OxygenOS 16"),
+              "oneplus_13_b": ("OnePlus 13", "ColorOS/OxygenOS 16"),
+              "oneplus_13s_b": ("OnePlus 13s", "ColorOS/OxygenOS 16"),
+              "oneplus_13t_b": ("OnePlus 13T", "ColorOS/OxygenOS 16"),
+              "oneplus_ace5_pro_b": ("OnePlus Ace5 Pro", "ColorOS/OxygenOS 16"),
+              "oneplus_ace_6": ("OnePlus Ace 6", "ColorOS/OxygenOS 16"),
+              "oneplus_pad_2_pro_b": ("OnePlus Pad 2 Pro", "ColorOS/OxygenOS 16"),
+              "oneplus_pad_3_b": ("OnePlus Pad 3", "ColorOS/OxygenOS 16"),
+              "oneplus_ace5_ultra_b": ("OnePlus Ace5 Ultra", "ColorOS/OxygenOS 16"),
+              "oneplus_turbo_6": ("OnePlus Turbo 6", "ColorOS/OxygenOS 16"),
+              "oneplus_12_b": ("OnePlus 12", "ColorOS/OxygenOS 16"),
+              "oneplus_ace3_pro_b": ("OnePlus Ace3 Pro", "ColorOS/OxygenOS 16"),
+              "oneplus_ace5_b": ("OnePlus Ace5", "ColorOS/OxygenOS 16"),
+              "oneplus_13r_b": ("OnePlus 13R", "ColorOS/OxygenOS 16"),
+              "oneplus_pad2_b": ("OnePlus Pad 2", "ColorOS/OxygenOS 16"),
+              "oneplus_pad_pro_b": ("OnePlus Pad Pro", "ColorOS/OxygenOS 16"),
+              "oneplus_ace5_race_b": ("OnePlus Ace5 Race", "ColorOS/OxygenOS 16"),
+              "oneplus_nord_5_b": ("OnePlus Nord 5", "ColorOS/OxygenOS 16"),
+              "oneplus_11_b": ("OnePlus 11", "ColorOS/OxygenOS 16"),
+              "oneplus_12r_b": ("OnePlus 12R", "ColorOS/OxygenOS 16"),
+              "oneplus_ace2_pro_b": ("OnePlus Ace2 Pro", "ColorOS/OxygenOS 16"),
+              "oneplus_ace3_b": ("OnePlus Ace3", "ColorOS/OxygenOS 16"),
+              "oneplus_open_b": ("OnePlus Open", "ColorOS/OxygenOS 16"),
+              "oneplus_10t_v": ("OnePlus 10T", "ColorOS/OxygenOS 15"),
+              "oneplus_11r_b": ("OnePlus 11R", "ColorOS/OxygenOS 16"),
+              "oneplus_ace2_b": ("OnePlus Ace2", "ColorOS/OxygenOS 16"),
+              "oneplus_ace_pro_v": ("OnePlus Ace Pro", "ColorOS/OxygenOS 15"),
+              "oneplus_10_pro_b": ("OnePlus 10 Pro", "ColorOS/OxygenOS 16"),
+              "oneplus_ace_3v_b": ("OnePlus Ace 3V", "ColorOS/OxygenOS 16"),
+              "oneplus_turbo_6v": ("OnePlus Turbo 6V", "ColorOS/OxygenOS 16"),
+              "oneplus_nord_4_b": ("OnePlus Nord 4", "ColorOS/OxygenOS 16"),
+              "oneplus_nord_ce4_lite_5g": ("OnePlus Nord CE4 Lite 5G", "ColorOS/OxygenOS 15"),
+              "oneplus_nord_ce4_b": ("OnePlus Nord CE4", "ColorOS/OxygenOS 16"),
+          }
+
+          KERNEL_LINES = {
+              "1": ("android12", "5.10"),
+              "2": ("android13", "5.15"),
+              "3": ("android14", "6.1"),
+              "4": ("android15", "6.6"),
+              "5": ("android16", "6.12"),
+          }
+
+          def run(cmd, cwd=None):
+              return subprocess.check_output(cmd, cwd=cwd, text=True)
+
+          def env_enabled(name):
+              return "on" if os.environ.get(name, "").lower() == "true" else "off"
+
+          effective_use_kpm = (
+              os.environ.get("MATRIX_USE_KPM", "").lower() == "true"
+              and os.environ.get("MATRIX_KSU_VARIANT", "") in {"SukiSU", "ReSukiSU"}
+          )
+
+          supported_manifest_set = set(SUPPORTED_MANIFESTS)
+          cpu_order = {cpu: index for index, cpu in enumerate(SUPPORTED_CPUS)}
+          manifest_order = {manifest: index for index, manifest in enumerate(SUPPORTED_MANIFESTS)}
+
+          with tempfile.TemporaryDirectory() as tmpdir:
+              repo_path = Path(tmpdir) / "kernel_manifest"
+              subprocess.run(
+                  [
+                      "git",
+                      "clone",
+                      "--depth=1",
+                      "--filter=blob:none",
+                      "--no-checkout",
+                      "--no-single-branch",
+                      "https://github.com/Xiaomichael/kernel_manifest.git",
+                      str(repo_path),
+                  ],
+                  check=True,
+              )
+
+              matrix = []
+              found = set()
+              for cpu in SUPPORTED_CPUS:
+                  branch = f"origin/oneplus/{cpu}"
+                  xml_files = [
+                      line
+                      for line in run(["git", "ls-tree", "-r", "--name-only", branch], cwd=repo_path).splitlines()
+                      if line.endswith(".xml")
+                  ]
+                  for xml_file in xml_files:
+                      device_manifest = Path(xml_file).stem
+                      if device_manifest not in supported_manifest_set:
+                          continue
+
+                      xml = run(["git", "show", f"{branch}:{xml_file}"], cwd=repo_path)
+                      upstream_match = re.search(r'upstream="refs/heads/ks-kernel\.lnx\.(\d+)\.0\.', xml)
+                      if not upstream_match:
+                          raise SystemExit(f"Cannot detect kernel line for {cpu}/{device_manifest}")
+
+                      line = KERNEL_LINES.get(upstream_match.group(1))
+                      if line is None:
+                          raise SystemExit(
+                              f"Unsupported OnePlus kernel line {upstream_match.group(1)}.0 for {cpu}/{device_manifest}"
+                          )
+
+                      android_version, kernel_version = line
+                      display_name, system_version = PROFILE_MAP[device_manifest]
+                      enable_susfs = (
+                          os.environ.get("MATRIX_ENABLE_SUSFS", "").lower() == "true"
+                          and os.environ.get("MATRIX_KSU_VARIANT", "") != "None"
+                          and f"{android_version}/{kernel_version}" in {
+                              "android14/6.1",
+                              "android15/6.6",
+                              "android16/6.12",
+                          }
+                      )
+                      matrix.append(
+                          {
+                              "cpu": cpu,
+                              "device_manifest": device_manifest,
+                              "device_label": (
+                                  f"{display_name} · {system_version} · "
+                                  f"{android_version}/{kernel_version} · {cpu}"
+                              ),
+                              "android_version": android_version,
+                              "kernel_version": kernel_version,
+                              "enable_susfs": enable_susfs,
+                          }
+                      )
+                      found.add(device_manifest)
+
+          missing = sorted(supported_manifest_set - found, key=manifest_order.get)
+          if missing:
+              raise SystemExit("Supported OnePlus manifests missing upstream: " + ", ".join(missing))
+
+          matrix.sort(
+              key=lambda row: (
+                  ["5.10", "5.15", "6.1", "6.6", "6.12"].index(row["kernel_version"]),
+                  cpu_order[row["cpu"]],
+                  manifest_order[row["device_manifest"]],
+              )
+          )
+          matrix_json = json.dumps({"include": matrix}, separators=(",", ":"))
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"matrix={matrix_json}\n")
+              output.write(f"count={len(matrix)}\n")
+
+          line_counts = Counter(f'{row["android_version"]}-{row["kernel_version"]}' for row in matrix)
+          cpu_counts = Counter(row["cpu"] for row in matrix)
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("## OnePlus 全矩阵内核构建\n\n")
+              summary.write(f"- 总任务数: {len(matrix)}\n")
+              summary.write(f"- KernelSU 变体: {os.environ.get('MATRIX_KSU_VARIANT', '')}\n")
+              summary.write(f"- SUSFS: {env_enabled('MATRIX_ENABLE_SUSFS')}（android14/6.1、android15/6.6、android16/6.12）\n")
+              summary.write(f"- KPM: {'on' if effective_use_kpm else 'off'}（仅 SukiSU/ReSukiSU 生效）\n")
+              summary.write(f"- lz4kd: {env_enabled('MATRIX_USE_LZ4KD')}\n")
+              summary.write(f"- BBG: {env_enabled('MATRIX_USE_BBG')}\n")
+              summary.write(f"- BBR: {env_enabled('MATRIX_USE_BBR')}\n")
+              summary.write(f"- 代理优化: {env_enabled('MATRIX_USE_PROXY_OPTIMIZATION')}（MTK 分支自动 off）\n")
+              summary.write(f"- Unicode 绕过: {env_enabled('MATRIX_USE_UNICODE_BYPASS')}\n\n")
+              summary.write("### KMI 分布\n")
+              for combo in sorted(line_counts):
+                  summary.write(f"- {combo}: {line_counts[combo]}\n")
+              summary.write("\n### CPU 分布\n")
+              for cpu in SUPPORTED_CPUS:
+                  if cpu in cpu_counts:
+                      summary.write(f"- {cpu}: {cpu_counts[cpu]}\n")
+
+          print(matrix_json)
+          PY
+
+  build-oneplus-full-matrix:
+    name: "${{ matrix.device_label }} · ${{ inputs.kernelsu_variant }}"
+    needs: prepare-matrix
+    if: ${{ needs.prepare-matrix.outputs.count != '0' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+    uses: ./.github/workflows/oneplus-build.yml
+    secrets: inherit
+    with:
+      cpu: ${{ matrix.cpu }}
+      device_manifest: ${{ matrix.device_manifest }}
+      android_version: ${{ matrix.android_version }}
+      kernel_version: ${{ matrix.kernel_version }}
+      ksu_variant: ${{ inputs.kernelsu_variant }}
+      enable_susfs: ${{ matrix.enable_susfs }}
+      use_kpm: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ReSukiSU') }}
+      use_lz4kd: ${{ inputs.use_lz4kd }}
+      use_bbg: ${{ inputs.use_bbg }}
+      use_bbr: ${{ inputs.use_bbr }}
+      use_proxy_optimization: ${{ inputs.use_proxy_optimization }}
+      use_unicode_bypass: ${{ inputs.use_unicode_bypass }}

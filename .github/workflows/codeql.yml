@@ -1,0 +1,89 @@
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+    branches:
+      - dev
+  schedule:
+    - cron: "28 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: c-cpp
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+          - language: java-kotlin
+            build-mode: manual
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix['build-mode'] }}
+          dependency-caching: true
+
+      - name: Set up JDK
+        if: ${{ matrix.language == 'java-kotlin' || matrix.language == 'c-cpp' }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        if: ${{ matrix.language == 'java-kotlin' || matrix.language == 'c-cpp' }}
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        if: ${{ matrix.language == 'java-kotlin' || matrix.language == 'c-cpp' }}
+        run: sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0" "cmake;3.22.1" "ndk;28.2.13676358"
+
+      - name: Set up Gradle
+        if: ${{ matrix.language == 'java-kotlin' || matrix.language == 'c-cpp' }}
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Build Java/Kotlin sources for CodeQL
+        if: ${{ matrix.language == 'java-kotlin' }}
+        run: >-
+          gradle --no-daemon --no-build-cache --rerun-tasks
+          :app:compileDebugKotlin :app:compileDebugJavaWithJavac
+
+      - name: Build native sources for CodeQL
+        if: ${{ matrix.language == 'c-cpp' }}
+        run: >-
+          gradle --no-daemon --no-build-cache --rerun-tasks
+          ':app:buildCMakeDebug[arm64-v8a]'
+          ':app:buildCMakeDebug[armeabi-v7a]'
+          ':app:buildCMakeDebug[x86]'
+          ':app:buildCMakeDebug[x86_64]'
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}

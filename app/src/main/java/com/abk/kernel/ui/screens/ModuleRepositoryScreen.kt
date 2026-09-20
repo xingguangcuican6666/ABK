@@ -2,123 +2,315 @@
 
 package com.abk.kernel.ui.screens
 
+import android.content.Context
+import android.os.Environment
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LibraryBooks
+import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Source
+import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import com.abk.kernel.ui.blur.BlurScreenScaffold
+import com.abk.kernel.ui.blur.blurredCardBackground
+import com.abk.kernel.ui.blur.blurredCardSurfaceColor
+import com.abk.kernel.ui.components.AbkInlineLoadingPill
+import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.abk.kernel.R
 import com.abk.kernel.data.model.CustomExternalModuleStage
+import com.abk.kernel.data.model.ExternalModuleMetadata
+import com.abk.kernel.data.model.ModuleCatalogItemKind
 import com.abk.kernel.data.model.ModuleCatalogItem
 import com.abk.kernel.data.model.ModuleCatalogRepository
+import com.abk.kernel.data.model.RuntimeModuleCatalogItem
+import com.abk.kernel.data.model.RuntimeModuleRepository
+import com.abk.kernel.data.model.downloadFileName
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.components.AppPageBackground
+import com.abk.kernel.ui.components.ObserveChildPageVisibility
+import com.abk.kernel.ui.components.childPageOverlayEnterTransition
+import com.abk.kernel.ui.components.childPageOverlayExitTransition
+import com.abk.kernel.ui.components.childPageScrimExitTransition
+import com.abk.kernel.ui.components.rememberChildPageBackController
+import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveTopBar
+import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
+import com.abk.kernel.utils.LocaleHelper
+import com.abk.kernel.utils.DownloadUtils
+import com.abk.kernel.utils.RootUtils
 import com.abk.kernel.viewmodel.MainViewModel
-import kotlin.math.pow
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-private const val MODULE_REPOSITORY_BACK_VISUAL_EXPONENT = 1.8f
-private const val MODULE_REPOSITORY_BACK_SCALE_DELTA = 0.09f
-private const val MODULE_REPOSITORY_BACK_SCRIM_ALPHA = 0.32f
-private const val MODULE_REPOSITORY_PAGE_EXIT_DELAY_MS = 280L
-private val MODULE_REPOSITORY_BACK_MAX_OFFSET = 56.dp
-private val MODULE_REPOSITORY_BACK_MAX_CORNER = 32.dp
+private const val RUNTIME_MODULE_DOWNLOAD_RUN_ID = -2_000_000_001L
+
+enum class ModuleRepositoryMode {
+    BUILD_ABK,
+    RUNTIME_STANDARD
+}
+
+private data class ModuleListComputation<T>(
+    val items: List<T> = emptyList(),
+    val loading: Boolean = false
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModuleRepositoryScreen(
     vm: MainViewModel,
+    mode: ModuleRepositoryMode,
     outerPadding: PaddingValues = PaddingValues(0.dp),
     onRepositoryPageVisibleChange: (Boolean) -> Unit = {}
 ) {
+    if (mode == ModuleRepositoryMode.BUILD_ABK) {
+        BuildModuleRepositoryScreenContent(
+            vm = vm,
+            outerPadding = outerPadding,
+            onRepositoryPageVisibleChange = onRepositoryPageVisibleChange
+        )
+        return
+    }
+
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
+    val scope = rememberCoroutineScope()
     val motionScheme = MaterialTheme.motionScheme
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showRepositorySettings by rememberSaveable { mutableStateOf(false) }
-    var pendingCatalogModule by remember { mutableStateOf<ModuleCatalogItem?>(null) }
-    var selectedCatalogModuleStages by rememberSaveable { mutableStateOf(emptyList<String>()) }
-    var repositoryBackProgress by remember { mutableFloatStateOf(0f) }
-    val animatedRepositoryBackProgress by animateFloatAsState(
-        targetValue = repositoryBackProgress.coerceIn(0f, 1f),
-        animationSpec = motionScheme.fastSpatialSpec(),
-        label = "module-repository-back-progress"
+    val repositoryPageTransition = rememberChildPageOverlayTransition(
+        visible = showRepositorySettings,
+        label = "runtime-module-repository-settings"
     )
-    val visualRepositoryBackProgress = animatedRepositoryBackProgress
-        .coerceIn(0f, 1f)
-        .pow(MODULE_REPOSITORY_BACK_VISUAL_EXPONENT)
-    val density = LocalDensity.current
-    val repositoryBackOffsetPx = with(density) { MODULE_REPOSITORY_BACK_MAX_OFFSET.toPx() }
-    val repositoryBackCorner = with(density) {
-        (MODULE_REPOSITORY_BACK_MAX_CORNER.toPx() * visualRepositoryBackProgress).toDp()
+    var pendingInstallModule by remember { mutableStateOf<MergedRuntimeCatalogModule?>(null) }
+    var installDialogVisible by remember { mutableStateOf(false) }
+    var installRunning by remember { mutableStateOf(false) }
+    var installSuccess by remember { mutableStateOf<Boolean?>(null) }
+    var installLog by remember { mutableStateOf<List<String>>(emptyList()) }
+    val mergedModulesState by produceState(
+        initialValue = ModuleListComputation<MergedRuntimeCatalogModule>(
+            loading = state.runtimeModuleRepositories.isNotEmpty()
+        ),
+        key1 = state.runtimeModuleRepositories
+    ) {
+        if (state.runtimeModuleRepositories.isEmpty()) {
+            value = ModuleListComputation(items = emptyList(), loading = false)
+            return@produceState
+        }
+        value = ModuleListComputation(loading = true)
+        val merged = withContext(Dispatchers.Default) {
+            mergeRuntimeCatalogModules(state.runtimeModuleRepositories)
+        }
+        value = ModuleListComputation(items = merged, loading = false)
     }
-    val mergedModules = remember(state.moduleCatalogRepositories) {
-        mergeCatalogModules(state.moduleCatalogRepositories)
+    val mergedModules = mergedModulesState.items
+    val filteredModulesState by produceState(
+        initialValue = ModuleListComputation<MergedRuntimeCatalogModule>(
+            loading = mergedModulesState.loading
+        ),
+        key1 = mergedModulesState,
+        key2 = searchQuery
+    ) {
+        if (mergedModulesState.loading) {
+            value = ModuleListComputation(loading = true)
+            return@produceState
+        }
+        value = ModuleListComputation(loading = true)
+        val filtered = withContext(Dispatchers.Default) {
+            if (searchQuery.isBlank()) {
+                mergedModules
+            } else {
+                mergedModules.filter { it.matchesQuery(searchQuery) }
+            }
+        }
+        value = ModuleListComputation(items = filtered, loading = false)
     }
-    val filteredModules = remember(mergedModules, searchQuery) {
-        mergedModules.filter { it.matchesQuery(searchQuery) }
-    }
-    val selectedModules = remember(state.buildConfig.customExternalModules) {
-        state.buildConfig.customExternalModules
-            .map { it.url.trim().lowercase() to CustomExternalModuleStage.normalize(it.stage) }
-            .toSet()
-    }
-
-    fun openRepositorySettings() {
-        repositoryBackProgress = 0f
-        onRepositoryPageVisibleChange(true)
-        showRepositorySettings = true
-    }
+    val filteredModules = filteredModulesState.items
+    val listComputing = mergedModulesState.loading
 
     fun closeRepositorySettings() {
         showRepositorySettings = false
     }
 
-    LaunchedEffect(showRepositorySettings) {
-        if (showRepositorySettings) {
-            onRepositoryPageVisibleChange(true)
-        } else {
-            delay(MODULE_REPOSITORY_PAGE_EXIT_DELAY_MS)
-            repositoryBackProgress = 0f
-            onRepositoryPageVisibleChange(false)
+    val childPageBack = rememberChildPageBackController(
+        enabled = showRepositorySettings,
+        predictiveBackEnabled = state.predictiveBackEnabled,
+        onBack = ::closeRepositorySettings,
+    )
+
+    fun openRepositorySettings() {
+        childPageBack.resetProgress()
+        showRepositorySettings = true
+    }
+
+    ObserveChildPageVisibility(
+        transition = repositoryPageTransition,
+        onVisibleChange = onRepositoryPageVisibleChange,
+        onAfterExitAnimation = { childPageBack.resetProgress() }
+    )
+
+    fun appendInstallLog(line: String) {
+        installLog = installLog + line
+    }
+
+    fun startInstall(module: MergedRuntimeCatalogModule) {
+        if (installRunning) return
+        pendingInstallModule = null
+        installDialogVisible = true
+        installRunning = true
+        installSuccess = null
+        installLog = listOf(
+            "$ module install",
+            "name: ${module.module.name}",
+            "source: ${module.module.zipUrl}",
+            "",
+            runtimeRepoDownloadingLabel(context)
+        )
+        scope.launch {
+            val downloadName = module.module.downloadFileName()
+            val downloadResult = withContext(Dispatchers.IO) {
+                DownloadUtils.downloadRuntimeModuleAsset(
+                    context = context,
+                    token = null,
+                    url = module.module.zipUrl,
+                    name = downloadName,
+                    sizeBytes = 0L,
+                    runId = RUNTIME_MODULE_DOWNLOAD_RUN_ID,
+                    runTitle = module.sources.firstOrNull().orEmpty().ifBlank {
+                        runtimeRepoUnknownSourceLabel(context)
+                    },
+                    downloadDirectoryPath = state.downloadDirectory,
+                    downloadThreadCount = state.downloadThreadCount
+                )
+            }
+            val downloadedFile = downloadResult.artifacts.firstOrNull()?.filePath?.let(::File)
+            if (downloadedFile == null || !downloadedFile.exists()) {
+                installRunning = false
+                installSuccess = false
+                installLog = installLog + listOf(
+                    "",
+                    downloadResult.errorMessage ?: runtimeRepoDownloadFailedLabel(context)
+                )
+                return@launch
+            }
+
+            appendInstallLog("file: ${downloadedFile.absolutePath}")
+            appendInstallLog(context.getString(R.string.runtime_wait_root_shell))
+            val result = withContext(Dispatchers.IO) {
+                if (!RootUtils.refreshRootState()) {
+                    RootUtils.ShellResult(false, listOf(context.getString(R.string.runtime_manager_inactive)))
+                } else {
+                    RootUtils.installModule(downloadedFile.absolutePath) { line ->
+                        scope.launch(Dispatchers.Main.immediate) {
+                            appendInstallLog(line)
+                        }
+                    }
+                }
+            }
+            installRunning = false
+            installSuccess = result.success
+            installLog = listOf(
+                "$ module install ${downloadedFile.name}",
+                "file: ${downloadedFile.absolutePath}",
+                ""
+            ) + result.output.ifEmpty {
+                listOf(
+                    if (result.success) {
+                        context.getString(R.string.runtime_module_install_done_no_output)
+                    } else {
+                        context.getString(R.string.runtime_module_install_failed_no_log)
+                    }
+                )
+            }
+            if (result.success) vm.refreshAbkRuntimeStatus()
         }
     }
 
@@ -126,24 +318,395 @@ fun ModuleRepositoryScreen(
         onDispose { onRepositoryPageVisibleChange(false) }
     }
 
-    PredictiveBackHandler(enabled = showRepositorySettings && state.predictiveBackEnabled) { progress ->
-        try {
-            progress.collect { backEvent ->
-                repositoryBackProgress = backEvent.progress.coerceIn(0f, 1f)
-            }
-            closeRepositorySettings()
-        } catch (_: CancellationException) {
-            repositoryBackProgress = 0f
-        }
+    pendingInstallModule?.let { merged ->
+        RuntimeRepositoryInstallConfirmDialog(
+            module = merged,
+            onDismiss = { pendingInstallModule = null },
+            onConfirm = { startInstall(merged) }
+        )
     }
 
-    BackHandler(enabled = showRepositorySettings && !state.predictiveBackEnabled) {
-        closeRepositorySettings()
+    if (installDialogVisible) {
+        RuntimeRepositoryInstallDialog(
+            running = installRunning,
+            success = installSuccess,
+            logLines = installLog,
+            onClose = { if (!installRunning) installDialogVisible = false },
+            onReboot = {
+                if (!installRunning) {
+                    scope.launch(Dispatchers.IO) { RootUtils.reboot() }
+                }
+            }
+        )
+    }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val childPageTopInset = outerPadding.calculateTopPadding()
+        val childPageBottomInset = outerPadding.calculateBottomPadding()
+        val childPageModifier = Modifier
+            .fillMaxWidth()
+            .height(maxHeight + childPageTopInset + childPageBottomInset)
+            .offset(y = -childPageTopInset)
+
+        BlurScreenScaffold(
+            blurConfig = state.blurConfig,
+            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
+            topBar = {
+                ExpressiveTopBar(
+                    title = runtimeRepoTitleLabel(context),
+                    scrollBehavior = scrollBehavior,
+                    enableBlur = state.blurEnabled,
+                    actions = {
+                        IconButton(onClick = ::openRepositorySettings) {
+                            Icon(
+                                Icons.Default.Dns,
+                                contentDescription = runtimeRepoConfigureLabel(context)
+                            )
+                        }
+                    }
+                )
+            }
+        ) { topBarHeight ->
+            RuntimeModuleRepositoryListContent(
+                topBarHeight = topBarHeight,
+                modules = filteredModules,
+                totalModules = mergedModules.size,
+                computing = listComputing,
+                repositories = state.runtimeModuleRepositories,
+                refreshing = state.refreshingRuntimeModuleRepositoryIds.isNotEmpty(),
+                searchQuery = searchQuery,
+                onSearchQueryChange = { searchQuery = it },
+                onOpenRepositorySettings = ::openRepositorySettings,
+                onOpenModule = { module ->
+                    val url = module.module.preferredOpenUrl()
+                    if (url.isBlank()) {
+                        Toast.makeText(context, context.getString(R.string.module_repo_open_failed), Toast.LENGTH_SHORT).show()
+                    } else {
+                        runCatching { uriHandler.openUri(url) }
+                            .onFailure {
+                                Toast.makeText(context, context.getString(R.string.module_repo_open_failed), Toast.LENGTH_SHORT).show()
+                            }
+                    }
+                },
+                onInstallModule = { module ->
+                    if (module.module.zipUrl.isBlank()) {
+                        Toast.makeText(context, runtimeRepoNoZipLabel(context), Toast.LENGTH_SHORT).show()
+                    } else {
+                        pendingInstallModule = module
+                    }
+                },
+                scrollBehavior = scrollBehavior,
+                bottomPadding = outerPadding.calculateBottomPadding()
+            )
+        }
+
+        repositoryPageTransition.AnimatedVisibility(
+            visible = { it },
+            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
+            exit = childPageScrimExitTransition(state.predictiveBackEnabled, motionScheme),
+            modifier = childPageModifier
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = childPageBack.scrimAlpha))
+            )
+        }
+
+        repositoryPageTransition.AnimatedVisibility(
+            visible = { it },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
+            modifier = childPageModifier
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(childPageBack.backTransformModifier())
+            ) {
+                ModuleRepositoryPageBackground(
+                    backgroundUri = state.customBackgroundUri,
+                    backgroundImageEnabled = state.backgroundImageEnabled
+                )
+                BlurScreenScaffold(
+                    blurConfig = state.blurConfig,
+                    containerColor = Color.Transparent,
+                    topBar = {
+                        ExpressiveTopBar(
+                            title = runtimeRepoCentralLabel(context),
+                            navigationIcon = {
+                                IconButton(onClick = childPageBack::requestDismiss) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.module_repo_back))
+                                }
+                            },
+                            enableBlur = state.blurEnabled
+                        )
+                    }
+                ) { topBarHeight ->
+                    RuntimeModuleRepositorySettingsPage(
+                        topBarHeight = topBarHeight,
+                        repositories = state.runtimeModuleRepositories,
+                        refreshingRepositoryIds = state.refreshingRuntimeModuleRepositoryIds,
+                        onAddRepository = vm::addRuntimeModuleRepository,
+                        onRefreshAll = vm::refreshAllRuntimeModuleRepositories,
+                        onRefreshRepository = vm::refreshRuntimeModuleRepository,
+                        onDeleteRepository = vm::deleteRuntimeModuleRepository
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BuildModuleRepositoryScreenContent(
+    vm: MainViewModel,
+    outerPadding: PaddingValues,
+    onRepositoryPageVisibleChange: (Boolean) -> Unit
+) {
+    val state by vm.uiState.collectAsState()
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val coroutineScope = rememberCoroutineScope()
+    val motionScheme = MaterialTheme.motionScheme
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var showRepositorySettings by rememberSaveable { mutableStateOf(false) }
+    val repositoryPageTransition = rememberChildPageOverlayTransition(
+        visible = showRepositorySettings,
+        label = "build-module-repository-settings"
+    )
+    var pendingCatalogModule by remember { mutableStateOf<ModuleCatalogItem?>(null) }
+    var selectedCatalogModuleStages by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var pendingModuleSetMetadata by remember { mutableStateOf<ExternalModuleMetadata?>(null) }
+    var selectedModuleSetChildren by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var moduleSetStageSelections by remember { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
+    val mergedModulesState by produceState(
+        initialValue = ModuleListComputation<BuildPageMergedCatalogModule>(
+            loading = state.buildModuleRepositories.isNotEmpty()
+        ),
+        key1 = state.buildModuleRepositories
+    ) {
+        if (state.buildModuleRepositories.isEmpty()) {
+            value = ModuleListComputation(items = emptyList(), loading = false)
+            return@produceState
+        }
+        value = ModuleListComputation(loading = true)
+        val merged = withContext(Dispatchers.Default) {
+            mergeBuildPageCatalogModules(state.buildModuleRepositories)
+        }
+        value = ModuleListComputation(items = merged, loading = false)
+    }
+    val mergedModules = mergedModulesState.items
+    val filteredModulesState by produceState(
+        initialValue = ModuleListComputation<BuildPageMergedCatalogModule>(
+            loading = mergedModulesState.loading
+        ),
+        key1 = mergedModulesState,
+        key2 = searchQuery
+    ) {
+        if (mergedModulesState.loading) {
+            value = ModuleListComputation(loading = true)
+            return@produceState
+        }
+        value = ModuleListComputation(loading = true)
+        val filtered = withContext(Dispatchers.Default) {
+            if (searchQuery.isBlank()) {
+                mergedModules
+            } else {
+                mergedModules.filter { it.matchesQuery(searchQuery) }
+            }
+        }
+        value = ModuleListComputation(items = filtered, loading = false)
+    }
+    val filteredModules = filteredModulesState.items
+    val listComputing = mergedModulesState.loading
+    val selectedModules = remember(state.buildConfig.customExternalModules) {
+        state.buildConfig.customExternalModules
+            .map { it.url.trim().lowercase() to CustomExternalModuleStage.normalize(it.stage) }
+            .toSet()
+    }
+
+    fun closeRepositorySettings() {
+        showRepositorySettings = false
+    }
+
+    val childPageBack = rememberChildPageBackController(
+        enabled = showRepositorySettings,
+        predictiveBackEnabled = state.predictiveBackEnabled,
+        onBack = ::closeRepositorySettings,
+    )
+
+    fun openRepositorySettings() {
+        childPageBack.resetProgress()
+        showRepositorySettings = true
+    }
+
+    ObserveChildPageVisibility(
+        transition = repositoryPageTransition,
+        onVisibleChange = onRepositoryPageVisibleChange,
+        onAfterExitAnimation = { childPageBack.resetProgress() }
+    )
+
+    DisposableEffect(Unit) {
+        onDispose { onRepositoryPageVisibleChange(false) }
     }
 
     pendingCatalogModule?.let { module ->
-        val supportedStages = module.normalizedSupportedStages()
-        val recommendedStages = module.normalizedRecommendedStages().toSet()
+        if (module.kind == ModuleCatalogItemKind.MODULE_SET) {
+            val metadata = pendingModuleSetMetadata
+            if (metadata != null) {
+                val children = metadata.children
+                val addToBuildLabel = stringResource(R.string.module_repo_add_to_build)
+                AlertDialog(
+                    onDismissRequest = {
+                        pendingCatalogModule = null
+                        pendingModuleSetMetadata = null
+                        selectedModuleSetChildren = emptyList()
+                        moduleSetStageSelections = emptyMap()
+                    },
+                    icon = { Icon(Icons.Default.Extension, null) },
+                    title = { Text(module.buildDisplayName()) },
+                    text = {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 420.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                text = if (module.description.isNotBlank()) module.description else addToBuildLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            children.forEach { child ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.Top,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Checkbox(
+                                        checked = child.id in selectedModuleSetChildren,
+                                        onCheckedChange = { checked ->
+                                            selectedModuleSetChildren = if (checked) {
+                                                (selectedModuleSetChildren + child.id).distinct()
+                                            } else {
+                                                selectedModuleSetChildren - child.id
+                                            }
+                                        }
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(child.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        if (child.description.isNotBlank()) {
+                                            Text(
+                                                child.description,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (child.id in selectedModuleSetChildren) {
+                                            val options = child.supportedStages
+                                            val initialStages = child.recommendedStages
+                                                .filter { it in options }
+                                                .ifEmpty { listOf(child.defaultStage) }
+                                            val selectedStages = moduleSetStageSelections[child.id] ?: initialStages
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                options.forEach { stage ->
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        Checkbox(
+                                                            checked = stage in selectedStages,
+                                                            onCheckedChange = { checked ->
+                                                                val updatedStages = if (checked) {
+                                                                    (selectedStages + stage).distinct()
+                                                                } else {
+                                                                    selectedStages - stage
+                                                                }
+                                                                moduleSetStageSelections = moduleSetStageSelections + (child.id to updatedStages)
+                                                            }
+                                                        )
+                                                        Text(
+                                                            text = buildString {
+                                                                append(stage)
+                                                                if (stage in child.recommendedStages) {
+                                                                    append(stringResource(R.string.module_repo_recommended))
+                                                                }
+                                                            },
+                                                            style = MaterialTheme.typography.bodySmall
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val selections = children
+                                    .filter { it.id in selectedModuleSetChildren }
+                                    .map { child ->
+                                        child to (
+                                            moduleSetStageSelections[child.id]
+                                                ?.distinct()
+                                                ?.filter { stage -> stage in child.supportedStages }
+                                                ?.ifEmpty {
+                                                    child.recommendedStages
+                                                        .filter { stage -> stage in child.supportedStages }
+                                                        .ifEmpty { listOf(child.defaultStage) }
+                                                }
+                                                ?: child.recommendedStages
+                                                    .filter { stage -> stage in child.supportedStages }
+                                                    .ifEmpty { listOf(child.defaultStage) }
+                                        )
+                                    }
+                                    .filter { (_, stages) -> stages.isNotEmpty() }
+                                if (vm.replaceModuleSetSelection(module.repoUrl, metadata, selections)) {
+                                    pendingCatalogModule = null
+                                    pendingModuleSetMetadata = null
+                                    selectedModuleSetChildren = emptyList()
+                                    moduleSetStageSelections = emptyMap()
+                                    Toast.makeText(context, context.getString(R.string.module_repo_added_to_build), Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            enabled = selectedModuleSetChildren.isNotEmpty() && children
+                                .filter { it.id in selectedModuleSetChildren }
+                                .all { child ->
+                                    val selectedStages = moduleSetStageSelections[child.id]
+                                        ?: child.recommendedStages
+                                            .filter { stage -> stage in child.supportedStages }
+                                            .ifEmpty { listOf(child.defaultStage) }
+                                    selectedStages.any { stage -> stage in child.supportedStages }
+                                }
+                        ) {
+                            Text(stringResource(R.string.module_repo_add_selected))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                pendingCatalogModule = null
+                                pendingModuleSetMetadata = null
+                                selectedModuleSetChildren = emptyList()
+                                moduleSetStageSelections = emptyMap()
+                            }
+                        ) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                )
+            }
+            return@let
+        }
+        val supportedStages = module.buildNormalizedSupportedStages()
+        val recommendedStages = module.buildNormalizedRecommendedStages().toSet()
         val addedStages = module.addedStages(selectedModules).toSet()
         val selectedStages = supportedStages.filter {
             it in selectedCatalogModuleStages && it !in addedStages
@@ -154,18 +717,18 @@ fun ModuleRepositoryScreen(
                 selectedCatalogModuleStages = emptyList()
             },
             icon = { Icon(Icons.Default.Extension, null) },
-            title = { Text("选择注入阶段") },
+            title = { Text(stringResource(R.string.module_repo_select_stage)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = module.displayName(),
+                        text = module.buildDisplayName(),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                     if (module.version.isNotBlank() || module.description.isNotBlank()) {
                         Text(
                             text = buildString {
-                                if (module.version.isNotBlank()) append("版本: ${module.version}")
+                                if (module.version.isNotBlank()) append(context.getString(R.string.module_repo_version, module.version))
                                 if (module.version.isNotBlank() && module.description.isNotBlank()) appendLine()
                                 if (module.description.isNotBlank()) append(module.description)
                             },
@@ -194,8 +757,8 @@ fun ModuleRepositoryScreen(
                             Text(
                                 text = buildString {
                                     append(stage)
-                                    if (stage in recommendedStages) append("（推荐）")
-                                    if (alreadyAdded) append("（已加入）")
+                                    if (stage in recommendedStages) append(stringResource(R.string.module_repo_recommended))
+                                    if (alreadyAdded) append(stringResource(R.string.module_repo_added_suffix))
                                 },
                                 style = MaterialTheme.typography.bodyMedium
                             )
@@ -209,12 +772,12 @@ fun ModuleRepositoryScreen(
                         if (vm.addCustomExternalModulesFromUrl(module.repoUrl, selectedStages)) {
                             pendingCatalogModule = null
                             selectedCatalogModuleStages = emptyList()
-                            Toast.makeText(context, "模块已加入构建配置", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.module_repo_added_to_build), Toast.LENGTH_SHORT).show()
                         }
                     },
                     enabled = selectedStages.isNotEmpty()
                 ) {
-                    Text("添加所选")
+                    Text(stringResource(R.string.module_repo_add_selected))
                 }
             },
             dismissButton = {
@@ -225,12 +788,12 @@ fun ModuleRepositoryScreen(
                             if (vm.addCustomExternalModulesFromUrl(module.repoUrl, remainingStages)) {
                                 pendingCatalogModule = null
                                 selectedCatalogModuleStages = emptyList()
-                                Toast.makeText(context, "模块已加入构建配置", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.module_repo_added_to_build), Toast.LENGTH_SHORT).show()
                             }
                         },
                         enabled = supportedStages.any { it !in addedStages }
                     ) {
-                        Text("全部阶段")
+                        Text(stringResource(R.string.module_repo_all_stages))
                     }
                     TextButton(
                         onClick = {
@@ -238,7 +801,7 @@ fun ModuleRepositoryScreen(
                             selectedCatalogModuleStages = emptyList()
                         }
                     ) {
-                        Text("取消")
+                        Text(stringResource(R.string.cancel))
                     }
                 }
             }
@@ -253,102 +816,114 @@ fun ModuleRepositoryScreen(
             .height(maxHeight + childPageTopInset + childPageBottomInset)
             .offset(y = -childPageTopInset)
 
-        Scaffold(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surface),
+        BlurScreenScaffold(
+            blurConfig = state.blurConfig,
+            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
             topBar = {
                 ExpressiveTopBar(
-                    title = "模块仓库",
+                    title = buildRepoTitleLabel(context),
                     scrollBehavior = scrollBehavior,
+                    enableBlur = state.blurEnabled,
                     actions = {
                         IconButton(onClick = ::openRepositorySettings) {
-                            Icon(Icons.Default.Dns, contentDescription = "配置模块仓库")
+                            Icon(Icons.Default.Dns, contentDescription = buildRepoManageLabel(context))
                         }
                     }
                 )
             }
-        ) { padding ->
-            ModuleRepositoryListContent(
-                padding = padding,
+        ) { topBarHeight ->
+            BuildModuleRepositoryListContent(
+                topBarHeight = topBarHeight,
                 modules = filteredModules,
                 totalModules = mergedModules.size,
-                repositories = state.moduleCatalogRepositories,
-                refreshing = state.refreshingModuleCatalogRepositoryIds.isNotEmpty(),
+                computing = listComputing,
+                repositories = state.buildModuleRepositories,
+                refreshing = state.refreshingBuildModuleRepositoryIds.isNotEmpty(),
                 selectedModules = selectedModules,
                 searchQuery = searchQuery,
                 onSearchQueryChange = { searchQuery = it },
                 onOpenRepositorySettings = ::openRepositorySettings,
                 onAddModule = { module ->
-                    pendingCatalogModule = module
-                    selectedCatalogModuleStages = module.initialStageSelection(selectedModules)
+                    if (module.kind == ModuleCatalogItemKind.MODULE_SET) {
+                        coroutineScope.launch {
+                            val metadata = vm.checkCustomExternalModuleMetadata(module.repoUrl)
+                            if (metadata != null) {
+                                pendingCatalogModule = module
+                                pendingModuleSetMetadata = metadata
+                                selectedModuleSetChildren = metadata.children.map { it.id }
+                                moduleSetStageSelections = metadata.children.associate { child ->
+                                    child.id to child.recommendedStages
+                                        .filter { stage -> stage in child.supportedStages }
+                                        .ifEmpty { listOf(child.defaultStage) }
+                                }
+                            }
+                        }
+                    } else {
+                        pendingCatalogModule = module
+                        selectedCatalogModuleStages = module.initialStageSelection(selectedModules)
+                    }
                 },
                 onOpenModule = { module ->
                     val url = module.homepage.ifBlank { module.repoUrl }
                     runCatching { uriHandler.openUri(url) }
-                        .onFailure { Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show() }
+                        .onFailure { Toast.makeText(context, context.getString(R.string.module_repo_open_failed), Toast.LENGTH_SHORT).show() }
                 },
                 scrollBehavior = scrollBehavior,
                 bottomPadding = outerPadding.calculateBottomPadding()
             )
         }
 
-        AnimatedVisibility(
-            visible = showRepositorySettings,
+        repositoryPageTransition.AnimatedVisibility(
+            visible = { it },
             enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
+            exit = childPageScrimExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = MODULE_REPOSITORY_BACK_SCRIM_ALPHA * visualRepositoryBackProgress))
+                    .background(Color.Black.copy(alpha = childPageBack.scrimAlpha))
             )
         }
 
-        AnimatedVisibility(
-            visible = showRepositorySettings,
-            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
-                slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { width -> width / 4 },
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
-                slideOutHorizontally(animationSpec = motionScheme.fastSpatialSpec()) { width -> width },
+        repositoryPageTransition.AnimatedVisibility(
+            visible = { it },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        translationX = repositoryBackOffsetPx * visualRepositoryBackProgress
-                        scaleX = 1f - MODULE_REPOSITORY_BACK_SCALE_DELTA * visualRepositoryBackProgress
-                        scaleY = 1f - MODULE_REPOSITORY_BACK_SCALE_DELTA * visualRepositoryBackProgress
-                        alpha = 1f - 0.06f * visualRepositoryBackProgress
-                        shape = RoundedCornerShape(repositoryBackCorner)
-                        clip = visualRepositoryBackProgress > 0.01f
-                    }
+                    .then(childPageBack.backTransformModifier())
             ) {
                 ModuleRepositoryPageBackground(
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
-                Scaffold(
+                BlurScreenScaffold(
+                    blurConfig = state.blurConfig,
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
-                            title = "中央仓库",
+                            title = buildRepoCentralLabel(context),
                             navigationIcon = {
-                                IconButton(onClick = ::closeRepositorySettings) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = "返回模块仓库")
+                                IconButton(onClick = childPageBack::requestDismiss) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.module_repo_back))
                                 }
-                            }
+                            },
+                            enableBlur = state.blurEnabled
                         )
                     }
-                ) { padding ->
-                    ModuleRepositorySettingsPage(
-                        padding = padding,
-                        repositories = state.moduleCatalogRepositories,
-                        refreshingRepositoryIds = state.refreshingModuleCatalogRepositoryIds,
-                        onAddRepository = { vm.addModuleCatalogRepository(it) },
-                        onRefreshAll = { vm.refreshAllModuleCatalogRepositories() },
-                        onRefreshRepository = { vm.refreshModuleCatalogRepository(it) },
-                        onDeleteRepository = { vm.deleteModuleCatalogRepository(it) }
+                ) { topBarHeight ->
+                    BuildModuleRepositorySettingsPage(
+                        topBarHeight = topBarHeight,
+                        repositories = state.buildModuleRepositories,
+                        refreshingRepositoryIds = state.refreshingBuildModuleRepositoryIds,
+                        onAddRepository = vm::addBuildModuleRepository,
+                        onRefreshAll = vm::refreshAllBuildModuleRepositories,
+                        onRefreshRepository = vm::refreshBuildModuleRepository,
+                        onDeleteRepository = vm::deleteBuildModuleRepository
                     )
                 }
             }
@@ -357,69 +932,87 @@ fun ModuleRepositoryScreen(
 }
 
 @Composable
-private fun ModuleRepositoryListContent(
-    padding: PaddingValues,
-    modules: List<MergedCatalogModule>,
+private fun RuntimeModuleRepositoryListContent(
+    topBarHeight: Dp,
+    modules: List<MergedRuntimeCatalogModule>,
     totalModules: Int,
-    repositories: List<ModuleCatalogRepository>,
+    computing: Boolean,
+    repositories: List<RuntimeModuleRepository>,
     refreshing: Boolean,
-    selectedModules: Set<Pair<String, String>>,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onOpenRepositorySettings: () -> Unit,
-    onAddModule: (ModuleCatalogItem) -> Unit,
-    onOpenModule: (ModuleCatalogItem) -> Unit,
-    scrollBehavior: TopAppBarScrollBehavior,
-    bottomPadding: androidx.compose.ui.unit.Dp
+    onOpenModule: (MergedRuntimeCatalogModule) -> Unit,
+    onInstallModule: (MergedRuntimeCatalogModule) -> Unit,
+    scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
+    bottomPadding: Dp
 ) {
-    Column(
+    val showInitialLoading = computing || (refreshing && totalModules == 0 && searchQuery.isBlank())
+    LazyColumn(
         modifier = Modifier
-            .padding(padding)
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection)
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = AbkScreenHorizontalPadding),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(top = topBarHeight + 16.dp, bottom = bottomPadding + 24.dp)
     ) {
-        CompactModuleSearchField(
-            value = searchQuery,
-            onValueChange = onSearchQueryChange
-        )
-
-        if (refreshing) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        item(key = "search") {
+            CompactModuleSearchField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange
+            )
         }
 
-        if (modules.isEmpty()) {
-            EmptyModuleRepositoryState(
-                totalModules = totalModules,
-                repositoryCount = repositories.size,
-                hasQuery = searchQuery.isNotBlank(),
-                onOpenRepositorySettings = onOpenRepositorySettings
-            )
-        } else {
-            modules.forEach { merged ->
-                val module = merged.module
-                val supportedStages = module.normalizedSupportedStages()
-                val allStagesAdded = supportedStages.all { stage ->
-                    module.repoUrl.trim().lowercase() to stage in selectedModules
-                }
-                ModuleRepositoryListItem(
-                    module = module,
-                    sources = merged.sources,
-                    alreadyAdded = allStagesAdded,
-                    onOpen = { onOpenModule(module) },
-                    onAdd = { onAddModule(module) }
+        if (refreshing && !showInitialLoading) {
+            item(key = "refreshing") {
+                AbkInlineLoadingPill(
+                    text = stringResource(R.string.module_repo_building_list),
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
 
-        Spacer(Modifier.height(bottomPadding + 24.dp))
+        if (showInitialLoading) {
+            item(key = "initial-loading") {
+                ModuleRepositoryInitialLoading()
+            }
+        } else if (modules.isEmpty()) {
+            item(key = "empty") {
+                RuntimeModuleRepositoryEmptyState(
+                    totalModules = totalModules,
+                    repositoryCount = repositories.size,
+                    hasQuery = searchQuery.isNotBlank(),
+                    onOpenRepositorySettings = onOpenRepositorySettings
+                )
+            }
+        } else {
+            items(
+                items = modules,
+                key = { merged ->
+                    "${merged.module.id.trim().lowercase().ifBlank { merged.module.name.trim().lowercase() }}-${merged.sources.joinToString("|")}"
+                }
+            ) { merged ->
+                RuntimeModuleRepositoryListItem(
+                    merged = merged,
+                    onOpen = { onOpenModule(merged) },
+                    onInstall = { onInstallModule(merged) }
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun EmptyModuleRepositoryState(
+private fun ModuleRepositoryInitialLoading() {
+    AbkInlineLoadingPill(
+        text = stringResource(R.string.module_repo_building_list),
+        modifier = Modifier.padding(vertical = 48.dp),
+        compact = false
+    )
+}
+
+@Composable
+private fun RuntimeModuleRepositoryEmptyState(
     totalModules: Int,
     repositoryCount: Int,
     hasQuery: Boolean,
@@ -440,10 +1033,10 @@ private fun EmptyModuleRepositoryState(
         )
         Text(
             text = when {
-                hasQuery -> "没有匹配的模块"
-                repositoryCount == 0 -> "还没有中央仓库"
-                totalModules == 0 -> "刷新中央仓库后会显示模块"
-                else -> "没有可显示的模块"
+                hasQuery -> stringResource(R.string.module_repo_no_matching)
+                repositoryCount == 0 -> runtimeRepoEmptyTitleLabel(LocalContext.current)
+                totalModules == 0 -> runtimeRepoEmptyDescLabel(LocalContext.current)
+                else -> stringResource(R.string.module_repo_no_display)
             },
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface
@@ -451,25 +1044,27 @@ private fun EmptyModuleRepositoryState(
         TextButton(onClick = onOpenRepositorySettings) {
             Icon(Icons.Default.Dns, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
-            Text("管理中央仓库")
+            Text(runtimeRepoManageLabel(LocalContext.current))
         }
     }
 }
 
 @Composable
-private fun ModuleRepositoryListItem(
-    module: ModuleCatalogItem,
-    sources: List<String>,
-    alreadyAdded: Boolean,
+private fun RuntimeModuleRepositoryListItem(
+    merged: MergedRuntimeCatalogModule,
     onOpen: () -> Unit,
-    onAdd: () -> Unit
+    onInstall: () -> Unit
 ) {
+    val context = LocalContext.current
+    val module = merged.module
+    val shape = RoundedCornerShape(8.dp)
     Card(
         modifier = Modifier
-            .fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
@@ -488,7 +1083,7 @@ private fun ModuleRepositoryListItem(
                     verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     Text(
-                        text = module.displayName(),
+                        text = module.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -504,7 +1099,7 @@ private fun ModuleRepositoryListItem(
                         )
                     }
                 }
-                if (sources.size > 1) {
+                if (merged.sources.size > 1) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
@@ -516,7 +1111,7 @@ private fun ModuleRepositoryListItem(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = sources.size.toString(),
+                            text = merged.sources.size.toString(),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -529,7 +1124,7 @@ private fun ModuleRepositoryListItem(
                     text = module.description,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -538,15 +1133,14 @@ private fun ModuleRepositoryListItem(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                ModuleTagChip(label = module.repoUrl.repoName(), maxWidth = 170.dp)
-                module.normalizedSupportedStages().take(2).forEach { stage ->
-                    ModuleTagChip(label = stage, secondary = true)
+                ModuleTagChip(label = module.id.ifBlank { module.name }, maxWidth = 170.dp)
+                module.minApi?.let { ModuleTagChip(label = "API >= $it", secondary = true) }
+                module.maxApi?.let { ModuleTagChip(label = "API <= $it", secondary = true) }
+                if (module.verified) {
+                    ModuleTagChip(label = runtimeRepoVerifiedLabel(LocalContext.current), secondary = true)
                 }
-                if (alreadyAdded) {
-                    ModuleTagChip(label = "已加入", secondary = true)
-                }
-                if (sources.size > 1) {
-                    ModuleTagChip(label = "来源 ${sources.size}", secondary = true)
+                if (merged.sources.size > 1) {
+                    ModuleTagChip(label = stringResource(R.string.module_repo_source_count, merged.sources.size), secondary = true)
                 }
             }
 
@@ -557,15 +1151,15 @@ private fun ModuleRepositoryListItem(
             ) {
                 CompactModuleActionButton(
                     icon = Icons.Default.OpenInBrowser,
-                    contentDescription = "打开模块仓库",
+                    contentDescription = context.getString(R.string.module_repo_open_repo),
                     onClick = onOpen
                 )
                 Spacer(Modifier.width(6.dp))
                 CompactModuleActionButton(
-                    icon = if (alreadyAdded) Icons.Default.CheckCircle else Icons.Default.Add,
-                    contentDescription = if (alreadyAdded) "已加入" else "加入构建配置",
-                    enabled = !alreadyAdded,
-                    onClick = onAdd
+                    icon = Icons.Default.UploadFile,
+                    contentDescription = context.getString(R.string.runtime_install_module),
+                    enabled = module.zipUrl.isNotBlank(),
+                    onClick = onInstall
                 )
             }
         }
@@ -606,7 +1200,7 @@ private fun CompactModuleSearchField(
             ) {
                 if (value.isBlank()) {
                     Text(
-                        text = "搜索模块",
+                        text = stringResource(R.string.module_repo_search),
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.onSurfaceVariant
                     )
@@ -683,8 +1277,671 @@ private fun ModuleTagChip(
 }
 
 @Composable
-private fun ModuleRepositorySettingsPage(
-    padding: PaddingValues,
+private fun RuntimeModuleRepositorySettingsPage(
+    topBarHeight: Dp,
+    repositories: List<RuntimeModuleRepository>,
+    refreshingRepositoryIds: Set<String>,
+    onAddRepository: (String) -> Unit,
+    onRefreshAll: () -> Unit,
+    onRefreshRepository: (String) -> Unit,
+    onDeleteRepository: (String) -> Unit
+) {
+    val refreshAllPresentation = rememberAbkInteractiveRefreshPresentation(
+        loading = refreshingRepositoryIds.isNotEmpty()
+    )
+    var repositoryUrl by rememberSaveable { mutableStateOf("") }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = AbkScreenHorizontalPadding),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Spacer(Modifier.height(topBarHeight + 16.dp))
+        ExpressiveSectionCard(
+            title = runtimeRepoCentralLabel(LocalContext.current),
+            subtitle = runtimeRepoCentralDescLabel(LocalContext.current),
+            icon = Icons.Default.Dns
+        ) {
+            OutlinedTextField(
+                value = repositoryUrl,
+                onValueChange = { repositoryUrl = it },
+                label = { Text(runtimeRepoUrlLabel(LocalContext.current)) },
+                placeholder = { Text("https://example.com/modules.json") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        onAddRepository(repositoryUrl)
+                        repositoryUrl = ""
+                    },
+                    enabled = repositoryUrl.isNotBlank(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp)
+                ) {
+                    Icon(Icons.Default.Add, null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.add))
+                }
+                OutlinedButton(
+                    onClick = {
+                        refreshAllPresentation.beginRefresh()
+                        onRefreshAll()
+                    },
+                    enabled = repositories.isNotEmpty(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp)
+                ) {
+                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.refresh_all))
+                }
+            }
+        }
+
+        if (repositories.isEmpty()) {
+            ExpressiveSectionCard(
+                title = runtimeRepoEmptyTitleLabel(LocalContext.current),
+                subtitle = runtimeRepoEmptyDescLabel(LocalContext.current),
+                icon = Icons.Default.Extension
+            ) {
+                Text(
+                    text = runtimeRepoCentralDescLabel(LocalContext.current),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else if (refreshAllPresentation.showLoading) {
+            AbkInlineLoadingPill(
+                text = stringResource(R.string.module_repo_building_list),
+                modifier = Modifier.fillMaxWidth(),
+                compact = false
+            )
+        } else {
+            repositories.forEach { repository ->
+                RuntimeModuleRepositoryCard(
+                    repository = repository,
+                    refreshing = repository.id in refreshingRepositoryIds,
+                    onRefresh = { onRefreshRepository(repository.id) },
+                    onDelete = { onDeleteRepository(repository.id) }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun RuntimeModuleRepositoryCard(
+    repository: RuntimeModuleRepository,
+    refreshing: Boolean,
+    onRefresh: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = refreshing)
+    ExpressiveSectionCard(
+        title = repository.name.ifBlank { repository.url },
+        subtitle = repository.url,
+        icon = Icons.Default.Dns
+    ) {
+        Crossfade(targetState = refreshPresentation.showLoading, label = "runtime-repo-card-refresh") { showingLoading ->
+            if (showingLoading) {
+                AbkInlineLoadingPill(
+                    text = stringResource(R.string.module_repo_refreshing_repository),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ExpressiveStatusChip(
+                            label = stringResource(R.string.module_repo_module_count, repository.modules.size),
+                            icon = Icons.Default.Extension,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (repository.skippedCount > 0) {
+                            ExpressiveStatusChip(
+                                label = stringResource(R.string.module_repo_skipped_count, repository.skippedCount),
+                                icon = Icons.Default.Link,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                    repository.error?.let {
+                        Text(
+                            text = it,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    val indexUrl = repository.indexJsonUrl.ifBlank { repository.url }
+                    Text(
+                        text = indexUrl,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                refreshPresentation.beginRefresh()
+                                onRefresh()
+                            },
+                            enabled = !refreshing,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(42.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.refresh))
+                        }
+                        OutlinedButton(
+                            onClick = onDelete,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(42.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, null, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.delete))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RuntimeRepositoryInstallConfirmDialog(
+    module: MergedRuntimeCatalogModule,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val context = LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.UploadFile, null) },
+        title = { Text(runtimeRepoConfirmInstallTitle(context)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = module.module.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                module.module.metaLine().takeIf { it.isNotBlank() }?.let { meta ->
+                    Text(
+                        text = meta,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = "${context.getString(R.string.runtime_source)}: ${
+                        module.sources.firstOrNull() ?: runtimeRepoUnknownSourceLabel(context)
+                    }",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = module.module.zipUrl,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (module.module.description.isNotBlank()) {
+                    Text(
+                        text = module.module.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = context.getString(R.string.runtime_confirm_flash_module_desc),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Icon(Icons.Default.UploadFile, null, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(context.getString(R.string.runtime_install_module))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun RuntimeRepositoryInstallDialog(
+    running: Boolean,
+    success: Boolean?,
+    logLines: List<String>,
+    onClose: () -> Unit,
+    onReboot: () -> Unit
+) {
+    val terminalScroll = rememberScrollState()
+    val colorScheme = MaterialTheme.colorScheme
+    val isLightTheme = colorScheme.surface.luminance() > 0.5f
+    val terminalContainer = if (isLightTheme) {
+        colorScheme.surfaceContainerHighest
+    } else {
+        colorScheme.surfaceContainerLowest
+    }
+
+    LaunchedEffect(logLines.size) {
+        terminalScroll.animateScrollTo(terminalScroll.maxValue)
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!running) onClose() },
+        icon = {
+            when {
+                running -> LoadingIndicator(modifier = Modifier.size(24.dp))
+                success == true -> Icon(Icons.Default.CheckCircle, null, tint = colorScheme.primary)
+                success == false -> Icon(Icons.Default.Error, null, tint = colorScheme.error)
+                else -> Icon(Icons.Default.UploadFile, null)
+            }
+        },
+        title = {
+            Text(
+                if (running) {
+                    stringResource(R.string.runtime_installing_module)
+                } else {
+                    stringResource(R.string.runtime_install_module)
+                }
+            )
+        },
+        text = {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 190.dp, max = 360.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = terminalContainer,
+                contentColor = colorScheme.onSurface,
+                border = BorderStroke(1.dp, colorScheme.outlineVariant)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(terminalScroll)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    logLines.ifEmpty { listOf(stringResource(R.string.runtime_waiting_output)) }.forEach { line ->
+                        Text(
+                            text = line,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = if (line.startsWith("$")) colorScheme.primary else colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (running) {
+                TextButton(onClick = {}, enabled = false) {
+                    Text(stringResource(R.string.runtime_running))
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onClose) {
+                        Text(stringResource(R.string.close))
+                    }
+                    if (success == true) {
+                        Button(
+                            onClick = onReboot,
+                            colors = ButtonDefaults.buttonColors(containerColor = colorScheme.error)
+                        ) {
+                            Icon(Icons.Default.RestartAlt, null, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(R.string.runtime_reboot))
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun ModuleRepositoryPageBackground(
+    backgroundUri: String?,
+    backgroundImageEnabled: Boolean
+) {
+    AppPageBackground(
+        backgroundUri = backgroundUri,
+        backgroundImageEnabled = backgroundImageEnabled
+    )
+}
+
+private data class MergedRuntimeCatalogModule(
+    val module: RuntimeModuleCatalogItem,
+    val sources: List<String>
+)
+
+private fun mergeRuntimeCatalogModules(repositories: List<RuntimeModuleRepository>): List<MergedRuntimeCatalogModule> =
+    repositories
+        .flatMap { repository ->
+            repository.modules.map { module -> repository.name.ifBlank { repository.url } to module }
+        }
+        .groupBy { (_, module) -> module.id.trim().lowercase().ifBlank { module.name.trim().lowercase() } }
+        .values
+        .map { entries ->
+            MergedRuntimeCatalogModule(
+                module = entries.first().second,
+                sources = entries.map { it.first }.distinct()
+            )
+        }
+        .sortedBy { it.module.name.lowercase() }
+
+private fun MergedRuntimeCatalogModule.matchesQuery(query: String): Boolean {
+    val cleanQuery = query.trim()
+    if (cleanQuery.isBlank()) return true
+    val module = module
+    return listOf(
+        module.id,
+        module.name,
+        module.version,
+        module.author,
+        module.description,
+        module.support,
+        module.website,
+        module.zipUrl,
+        sources.joinToString(" ")
+    ).any { it.contains(cleanQuery, ignoreCase = true) }
+}
+
+@Composable
+private fun RuntimeModuleCatalogItem.metaLine(): String =
+    listOfNotNull(
+        version.takeIf { it.isNotBlank() }?.let { stringResource(R.string.module_repo_version, it) },
+        author.takeIf { it.isNotBlank() }?.let { stringResource(R.string.runtime_module_author, it) }
+    ).joinToString("\n")
+
+private fun RuntimeModuleCatalogItem.preferredOpenUrl(): String =
+    support.takeIf { it.isNotBlank() }
+        ?: website.takeIf { it.isNotBlank() }
+        ?: donate.takeIf { it.isNotBlank() }
+        ?: zipUrl
+
+private fun String.repoName(): String =
+    trim()
+        .trimEnd('/')
+        .removeSuffix(".git")
+        .substringAfterLast('/')
+        .ifBlank { trim().trimEnd('/').substringAfterLast('/') }
+
+private data class BuildPageMergedCatalogModule(
+    val module: ModuleCatalogItem,
+    val sources: List<String>
+)
+
+private fun mergeBuildPageCatalogModules(repositories: List<ModuleCatalogRepository>): List<BuildPageMergedCatalogModule> =
+    repositories
+        .flatMap { repository ->
+            repository.modules.map { module -> repository.name.ifBlank { repository.url } to module }
+        }
+        .groupBy { (_, module) -> module.repoUrl.trim().lowercase() }
+        .values
+        .map { entries ->
+            BuildPageMergedCatalogModule(
+                module = entries.first().second,
+                sources = entries.map { it.first }.distinct()
+            )
+        }
+        .sortedBy { it.module.buildDisplayName().lowercase() }
+
+private fun BuildPageMergedCatalogModule.matchesQuery(query: String): Boolean {
+    val cleanQuery = query.trim()
+    if (cleanQuery.isBlank()) return true
+    val item = module
+    return listOf(
+        item.name,
+        item.version,
+        item.description,
+        item.repoUrl,
+        item.author,
+        item.homepage,
+        sources.joinToString(" ")
+    ).any { it.contains(cleanQuery, ignoreCase = true) }
+}
+
+@Composable
+private fun BuildModuleRepositoryListContent(
+    topBarHeight: Dp,
+    modules: List<BuildPageMergedCatalogModule>,
+    totalModules: Int,
+    computing: Boolean,
+    repositories: List<ModuleCatalogRepository>,
+    refreshing: Boolean,
+    selectedModules: Set<Pair<String, String>>,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    onOpenRepositorySettings: () -> Unit,
+    onAddModule: (ModuleCatalogItem) -> Unit,
+    onOpenModule: (ModuleCatalogItem) -> Unit,
+    scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
+    bottomPadding: Dp
+) {
+    val context = LocalContext.current
+    val showInitialLoading = computing || (refreshing && totalModules == 0 && searchQuery.isBlank())
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection)
+            .padding(horizontal = AbkScreenHorizontalPadding),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(top = topBarHeight + 16.dp, bottom = bottomPadding + 24.dp)
+    ) {
+        item(key = "search") {
+            CompactModuleSearchField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange
+            )
+        }
+
+        if (refreshing && !showInitialLoading) {
+            item(key = "refreshing") {
+                AbkInlineLoadingPill(
+                    text = stringResource(R.string.module_repo_building_list),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+
+        if (showInitialLoading) {
+            item(key = "initial-loading") {
+                ModuleRepositoryInitialLoading()
+            }
+        } else if (modules.isEmpty()) {
+            item(key = "empty") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Extension,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(38.dp)
+                    )
+                    Text(
+                        text = when {
+                            searchQuery.isNotBlank() -> context.getString(R.string.module_repo_no_matching)
+                            repositories.isEmpty() -> buildRepoEmptyTitleLabel(context)
+                            totalModules == 0 -> context.getString(R.string.module_repo_refresh_hint)
+                            else -> context.getString(R.string.module_repo_no_display)
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    TextButton(onClick = onOpenRepositorySettings) {
+                        Icon(Icons.Default.Dns, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(buildRepoManageLabel(context))
+                    }
+                }
+            }
+        } else {
+            items(
+                items = modules,
+                key = { merged ->
+                    merged.module.repoUrl.trim().lowercase()
+                }
+            ) { merged ->
+                val module = merged.module
+                val supportedStages = module.buildNormalizedSupportedStages()
+                val allStagesAdded = supportedStages.all { stage ->
+                    module.repoUrl.trim().lowercase() to stage in selectedModules
+                }
+                val shape = RoundedCornerShape(8.dp)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .blurredCardBackground(shape),
+                    shape = shape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Text(
+                                    text = module.buildDisplayName(),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                val meta = module.buildMetaLine()
+                                if (meta.isNotBlank()) {
+                                    Text(
+                                        text = meta,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                            if (merged.sources.size > 1) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Source,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = merged.sources.size.toString(),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        if (module.description.isNotBlank()) {
+                            Text(
+                                text = module.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            ModuleTagChip(label = module.repoUrl.repoName(), maxWidth = 170.dp)
+                            module.buildNormalizedSupportedStages().take(2).forEach { stage ->
+                                ModuleTagChip(label = stage, secondary = true)
+                            }
+                            if (allStagesAdded) {
+                                ModuleTagChip(label = context.getString(R.string.module_repo_joined), secondary = true)
+                            }
+                            if (merged.sources.size > 1) {
+                                ModuleTagChip(
+                                    label = context.getString(R.string.module_repo_source_count, merged.sources.size),
+                                    secondary = true
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CompactModuleActionButton(
+                                icon = Icons.Default.OpenInBrowser,
+                                contentDescription = context.getString(R.string.module_repo_open_repo),
+                                onClick = { onOpenModule(module) }
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            CompactModuleActionButton(
+                                icon = if (allStagesAdded) Icons.Default.CheckCircle else Icons.Default.Add,
+                                contentDescription = if (allStagesAdded) {
+                                    context.getString(R.string.module_repo_joined)
+                                } else {
+                                    context.getString(R.string.module_repo_add_to_build)
+                                },
+                                enabled = !allStagesAdded,
+                                onClick = { onAddModule(module) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BuildModuleRepositorySettingsPage(
+    topBarHeight: Dp,
     repositories: List<ModuleCatalogRepository>,
     refreshingRepositoryIds: Set<String>,
     onAddRepository: (String) -> Unit,
@@ -692,24 +1949,28 @@ private fun ModuleRepositorySettingsPage(
     onRefreshRepository: (String) -> Unit,
     onDeleteRepository: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    val refreshAllPresentation = rememberAbkInteractiveRefreshPresentation(
+        loading = refreshingRepositoryIds.isNotEmpty()
+    )
     var repositoryUrl by rememberSaveable { mutableStateOf("") }
     Column(
         modifier = Modifier
-            .padding(padding)
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Spacer(Modifier.height(topBarHeight + 16.dp))
         ExpressiveSectionCard(
-            title = "中央仓库",
-            subtitle = "添加包含 abk-modules.json 的索引仓库。",
+            title = buildRepoCentralLabel(context),
+            subtitle = buildRepoCentralDescLabel(context),
             icon = Icons.Default.Dns
         ) {
             OutlinedTextField(
                 value = repositoryUrl,
                 onValueChange = { repositoryUrl = it },
-                label = { Text("中央仓库链接") },
+                label = { Text(buildRepoUrlLabel(context)) },
                 placeholder = { Text("https://github.com/user/abk-module-catalog") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
@@ -725,35 +1986,44 @@ private fun ModuleRepositorySettingsPage(
                 ) {
                     Icon(Icons.Default.Add, null, modifier = Modifier.size(17.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("添加")
+                    Text(stringResource(R.string.add))
                 }
                 OutlinedButton(
-                    onClick = onRefreshAll,
+                    onClick = {
+                        refreshAllPresentation.beginRefresh()
+                        onRefreshAll()
+                    },
                     enabled = repositories.isNotEmpty(),
                     modifier = Modifier.weight(1f).height(44.dp)
                 ) {
                     Icon(Icons.Default.Refresh, null, modifier = Modifier.size(17.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("刷新全部")
+                    Text(stringResource(R.string.refresh_all))
                 }
             }
         }
 
         if (repositories.isEmpty()) {
             ExpressiveSectionCard(
-                title = "暂无中央仓库",
-                subtitle = "添加中央仓库后，模块会在主页面合并展示。",
+                title = buildRepoEmptyTitleLabel(context),
+                subtitle = buildRepoEmptyDescLabel(context),
                 icon = Icons.Default.LibraryBooks
             ) {
                 Text(
-                    text = "删除中央仓库不会移除已经加入构建配置的单模块仓库。",
+                    text = context.getString(R.string.module_repo_delete_keep_modules),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        } else if (refreshAllPresentation.showLoading) {
+            AbkInlineLoadingPill(
+                text = stringResource(R.string.module_repo_building_list),
+                modifier = Modifier.fillMaxWidth(),
+                compact = false
+            )
         } else {
             repositories.forEach { repository ->
-                ModuleCatalogRepositoryCard(
+                BuildModuleCatalogRepositoryCard(
                     repository = repository,
                     refreshing = repository.id in refreshingRepositoryIds,
                     onRefresh = { onRefreshRepository(repository.id) },
@@ -767,164 +2037,104 @@ private fun ModuleRepositorySettingsPage(
 }
 
 @Composable
-private fun ModuleCatalogRepositoryCard(
+private fun BuildModuleCatalogRepositoryCard(
     repository: ModuleCatalogRepository,
     refreshing: Boolean,
     onRefresh: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = refreshing)
     ExpressiveSectionCard(
         title = repository.name.ifBlank { repository.url },
         subtitle = repository.url,
         icon = Icons.Default.Dns
     ) {
-        if (refreshing) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ExpressiveStatusChip(
-                label = "${repository.modules.size} 个模块",
-                icon = Icons.Default.Extension,
-                color = MaterialTheme.colorScheme.primary
-            )
-            if (repository.skippedCount > 0) {
-                ExpressiveStatusChip(
-                    label = "跳过 ${repository.skippedCount}",
-                    icon = Icons.Default.Link,
-                    color = MaterialTheme.colorScheme.error
+        Crossfade(targetState = refreshPresentation.showLoading, label = "build-repo-card-refresh") { showingLoading ->
+            if (showingLoading) {
+                AbkInlineLoadingPill(
+                    text = stringResource(R.string.module_repo_refreshing_repository),
+                    modifier = Modifier.fillMaxWidth()
                 )
-            }
-        }
-        repository.error?.let {
-            Text(
-                text = it,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-        val indexUrl = repository.indexJsonUrl.ifBlank { repository.url }
-        Text(
-            text = indexUrl,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = onRefresh,
-                enabled = !refreshing,
-                modifier = Modifier.weight(1f).height(42.dp)
-            ) {
-                if (refreshing) {
-                    CircularProgressIndicator(modifier = Modifier.size(17.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(17.dp))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ExpressiveStatusChip(
+                            label = stringResource(R.string.module_repo_module_count, repository.modules.size),
+                            icon = Icons.Default.Extension,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (repository.skippedCount > 0) {
+                            ExpressiveStatusChip(
+                                label = stringResource(R.string.module_repo_skipped_count, repository.skippedCount),
+                                icon = Icons.Default.Link,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                    repository.error?.let {
+                        Text(
+                            text = it,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    val indexUrl = repository.indexJsonUrl.ifBlank { repository.url }
+                    Text(
+                        text = indexUrl,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                refreshPresentation.beginRefresh()
+                                onRefresh()
+                            },
+                            enabled = !refreshing,
+                            modifier = Modifier.weight(1f).height(42.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.refresh))
+                        }
+                        OutlinedButton(
+                            onClick = onDelete,
+                            modifier = Modifier.weight(1f).height(42.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, null, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.delete))
+                        }
+                    }
                 }
-                Spacer(Modifier.width(6.dp))
-                Text("刷新")
-            }
-            OutlinedButton(
-                onClick = onDelete,
-                modifier = Modifier.weight(1f).height(42.dp)
-            ) {
-                Icon(Icons.Default.Delete, null, modifier = Modifier.size(17.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("删除")
             }
         }
     }
 }
 
-@Composable
-private fun ModuleRepositoryPageBackground(
-    backgroundUri: String?,
-    backgroundImageEnabled: Boolean
-) {
-    val colorScheme = MaterialTheme.colorScheme
-    val hasBackground = backgroundImageEnabled && !backgroundUri.isNullOrBlank()
-    val scrimColor = if (colorScheme.surface.luminance() > 0.5f) {
-        colorScheme.surface.copy(alpha = 0.28f)
-    } else {
-        Color.Black.copy(alpha = 0.38f)
-    }
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colorScheme.surface)
-    ) {
-        if (hasBackground) {
-            AsyncImage(
-                model = backgroundUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(scrimColor)
-            )
-        }
-    }
-}
-
-private data class MergedCatalogModule(
-    val module: ModuleCatalogItem,
-    val sources: List<String>
-)
-
-private fun mergeCatalogModules(repositories: List<ModuleCatalogRepository>): List<MergedCatalogModule> =
-    repositories
-        .flatMap { repository ->
-            repository.modules.map { module -> repository.name.ifBlank { repository.url } to module }
-        }
-        .groupBy { (_, module) -> module.repoUrl.trim().lowercase() }
-        .values
-        .map { entries ->
-            val module = entries.first().second
-            MergedCatalogModule(
-                module = module,
-                sources = entries.map { it.first }.distinct()
-            )
-        }
-        .sortedBy { it.module.displayName().lowercase() }
-
-private fun MergedCatalogModule.matchesQuery(query: String): Boolean {
-    val cleanQuery = query.trim()
-    if (cleanQuery.isBlank()) return true
-    val catalogItem = module
-    return listOf(
-        catalogItem.name,
-        catalogItem.version,
-        catalogItem.description,
-        catalogItem.repoUrl,
-        catalogItem.author,
-        catalogItem.homepage,
-        sources.joinToString(" ")
-    ).any { it.contains(cleanQuery, ignoreCase = true) }
-}
-
-private fun ModuleCatalogItem.displayName(): String =
+private fun ModuleCatalogItem.buildDisplayName(): String =
     name.ifBlank { repoUrl.trim().trimEnd('/').substringAfterLast('/').removeSuffix(".git") }
 
-private fun ModuleCatalogItem.metaLine(): String =
+@Composable
+private fun ModuleCatalogItem.buildMetaLine(): String =
     listOfNotNull(
-        version.takeIf { it.isNotBlank() }?.let { "版本: $it" },
-        author.takeIf { it.isNotBlank() }?.let { "作者: $it" }
+        version.takeIf { it.isNotBlank() }?.let { stringResource(R.string.module_repo_version, it) },
+        author.takeIf { it.isNotBlank() }?.let { stringResource(R.string.runtime_module_author, it) }
     ).joinToString("\n")
 
-private fun ModuleCatalogItem.normalizedSupportedStages(): List<String> =
+private fun ModuleCatalogItem.buildNormalizedSupportedStages(): List<String> =
     supportedStages
         .map { CustomExternalModuleStage.normalize(it) }
         .distinct()
         .ifEmpty { listOf(CustomExternalModuleStage.normalize(defaultStage)) }
 
-private fun ModuleCatalogItem.normalizedRecommendedStages(): List<String> {
-    val supportedStages = normalizedSupportedStages()
+private fun ModuleCatalogItem.buildNormalizedRecommendedStages(): List<String> {
+    val supportedStages = buildNormalizedSupportedStages()
     val normalizedDefaultStage = CustomExternalModuleStage.normalize(defaultStage)
         .takeIf { it in supportedStages }
         ?: supportedStages.first()
@@ -937,25 +2147,165 @@ private fun ModuleCatalogItem.normalizedRecommendedStages(): List<String> {
 
 private fun ModuleCatalogItem.addedStages(selectedModules: Set<Pair<String, String>>): List<String> {
     val moduleUrl = repoUrl.trim().lowercase()
-    return normalizedSupportedStages().filter { stage -> moduleUrl to stage in selectedModules }
+    return buildNormalizedSupportedStages().filter { stage -> moduleUrl to stage in selectedModules }
 }
 
 private fun ModuleCatalogItem.initialStageSelection(selectedModules: Set<Pair<String, String>>): List<String> {
     val moduleUrl = repoUrl.trim().lowercase()
-    val remainingRecommendedStages = normalizedRecommendedStages().filterNot { stage ->
+    val remainingRecommendedStages = buildNormalizedRecommendedStages().filterNot { stage ->
         moduleUrl to stage in selectedModules
     }
-    val remainingSupportedStages = normalizedSupportedStages().filterNot { stage ->
+    val remainingSupportedStages = buildNormalizedSupportedStages().filterNot { stage ->
         moduleUrl to stage in selectedModules
     }
     return remainingRecommendedStages
         .ifEmpty { remainingSupportedStages.take(1) }
-        .ifEmpty { normalizedRecommendedStages() }
+        .ifEmpty { buildNormalizedRecommendedStages() }
 }
 
-private fun String.repoName(): String =
-    trim()
-        .trimEnd('/')
-        .removeSuffix(".git")
-        .substringAfterLast('/')
-        .ifBlank { trim().trimEnd('/').substringAfterLast('/') }
+private fun buildRepoTitleLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "ABK 模块仓库"
+        LocaleHelper.LANG_RU -> "Репозиторий модулей ABK"
+        else -> "ABK Module Repo"
+    }
+
+private fun buildRepoCentralLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "ABK 模块中央仓库"
+        LocaleHelper.LANG_RU -> "Центральный репозиторий модулей ABK"
+        else -> "ABK module central repository"
+    }
+
+private fun buildRepoCentralDescLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "添加包含 abk-modules.json 的 ABK 模块仓库。"
+        LocaleHelper.LANG_RU -> "Добавьте репозитории модулей ABK, содержащие abk-modules.json."
+        else -> "Add ABK module repositories that contain abk-modules.json."
+    }
+
+private fun buildRepoManageLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "管理 ABK 模块仓库"
+        LocaleHelper.LANG_RU -> "Управление репозиториями модулей ABK"
+        else -> "Manage ABK module repositories"
+    }
+
+private fun buildRepoUrlLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "ABK 模块仓库链接"
+        LocaleHelper.LANG_RU -> "Ссылка на репозиторий модулей ABK"
+        else -> "ABK module repository URL"
+    }
+
+private fun buildRepoEmptyTitleLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "暂无 ABK 模块仓库"
+        LocaleHelper.LANG_RU -> "Нет репозиториев модулей ABK"
+        else -> "No ABK module repositories"
+    }
+
+private fun buildRepoEmptyDescLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "添加 ABK 模块仓库后，模块会在这里合并展示并支持加入构建配置。"
+        LocaleHelper.LANG_RU -> "После добавления репозитория модулей ABK они будут показаны здесь и смогут добавляться в конфигурацию сборки."
+        else -> "After adding an ABK module repository, modules are merged here and can be added to the build configuration."
+    }
+
+private fun runtimeRepoTitleLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "普通模块仓库"
+        LocaleHelper.LANG_RU -> "Репозиторий обычных модулей"
+        else -> "Standard Module Repo"
+    }
+
+private fun runtimeRepoConfigureLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "配置普通模块仓库"
+        LocaleHelper.LANG_RU -> "Настроить репозитории обычных модулей"
+        else -> "Configure standard module repositories"
+    }
+
+private fun runtimeRepoCentralLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "普通模块中央仓库"
+        LocaleHelper.LANG_RU -> "Центральный репозиторий обычных модулей"
+        else -> "Standard module central repository"
+    }
+
+private fun runtimeRepoCentralDescLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "添加符合 Magisk 标准 JSON 格式的普通模块仓库。"
+        LocaleHelper.LANG_RU -> "Добавьте репозиторий обычных модулей в стандартном формате JSON Magisk."
+        else -> "Add standard module repositories that expose the Magisk JSON format."
+    }
+
+private fun runtimeRepoUrlLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "普通模块仓库链接"
+        LocaleHelper.LANG_RU -> "Ссылка на репозиторий обычных модулей"
+        else -> "Standard module repository URL"
+    }
+
+private fun runtimeRepoEmptyTitleLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "暂无普通模块仓库"
+        LocaleHelper.LANG_RU -> "Нет репозиториев обычных модулей"
+        else -> "No standard module repositories"
+    }
+
+private fun runtimeRepoEmptyDescLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "添加普通模块仓库后，模块会在这里合并展示并支持下载安装。"
+        LocaleHelper.LANG_RU -> "После добавления репозитория обычных модулей они будут показаны здесь и смогут скачиваться для установки."
+        else -> "After adding a standard module repository, modules are merged here and can be downloaded for installation."
+    }
+
+private fun runtimeRepoManageLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "管理普通模块仓库"
+        LocaleHelper.LANG_RU -> "Управление репозиториями обычных модулей"
+        else -> "Manage standard module repositories"
+    }
+
+private fun runtimeRepoDownloadingLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "正在下载模块..."
+        LocaleHelper.LANG_RU -> "Скачивание модуля…"
+        else -> "Downloading module..."
+    }
+
+private fun runtimeRepoDownloadFailedLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "模块下载失败"
+        LocaleHelper.LANG_RU -> "Не удалось скачать модуль"
+        else -> "Module download failed"
+    }
+
+private fun runtimeRepoUnknownSourceLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "未知来源"
+        LocaleHelper.LANG_RU -> "Неизвестный источник"
+        else -> "Unknown source"
+    }
+
+private fun runtimeRepoNoZipLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "该模块仓库项没有可安装的 ZIP 链接"
+        LocaleHelper.LANG_RU -> "У этой записи репозитория нет ZIP для установки"
+        else -> "This repository entry does not expose an installable ZIP URL"
+    }
+
+private fun runtimeRepoVerifiedLabel(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "已验证"
+        LocaleHelper.LANG_RU -> "Проверен"
+        else -> "Verified"
+    }
+
+private fun runtimeRepoConfirmInstallTitle(context: Context): String =
+    when (LocaleHelper.getLanguage(context)) {
+        LocaleHelper.LANG_ZH -> "确认下载安装"
+        LocaleHelper.LANG_RU -> "Подтвердить скачивание и установку"
+        else -> "Confirm download and install"
+    }

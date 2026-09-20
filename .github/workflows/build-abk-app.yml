@@ -5,38 +5,62 @@ on:
   push:
     paths:
       - "app/**"
+      - "app_dev/**"
       - "build.gradle.kts"
       - "settings.gradle.kts"
       - "gradle/**"
       - ".github/workflows/build-abk-app.yml"
+      - ".github/actions/prepare-abk-app-inputs/**"
+      - ".github/scripts/patch-ksud-uapi-compat.py"
   pull_request:
     paths:
       - "app/**"
+      - "app_dev/**"
       - "build.gradle.kts"
       - "settings.gradle.kts"
       - "gradle/**"
       - ".github/workflows/build-abk-app.yml"
+      - ".github/actions/prepare-abk-app-inputs/**"
+      - ".github/scripts/patch-ksud-uapi-compat.py"
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || (github.event_name == 'push' && github.repository == 'xingguangcuican6666/ABK') }}
+    runs-on: ${{ vars.APP_RUNNER || 'ubuntu-latest' }}
     permissions:
-      contents: read
+      contents: write
       actions: read
+      pull-requests: write
     env:
       HAS_RELEASE_SIGNING: ${{ secrets.ABK_RELEASE_KEYSTORE_BASE64 != '' && secrets.ABK_RELEASE_STORE_PASSWORD != '' && secrets.ABK_RELEASE_KEY_ALIAS != '' && secrets.ABK_RELEASE_KEY_PASSWORD != '' }}
       SUKISU_ULTRA_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
       SUKISU_ULTRA_REF: main
       SUKISU_KSUD_ABIS: arm64-v8a,armeabi-v7a,x86_64
     steps:
-      - name: Checkout
+      - name: Checkout pull request merge ref
+        if: ${{ github.event_name == 'pull_request' }}
         uses: actions/checkout@v6
+
+      - name: Checkout branch or tag ref
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Stamp app build metadata
+        run: |
+          echo "ABK_APP_UPDATE_METADATA_URL=https://raw.githubusercontent.com/xingguangcuican6666/ABK/dev/version.json" >> "$GITHUB_ENV"
+          echo "ABK_APP_BUILD_TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+          echo "ABK_APP_BUILD_TIMESTAMP_EPOCH_MILLIS=$(( $(date -u +%s) * 1000 ))" >> "$GITHUB_ENV"
+          echo "ABK_APP_BUILD_RUN_ID=${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+          echo "ABK_APP_BUILD_COMMIT_SHA=${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "ABK_APP_BUILD_WORKFLOW_NAME=${GITHUB_WORKFLOW}" >> "$GITHUB_ENV"
 
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -48,13 +72,60 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,aarch64-unknown-linux-musl,x86_64-unknown-linux-musl
 
+      - name: Prepare ABK app inputs
+        id: abk-inputs
+        uses: ./.github/actions/prepare-abk-app-inputs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: abk-cargo-registry-v1-linux
+          restore-keys: abk-cargo-registry-v1-
+
+      - name: Cache ksud outputs
+        id: ksud-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/build/generated/abk-assets/main
+            app/build/generated/abk-jniLibs/main
+          key: abk-ksud-v1-${{ steps.abk-inputs.outputs.sukisu_commit }}-${{ steps.abk-inputs.outputs.ksud_abis_key }}-${{ steps.abk-inputs.outputs.workflow_digest }}
+
+      - name: Verify ksud cache
+        id: ksud-verify
+        run: |
+          set -euo pipefail
+          expected="${{ steps.abk-inputs.outputs.sukisu_commit }}"
+          props="app/build/generated/abk-assets/main/ksud/source.properties"
+          if [ "${{ steps.ksud-cache.outputs.cache-hit }}" != "true" ] || [ ! -f "$props" ]; then
+            echo "needs_rebuild=true" >> "$GITHUB_OUTPUT"
+            echo "ksud cache: miss"
+            exit 0
+          fi
+          actual="$(grep '^commit=' "$props" | cut -d= -f2- | tr -d '\r')"
+          if [ "$actual" != "$expected" ]; then
+            echo "ksud cache: stale (expected=$expected actual=$actual)"
+            rm -rf app/build/generated/abk-assets/main app/build/generated/abk-jniLibs/main
+            echo "needs_rebuild=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ksud cache: hit (commit=$actual)"
+            echo "needs_rebuild=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build bundled SukiSU-Ultra ksud assets
+        if: steps.ksud-verify.outputs.needs_rebuild == 'true'
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
         run: |
@@ -69,20 +140,9 @@ jobs:
           rm -rf "$source_dir" "$target_dir" "$jni_target_dir"
           git clone --depth 1 --branch "$SUKISU_ULTRA_REF" "$SUKISU_ULTRA_REPO" "$source_dir"
           commit="$(git -C "$source_dir" rev-parse HEAD)"
+          python3 .github/scripts/patch-ksud-uapi-compat.py "$source_dir"
+          grep -q "ABK legacy uapi=0 compatibility" "$source_dir/userspace/ksud/src/ksucalls.rs"
           mkdir -p "$target_dir" "$jni_target_dir"
-
-          SOURCE_DIR="$source_dir" python3 - <<'PY'
-          import os
-          from pathlib import Path
-
-          path = Path(os.environ["SOURCE_DIR"]) / "userspace/ksud/src/boot_patch.rs"
-          text = path.read_text()
-          old = """            } else {\n                let magiskboot_path = workdir.join(\"magiskboot\");\n                assets::copy_assets_to_file(\"magiskboot\", &magiskboot_path)\n                    .context(\"copy magiskboot failed\")?;\n                magiskboot_path\n            };\n            ensure!(magiskboot.exists(), \"{} is not exist\", magiskboot.display());\n            #[cfg(unix)]\n            let _ = std::fs::set_permissions(&magiskboot, std::fs::Permissions::from_mode(0o755));\n            magiskboot\n"""
-          new = """            } else {\n                let magiskboot_path = workdir.join(\"magiskboot\");\n                let magiskboot_bin = workdir.join(\"magiskboot.bin\");\n                assets::copy_assets_to_file(\"magiskboot\", &magiskboot_bin)\n                    .context(\"copy magiskboot failed\")?;\n                #[cfg(unix)]\n                {\n                    use std::io::Write;\n                    let mut wrapper = std::fs::File::create(&magiskboot_path)?;\n                    wrapper.write_all(b\"#!/system/bin/sh\\nLINKER=/apex/com.android.runtime/bin/linker64\\n[ -x \\\\\\\"$LINKER\\\\\\\" ] || LINKER=/system/bin/linker64\\nexec \\\\\\\"$LINKER\\\\\\\" \\\\\\\"$0.bin\\\\\\\" \\\\\\\"$@\\\\\\\"\\n\")?;\n                    let _ = std::fs::set_permissions(&magiskboot_path, std::fs::Permissions::from_mode(0o755));\n                    let _ = std::fs::set_permissions(&magiskboot_bin, std::fs::Permissions::from_mode(0o755));\n                }\n                magiskboot_path\n            };\n            ensure!(magiskboot.exists(), \"{} is not exist\", magiskboot.display());\n            #[cfg(unix)]\n            let _ = std::fs::set_permissions(&magiskboot, std::fs::Permissions::from_mode(0o755));\n            magiskboot\n"""
-          if old not in text:
-              raise SystemExit("failed to find magiskboot injection block in boot_patch.rs")
-          path.write_text(text.replace(old, new, 1))
-          PY
 
           setup_rust_build() {
             local triple="$1"
@@ -177,23 +237,12 @@ jobs:
               --manifest-path "$source_dir/Cargo.toml"
           }
 
-          magiskboot_url_for_abi() {
-            case "$1" in
-              arm64-v8a) printf '%s\n' "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/manager/app/src/main/jniLibs/arm64-v8a/libmagiskboot.so" ;;
-              x86_64) printf '%s\n' "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/manager/app/src/main/jniLibs/x86_64/libmagiskboot.so" ;;
-              armeabi-v7a) printf '%s\n' "" ;;
-              *)
-                echo "::error::Unsupported magiskboot ABI: $1"
-                return 1
-                ;;
-            esac
-          }
-
           {
             echo "source_repo=$repo_url"
             echo "ref=$SUKISU_ULTRA_REF"
             echo "commit=$commit"
             echo "abis=$SUKISU_KSUD_ABIS"
+            echo "patches=legacy_uapi_zero_compat"
             echo "built_by=.github/workflows/build-abk-app.yml"
           } > "$target_dir/source.properties"
 
@@ -223,13 +272,6 @@ jobs:
               exit 1
             fi
             install -Dm755 "$ksuinit_binary" "$bin_dir/ksuinit"
-            magiskboot_url="$(magiskboot_url_for_abi "$abi")"
-            if [ -n "$magiskboot_url" ]; then
-              curl -fsSL "$magiskboot_url" -o "$bin_dir/magiskboot"
-              chmod 755 "$bin_dir/magiskboot"
-            else
-              echo "warning.$abi=magiskboot_missing_upstream" >> "$target_dir/source.properties"
-            fi
             setup_rust_build "$triple" 26
             cargo build \
               --target "$triple" \
@@ -273,10 +315,41 @@ jobs:
             echo "- Commit: $commit"
             echo "- ABIs: $SUKISU_KSUD_ABIS"
             echo "- Embedded ksuinit: aarch64-unknown-linux-musl, x86_64-unknown-linux-musl"
-            echo "- Embedded magiskboot: arm64-v8a, x86_64"
+            echo "- magiskboot: removed upstream (ksud uses bootimg crate)"
+            echo "- Patch: allow legacy kernel uapi=0 for bundled ksud"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Cache LKM assets
+        id: lkm-cache
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/assets/abk_lkm
+          key: abk-lkm-v1-${{ steps.abk-inputs.outputs.lkm_head_sha }}
+
+      - name: Verify LKM cache
+        id: lkm-verify
+        run: |
+          set -euo pipefail
+          expected="${{ steps.abk-inputs.outputs.lkm_head_sha }}"
+          props="app/src/main/assets/abk_lkm/source.properties"
+          if [ "${{ steps.lkm-cache.outputs.cache-hit }}" != "true" ] || [ ! -f "$props" ]; then
+            echo "needs_rebundle=true" >> "$GITHUB_OUTPUT"
+            echo "lkm cache: miss"
+            exit 0
+          fi
+          actual="$(grep '^head_sha=' "$props" | cut -d= -f2- | tr -d '\r')"
+          if [ "$actual" != "$expected" ]; then
+            echo "lkm cache: stale (expected=$expected actual=$actual)"
+            rm -rf app/src/main/assets/abk_lkm
+            mkdir -p app/src/main/assets/abk_lkm
+            echo "needs_rebundle=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "lkm cache: hit (head_sha=$actual)"
+            echo "needs_rebundle=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Bundle ABK LKM artifacts
+        if: steps.lkm-verify.outputs.needs_rebundle == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -476,6 +549,55 @@ jobs:
           fi
           "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose "$signed_apk"
 
+      - name: Prepare version metadata
+        if: ${{ github.repository == 'xingguangcuican6666/ABK' && github.event_name != 'pull_request' && startsWith(github.ref, 'refs/heads/') }}
+        id: version
+        run: |
+          set -euo pipefail
+
+          git restore --staged --worktree version.json app/build.gradle.kts app/src/main/res/values/strings.xml 2>/dev/null || true
+
+          python .github/scripts/update-version-json.py \
+            --channel normal \
+            --workflow-name "${GITHUB_WORKFLOW}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --commit-sha "${GITHUB_SHA}" \
+            --published-at "${ABK_APP_BUILD_TIMESTAMP}" \
+            --build-timestamp-epoch-millis "${ABK_APP_BUILD_TIMESTAMP_EPOCH_MILLIS}"
+
+          if git diff --quiet -- version.json app/build.gradle.kts app/src/main/res/values/strings.xml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create version update PR
+        if: ${{ steps.version.outputs.changed == 'true' }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(app): update unstable version metadata"
+          title: "chore(app): update unstable version metadata"
+          body: |
+            Automated update of unstable version metadata.
+
+            Changes:
+            - Updated version metadata
+            - Updated build information
+
+            Workflow: ${{ github.workflow }}
+            Run ID: ${{ github.run_id }}
+            Commit: ${{ github.sha }}
+
+          branch: bot/update-version-json
+          base: ${{ github.ref_name }}
+          delete-branch: true
+
+          add-paths: |
+            version.json
+            app/build.gradle.kts
+            app/src/main/res/values/strings.xml
+
       - name: Upload APKs
         uses: actions/upload-artifact@v6
         with:
@@ -484,3 +606,5 @@ jobs:
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/release/*.apk
             app/signing/abk-manager-cert.generated.env
+            LICENSE
+            THIRD_PARTY_NOTICES.md

@@ -20,6 +20,36 @@
 #include "abk_ksu.h"
 
 static int fd = -1;
+static uint32_t g_cached_app_profile_version = 0;
+static constexpr uint32_t KSU_MIN_COMPAT_APP_PROFILE_VER = 2;
+
+static bool is_supported_app_profile_version(uint32_t version) {
+    return version >= KSU_MIN_COMPAT_APP_PROFILE_VER && version <= KSU_APP_PROFILE_VER;
+}
+
+static std::vector<uint32_t> build_app_profile_version_candidates(uint32_t preferred) {
+    std::vector<uint32_t> versions;
+    auto append_unique = [&versions](uint32_t version) {
+        if (!is_supported_app_profile_version(version)) {
+            return;
+        }
+        for (uint32_t existing : versions) {
+            if (existing == version) {
+                return;
+            }
+        }
+        versions.push_back(version);
+    };
+
+    append_unique(preferred);
+    append_unique(g_cached_app_profile_version);
+    for (int version = static_cast<int>(KSU_APP_PROFILE_VER);
+         version >= static_cast<int>(KSU_MIN_COMPAT_APP_PROFILE_VER);
+         --version) {
+        append_unique(static_cast<uint32_t>(version));
+    }
+    return versions;
+}
 
 static inline int scan_driver_fd() {
     const char *kName = "[ksu_driver]";
@@ -97,7 +127,15 @@ static struct ksu_get_info_cmd g_version {};
 
 struct ksu_get_info_cmd get_info() {
     if (!g_version.version) {
-        ksuctl(KSU_IOCTL_GET_INFO, &g_version);
+        if (ksuctl(KSU_IOCTL_GET_INFO, &g_version) < 0) {
+            struct ksu_get_info_legacy_cmd legacy = {};
+            if (ksuctl(KSU_IOCTL_GET_INFO_LEGACY, &legacy) == 0) {
+                g_version.version = legacy.version;
+                g_version.flags = legacy.flags;
+                g_version.features = legacy.features;
+                g_version.uapi_version = 0;
+            }
+        }
     }
     return g_version;
 }
@@ -137,6 +175,29 @@ void get_hook_type(char *buff, size_t size) {
 
 bool get_allow_list(struct ksu_new_get_allow_list_cmd *cmd) {
     return ksuctl(KSU_IOCTL_NEW_GET_ALLOW_LIST, cmd) == 0;
+}
+
+std::vector<uint32_t> get_allow_list_uids() {
+    struct ksu_new_get_allow_list_cmd probe = {
+            .count = 0
+    };
+    if (!get_allow_list(&probe) || probe.total_count == 0) {
+        return {};
+    }
+
+    const size_t total_count = probe.total_count;
+    std::vector<uint8_t> storage(
+            sizeof(struct ksu_new_get_allow_list_cmd) + total_count * sizeof(uint32_t),
+            0
+    );
+    auto *cmd = reinterpret_cast<struct ksu_new_get_allow_list_cmd *>(storage.data());
+    cmd->count = static_cast<__u16>(total_count);
+    if (!get_allow_list(cmd)) {
+        return {};
+    }
+
+    const size_t actual_count = cmd->count < cmd->total_count ? cmd->count : cmd->total_count;
+    return std::vector<uint32_t>(cmd->uids, cmd->uids + actual_count);
 }
 
 bool is_safe_mode() {
@@ -185,15 +246,38 @@ bool uid_should_umount(int uid) {
 }
 
 bool set_app_profile(const app_profile *profile) {
-    struct ksu_set_app_profile_cmd cmd = {};
-    cmd.profile = *profile;
-    return ksuctl(KSU_IOCTL_SET_APP_PROFILE, &cmd) == 0;
+    if (!profile) {
+        errno = EINVAL;
+        return false;
+    }
+
+    const auto versions = build_app_profile_version_candidates(profile->version);
+    int last_errno = errno;
+    for (uint32_t version : versions) {
+        struct ksu_set_app_profile_cmd cmd = {};
+        cmd.profile = *profile;
+        cmd.profile.version = version;
+        if (ksuctl(KSU_IOCTL_SET_APP_PROFILE, &cmd) == 0) {
+            g_cached_app_profile_version = version;
+            return true;
+        }
+        last_errno = errno;
+        if (errno == ENODEV || errno == EBADF) {
+            break;
+        }
+    }
+
+    errno = last_errno;
+    return false;
 }
 
 int get_app_profile(app_profile *profile) {
     struct ksu_get_app_profile_cmd cmd = {.profile = *profile};
     int ret = ksuctl(KSU_IOCTL_GET_APP_PROFILE, &cmd);
     *profile = cmd.profile;
+    if (ret == 0 && is_supported_app_profile_version(profile->version)) {
+        g_cached_app_profile_version = profile->version;
+    }
     return ret;
 }
 

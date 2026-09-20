@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -69,8 +70,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -87,21 +88,35 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.abk.kernel.R
+import com.abk.kernel.ui.blur.BlurConfig
+import com.abk.kernel.ui.blur.BlurScreenScaffold
+import com.abk.kernel.ui.blur.blurredCardBackground
+import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.components.AppPageBackground
 import com.abk.kernel.ui.components.ExpressiveListItem
 import com.abk.kernel.ui.components.ExpressiveTopBar
-import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.utils.RootUtils
+import com.abk.kernel.data.model.ArtifactType
+import com.abk.kernel.data.repository.PreferencesRepository
+import com.abk.kernel.utils.ArtifactVerification
+import com.abk.kernel.utils.DownloadUtils
+import com.abk.kernel.utils.ForkSigningManager
+import com.abk.kernel.utils.SignedBundleManifest
 import java.io.File
+import java.io.FileOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.zip.ZipFile
 
 private enum class LkmPatchInstallMode {
     SelectFile,
@@ -117,8 +132,11 @@ fun AbkRootPatchScreen(
     runtimeVariant: String,
     backgroundUri: String?,
     backgroundImageEnabled: Boolean,
+    blurEnabled: Boolean,
+    blurBackgroundExpEnabled: Boolean,
     onBack: () -> Unit,
-    onBackEnabledChange: (Boolean) -> Unit = {}
+    onBackEnabledChange: (Boolean) -> Unit = {},
+    downloadDirectory: String? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -131,6 +149,9 @@ fun AbkRootPatchScreen(
     }
     val defaultPartition by produceState(initialValue = "boot", context, rootGranted) {
         value = withContext(Dispatchers.IO) { RootUtils.detectDefaultBootPartition() }
+    }
+    val supportsAnyKernelInactiveSlot by produceState(initialValue = false, context, rootGranted) {
+        value = withContext(Dispatchers.IO) { RootUtils.supportsAnyKernelInactiveSlot() }
     }
 
     var selectedMode by rememberSaveable { mutableStateOf<LkmPatchInstallMode?>(null) }
@@ -149,6 +170,7 @@ fun AbkRootPatchScreen(
             )
     }
     var selectedKmi by rememberSaveable { mutableStateOf(currentKmi.orEmpty()) }
+    var hasCustomKmiSelection by rememberSaveable { mutableStateOf(false) }
     val selectedAsset = bundledAssets.firstOrNull {
         it.variantId == selectedVariant && it.kmi == selectedKmi
     }
@@ -157,8 +179,16 @@ fun AbkRootPatchScreen(
     var selectedBootName by rememberSaveable { mutableStateOf("") }
     var selectedAnyKernelPath by rememberSaveable { mutableStateOf("") }
     var selectedAnyKernelName by rememberSaveable { mutableStateOf("") }
+    var selectedAnyKernelManifest by remember { mutableStateOf<SignedBundleManifest?>(null) }
+    var showAnyKernelManifestNotice by remember { mutableStateOf(false) }
+    var showAnyKernelFlashConfirm by remember { mutableStateOf(false) }
+    val sessionManifestNoticeHashes = remember { mutableSetOf<String>() }
     var selectedLocalLkmPath by rememberSaveable { mutableStateOf("") }
     var selectedLocalLkmName by rememberSaveable { mutableStateOf("") }
+    var selectedAnyKernelSlotTargetName by rememberSaveable {
+        mutableStateOf(RootUtils.Ak3SlotTarget.CURRENT.name)
+    }
+    var showAnyKernelSlotMenu by remember { mutableStateOf(false) }
     var selectedPartition by rememberSaveable { mutableStateOf(defaultPartition) }
     var hasCustomPartitionSelection by rememberSaveable { mutableStateOf(false) }
     var showPartitionMenu by remember { mutableStateOf(false) }
@@ -174,9 +204,6 @@ fun AbkRootPatchScreen(
     val userlandKsudPath by produceState<String?>(initialValue = null, context) {
         value = withContext(Dispatchers.IO) { RootUtils.resolveUserlandKsudPath(context) }
     }
-    val userlandMagiskbootPath by produceState<String?>(initialValue = null, context) {
-        value = withContext(Dispatchers.IO) { RootUtils.resolveUserlandMagiskbootPath(context) }
-    }
     val hasLocalLkm = selectedLocalLkmPath.isNotBlank()
     val activeLkmLabel = selectedLocalLkmName.takeIf { it.isNotBlank() }
         ?: selectedAsset?.let { "${it.variantLabel} · ${it.kmi}" }
@@ -184,11 +211,10 @@ fun AbkRootPatchScreen(
     val hasLkmSource = hasLocalLkm || selectedAsset != null
     val showRootInstallModes = rootGranted
     val hasUserlandKsud = userlandKsudPath != null
-    val hasUserlandMagiskboot = userlandMagiskbootPath != null
     val canPatchSelectedFile = selectedBootPath.isNotBlank() &&
         hasLkmSource &&
         !running &&
-        (rootGranted || (hasUserlandKsud && hasUserlandMagiskboot))
+        (rootGranted || hasUserlandKsud)
     val canDirectInstall = rootGranted && hasLkmSource && !running
     val canFlashAnyKernel3 = rootGranted && selectedAnyKernelPath.isNotBlank() && !running
     val canProceed = when (selectedMode) {
@@ -198,10 +224,40 @@ fun AbkRootPatchScreen(
         LkmPatchInstallMode.AnyKernel3 -> canFlashAnyKernel3
         null -> false
     }
+    val copiedMessage = stringResource(R.string.copied)
+    val actionPatchImage = stringResource(R.string.root_patch_action_patch_image)
+    val actionDirectInstall = stringResource(R.string.root_patch_action_direct_install)
+    val actionOtaInstall = stringResource(R.string.root_patch_action_ota_install)
+    val actionFlashAnyKernel = stringResource(R.string.root_patch_action_flash_anykernel)
+    val actionFlashPatchedImage = stringResource(R.string.root_patch_action_flash_patched_image)
+    val selectFileDesc = stringResource(R.string.root_patch_select_file_desc)
+    val anyKernelDesc = stringResource(R.string.root_patch_anykernel_desc)
+    val anyKernelSlotTitle = stringResource(R.string.root_patch_ak3_slot_title)
+    val anyKernelSlotDesc = stringResource(R.string.root_patch_ak3_slot_desc)
+    val anyKernelCurrentSlotLabel = stringResource(R.string.root_patch_ak3_slot_current)
+    val anyKernelInactiveSlotLabel = stringResource(R.string.root_patch_ak3_slot_inactive)
+    val localLkmDesc = stringResource(R.string.root_patch_local_lkm_desc)
+    val noLkmAvailable = stringResource(R.string.root_patch_no_lkm_available)
+    val defaultPartitionLabel = stringResource(R.string.root_patch_default_label)
+    val lkmFallbackLabel = stringResource(R.string.root_patch_lkm_fallback)
+    val currentBuiltinLkm = selectedAsset?.let {
+        stringResource(R.string.root_patch_current_builtin_lkm, it.variantLabel, it.kmi)
+    }
+    val localLkmSubtitle = selectedLocalLkmName.ifBlank { currentBuiltinLkm ?: localLkmDesc }
+    val activeLkmLogLabel = activeLkmLabel.ifBlank { lkmFallbackLabel }
+    val selectedAnyKernelSlotTarget = runCatching {
+        RootUtils.Ak3SlotTarget.valueOf(selectedAnyKernelSlotTargetName)
+    }.getOrDefault(RootUtils.Ak3SlotTarget.CURRENT)
 
-    LaunchedEffect(selectedVariant, kmiOptions, currentKmi) {
-        if (selectedKmi !in kmiOptions) {
-            selectedKmi = currentKmi?.takeIf { it in kmiOptions } ?: kmiOptions.firstOrNull().orEmpty()
+    LaunchedEffect(selectedVariant, kmiOptions, currentKmi, hasCustomKmiSelection) {
+        val preferredKmi = preferredLkmKmiSelection(
+            currentSelection = selectedKmi,
+            options = kmiOptions,
+            recommendedKmi = currentKmi,
+            hasCustomSelection = hasCustomKmiSelection
+        )
+        if (selectedKmi != preferredKmi) {
+            selectedKmi = preferredKmi
         }
     }
 
@@ -230,6 +286,12 @@ fun AbkRootPatchScreen(
         }
     }
 
+    LaunchedEffect(supportsAnyKernelInactiveSlot) {
+        if (!supportsAnyKernelInactiveSlot) {
+            selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.CURRENT.name
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose { onBackEnabledChange(true) }
     }
@@ -243,7 +305,7 @@ fun AbkRootPatchScreen(
     fun copyText(label: String, value: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
-        Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
     }
 
     val bootPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -255,33 +317,55 @@ fun AbkRootPatchScreen(
             selectedMode = LkmPatchInstallMode.SelectFile
             patchedImagePath = ""
             success = null
-            logLines = listOf("已选择 ${staged.second}")
+            logLines = listOf(context.getString(R.string.root_patch_selected_file, staged.second))
         }
     }
 
     val anyKernelPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         if (!isZipFile(context, uri)) {
-            Toast.makeText(context, "仅支持 AnyKernel3 zip 文件", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.root_patch_only_anykernel_zip), Toast.LENGTH_SHORT).show()
             return@rememberLauncherForActivityResult
         }
         scope.launch {
-            val staged = withContext(Dispatchers.IO) {
-                stageContentUri(context, uri, "abk-anykernel3", "AnyKernel3.zip")
+            val prepared = runCatching {
+                withContext(Dispatchers.IO) {
+                    val staged = stageContentUri(context, uri, "abk-anykernel3", "AnyKernel3.zip")
+                    prepareLocalAnyKernelSelection(context, staged.first, staged.second)
+                }
+            }.getOrElse { error ->
+                Toast.makeText(
+                    context,
+                    context.getString(
+                        R.string.root_patch_bundle_verification_failed,
+                        error.message ?: error::class.java.simpleName
+                    ),
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
             }
-            selectedAnyKernelPath = staged.first.absolutePath
-            selectedAnyKernelName = staged.second
+            selectedAnyKernelPath = prepared.payload.absolutePath
+            selectedAnyKernelName = prepared.displayName
+            selectedAnyKernelManifest = prepared.manifest
             selectedMode = LkmPatchInstallMode.AnyKernel3
             patchedImagePath = ""
             success = null
-            logLines = listOf("已选择 ${staged.second}")
+            logLines = listOf(context.getString(R.string.root_patch_selected_file, prepared.displayName))
+            val bundleHash = prepared.bundleFile?.let { bundle ->
+                withContext(Dispatchers.IO) { DownloadUtils.fileSha256Hex(bundle) }
+            }
+            if (prepared.manifest?.clientNotice != null &&
+                (bundleHash == null || sessionManifestNoticeHashes.add(bundleHash))
+            ) {
+                showAnyKernelManifestNotice = true
+            }
         }
     }
 
     val localLkmPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         if (!isKoFile(context, uri)) {
-            Toast.makeText(context, "仅支持 .ko LKM 文件", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.root_patch_only_ko_lkm), Toast.LENGTH_SHORT).show()
             return@rememberLauncherForActivityResult
         }
         scope.launch {
@@ -290,7 +374,7 @@ fun AbkRootPatchScreen(
             selectedLocalLkmName = staged.second
             patchedImagePath = ""
             success = null
-            logLines = listOf("已选择 ${staged.second}")
+            logLines = listOf(context.getString(R.string.root_patch_selected_file, staged.second))
         }
     }
 
@@ -308,7 +392,7 @@ fun AbkRootPatchScreen(
         patchedImagePath = result.patchedImagePath.orEmpty()
         if (result.output.isNotEmpty()) logLines = result.output
         if (result.success && patchedImagePath.isNotBlank()) {
-            logLines = logLines + "[ABK] 输出镜像: $patchedImagePath"
+            logLines = logLines + context.getString(R.string.root_patch_output_image, patchedImagePath)
         }
     }
 
@@ -316,10 +400,10 @@ fun AbkRootPatchScreen(
         if (!canPatchSelectedFile) return
         val modulePath = selectedLocalLkmPath.takeIf { it.isNotBlank() }
         beginOperation(
-            action = "修补镜像",
+            action = actionPatchImage,
             lines = listOf(
-                "${'$'} ksud boot-patch --boot $selectedBootName --module ${activeLkmLabel.ifBlank { "LKM" }}",
-                "partition: $selectedPartition"
+                "${'$'} ksud boot-patch --boot $selectedBootName --module $activeLkmLogLabel",
+                context.getString(R.string.root_patch_log_partition, selectedPartition)
             )
         )
         scope.launch {
@@ -334,7 +418,8 @@ fun AbkRootPatchScreen(
                     allowShell = allowShell,
                     enableAdb = enableAdb,
                     localModulePath = modulePath,
-                    onOutput = ::appendLog
+                    onOutput = ::appendLog,
+                    downloadDirectory = downloadDirectory
                 )
             }
             finishPatchResult(result)
@@ -344,12 +429,12 @@ fun AbkRootPatchScreen(
     fun startDirectInstall(ota: Boolean) {
         if (!canDirectInstall) return
         val modulePath = selectedLocalLkmPath.takeIf { it.isNotBlank() }
-        val action = if (ota) "OTA 安装" else "直接安装"
+        val action = if (ota) actionOtaInstall else actionDirectInstall
         beginOperation(
             action = action,
             lines = listOf(
                 "${'$'} ksud boot-patch --flash${if (ota) " --ota" else ""} --partition $selectedPartition",
-                "module: ${activeLkmLabel.ifBlank { "LKM" }}"
+                context.getString(R.string.root_patch_log_module, activeLkmLogLabel)
             )
         )
         scope.launch {
@@ -366,25 +451,38 @@ fun AbkRootPatchScreen(
                     allowShell = allowShell,
                     enableAdb = enableAdb,
                     localModulePath = modulePath,
-                    onOutput = ::appendLog
+                    onOutput = ::appendLog,
+                    downloadDirectory = downloadDirectory
                 )
             }
             finishPatchResult(result)
         }
     }
 
-    fun startAnyKernel3Flash() {
+    fun performAnyKernel3Flash() {
         if (!canFlashAnyKernel3) return
         beginOperation(
-            action = "刷入 AnyKernel3",
+            action = actionFlashAnyKernel,
             lines = listOf(
                 "${'$'} flash AnyKernel3",
-                "file: $selectedAnyKernelPath"
+                context.getString(R.string.root_patch_log_file, selectedAnyKernelPath),
+                context.getString(
+                    R.string.root_patch_log_slot,
+                    when (selectedAnyKernelSlotTarget) {
+                        RootUtils.Ak3SlotTarget.INACTIVE -> anyKernelInactiveSlotLabel
+                        RootUtils.Ak3SlotTarget.CURRENT -> anyKernelCurrentSlotLabel
+                    }
+                )
             )
         )
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                RootUtils.flashAnyKernel3(context, selectedAnyKernelPath, ::appendLog)
+                RootUtils.flashAnyKernel3(
+                    context,
+                    selectedAnyKernelPath,
+                    targetSlot = selectedAnyKernelSlotTarget,
+                    onOutput = ::appendLog
+                )
             }
             running = false
             success = result.success
@@ -392,13 +490,22 @@ fun AbkRootPatchScreen(
         }
     }
 
+    fun startAnyKernel3Flash() {
+        if (!canFlashAnyKernel3) return
+        if (selectedAnyKernelManifest?.clientNotice != null) {
+            showAnyKernelFlashConfirm = true
+            return
+        }
+        performAnyKernel3Flash()
+    }
+
     fun startFlashPatchedImage() {
         if (patchedImagePath.isBlank() || running) return
         beginOperation(
-            action = "刷入已修补镜像",
+            action = actionFlashPatchedImage,
             lines = listOf(
                 "${'$'} dd $selectedPartition <- ${File(patchedImagePath).name}",
-                "file: $patchedImagePath"
+                context.getString(R.string.root_patch_log_file, patchedImagePath)
             )
         )
         scope.launch {
@@ -425,37 +532,135 @@ fun AbkRootPatchScreen(
         }
     }
 
+    selectedAnyKernelManifest?.takeIf { it.clientNotice != null }?.let { manifest ->
+        val source = manifest.kernelSource
+        val feature = manifest.featureStatus
+        if (showAnyKernelManifestNotice || showAnyKernelFlashConfirm) {
+            AlertDialog(
+                onDismissRequest = {
+                    showAnyKernelManifestNotice = false
+                    showAnyKernelFlashConfirm = false
+                },
+                icon = {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                },
+                title = {
+                    Text(
+                        if (showAnyKernelFlashConfirm) {
+                            stringResource(R.string.flash_custom_source_review_before_flash)
+                        } else {
+                            stringResource(R.string.flash_custom_source_notice_title)
+                        }
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        source?.url?.let { Text(stringResource(R.string.flash_custom_source_url, it)) }
+                        if (source?.access == "github_private") {
+                            Text(
+                                stringResource(R.string.flash_custom_source_private_warning),
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        source?.access?.let { Text(stringResource(R.string.flash_custom_source_access, it)) }
+                        source?.requestedRef?.let { Text(stringResource(R.string.flash_custom_source_ref, it)) }
+                        source?.resolvedCommit?.let { Text(stringResource(R.string.flash_custom_source_commit, it)) }
+                        source?.kernelVersion?.let { kernel ->
+                            Text(stringResource(R.string.flash_custom_source_kernel, source.androidVersion.orEmpty(), kernel))
+                        }
+                        source?.toolchainPatchLevel?.let {
+                            Text(stringResource(R.string.flash_custom_source_toolchain, it))
+                        }
+                        source?.deviceLabel?.takeIf { it.isNotBlank() }?.let {
+                            Text(stringResource(R.string.flash_custom_source_device, it))
+                        }
+                        source?.defconfigs?.takeIf { it.isNotEmpty() }?.let { defconfigs ->
+                            Text(stringResource(R.string.flash_custom_source_defconfigs, defconfigs.joinToString(" -> ")))
+                        }
+                        feature?.requested?.takeIf { it.isNotEmpty() }?.let {
+                            Text(stringResource(R.string.flash_custom_source_requested, formatFeatureMap(it)))
+                        }
+                        feature?.effective?.takeIf { it.isNotEmpty() }?.let {
+                            Text(stringResource(R.string.flash_custom_source_effective, formatFeatureMap(it)))
+                        }
+                        feature?.skipped?.takeIf { it.isNotEmpty() }?.let { skippedFeatures ->
+                            Text(
+                                stringResource(R.string.flash_custom_source_skipped_title),
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            skippedFeatures.forEach { skipped ->
+                                Text(
+                                    "• ${skipped.id}: ${skipped.message}",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                        Text(
+                            stringResource(R.string.flash_custom_source_old_client_warning),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val confirmFlash = showAnyKernelFlashConfirm
+                            showAnyKernelManifestNotice = false
+                            showAnyKernelFlashConfirm = false
+                            if (confirmFlash) performAnyKernel3Flash()
+                        }
+                    ) {
+                        Text(stringResource(if (showAnyKernelFlashConfirm) R.string.flash_confirm else R.string.confirm))
+                    }
+                }
+            )
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         LkmPatchPageBackground(
             backgroundUri = backgroundUri,
             backgroundImageEnabled = backgroundImageEnabled
         )
-        Scaffold(
+        BlurScreenScaffold(
+            blurConfig = BlurConfig(
+                blurEnabled = blurEnabled,
+                backgroundExpEnabled = blurBackgroundExpEnabled,
+                backgroundUri = backgroundUri,
+                backgroundImageEnabled = backgroundImageEnabled,
+            ),
             containerColor = Color.Transparent,
             topBar = {
                 ExpressiveTopBar(
-                    title = "安装",
+                    title = stringResource(R.string.root_patch_title),
                     navigationIcon = {
                         IconButton(onClick = onBack, enabled = !running) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
                         }
-                    }
+                    },
+                    enableBlur = blurEnabled
                 )
             }
-        ) { padding ->
+        ) { topBarHeight ->
             Column(
                 modifier = Modifier
-                    .padding(padding)
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = AbkScreenHorizontalPadding)
-                    .padding(top = 12.dp),
+                    .padding(horizontal = AbkScreenHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+            Spacer(Modifier.height(topBarHeight + 16.dp))
             PatchGroupCard {
                 PatchModeRow(
-                    title = "选择一个文件",
-                    subtitle = selectedBootName.ifBlank { "建议选择 init_boot 分区镜像" },
+                    title = stringResource(R.string.root_patch_select_file),
+                    subtitle = selectedBootName.ifBlank { selectFileDesc },
                     selected = selectedMode == LkmPatchInstallMode.SelectFile,
                     enabled = !running,
                     onClick = {
@@ -466,8 +671,8 @@ fun AbkRootPatchScreen(
                 if (showRootInstallModes) {
                     PatchDivider()
                     PatchModeRow(
-                        title = "直接安装（推荐）",
-                        subtitle = "自动识别当前 boot / init_boot 并直接修补",
+                        title = stringResource(R.string.root_patch_direct_install),
+                        subtitle = stringResource(R.string.root_patch_direct_install_desc),
                         selected = selectedMode == LkmPatchInstallMode.DirectInstall,
                         enabled = !running,
                         onClick = {
@@ -480,8 +685,8 @@ fun AbkRootPatchScreen(
                     )
                     PatchDivider()
                     PatchModeRow(
-                        title = "安装到未使用的槽位（OTA 后）",
-                        subtitle = "修补并写入另一槽位",
+                        title = stringResource(R.string.root_patch_ota_install),
+                        subtitle = stringResource(R.string.root_patch_ota_install_desc),
                         selected = selectedMode == LkmPatchInstallMode.OtaInstall,
                         enabled = !running,
                         onClick = {
@@ -494,8 +699,8 @@ fun AbkRootPatchScreen(
                     )
                     PatchDivider()
                     PatchModeRow(
-                        title = "AnyKernel3 内核",
-                        subtitle = selectedAnyKernelName.ifBlank { "刷入 AnyKernel3 格式的内核 zip 包" },
+                        title = stringResource(R.string.root_patch_anykernel),
+                        subtitle = selectedAnyKernelName.ifBlank { anyKernelDesc },
                         selected = selectedMode == LkmPatchInstallMode.AnyKernel3,
                         enabled = !running,
                         onClick = {
@@ -510,11 +715,69 @@ fun AbkRootPatchScreen(
                 }
             }
 
+            AnimatedVisibility(
+                visible = selectedMode == LkmPatchInstallMode.AnyKernel3 && supportsAnyKernelInactiveSlot,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                PatchGroupCard {
+                    androidx.compose.foundation.layout.Box {
+                        ExpressiveListItem(
+                            title = anyKernelSlotTitle,
+                            subtitle = anyKernelSlotDesc,
+                            leadingIcon = Icons.Default.Edit,
+                            enabled = !running,
+                            trailingContent = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = when (selectedAnyKernelSlotTarget) {
+                                            RootUtils.Ak3SlotTarget.INACTIVE -> anyKernelInactiveSlotLabel
+                                            RootUtils.Ak3SlotTarget.CURRENT -> anyKernelCurrentSlotLabel
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        textAlign = TextAlign.End,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Icon(
+                                        Icons.Default.ChevronRight,
+                                        contentDescription = anyKernelSlotTitle
+                                    )
+                                }
+                            },
+                            onClick = { showAnyKernelSlotMenu = true }
+                        )
+                        DropdownMenu(
+                            expanded = showAnyKernelSlotMenu,
+                            onDismissRequest = { showAnyKernelSlotMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(anyKernelCurrentSlotLabel) },
+                                onClick = {
+                                    selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.CURRENT.name
+                                    showAnyKernelSlotMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(anyKernelInactiveSlotLabel) },
+                                onClick = {
+                                    selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.INACTIVE.name
+                                    showAnyKernelSlotMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
             PatchGroupCard {
                 androidx.compose.foundation.layout.Box {
                     ExpressiveListItem(
-                        title = "选择分区",
-                        subtitle = "当前槽位目标分区",
+                        title = stringResource(R.string.root_patch_select_partition),
+                        subtitle = stringResource(R.string.root_patch_partition_desc),
                         leadingIcon = Icons.Default.Edit,
                         enabled = !running && selectedMode != LkmPatchInstallMode.AnyKernel3,
                         trailingContent = {
@@ -523,13 +786,13 @@ fun AbkRootPatchScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = partitionLabel(selectedPartition, defaultPartition),
+                                    text = partitionLabel(selectedPartition, defaultPartition, defaultPartitionLabel, context),
                                     style = MaterialTheme.typography.bodyMedium,
                                     textAlign = TextAlign.End,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                Icon(Icons.Default.ChevronRight, contentDescription = "选择分区")
+                                Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.root_patch_select_partition))
                             }
                         },
                         onClick = { showPartitionMenu = true }
@@ -540,7 +803,7 @@ fun AbkRootPatchScreen(
                     ) {
                         partitionOptions.forEach { partition ->
                             DropdownMenuItem(
-                                text = { Text(partitionMenuLabel(partition, defaultPartition)) },
+                                text = { Text(partitionMenuLabel(partition, defaultPartition, defaultPartitionLabel, context)) },
                                 onClick = {
                                     hasCustomPartitionSelection = true
                                     selectedPartition = partition
@@ -554,11 +817,8 @@ fun AbkRootPatchScreen(
 
             PatchGroupCard {
                 ExpressiveListItem(
-                    title = "使用本地 LKM 文件",
-                    subtitle = selectedLocalLkmName.ifBlank {
-                        selectedAsset?.let { "当前内置: ${it.variantLabel} · ${it.kmi}" }
-                            ?: "选择本地 .ko 文件或使用内置 LKM"
-                    },
+                    title = stringResource(R.string.root_patch_use_local_lkm),
+                    subtitle = localLkmSubtitle,
                     leadingIcon = Icons.Default.FolderOpen,
                     enabled = !running,
                     trailingContent = {
@@ -570,10 +830,10 @@ fun AbkRootPatchScreen(
                                 },
                                 enabled = !running
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = "清除本地 LKM")
+                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.root_patch_clear_local_lkm))
                             }
                         } else {
-                            Icon(Icons.Default.ChevronRight, contentDescription = "选择本地 LKM")
+                            Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.root_patch_select_local_lkm))
                         }
                     },
                     onClick = { localLkmPicker.launch(arrayOf("application/octet-stream", "*/*")) }
@@ -596,6 +856,8 @@ fun AbkRootPatchScreen(
                                     selected = selectedVariant == variant.id,
                                     onClick = {
                                         selectedVariant = variant.id
+                                        selectedKmi = ""
+                                        hasCustomKmiSelection = false
                                         patchedImagePath = ""
                                         success = null
                                         currentAction = ""
@@ -608,12 +870,13 @@ fun AbkRootPatchScreen(
                         }
                         DropdownField(
                             label = "KMI",
-                            value = selectedKmi.ifBlank { "无可用 LKM" },
-                            options = kmiOptions.ifEmpty { listOf("无可用 LKM") },
+                            value = selectedKmi.ifBlank { noLkmAvailable },
+                            options = kmiOptions.ifEmpty { listOf(noLkmAvailable) },
                             recommendedValue = currentKmi?.takeIf { it in kmiOptions },
                             onSelect = {
                                 if (it in kmiOptions) {
                                     selectedKmi = it
+                                    hasCustomKmiSelection = true
                                     patchedImagePath = ""
                                     success = null
                                     currentAction = ""
@@ -627,12 +890,12 @@ fun AbkRootPatchScreen(
 
             PatchGroupCard {
                 ExpressiveListItem(
-                    title = "高级选项",
+                    title = stringResource(R.string.root_patch_advanced_options),
                     leadingIcon = Icons.Default.Tune,
                     trailingContent = {
                         Icon(
                             if (showAdvancedOptions) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = "展开高级选项"
+                            contentDescription = stringResource(R.string.root_patch_expand_advanced_options)
                         )
                     },
                     onClick = { showAdvancedOptions = !showAdvancedOptions }
@@ -644,23 +907,23 @@ fun AbkRootPatchScreen(
                 ) {
                     Column {
                         Text(
-                            text = "高级参数会直接透传给当前 APK 内置 ksud，不再做兼容探测。",
+                            text = stringResource(R.string.root_patch_advanced_desc),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                         )
                         PatchDivider()
                         PatchCheckboxItem(
-                            title = "总是给 shell 授予 root 权限",
-                            subtitle = "总是允许 adb shell 调用 su，非必要请勿开启。",
+                            title = stringResource(R.string.root_patch_allow_shell_root),
+                            subtitle = stringResource(R.string.root_patch_allow_shell_root_desc),
                             checked = allowShell,
                             enabled = !running,
                             onCheckedChange = { allowShell = it }
                         )
                         PatchDivider()
                         PatchCheckboxItem(
-                            title = "启动时强制启用 ADB 调试",
-                            subtitle = "强制允许 USB 调试并取消 adb 认证，非必要请勿开启。",
+                            title = stringResource(R.string.root_patch_enable_adb_debug),
+                            subtitle = stringResource(R.string.root_patch_enable_adb_debug_desc),
                             checked = enableAdb,
                             enabled = !running,
                             onCheckedChange = { enableAdb = it }
@@ -670,13 +933,10 @@ fun AbkRootPatchScreen(
             }
 
             if (!hasLkmSource && selectedMode != LkmPatchInstallMode.AnyKernel3) {
-                InlineWarning("当前变体和 KMI 没有内置 LKM，请选择本地 .ko 文件。")
+                InlineWarning(stringResource(R.string.root_patch_warn_no_lkm))
             }
-            if (selectedMode == LkmPatchInstallMode.SelectFile && !rootGranted) {
-                when {
-                    !hasUserlandKsud -> InlineWarning("当前 APK 未包含可执行的内置 SukiSU-Ultra ksud，无法无 Root 修补 boot.img。请使用带内置 ksud 的 APK，或授予 Root 后继续。")
-                    !hasUserlandMagiskboot -> InlineWarning("当前 APK 未包含可执行的内置 magiskboot，无法无 Root 解包 boot.img。请使用带内置 magiskboot 的 APK，或授予 Root 后继续。")
-                }
+            if (selectedMode == LkmPatchInstallMode.SelectFile && !rootGranted && !hasUserlandKsud) {
+                InlineWarning(stringResource(R.string.root_patch_warn_no_ksud))
             }
 
             Button(
@@ -690,9 +950,9 @@ fun AbkRootPatchScreen(
                         strokeWidth = 2.dp
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("处理中")
+                    Text(stringResource(R.string.root_patch_processing))
                 } else {
-                    Text("下一步")
+                    Text(stringResource(R.string.root_patch_next))
                 }
             }
 
@@ -700,7 +960,7 @@ fun AbkRootPatchScreen(
                 PatchedImageCard(
                     path = patchedImagePath,
                     canFlash = selectedMode == LkmPatchInstallMode.SelectFile && rootGranted && !running,
-                    onCopy = { copyText("patched boot", patchedImagePath) },
+                    onCopy = { copyText(context.getString(R.string.root_patch_clip_label_patched_boot), patchedImagePath) },
                     onFlash = ::startFlashPatchedImage
                 )
             }
@@ -711,7 +971,7 @@ fun AbkRootPatchScreen(
                     success = success,
                     action = currentAction,
                     lines = logLines,
-                    canReboot = success == true && currentAction != "修补镜像",
+                    canReboot = success == true && currentAction != actionPatchImage,
                     onReboot = {
                         if (!running) scope.launch(Dispatchers.IO) { RootUtils.reboot() }
                     }
@@ -729,40 +989,22 @@ private fun LkmPatchPageBackground(
     backgroundUri: String?,
     backgroundImageEnabled: Boolean
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val hasBackground = backgroundImageEnabled && !backgroundUri.isNullOrBlank()
-    val scrimColor = if (colorScheme.surface.luminance() > 0.5f) {
-        colorScheme.surface.copy(alpha = 0.28f)
-    } else {
-        Color.Black.copy(alpha = 0.38f)
-    }
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colorScheme.surface)
-    ) {
-        if (hasBackground) {
-            AsyncImage(
-                model = backgroundUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(scrimColor)
-            )
-        }
-    }
+    AppPageBackground(
+        backgroundUri = backgroundUri,
+        backgroundImageEnabled = backgroundImageEnabled
+    )
 }
 
 @Composable
 private fun PatchGroupCard(content: @Composable ColumnScope.() -> Unit) {
+    val shape = MaterialTheme.shapes.medium
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
@@ -847,29 +1089,33 @@ private fun PatchedImageCard(
     onCopy: () -> Unit,
     onFlash: () -> Unit
 ) {
+    val shape = MaterialTheme.shapes.medium
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(20.dp))
                 Text(
-                    text = "修补结果",
+                    text = stringResource(R.string.root_patch_result),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onCopy) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "复制路径")
+                    Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.root_patch_copy_path))
                 }
                 if (canFlash) {
                     AssistChip(
                         onClick = onFlash,
-                        label = { Text("刷入") },
+                        label = { Text(stringResource(R.string.root_patch_flash)) },
                         leadingIcon = { Icon(Icons.Default.FlashOn, null, modifier = Modifier.size(16.dp)) }
                     )
                 }
@@ -894,10 +1140,14 @@ private fun PatchLogCard(
     canReboot: Boolean,
     onReboot: () -> Unit
 ) {
+    val shape = MaterialTheme.shapes.medium
     Card(
-        colors = CardDefaults.cardColors(containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
+        colors = CardDefaults.cardColors(containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -909,7 +1159,7 @@ private fun PatchLogCard(
                 }
                 Icon(icon, null, modifier = Modifier.size(20.dp))
                 Text(
-                    action.ifBlank { "日志" },
+                    action.ifBlank { stringResource(R.string.root_patch_logs) },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -917,7 +1167,7 @@ private fun PatchLogCard(
                 if (canReboot) {
                     AssistChip(
                         onClick = onReboot,
-                        label = { Text("重启") },
+                        label = { Text(stringResource(R.string.root_patch_reboot)) },
                         leadingIcon = { Icon(Icons.Default.RestartAlt, null, modifier = Modifier.size(16.dp)) }
                     )
                 }
@@ -929,7 +1179,7 @@ private fun PatchLogCard(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                val displayLines = lines.ifEmpty { listOf("等待操作") }
+                val displayLines = lines.ifEmpty { listOf(stringResource(R.string.root_patch_waiting_operation)) }
                 displayLines.forEach { line ->
                     Text(
                         text = line,
@@ -947,6 +1197,62 @@ private fun PatchLogCard(
     }
 }
 
+private data class LocalAnyKernelSelection(
+    val payload: File,
+    val displayName: String,
+    val manifest: SignedBundleManifest? = null,
+    val bundleFile: File? = null
+)
+
+private fun prepareLocalAnyKernelSelection(
+    context: Context,
+    stagedFile: File,
+    displayName: String
+): LocalAnyKernelSelection {
+    val manifest = ArtifactVerification.readBundleManifest(stagedFile)
+    if (manifest == null && !stagedFile.name.endsWith(".bundle.zip", ignoreCase = true)) {
+        return LocalAnyKernelSelection(stagedFile, displayName)
+    }
+    if (manifest == null) {
+        error("Missing signed bundle manifest")
+    }
+    val storedKey = PreferencesRepository(context).readForkArtifactSigningPublicKeyBlocking()
+    val publicKeyPem = storedKey?.let(ForkSigningManager::publicKeyPemFromStoredValue)
+    val verification = ArtifactVerification.verifyBundleFile(
+        bundleFile = stagedFile,
+        expectedType = ArtifactType.ANYKERNEL3,
+        publicKeyPem = publicKeyPem
+    )
+    if (!verification.success) {
+        error(verification.message)
+    }
+    val payloadName = verification.manifest.payloadName
+    val payloadFile = File(
+        stagedFile.parentFile ?: error("Selected bundle has no staging directory"),
+        "verified-${safeLocalFileName(payloadName)}"
+    )
+    ZipFile(stagedFile).use { zip ->
+        val payloadEntry = zip.getEntry(payloadName) ?: error("Missing signed AnyKernel3 payload")
+        zip.getInputStream(payloadEntry).use { input ->
+            FileOutputStream(payloadFile).use { output -> input.copyTo(output) }
+        }
+    }
+    return LocalAnyKernelSelection(
+        payload = payloadFile,
+        displayName = displayName,
+        manifest = verification.manifest,
+        bundleFile = stagedFile
+    )
+}
+
+private fun safeLocalFileName(value: String): String =
+    value.replace(Regex("""[^A-Za-z0-9._-]"""), "_").ifBlank { "payload.zip" }
+
+private fun formatFeatureMap(values: Map<String, Any?>): String =
+    values.entries
+        .sortedBy { it.key }
+        .joinToString(", ") { (key, value) -> "$key=${value ?: "null"}" }
+
 private suspend fun stageContentUri(
     context: Context,
     uri: Uri,
@@ -962,7 +1268,7 @@ private suspend fun stageContentUri(
     val target = File(dir, safeName)
     context.contentResolver.openInputStream(uri)?.use { input ->
         target.outputStream().use { output -> input.copyTo(output) }
-    } ?: error("无法读取选择的文件")
+    } ?: error(context.getString(R.string.root_patch_read_selected_file_failed))
     target to displayName
 }
 
@@ -988,11 +1294,47 @@ private fun isZipFile(context: Context, uri: Uri): Boolean {
         name.endsWith(".zip", ignoreCase = true)
 }
 
-private fun partitionLabel(partition: String, defaultPartition: String): String =
-    if (partition == defaultPartition) "$partition\n(default)" else partition
+private fun partitionLabel(
+    partition: String,
+    defaultPartition: String,
+    defaultLabel: String,
+    context: Context
+): String =
+    if (partition == defaultPartition) {
+        context.getString(R.string.root_patch_partition_default_multiline, partition, defaultLabel)
+    } else {
+        partition
+    }
 
-private fun partitionMenuLabel(partition: String, defaultPartition: String): String =
-    if (partition == defaultPartition) "$partition (default)" else partition
+private fun partitionMenuLabel(
+    partition: String,
+    defaultPartition: String,
+    defaultLabel: String,
+    context: Context
+): String =
+    if (partition == defaultPartition) {
+        context.getString(R.string.root_patch_partition_default_inline, partition, defaultLabel)
+    } else {
+        partition
+    }
+
+internal fun preferredLkmKmiSelection(
+    currentSelection: String,
+    options: List<String>,
+    recommendedKmi: String?,
+    hasCustomSelection: Boolean
+): String {
+    if (options.isEmpty()) return ""
+
+    val current = currentSelection.takeIf { it in options }
+    val recommended = recommendedKmi?.takeIf { it in options }
+    return when {
+        hasCustomSelection && current != null -> current
+        recommended != null -> recommended
+        current != null -> current
+        else -> options.first()
+    }
+}
 
 private fun String.defaultLkmVariantId(): String {
     val lower = lowercase()

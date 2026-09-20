@@ -10,14 +10,21 @@ An automation repository and Android app for building, distributing, and managin
 [![ABK App](https://img.shields.io/github/actions/workflow/status/xingguangcuican6666/ABK/build-abk-app.yml?label=ABK%20App&style=flat-square&logo=android&logoColor=white)](https://github.com/xingguangcuican6666/ABK/actions/workflows/build-abk-app.yml)
 [![KernelSU](https://img.shields.io/badge/KernelSU-Supported-5AA300?style=flat-square)](https://kernelsu.org/)
 [![SUSFS](https://img.shields.io/badge/SUSFS-Integrated-E67E22?style=flat-square)](https://gitlab.com/simonpunk/susfs4ksu)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/xingguangcuican6666/ABK)
 
 [简体中文](README.md) | English
 
 </div>
 
+## Support My Work
+
+If you like this project, please consider buying me a coffee to support its ongoing development!
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/xingguangcuican)
+
 ## Purpose
 
-ABK exists to turn the manual workflow of forking, enabling Actions, filling GKI parameters, starting builds, downloading artifacts, and flashing/installing outputs into a more direct process.
+ABK exists to turn the manual workflow of forking, enabling Actions, filling GKI or OnePlus/Oplus parameters, starting builds, downloading artifacts, and flashing/installing outputs into a more direct process.
 
 The repository provides GitHub Actions kernel build workflows. The Android app handles root checks, GitHub authorization, fork checks/sync, build dispatch, progress notifications, artifact downloads, and flashing/install entry points.
 
@@ -31,9 +38,9 @@ The repository provides GitHub Actions kernel build workflows. The Android app h
 
 ## Scope
 
-- Android 12 / 13 / 14 / 15 / 16 GKI build workflows.
+- Android 12 / 13 / 14 / 15 / 16 GKI build workflows, plus OnePlus/Oplus device build workflows.
 - KernelSU Official, KernelSU Next, SukiSU, and ReSukiSU variants.
-- Optional SUSFS, ZRAM, BBG, KPM, Re-Kernel, and OnePlus 8E support.
+- Optional SUSFS, ZRAM, BBG, KPM, Re-Kernel, lz4kd, BBR, proxy optimization, Unicode bypass, and OnePlus 8E support.
 - Artifact handling for AnyKernel3 packages, kernel images, KernelSU managers, and SUSFS modules.
 
 Actual compatibility depends on the device, kernel version, upstream branch state, and current patch compatibility.
@@ -50,6 +57,16 @@ Actual compatibility depends on the device, kernel version, upstream branch stat
 8. Flash or install only after confirming the risk.
 
 You can also run the workflows manually from GitHub Actions.
+
+## OnePlus/Oplus Device Builds
+
+The app's Build tab can switch between `GKI` and `OnePlus` targets. Selecting `OnePlus` dispatches [`oneplus-custom.yml`](.github/workflows/oneplus-custom.yml), which syncs the selected CPU branch and device XML from the OnePlus/Oplus manifest.
+ABK no longer uses `_b/_v/_u/_t` as the user-facing selection rule; the app, workflow summaries, and matrix job names show the device, ColorOS/OxygenOS system line, Android KMI, and CPU directly, while the upstream XML name stays only as a repo-init parameter.
+
+OnePlus builds support `android12/5.10`, `android13/5.15`, `android14/6.1`, `android15/6.6`, and `android16/6.12`; OnePlus 15/15T use the `sm8850` `android16/6.12` manifests. KernelSU Official, SukiSU, ReSukiSU, and rootless builds are available. OnePlus-specific switches include SUSFS, KPM, lz4kd, BBG, BBR, proxy optimization, and the Unicode zero-width bypass fix. SUSFS applies to `android14/6.1`, `android15/6.6`, and `android16/6.12`; 6.12 automatically disables the incompatible legacy lz4kd patch, and MTK CPU branches force proxy optimization off.
+
+To batch-build every currently supported OnePlus/Oplus device, manually run [`oneplus-full-feature-matrix.yml`](.github/workflows/oneplus-full-feature-matrix.yml) from GitHub Actions. The matrix reads the upstream manifest and generates jobs by CPU branch and KMI line.
+To trigger a full matrix across all manager variants for both GKI and OnePlus in one place, use [`all-managers-full-feature-matrix.yml`](.github/workflows/all-managers-full-feature-matrix.yml). Its inputs let you choose which variants to include, whether to run GKI or OnePlus, and the common build customizations.
 
 ## Risk Notice
 
@@ -77,7 +94,7 @@ Virtualization support enables the kernel features needed by Linux container env
 **If the build fails or bootloops after flashing:** Try switching to a different slot patch (e.g. 678 → 123 or 345). Different kernel sub-levels may require different patches.
 - Flashing kernels is high-risk and may cause boot failure, data loss, or require restoring a stock boot image.
 - Do not build or flash if you are unsure about the target partition, kernel version, Android version, or security patch level.
-- OnePlus ColorOS 14 / 15 compatibility still needs device-side validation and may require data wiping in failure cases.
+- OnePlus ColorOS/OxygenOS 13 / 14 / 15 / 16 compatibility still needs device-side validation and may require data wiping in failure cases.
 - If a build fails, first check whether SukiSU / SUSFS / ReSukiSU upstream branches have recently changed and are temporarily out of sync.
 - Custom external modules execute `setup.sh` from third-party repository roots. Review the script and source before enabling it.
 - ABK is intended only for devices and repositories you own or are explicitly authorized to use. Do not use it for unauthorized access, fraud, abuse, anti-risk bypassing, cheating, data theft, service disruption, or other illegal purposes.
@@ -98,6 +115,16 @@ sukisu=
 ```
 
 An empty value means the latest commit of that branch will be used.
+
+## KSU branch `Latest(最新)` (GKI only)
+
+Applies to every GKI `workflow_dispatch` workflow ([`kernel-custom.yml`](.github/workflows/kernel-custom.yml), [`kernel-a12-5-10.yml`](.github/workflows/kernel-a12-5-10.yml), [`kernel-a13-5-15.yml`](.github/workflows/kernel-a13-5-15.yml), [`kernel-a14-6-1.yml`](.github/workflows/kernel-a14-6-1.yml), [`kernel-a15-6-6.yml`](.github/workflows/kernel-a15-6-6.yml), [`kernel-a16-6-12.yml`](.github/workflows/kernel-a16-6-12.yml), and [`kernel-full-feature-matrix.yml`](.github/workflows/kernel-full-feature-matrix.yml)). The app dispatches [`kernel-custom.yml`](.github/workflows/kernel-custom.yml); on github.com you can also pick **Latest(最新)** when manually running a fixed-version workflow.
+
+On GitHub Actions and the app GKI build screen, **Latest(最新)** sits between **Dev** and **Custom**. [`resolve-ksu-ref.sh`](.github/scripts/resolve-ksu-ref.sh) resolves upstream KernelSU sources at run time:
+
+- **Official / SukiSU / ReSukiSU (GKI):** prefer upstream `main` **HEAD** when that commit has a successful `release.yml` (tag release) or standalone `build-manager.yml` run; kernel and manager share that `head_sha`. Otherwise fall back to the latest successful standalone `build-manager` on `main`. Manager APK via [nightly.link](https://nightly.link/) (`manager.zip` or `Manager-release.zip`); download also checks `release.yml` runs. Latest fails if neither path has a usable green run on `main`.
+
+If manager download fails, the manager job step fails but **the kernel build continues**. Latest does not fall back to `releases/latest` (the Stable/Dev release path).
 
 ## Stock Config
 
@@ -212,29 +239,85 @@ The app is built by the [`Build ABK App`](.github/workflows/build-abk-app.yml) w
 - The workflow currently bundles `arm64-v8a`, `armeabi-v7a`, and `x86_64`; at runtime ABK prefers the APK-bundled `ksud` and falls back to `/data/adb/ksud` or a system `ksud` only when needed.
 - This repository does not check in prebuilt `ksud` binaries. Source, build provenance, and license notes are documented in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
-## Acknowledgements
+### Self-hosted runner (optional)
 
-ABK continues development on top of the following projects, repositories, and community work. This section centralizes the major repositories and projects referenced by the README, website, workflows, or release notes:
+The app build workflows (`Build ABK App` / `Build ABK App (dev)`) pick their runner from the repository variable `APP_RUNNER`. **When unset, both workflows default to the GitHub-hosted `ubuntu-latest`**, so a fork works with no configuration. To build on your own hardware, see [`docs/self-hosted-runner.md`](docs/self-hosted-runner.md).
 
-- Upstream repository: [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS)
-- KernelSU: [tiann/KernelSU](https://github.com/tiann/KernelSU)
-- KernelSU Next: [KernelSU-Next/KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next)
-- SukiSU Ultra: [SukiSU-Ultra/SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)
-- ReSukiSU: [ReSukiSU/ReSukiSU](https://github.com/ReSukiSU/ReSukiSU)
-- SUSFS: [simonpunk/susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu)
-- SUSFS GitHub mirror / patch source: [ShirkNeko/susfs4ksu](https://github.com/ShirkNeko/susfs4ksu)
-- SukiSU patch: [ShirkNeko/SukiSU_patch](https://github.com/ShirkNeko/SukiSU_patch)
-- AnyKernel3: [WildKernels/AnyKernel3](https://github.com/WildKernels/AnyKernel3)
-- Kernel patches: [WildKernels/kernel_patches](https://github.com/WildKernels/kernel_patches)
-- Action-Build: [Numbersf/Action-Build](https://github.com/Numbersf/Action-Build)
-- SUSFS module build source: [sidex15/susfs4ksu-module](https://github.com/sidex15/susfs4ksu-module)
-- GCC prebuilts: [LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1](https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1)
-- Baseband Guard: [vc-teahouse/Baseband-guard](https://github.com/vc-teahouse/Baseband-guard)
-- Re-Kernel: [Sakion-Team/Re-Kernel](https://github.com/Sakion-Team/Re-Kernel)
-- Droidspaces / virtualization patch source: [ravindu644/Droidspaces-OSS](https://github.com/ravindu644/Droidspaces-OSS)
-- KernelSU website: https://kernelsu.org/
-- NTsync，setip和BBR来源： [WildKernels/kernel_patches](https://github.com/WildKernels/kernel_patche) PR by [huime180](https://github.com/huime180)
+## Contributors
+
+The following list is normalized from the current git history to identifiable GitHub usernames/links and sorted by username. Automation accounts and identities without a reliable mapping are filtered out:
+
+[@Akuma-Noko](https://github.com/Akuma-Noko), [@DebugBoard](https://github.com/DebugBoard), [@DreamFerry](https://github.com/DreamFerry), [@elysias123](https://github.com/elysias123), [@fanziyun](https://github.com/fanziyun), [@Fede2782](https://github.com/Fede2782), [@FixeQyt](https://github.com/FixeQyt), [@FunLay123](https://github.com/FunLay123), [@gsf114](https://github.com/gsf114), [@guruji-byte](https://github.com/guruji-byte), [@huime180](https://github.com/huime180), [@liqideqq](https://github.com/liqideqq), [@LX200944](https://github.com/LX200944), [@Mazha0309](https://github.com/Mazha0309), [@MiRinChan](https://github.com/MiRinChan), [@prpjzz](https://github.com/prpjzz), [@ReeViiS69](https://github.com/ReeViiS69), [@ShirkNeko](https://github.com/ShirkNeko), [@Starsun](https://github.com/Starsun), [@TheSillyOk](https://github.com/TheSillyOk), [@TheWildJames](https://github.com/TheWildJames), [@Tools-cx-app](https://github.com/Tools-cx-app), [@ukriu](https://github.com/ukriu), [@wrnxr233](https://github.com/wrnxr233), [@Xiaomichael](https://github.com/Xiaomichael), [@xingguangcuican6666](https://github.com/xingguangcuican6666), [@yx1234587](https://github.com/yx1234587), [@zzh20188](https://github.com/zzh20188).
+
+## Open Source Licenses
+
+The full notice list is maintained in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), and the app's Open source licenses page follows the same scope. Upstream license texts and extra obligations remain authoritative.
+
+### Repository and Bundled Code
+
+| Component | Source | License |
+| --- | --- | --- |
+| AnyBase Kernel | [`LICENSE`](LICENSE) | GPL-3.0 |
+| ABK Control native bridge | `app/src/main/cpp/uapi/abk_control.h` | GPL-2.0 |
+| xingguang DDK module | `ddk/xingguang-ddk/xingguang_ddk.c` | GPL |
+| DDK kernel API patch | `ddk/patches/xingguang-ddk/0001-xingguang-ddk-api.patch` | GPL-2.0 |
+| ZRAM LZ4 kernel glue | `zram/lz4/Makefile` | GPL-2.0-only |
+| LZ4 sources and headers | `zram/lz4`, `zram/include/linux/lz4.h` | BSD-2-Clause |
+
+### Upstream Projects and Workflow References
+
+| Project | URL | License |
+| --- | --- | --- |
+| zzh20188/GKI_KernelSU_SUSFS | <https://github.com/zzh20188/GKI_KernelSU_SUSFS> | Upstream repository license |
+| WildKernels/GKI_KernelSU_SUSFS | <https://github.com/WildKernels/GKI_KernelSU_SUSFS> | Upstream repository license |
+| CodeLinaro CLO LA | <https://git.codelinaro.org/clo/la> | Top-level upstream project licenses |
+| OnePlusOSS/kernel_manifest | <https://github.com/OnePlusOSS/kernel_manifest> | Upstream repository license / no SPDX detected |
+| Xiaomichael/kernel_manifest | <https://github.com/Xiaomichael/kernel_manifest> | Upstream repository license / no SPDX detected |
+| Xiaomichael/kernel_patches | <https://github.com/Xiaomichael/kernel_patches> | Upstream repository license / no SPDX detected |
+| KernelSU | <https://github.com/tiann/KernelSU> | GPL-3.0 |
+| KernelSU Next | <https://github.com/KernelSU-Next/KernelSU-Next> | GPL-3.0 |
+| SukiSU Ultra | <https://github.com/SukiSU-Ultra/SukiSU-Ultra> | GPL-3.0 |
+| ReSukiSU | <https://github.com/ReSukiSU/ReSukiSU> | GPL-3.0 |
+| SUSFS | <https://gitlab.com/simonpunk/susfs4ksu> | GPL-2.0 |
+| ShirkNeko/susfs4ksu | <https://github.com/ShirkNeko/susfs4ksu> | GPL-2.0 |
+| SukiSU_patch | <https://github.com/ShirkNeko/SukiSU_patch> | GPL-2.0 |
+| AnyKernel3 | <https://github.com/WildKernels/AnyKernel3> | GPL-2.0 |
+| Xiaomichael/AnyKernel3 | <https://github.com/Xiaomichael/AnyKernel3> | Upstream repository license / NOASSERTION |
+| WildKernels/kernel_patches | <https://github.com/WildKernels/kernel_patches> | GPL-2.0 |
+| cctv18/susfs4oki | <https://github.com/cctv18/susfs4oki> | GPL-3.0 |
+| SukiSU_KernelPatch_patch | <https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch> | Upstream repository license |
+| Action-Build | <https://github.com/Numbersf/Action-Build> | Upstream repository license |
+| SUSFS module build source | <https://github.com/sidex15/susfs4ksu-module> | Upstream repository license |
+| GCC prebuilts | <https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1> | GPL-family toolchain notices |
+| Baseband Guard | <https://github.com/vc-teahouse/Baseband-guard> | Upstream repository license |
+| Re-Kernel | <https://github.com/Sakion-Team/Re-Kernel> | Upstream repository license |
+| Droidspaces / virtualization patch source | <https://github.com/ravindu644/Droidspaces-OSS> | Upstream repository license |
+| ABK_repo module catalog | <https://github.com/xingguangcuican6666/ABK_repo> | Upstream repository license |
+| AOSP kernel/common, manifest, mkbootimg, build-tools | <https://android.googlesource.com/> | GPL-2.0 / Apache-2.0 / AOSP notices |
+| Android GKI certified boot images / command line tools | <https://dl.google.com/android/> | Android distribution terms / Android SDK License |
+
+### Android / Gradle Dependencies
+
+Android dependencies are derived from `gradle/libs.versions.toml` and `app/build.gradle.kts`. Gradle native-platform initialization fails in this local environment, so this records direct declared dependencies; transitive dependencies follow the actual Gradle resolution result.
+
+| License | Dependencies |
+| --- | --- |
+| Apache-2.0 | Android Gradle Plugin, Kotlin Gradle/Compose plugin, AndroidX Core/Lifecycle/Activity/Compose/Material3/Navigation/Work/DataStore/Test, Google Material Components, Retrofit, OkHttp, Gson, kotlinx-serialization-json, libsu, Coil |
+| EPL-1.0 | JUnit 4.13.2 |
+
+### Web npm Transitive Dependencies
+
+Web dependencies are derived from `web/package-lock.json`.
+
+| License | Packages |
+| --- | --- |
+| Apache-2.0 | `@webassemblyjs/leb128`, `@xtuc/long`, `baseline-browser-mapping`, `detect-libc` |
+| BSD-2-Clause | `eslint-scope`, `esrecurse`, `estraverse`, `glob-to-regexp`, `terser` |
+| BSD-3-Clause | `@xtuc/ieee754`, `fast-uri`, `flat`, `source-map`, `source-map-js` |
+| CC-BY-4.0 | `caniuse-lite` |
+| ISC | `electron-to-chromium`, `graceful-fs`, `icss-utils`, `isexe`, `picocolors`, `postcss-modules-extract-imports`, `postcss-modules-scope`, `postcss-modules-values`, `semver`, `which` |
+| MIT | Remaining npm transitive dependencies, including `webpack`, `webpack-cli`, `sass`, `sass-loader`, `css-loader`, `mini-css-extract-plugin`, `postcss`, `ajv`, `browserslist`, `chokidar`, `@jridgewell/*`, `@parcel/watcher*`, and MIT-licensed `@webassemblyjs/*` packages. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the full package list. |
 
 ## License
 
-This repository references multiple third-party projects, patches, and generated artifacts. Before using, redistributing, or modifying them, follow the license and terms of each upstream project. Users are responsible for any device damage, data loss, account risk, service interruption, compliance issue, or direct/indirect loss caused by using ABK, its workflows, custom modules, or generated artifacts.
+ABK is released under GPL-3.0. This repository also references third-party projects, patches, binary sources, and package dependencies. Before using, redistributing, or modifying them, follow the license and terms of each upstream project. Users are responsible for any device damage, data loss, account risk, service interruption, compliance issue, or direct/indirect loss caused by using ABK, its workflows, custom modules, or generated artifacts.

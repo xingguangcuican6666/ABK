@@ -24,6 +24,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +32,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.abk.kernel.ui.blur.blurEffect
+import com.abk.kernel.ui.blur.isBlurActive
 import com.abk.kernel.ui.theme.uiSurfaceColor
 
 val AbkScreenHorizontalPadding: Dp = 24.dp
@@ -46,6 +49,7 @@ fun ExpressiveFlexibleTopBar(
     navigationIcon: @Composable (() -> Unit)? = null,
     compactTitle: Boolean = false,
     scrollBehavior: TopAppBarScrollBehavior? = null,
+    enableBlur: Boolean = false,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
     ExpressiveTopBar(
@@ -54,6 +58,7 @@ fun ExpressiveFlexibleTopBar(
         navigationIcon = navigationIcon,
         compactTitle = compactTitle,
         scrollBehavior = scrollBehavior,
+        enableBlur = enableBlur,
         actions = actions
     )
 }
@@ -67,6 +72,7 @@ fun ExpressiveTopBar(
     compactTitle: Boolean = false,
     collapsing: Boolean = true,
     scrollBehavior: TopAppBarScrollBehavior? = null,
+    enableBlur: Boolean = false,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
     val hasNavigation = navigationIcon != null
@@ -124,10 +130,13 @@ fun ExpressiveTopBar(
             fontWeight = FontWeight.Normal,
             letterSpacing = 0.sp
         )
+    val blurActive = isBlurActive(enableBlur)
 
     Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = uiSurfaceColor(MaterialTheme.colorScheme.surface),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (blurActive) Modifier.blurEffect() else Modifier),
+        color = if (blurActive) Color.Transparent else uiSurfaceColor(MaterialTheme.colorScheme.surface),
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         Column(

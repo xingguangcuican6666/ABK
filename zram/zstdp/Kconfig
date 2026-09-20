@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config CRYPTO_ZSTDP
+	tristate "Zstdp"
+	select CRYPTO_ALGAPI
+	select CRYPTO_ACOMP2
+	select XXHASH
+	help
+	  zstdp is a zram-oriented zstd variant with pre-split block handling.
+	  ABK vendors the upstream zstd sources required by zstd_preSplit.c and
+	  registers the compressor as "zstdp" / "zstdp-scomp".

@@ -2,24 +2,30 @@
 
 package com.abk.kernel.ui.screens
 
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.PredictiveBackHandler
+import android.os.Environment
+import android.provider.Settings
+import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -33,78 +39,103 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
 import coil.compose.AsyncImage
 import com.abk.kernel.BuildConfig
 import com.abk.kernel.R
+import com.abk.kernel.extensions.AbkExtensionManagerScreen
+import com.abk.kernel.utils.DownloadDirectoryUtils
+import com.abk.kernel.utils.DownloadUtils
+import com.abk.kernel.utils.LocaleHelper
+import com.abk.kernel.ui.blur.BlurScreenScaffold
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.components.AbkSegmentedButtonOption
+import com.abk.kernel.ui.components.AbkSingleChoiceSegmentedButtonRow
+import com.abk.kernel.ui.components.AbkInlineLoadingPill
+import com.abk.kernel.ui.components.AppPageBackground
+import com.abk.kernel.ui.components.ObserveChildPageVisibility
+import com.abk.kernel.ui.components.childPageOverlayEnterTransition
+import com.abk.kernel.ui.components.childPageOverlayExitTransition
+import com.abk.kernel.ui.components.childPageScrimExitTransition
+import com.abk.kernel.ui.components.rememberChildPageBackController
+import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
 import com.abk.kernel.ui.components.ExpressiveHeroCard
 import com.abk.kernel.ui.components.ExpressiveListItem
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveSwitchItem
 import com.abk.kernel.ui.components.ExpressiveTopBar
+import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
+import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
+import com.abk.kernel.data.model.APP_UPDATE_LINE_DEV
+import com.abk.kernel.data.model.APP_UPDATE_LINE_NORMAL
+import com.abk.kernel.data.model.APP_UPDATE_STABILITY_STABLE
+import com.abk.kernel.data.model.APP_UPDATE_STABILITY_UNSTABLE
+import com.abk.kernel.data.model.AppUpdateCheckResult
+import com.abk.kernel.data.repository.PreferencesRepository
+import com.abk.kernel.data.repository.Result
 import com.abk.kernel.data.model.ManagerSettingItem
 import com.abk.kernel.data.model.ManagerSettingKind
+import com.abk.kernel.data.model.normalizeAppUpdateLine
+import com.abk.kernel.data.model.normalizeAppUpdateStability
 import com.abk.kernel.viewmodel.MainUiState
 import com.abk.kernel.viewmodel.MainViewModel
-import kotlin.math.pow
-import kotlinx.coroutines.CancellationException
+import com.abk.kernel.viewmodel.exportDiagnosticBundle
+import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
-
-private const val THEME_BACK_VISUAL_EXPONENT = 1.8f
-private const val THEME_BACK_SCALE_DELTA = 0.09f
-private const val THEME_BACK_SCRIM_ALPHA = 0.32f
-private const val THEME_PAGE_EXIT_DELAY_MS = 280L
-private val THEME_BACK_MAX_OFFSET = 56.dp
-private val THEME_BACK_MAX_CORNER = 32.dp
-
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsScreen(
     vm: MainViewModel,
     outerPadding: PaddingValues = PaddingValues(0.dp),
-    onThemePageVisibleChange: (Boolean) -> Unit = {},
+    onChildPageVisibleChange: (Boolean) -> Unit = {},
     onOpenInstalledModules: () -> Unit = {}
 ) {
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var showLogoutDialog by remember { mutableStateOf(false) }
-    var showAboutDialog by remember { mutableStateOf(false) }
+    var exportingDiagnostics by remember { mutableStateOf(false) }
     var showThemeSettings by rememberSaveable { mutableStateOf(false) }
     var showAppProfileTemplates by rememberSaveable { mutableStateOf(false) }
     var showManagerTools by rememberSaveable { mutableStateOf(false) }
+    var showKernelCapabilities by rememberSaveable { mutableStateOf(false) }
+    var showSusfsControl by rememberSaveable { mutableStateOf(false) }
+    var showAboutPage by rememberSaveable { mutableStateOf(false) }
+    var showOpenSourceLicenses by rememberSaveable { mutableStateOf(false) }
+    var showExtensionManagerPage by rememberSaveable { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-    var themeBackProgress by remember { mutableFloatStateOf(0f) }
-    val showChildPage = showThemeSettings || showAppProfileTemplates || showManagerTools
-    val motionScheme = MaterialTheme.motionScheme
-    val animatedThemeBackProgress by animateFloatAsState(
-        targetValue = themeBackProgress.coerceIn(0f, 1f),
-        animationSpec = motionScheme.fastSpatialSpec(),
-        label = "settings-theme-back-progress"
+    val showChildPage = showThemeSettings || showAppProfileTemplates || showManagerTools || showKernelCapabilities ||
+        showSusfsControl || showAboutPage || showOpenSourceLicenses || showExtensionManagerPage
+    val childPageTransition = rememberChildPageOverlayTransition(
+        visible = showChildPage,
+        label = "settings-child-page"
     )
-    val visualThemeBackProgress = animatedThemeBackProgress
-        .coerceIn(0f, 1f)
-        .pow(THEME_BACK_VISUAL_EXPONENT)
-    val density = LocalDensity.current
-    val themeBackOffsetPx = with(density) { THEME_BACK_MAX_OFFSET.toPx() }
-    val themeBackCorner = with(density) { (THEME_BACK_MAX_CORNER.toPx() * visualThemeBackProgress).toDp() }
+    val motionScheme = MaterialTheme.motionScheme
 
     LaunchedEffect(Unit) {
         vm.refreshManagerSettings(force = true)
+        vm.refreshSusfsState(force = true)
     }
 
     LaunchedEffect(state.hasNativeManagerPermission) {
@@ -114,77 +145,172 @@ fun SettingsScreen(
         }
     }
 
-    LaunchedEffect(showChildPage) {
-        if (showChildPage) {
-            onThemePageVisibleChange(true)
-        } else {
-            delay(THEME_PAGE_EXIT_DELAY_MS)
-            themeBackProgress = 0f
-            onThemePageVisibleChange(false)
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { onThemePageVisibleChange(false) }
-    }
-
-    fun openThemeSettings() {
-        themeBackProgress = 0f
-        onThemePageVisibleChange(true)
-        showAppProfileTemplates = false
-        showManagerTools = false
-        showThemeSettings = true
-    }
-
-    fun closeThemeSettings() {
-        showThemeSettings = false
-    }
-
-    fun openAppProfileTemplates() {
-        themeBackProgress = 0f
-        onThemePageVisibleChange(true)
-        showThemeSettings = false
-        showManagerTools = false
-        showAppProfileTemplates = true
-        vm.refreshAppProfileTemplates()
-    }
-
-    fun openManagerTools() {
-        themeBackProgress = 0f
-        onThemePageVisibleChange(true)
-        showThemeSettings = false
-        showAppProfileTemplates = false
-        showManagerTools = true
-        vm.refreshManagerTools(force = true)
+    LaunchedEffect(state.appUpdatePendingInstallPath) {
+        val apkPath = state.appUpdatePendingInstallPath ?: return@LaunchedEffect
+        launchAppUpdateInstaller(context, apkPath)
+        vm.consumeAppUpdatePendingInstallPath()
     }
 
     fun closeChildPage() {
         showThemeSettings = false
         showAppProfileTemplates = false
         showManagerTools = false
+        showKernelCapabilities = false
+        showSusfsControl = false
+        showAboutPage = false
+        showOpenSourceLicenses = false
+        showExtensionManagerPage = false
     }
 
-    PredictiveBackHandler(enabled = showChildPage && state.predictiveBackEnabled) { progress ->
-        try {
-            progress.collect { backEvent ->
-                themeBackProgress = backEvent.progress.coerceIn(0f, 1f)
+    val childPageBack = rememberChildPageBackController(
+        enabled = showChildPage,
+        predictiveBackEnabled = state.predictiveBackEnabled,
+        onBack = ::closeChildPage,
+    )
+
+    ObserveChildPageVisibility(
+        transition = childPageTransition,
+        onVisibleChange = onChildPageVisibleChange,
+        onAfterExitAnimation = { childPageBack.resetProgress() }
+    )
+
+    DisposableEffect(Unit) {
+        onDispose { onChildPageVisibleChange(false) }
+    }
+
+    fun openThemeSettings() {
+        childPageBack.resetProgress()
+        showAppProfileTemplates = false
+        showManagerTools = false
+        showKernelCapabilities = false
+        showSusfsControl = false
+        showAboutPage = false
+        showOpenSourceLicenses = false
+        showExtensionManagerPage = false
+        showThemeSettings = true
+    }
+
+    fun openAppProfileTemplates() {
+        childPageBack.resetProgress()
+        showThemeSettings = false
+        showManagerTools = false
+        showKernelCapabilities = false
+        showSusfsControl = false
+        showAboutPage = false
+        showOpenSourceLicenses = false
+        showExtensionManagerPage = false
+        showAppProfileTemplates = true
+        vm.refreshAppProfileTemplates()
+    }
+
+    fun openManagerTools() {
+        childPageBack.resetProgress()
+        showThemeSettings = false
+        showAppProfileTemplates = false
+        showSusfsControl = false
+        showKernelCapabilities = false
+        showAboutPage = false
+        showOpenSourceLicenses = false
+        showExtensionManagerPage = false
+        showManagerTools = true
+        vm.refreshManagerTools(force = true)
+    }
+
+    fun openKernelCapabilities() {
+        childPageBack.resetProgress()
+        showThemeSettings = false
+        showAppProfileTemplates = false
+        showManagerTools = false
+        showSusfsControl = false
+        showAboutPage = false
+        showOpenSourceLicenses = false
+        showExtensionManagerPage = false
+        showKernelCapabilities = true
+        vm.refreshKernelCapabilities(force = true)
+    }
+
+    fun openSusfsControl() {
+        childPageBack.resetProgress()
+        showThemeSettings = false
+        showAppProfileTemplates = false
+        showManagerTools = false
+        showKernelCapabilities = false
+        showAboutPage = false
+        showOpenSourceLicenses = false
+        showExtensionManagerPage = false
+        showSusfsControl = true
+        vm.refreshSusfsState(force = true)
+    }
+
+    fun openAboutPage() {
+        childPageBack.resetProgress()
+        showThemeSettings = false
+        showAppProfileTemplates = false
+        showManagerTools = false
+        showKernelCapabilities = false
+        showOpenSourceLicenses = false
+        showExtensionManagerPage = false
+        showAboutPage = true
+    }
+
+    fun openOpenSourceLicenses() {
+        childPageBack.resetProgress()
+        showThemeSettings = false
+        showAppProfileTemplates = false
+        showManagerTools = false
+        showKernelCapabilities = false
+        showAboutPage = false
+        showExtensionManagerPage = false
+        showOpenSourceLicenses = true
+    }
+
+    fun openExtensionManagerPage() {
+        childPageBack.resetProgress()
+        showThemeSettings = false
+        showAppProfileTemplates = false
+        showManagerTools = false
+        showKernelCapabilities = false
+        showAboutPage = false
+        showOpenSourceLicenses = false
+        showExtensionManagerPage = true
+    }
+
+    fun exportDiagnostics() {
+        if (exportingDiagnostics) return
+        scope.launch {
+            exportingDiagnostics = true
+            runCatching {
+                exportDiagnosticBundle(context, state)
+            }.onSuccess { result ->
+                shareDiagnosticBundle(context, result.zipFile)
+                if (result.warnings.isNotEmpty()) {
+                    vm.showSnackbar(
+                        context.getString(
+                            R.string.settings_export_diagnostics_partial,
+                            result.warnings.size
+                        ),
+                        longDuration = true
+                    )
+                }
+            }.onFailure { error ->
+                vm.showSnackbar(
+                    context.getString(
+                        R.string.settings_export_diagnostics_failed,
+                        error.message ?: error::class.java.simpleName
+                    ),
+                    longDuration = true
+                )
             }
-            closeChildPage()
-        } catch (_: CancellationException) {
-            themeBackProgress = 0f
+            exportingDiagnostics = false
         }
-    }
-
-    BackHandler(enabled = showChildPage && !state.predictiveBackEnabled) {
-        closeChildPage()
     }
 
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
             icon = { Icon(Icons.Default.Logout, null) },
-            title = { Text("退出登录") },
-            text = { Text("确认退出 GitHub 账户吗？退出后需重新授权。") },
+            title = { Text(stringResource(R.string.settings_logout_title)) },
+            text = { Text(stringResource(R.string.settings_logout_message)) },
             confirmButton = {
                 Button(
                     onClick = { showLogoutDialog = false; vm.logout() },
@@ -197,13 +323,6 @@ fun SettingsScreen(
         )
     }
 
-    if (showAboutDialog) {
-        AboutDialog(
-            onDismiss = { showAboutDialog = false },
-            onOpenUrl = { openUrl(context, it) }
-        )
-    }
-
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val childPageTopInset = outerPadding.calculateTopPadding()
         val childPageBottomInset = outerPadding.calculateBottomPadding()
@@ -211,17 +330,20 @@ fun SettingsScreen(
             .fillMaxWidth()
             .height(maxHeight + childPageTopInset + childPageBottomInset)
             .offset(y = -childPageTopInset)
-        Scaffold(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surface),
+        BlurScreenScaffold(
+            blurConfig = state.blurConfig,
+            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
             topBar = {
                 ExpressiveTopBar(
                     title = stringResource(R.string.settings_title),
-                    scrollBehavior = scrollBehavior
+                    scrollBehavior = scrollBehavior,
+                    enableBlur = state.blurEnabled
                 )
             }
-        ) {
+        ) { topBarHeight ->
             SettingsMainContent(
-                padding = it,
+                topBarHeight = topBarHeight,
+                outerPadding = outerPadding,
                 state = state,
                 vm = vm,
                 scrollBehavior = scrollBehavior,
@@ -229,63 +351,62 @@ fun SettingsScreen(
                 onOpenThemeSettings = ::openThemeSettings,
                 onOpenAppProfileTemplates = ::openAppProfileTemplates,
                 onOpenManagerTools = ::openManagerTools,
+                onOpenKernelCapabilities = ::openKernelCapabilities,
+                onOpenSusfsControl = ::openSusfsControl,
                 onOpenInstalledModules = onOpenInstalledModules,
-                onAbout = { showAboutDialog = true }
+                onAbout = ::openAboutPage,
+                onOpenSourceLicenses = ::openOpenSourceLicenses,
+                onOpenExtensionManager = ::openExtensionManagerPage,
+                exportingDiagnostics = exportingDiagnostics,
+                onExportDiagnostics = ::exportDiagnostics
             )
         }
 
-        AnimatedVisibility(
-            visible = showChildPage,
+        childPageTransition.AnimatedVisibility(
+            visible = { it },
             enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
+            exit = childPageScrimExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = THEME_BACK_SCRIM_ALPHA * visualThemeBackProgress))
+                    .background(Color.Black.copy(alpha = childPageBack.scrimAlpha))
             )
         }
 
-        AnimatedVisibility(
-            visible = showThemeSettings,
-            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
-                slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { width -> width / 4 },
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
-                slideOutHorizontally(animationSpec = motionScheme.fastSpatialSpec()) { width -> width },
+        childPageTransition.AnimatedVisibility(
+            visible = { it && showThemeSettings },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        translationX = themeBackOffsetPx * visualThemeBackProgress
-                        scaleX = 1f - THEME_BACK_SCALE_DELTA * visualThemeBackProgress
-                        scaleY = 1f - THEME_BACK_SCALE_DELTA * visualThemeBackProgress
-                        alpha = 1f - 0.06f * visualThemeBackProgress
-                        shape = RoundedCornerShape(themeBackCorner)
-                        clip = visualThemeBackProgress > 0.01f
-                    }
+                    .then(childPageBack.backTransformModifier())
             ) {
                 SettingsPageBackground(
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
-                Scaffold(
+                BlurScreenScaffold(
+                    blurConfig = state.blurConfig,
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
                             title = stringResource(R.string.settings_theme),
                             navigationIcon = {
-                                IconButton(onClick = ::closeThemeSettings) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                                IconButton(onClick = childPageBack::requestDismiss) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
                                 }
-                            }
+                            },
+                            enableBlur = state.blurEnabled
                         )
                     }
-                ) {
+                ) { topBarHeight ->
                     ThemeSettingsScreen(
-                        padding = it,
+                        topBarHeight = topBarHeight,
                         themeMode = state.themeMode,
                         dynamicColorEnabled = state.dynamicColorEnabled,
                         customThemeColorArgb = state.customThemeColorArgb,
@@ -293,6 +414,8 @@ fun SettingsScreen(
                         backgroundUri = state.customBackgroundUri,
                         backgroundImageEnabled = state.backgroundImageEnabled,
                         uiSurfaceAlpha = state.uiSurfaceAlpha,
+                        blurEnabled = state.blurEnabled,
+                        blurBackgroundExpEnabled = state.blurBackgroundExpEnabled,
                         onThemeModeChange = { value -> vm.setThemeMode(value) },
                         onDynamicColorEnabledChange = { enabled, themeColor, accentColor ->
                             vm.setDynamicColorEnabled(enabled, themeColor, accentColor)
@@ -302,58 +425,63 @@ fun SettingsScreen(
                         },
                         onBackgroundImageChange = { uri -> vm.setBackgroundImageUri(uri) },
                         onBackgroundImageEnabledChange = { enabled -> vm.setBackgroundImageEnabled(enabled) },
-                        onUiSurfaceAlphaChange = { alpha -> vm.setUiSurfaceAlpha(alpha) }
+                        onUiSurfaceAlphaChange = { alpha -> vm.setUiSurfaceAlpha(alpha) },
+                        onUiSurfaceAlphaPreviewChange = { alpha -> vm.setUiSurfaceAlphaPreview(alpha) },
+                        onBlurEnabledChange = vm::setBlurEnabled,
+                        onBlurBackgroundExpEnabledChange = vm::setBlurBackgroundExpEnabled,
+                        onUiSurfaceAlphaSync = vm::syncUiSurfaceAlphaPreview
                     )
                 }
             }
         }
 
-        AnimatedVisibility(
-            visible = showAppProfileTemplates,
-            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
-                slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { width -> width / 4 },
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
-                slideOutHorizontally(animationSpec = motionScheme.fastSpatialSpec()) { width -> width },
+        childPageTransition.AnimatedVisibility(
+            visible = { it && showAppProfileTemplates },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
+            val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = state.appProfileTemplatesLoading)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        translationX = themeBackOffsetPx * visualThemeBackProgress
-                        scaleX = 1f - THEME_BACK_SCALE_DELTA * visualThemeBackProgress
-                        scaleY = 1f - THEME_BACK_SCALE_DELTA * visualThemeBackProgress
-                        alpha = 1f - 0.06f * visualThemeBackProgress
-                        shape = RoundedCornerShape(themeBackCorner)
-                        clip = visualThemeBackProgress > 0.01f
-                    }
+                    .then(childPageBack.backTransformModifier())
             ) {
                 SettingsPageBackground(
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
-                Scaffold(
+                BlurScreenScaffold(
+                    blurConfig = state.blurConfig,
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
-                            title = "App Profile 模板",
+                            title = stringResource(R.string.settings_app_profile_templates),
                             navigationIcon = {
-                                IconButton(onClick = ::closeChildPage) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                                IconButton(onClick = childPageBack::requestDismiss) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
                                 }
                             },
+                            enableBlur = state.blurEnabled,
                             actions = {
-                                IconButton(onClick = { vm.refreshAppProfileTemplates() }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                                IconButton(onClick = {
+                                    refreshPresentation.beginRefresh()
+                                    vm.refreshAppProfileTemplates()
+                                }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
                                 }
                             }
                         )
                     }
-                ) {
+                ) { topBarHeight ->
                     AppProfileTemplateSettingsScreen(
-                        padding = it,
+                        topBarHeight = topBarHeight,
                         state = state,
-                        onRefresh = vm::refreshAppProfileTemplates,
+                        showRefreshLoading = refreshPresentation.showLoading && state.appProfileTemplates.isNotEmpty(),
+                        onRefresh = {
+                            refreshPresentation.beginRefresh()
+                            vm.refreshAppProfileTemplates()
+                        },
                         onSelect = vm::selectAppProfileTemplate,
                         onSave = vm::saveAppProfileTemplate,
                         onDelete = vm::deleteAppProfileTemplate
@@ -362,54 +490,265 @@ fun SettingsScreen(
             }
         }
 
-        AnimatedVisibility(
-            visible = showManagerTools,
-            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
-                slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { width -> width / 4 },
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
-                slideOutHorizontally(animationSpec = motionScheme.fastSpatialSpec()) { width -> width },
+        childPageTransition.AnimatedVisibility(
+            visible = { it && showExtensionManagerPage },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        translationX = themeBackOffsetPx * visualThemeBackProgress
-                        scaleX = 1f - THEME_BACK_SCALE_DELTA * visualThemeBackProgress
-                        scaleY = 1f - THEME_BACK_SCALE_DELTA * visualThemeBackProgress
-                        alpha = 1f - 0.06f * visualThemeBackProgress
-                        shape = RoundedCornerShape(themeBackCorner)
-                        clip = visualThemeBackProgress > 0.01f
-                    }
+                    .then(childPageBack.backTransformModifier())
             ) {
                 SettingsPageBackground(
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
-                Scaffold(
+                AbkExtensionManagerScreen(
+                    focusExtensionId = null,
+                    bootstrapMode = false,
+                    onBack = childPageBack::requestDismiss,
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = Color.Transparent,
+                    blurEnabled = state.blurEnabled,
+                    blurBackgroundExpEnabled = state.blurBackgroundExpEnabled,
+                    backgroundUri = state.customBackgroundUri,
+                    backgroundImageEnabled = state.backgroundImageEnabled,
+                )
+            }
+        }
+
+        childPageTransition.AnimatedVisibility(
+            visible = { it && showManagerTools },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
+            modifier = childPageModifier
+        ) {
+            val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = state.managerToolsLoading)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(childPageBack.backTransformModifier())
+            ) {
+                SettingsPageBackground(
+                    backgroundUri = state.customBackgroundUri,
+                    backgroundImageEnabled = state.backgroundImageEnabled
+                )
+                BlurScreenScaffold(
+                    blurConfig = state.blurConfig,
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
-                            title = "工具",
+                            title = stringResource(R.string.settings_tools),
                             navigationIcon = {
-                                IconButton(onClick = ::closeChildPage) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                                IconButton(onClick = childPageBack::requestDismiss) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
                                 }
                             },
+                            enableBlur = state.blurEnabled,
                             actions = {
-                                IconButton(onClick = { vm.refreshManagerTools(force = true) }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                                IconButton(onClick = {
+                                    refreshPresentation.beginRefresh()
+                                    vm.refreshManagerTools(force = true)
+                                }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
                                 }
                             }
                         )
                     }
-                ) {
+                ) { topBarHeight ->
                     ManagerToolsSettingsScreen(
-                        padding = it,
+                        topBarHeight = topBarHeight,
                         state = state,
+                        showRefreshLoading = refreshPresentation.showLoading,
                         onSelinuxChange = vm::setSelinuxEnforcing,
                         onBackupAllowlist = vm::backupRootGrantAllowlist,
                         onRestoreAllowlist = vm::restoreRootGrantAllowlist
+                    )
+                }
+            }
+        }
+
+        childPageTransition.AnimatedVisibility(
+            visible = { it && showKernelCapabilities },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
+            modifier = childPageModifier
+        ) {
+            val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = state.kernelCapabilitiesLoading)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(childPageBack.backTransformModifier())
+            ) {
+                SettingsPageBackground(
+                    backgroundUri = state.customBackgroundUri,
+                    backgroundImageEnabled = state.backgroundImageEnabled
+                )
+                BlurScreenScaffold(
+                    blurConfig = state.blurConfig,
+                    containerColor = Color.Transparent,
+                    topBar = {
+                        ExpressiveTopBar(
+                            title = stringResource(R.string.settings_kernel_capabilities),
+                            navigationIcon = {
+                                IconButton(onClick = childPageBack::requestDismiss) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                                }
+                            },
+                            enableBlur = state.blurEnabled,
+                            actions = {
+                                IconButton(onClick = {
+                                    refreshPresentation.beginRefresh()
+                                    vm.refreshKernelCapabilities(force = true)
+                                }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                                }
+                            }
+                        )
+                    }
+                ) { topBarHeight ->
+                    KernelCapabilitiesSettingsScreen(
+                        topBarHeight = topBarHeight,
+                        state = state,
+                        showRefreshLoading = refreshPresentation.showLoading,
+                        onRefresh = {
+                            refreshPresentation.beginRefresh()
+                            vm.refreshKernelCapabilities(force = true)
+                        },
+                        onTcpAlgorithmSelected = vm::setTcpCongestionControlAlgorithm
+                    )
+                }
+            }
+        }
+
+        childPageTransition.AnimatedVisibility(
+            visible = { it && showSusfsControl },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
+            modifier = childPageModifier
+        ) {
+            val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = state.susfsLoading)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(childPageBack.backTransformModifier())
+            ) {
+                SettingsPageBackground(
+                    backgroundUri = state.customBackgroundUri,
+                    backgroundImageEnabled = state.backgroundImageEnabled
+                )
+                BlurScreenScaffold(
+                    blurConfig = state.blurConfig,
+                    containerColor = Color.Transparent,
+                    topBar = {
+                        ExpressiveTopBar(
+                            title = stringResource(R.string.susfs_title),
+                            navigationIcon = {
+                                IconButton(onClick = childPageBack::requestDismiss) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                                }
+                            },
+                            enableBlur = state.blurEnabled,
+                            actions = {
+                                IconButton(onClick = {
+                                    refreshPresentation.beginRefresh()
+                                    vm.refreshSusfsState(force = true)
+                                }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                                }
+                            }
+                        )
+                    }
+                ) { topBarHeight ->
+                    SusfsControlScreen(
+                        topBarHeight = topBarHeight,
+                        state = state,
+                        showRefreshLoading = refreshPresentation.showLoading,
+                        onApply = vm::applySusfsConfig,
+                        onReset = vm::resetSusfsConfig,
+                        onRefresh = {
+                            refreshPresentation.beginRefresh()
+                            vm.refreshSusfsState(force = true)
+                        }
+                    )
+                }
+            }
+        }
+
+        childPageTransition.AnimatedVisibility(
+            visible = { it && showAboutPage },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
+            modifier = childPageModifier
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(childPageBack.backTransformModifier())
+            ) {
+                SettingsPageBackground(
+                    backgroundUri = state.customBackgroundUri,
+                    backgroundImageEnabled = state.backgroundImageEnabled
+                )
+                BlurScreenScaffold(
+                    blurConfig = state.blurConfig,
+                    containerColor = Color.Transparent,
+                    topBar = {
+                        ExpressiveTopBar(
+                            title = stringResource(R.string.settings_about_title),
+                            navigationIcon = {
+                                IconButton(onClick = childPageBack::requestDismiss) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                                }
+                            },
+                            enableBlur = state.blurEnabled
+                        )
+                    }
+                ) { topBarHeight ->
+                    AboutRepositoryScreen(
+                        topBarHeight = topBarHeight,
+                        onOpenUrl = { openUrl(context, it) },
+                        onOpenSourceLicenses = ::openOpenSourceLicenses
+                    )
+                }
+            }
+        }
+
+        childPageTransition.AnimatedVisibility(
+            visible = { it && showOpenSourceLicenses },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
+            modifier = childPageModifier
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(childPageBack.backTransformModifier())
+            ) {
+                SettingsPageBackground(
+                    backgroundUri = state.customBackgroundUri,
+                    backgroundImageEnabled = state.backgroundImageEnabled
+                )
+                BlurScreenScaffold(
+                    blurConfig = state.blurConfig,
+                    containerColor = Color.Transparent,
+                    topBar = {
+                        ExpressiveTopBar(
+                            title = stringResource(R.string.settings_open_source_licenses),
+                            navigationIcon = {
+                                IconButton(onClick = childPageBack::requestDismiss) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.settings_back))
+                                }
+                            },
+                            enableBlur = state.blurEnabled
+                        )
+                    }
+                ) { topBarHeight ->
+                    OpenSourceLicensesScreen(
+                        topBarHeight = topBarHeight,
+                        onOpenUrl = { openUrl(context, it) }
                     )
                 }
             }
@@ -422,37 +761,16 @@ private fun SettingsPageBackground(
     backgroundUri: String?,
     backgroundImageEnabled: Boolean
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val hasBackground = backgroundImageEnabled && !backgroundUri.isNullOrBlank()
-    val scrimColor = if (colorScheme.surface.luminance() > 0.5f) {
-        colorScheme.surface.copy(alpha = 0.28f)
-    } else {
-        Color.Black.copy(alpha = 0.38f)
-    }
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colorScheme.surface)
-    ) {
-        if (hasBackground) {
-            AsyncImage(
-                model = backgroundUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(scrimColor)
-            )
-        }
-    }
+    AppPageBackground(
+        backgroundUri = backgroundUri,
+        backgroundImageEnabled = backgroundImageEnabled
+    )
 }
 
 @Composable
 private fun SettingsMainContent(
-    padding: PaddingValues,
+    topBarHeight: Dp,
+    outerPadding: PaddingValues,
     state: MainUiState,
     vm: MainViewModel,
     scrollBehavior: TopAppBarScrollBehavior,
@@ -460,18 +778,25 @@ private fun SettingsMainContent(
     onOpenThemeSettings: () -> Unit,
     onOpenAppProfileTemplates: () -> Unit,
     onOpenManagerTools: () -> Unit,
+    onOpenKernelCapabilities: () -> Unit,
+    onOpenSusfsControl: () -> Unit,
     onOpenInstalledModules: () -> Unit,
-    onAbout: () -> Unit
+    onAbout: () -> Unit,
+    onOpenSourceLicenses: () -> Unit,
+    onOpenExtensionManager: () -> Unit,
+    exportingDiagnostics: Boolean,
+    onExportDiagnostics: () -> Unit
 ) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
-            .padding(padding)
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Spacer(Modifier.height(topBarHeight + 16.dp))
         SettingsGroup(title = stringResource(R.string.settings_account)) {
             state.user?.let { user ->
                 ExpressiveListItem(
@@ -489,43 +814,203 @@ private fun SettingsMainContent(
                         IconButton(onClick = onLogout) {
                             Icon(
                                 Icons.Default.Logout,
-                                contentDescription = "退出登录",
+                                contentDescription = stringResource(R.string.settings_logout_desc),
                                 tint = MaterialTheme.colorScheme.error
                             )
                         }
                     }
                 )
+                val forkUrl = state.forkRepo?.let { repo ->
+                    repo.htmlUrl.takeIf { it.isNotBlank() } ?: "https://github.com/${repo.fullName}"
+                }
+                val openCtx = LocalContext.current
+                val onForkClick: (() -> Unit)? = if (forkUrl != null) {
+                    { openUrl(openCtx, forkUrl) }
+                } else null
                 ExpressiveListItem(
-                    title = "Fork 仓库",
-                    subtitle = state.forkRepo?.fullName ?: "未 Fork",
-                    leadingIcon = Icons.Default.ForkRight
+                    title = stringResource(R.string.settings_fork_repo),
+                    subtitle = state.forkRepo?.fullName ?: stringResource(R.string.settings_waiting_fork),
+                    leadingIcon = Icons.Default.ForkRight,
+                    onClick = onForkClick
                 )
             } ?: ExpressiveListItem(
-                title = "未登录",
-                leadingIcon = Icons.Default.AccountCircle
+                title = stringResource(R.string.settings_not_logged_in),
+                subtitle = stringResource(R.string.settings_login_hint),
+                leadingIcon = Icons.Default.AccountCircle,
+                trailingContent = {
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        contentDescription = stringResource(R.string.settings_login_hint)
+                    )
+                },
+                onClick = { vm.openLoginOobe() }
             )
         }
 
         SettingsGroup(title = stringResource(R.string.settings_build)) {
             SwitchSettingsItem(
+                icon = Icons.Default.Sync,
+                title = stringResource(R.string.settings_workflow_foreground_refresh),
+                subtitle = stringResource(R.string.settings_workflow_foreground_refresh_desc),
+                checked = state.workflowForegroundRefreshEnabled,
+                onCheckedChange = { vm.setWorkflowForegroundRefreshEnabled(it) }
+            )
+            AnimatedVisibility(
+                visible = state.workflowForegroundRefreshEnabled,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                WorkflowForegroundRefreshIntervalPicker(
+                    selectedSec = state.workflowForegroundRefreshIntervalSec,
+                    onSelect = { vm.setWorkflowForegroundRefreshIntervalSec(it) }
+                )
+            }
+            SwitchSettingsItem(
                 icon = Icons.Default.Download,
                 title = stringResource(R.string.settings_auto_download),
-                subtitle = "仅对下一次新提交的构建生效，关闭后不会自动下载",
+                subtitle = stringResource(R.string.settings_auto_download_desc),
                 checked = state.autoDownload,
                 onCheckedChange = { vm.setAutoDownload(it) }
             )
             SwitchSettingsItem(
                 icon = Icons.Default.CloudDownload,
-                title = "预编译 GKI 获取与下载",
-                subtitle = "从本仓库 Release 获取预编译 GKI，下载需手动触发",
+                title = stringResource(R.string.settings_prebuilt_gki),
+                subtitle = stringResource(R.string.settings_prebuilt_gki_desc),
                 checked = state.prebuiltGkiEnabled,
                 onCheckedChange = { vm.setPrebuiltGkiEnabled(it) }
+            )
+            Spacer(Modifier.height(10.dp))
+            DownloadDirectorySettingsItem(
+                value = state.downloadDirectory,
+                onValueChange = { vm.setDownloadDirectory(it) }
             )
             Spacer(Modifier.height(10.dp))
             MirrorSettingsItem(
                 value = state.downloadMirrorBaseUrl,
                 onValueChange = { vm.setDownloadMirrorBaseUrl(it) }
             )
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_download_threads),
+                subtitle = stringResource(R.string.settings_download_threads_desc, state.downloadThreadCount),
+                leadingIcon = Icons.Default.Speed,
+                trailingContent = {
+                    Slider(
+                        value = state.downloadThreadCount.toFloat(),
+                        onValueChange = { vm.setDownloadThreadCount(it.toInt()) },
+                        valueRange = 1f..64f,
+                        steps = 62,
+                        modifier = Modifier.width(150.dp)
+                    )
+                }
+            )
+            Spacer(Modifier.height(10.dp))
+            val hasArtifacts = state.downloadedArtifacts.isNotEmpty()
+            var showClearArtifactsDialog by remember { mutableStateOf(false) }
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_clear_artifacts),
+                subtitle = if (hasArtifacts) {
+                    val count = state.downloadedArtifacts.size
+                    val totalBytes = state.downloadedArtifacts.sumOf { it.sizeBytes }
+                    "$count ${stringResource(R.string.settings_clear_artifacts_files)} · ${DownloadUtils.formatSize(totalBytes)}"
+                } else {
+                    stringResource(R.string.settings_clear_artifacts_empty)
+                },
+                leadingIcon = Icons.Default.Delete,
+                enabled = hasArtifacts,
+                onClick = if (hasArtifacts) {{ showClearArtifactsDialog = true }} else null
+            )
+            if (showClearArtifactsDialog) {
+                AlertDialog(
+                    onDismissRequest = { showClearArtifactsDialog = false },
+                    icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                    title = { Text(stringResource(R.string.settings_clear_artifacts_title)) },
+                    text = { Text(stringResource(R.string.settings_clear_artifacts_message)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            vm.clearAllDownloadedArtifacts()
+                            showClearArtifactsDialog = false
+                        }) {
+                            Text(stringResource(R.string.settings_clear_artifacts_confirm))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showClearArtifactsDialog = false }) {
+                            Text(stringResource(android.R.string.cancel))
+                        }
+                    }
+                )
+            }
+        }
+
+        SecuritySettingsGroup(
+            state = state,
+            vm = vm,
+        )
+
+        SettingsGroup(title = stringResource(R.string.settings_app_update)) {
+            AppUpdateStabilityPicker(
+                selected = state.appUpdateStability,
+                onSelect = vm::setAppUpdateStability
+            )
+            AppUpdateLinePicker(
+                selected = state.appUpdateLine,
+                onSelect = vm::setAppUpdateLine
+            )
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_check_app_update),
+                subtitle = appUpdateCheckSubtitle(state),
+                leadingIcon = Icons.Default.Download,
+                trailingContent = {
+                    if (state.appUpdateChecking) {
+                        LoadingIndicator(Modifier.size(22.dp))
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.settings_check_app_update))
+                    }
+                },
+                onClick = vm::checkAppUpdate
+            )
+            state.appUpdateInfo?.let { info ->
+                ExpressiveListItem(
+                    title = if (info.hasUpdate) {
+                        stringResource(R.string.settings_app_update_available)
+                    } else {
+                        stringResource(R.string.settings_app_update_latest)
+                    },
+                    subtitle = appUpdateResultSubtitle(info),
+                    leadingIcon = if (info.hasUpdate) Icons.Default.Download else Icons.Default.Verified
+                )
+                if (info.hasUpdate) {
+                    val downloadUrl = info.remote.downloadUrl
+                    ExpressiveListItem(
+                        title = stringResource(R.string.settings_download_install_update),
+                        subtitle = when {
+                            state.appUpdateDownloading -> stringResource(
+                                R.string.settings_app_update_downloading_progress,
+                                state.appUpdateDownloadProgress
+                            )
+                            downloadUrl.isBlank() -> stringResource(R.string.settings_app_update_link_missing)
+                            else -> downloadUrl
+                        },
+                        leadingIcon = Icons.Default.InstallMobile,
+                        enabled = downloadUrl.isNotBlank(),
+                        trailingContent = {
+                            if (state.appUpdateDownloading) {
+                                LoadingIndicator(Modifier.size(22.dp))
+                            } else if (downloadUrl.isNotBlank()) {
+                                Icon(Icons.Default.Download, contentDescription = stringResource(R.string.settings_download_install_update))
+                            }
+                        },
+                        onClick = downloadUrl.takeIf { it.isNotBlank() }?.let { { vm.downloadAndInstallAppUpdate() } }
+                    )
+                }
+            }
+            state.appUpdateError?.takeIf { it.isNotBlank() }?.let { error ->
+                ExpressiveListItem(
+                    title = stringResource(R.string.settings_app_update_error),
+                    subtitle = error,
+                    leadingIcon = Icons.Default.Error
+                )
+            }
         }
 
         ManagerInjectedSettingsGroup(
@@ -533,6 +1018,8 @@ private fun SettingsMainContent(
             vm = vm,
             onOpenAppProfileTemplates = onOpenAppProfileTemplates,
             onOpenManagerTools = onOpenManagerTools,
+            onOpenKernelCapabilities = onOpenKernelCapabilities,
+            onOpenSusfsControl = onOpenSusfsControl,
             onOpenInstalledModules = onOpenInstalledModules
         )
 
@@ -540,29 +1027,60 @@ private fun SettingsMainContent(
             SwitchSettingsItem(
                 icon = Icons.Default.Notifications,
                 title = stringResource(R.string.settings_notify_build),
-                subtitle = "在通知栏显示构建状态",
+                subtitle = stringResource(R.string.settings_notify_build_desc),
                 checked = state.notifyBuild,
                 onCheckedChange = { vm.setNotifyBuild(it) }
             )
         }
 
-        SettingsGroup(title = "导航") {
+        SettingsGroup(title = stringResource(R.string.settings_navigation)) {
             SwitchSettingsItem(
                 icon = Icons.Default.ArrowBack,
-                title = "应用内 M3E 返回动效",
-                subtitle = "使用 Material 3 Expressive 的页面返回动画，不依赖系统预测性返回",
+                title = stringResource(R.string.settings_predictive_back),
+                subtitle = stringResource(R.string.settings_predictive_back_desc),
                 checked = state.predictiveBackEnabled,
                 onCheckedChange = { vm.setPredictiveBackEnabled(it) }
             )
         }
 
+        SettingsGroup(title = stringResource(R.string.settings_language)) {
+            val ctx = LocalContext.current
+            val currentLang = LocaleHelper.getLanguage(ctx)
+            val activity = ctx as? Activity
+            LanguageSettingsItem(
+                current = currentLang,
+                onSelect = { lang ->
+                    LocaleHelper.setLanguage(ctx, lang)
+                    vm.onUiLanguageChanged()
+                    activity?.recreate()
+                }
+            )
+        }
+
         SettingsGroup(title = stringResource(R.string.settings_theme)) {
             ExpressiveListItem(
-                title = "颜色与外观",
+                title = stringResource(R.string.settings_color_appearance),
                 subtitle = "${themeModeLabel(state.themeMode)} · ${dynamicColorLabel(state.dynamicColorEnabled)}",
                 leadingIcon = Icons.Default.Palette,
-                trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = "进入颜色与外观") },
+                trailingContent = {
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        contentDescription = stringResource(R.string.settings_enter_color_appearance)
+                    )
+                },
                 onClick = onOpenThemeSettings
+            )
+        }
+
+        SettingsGroup(title = stringResource(R.string.settings_extensions_title)) {
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_extensions_manage),
+                subtitle = stringResource(R.string.settings_extensions_manage_desc),
+                leadingIcon = Icons.Default.Extension,
+                trailingContent = {
+                    Icon(Icons.Default.ChevronRight, contentDescription = null)
+                },
+                onClick = onOpenExtensionManager
             )
         }
 
@@ -573,15 +1091,46 @@ private fun SettingsMainContent(
                 leadingIcon = Icons.Default.Info
             )
             ExpressiveListItem(
-                title = "关于",
-                subtitle = "项目入口、源码仓库、上游项目与致谢",
+                title = stringResource(R.string.settings_about),
+                subtitle = stringResource(R.string.settings_about_desc),
                 leadingIcon = Icons.Default.AutoAwesome,
-                trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = "进入关于") },
+                trailingContent = {
+                    Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_enter_about))
+                },
                 onClick = onAbout
+            )
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_open_source_licenses),
+                subtitle = stringResource(R.string.settings_open_source_licenses_desc),
+                leadingIcon = Icons.Default.Article,
+                trailingContent = {
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        contentDescription = stringResource(R.string.settings_enter_open_source_licenses)
+                    )
+                },
+                onClick = onOpenSourceLicenses
+            )
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_export_diagnostics),
+                subtitle = stringResource(R.string.settings_export_diagnostics_desc),
+                leadingIcon = Icons.Default.BugReport,
+                enabled = !exportingDiagnostics,
+                trailingContent = {
+                    if (exportingDiagnostics) {
+                        LoadingIndicator(Modifier.size(20.dp))
+                    } else {
+                        Icon(
+                            Icons.Default.Share,
+                            contentDescription = stringResource(R.string.settings_export)
+                        )
+                    }
+                },
+                onClick = onExportDiagnostics
             )
         }
 
-        Spacer(Modifier.height(80.dp))
+        Spacer(Modifier.height(80.dp + outerPadding.calculateBottomPadding()))
     }
 }
 
@@ -591,68 +1140,598 @@ private fun ManagerInjectedSettingsGroup(
     vm: MainViewModel,
     onOpenAppProfileTemplates: () -> Unit,
     onOpenManagerTools: () -> Unit,
+    onOpenKernelCapabilities: () -> Unit,
+    onOpenSusfsControl: () -> Unit,
     onOpenInstalledModules: () -> Unit
 ) {
-    if (!state.hasNativeManagerPermission) return
     val hasInjectedSettings = state.managerSettingsItems.isNotEmpty()
+    val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = state.managerSettingsLoading)
+    val showRefreshLoading = refreshPresentation.showLoading
     if (!hasInjectedSettings && !state.managerSettingsLoading && state.managerSettingsError == null) return
 
-    SettingsGroup(title = state.managerSettingsTitle.ifBlank { "管理器设置" }) {
+    SettingsGroup(title = state.managerSettingsTitle.ifBlank { stringResource(R.string.settings_manager_settings) }) {
         when {
             state.managerSettingsLoading && !hasInjectedSettings -> {
-                ExpressiveListItem(
-                    title = "正在读取后端设置",
-                    subtitle = "从当前 KSU 后端加载可用功能",
-                    leadingContent = { LoadingIndicator(Modifier.size(24.dp)) }
+                AbkInlineLoadingPill(
+                    text = stringResource(R.string.settings_manager_loading_title),
+                    modifier = Modifier.fillMaxWidth(),
+                    compact = false
                 )
             }
             state.managerSettingsError != null -> {
                 ExpressiveListItem(
-                    title = "后端设置读取失败",
+                    title = stringResource(R.string.settings_manager_load_failed),
                     subtitle = state.managerSettingsError,
                     leadingIcon = Icons.Default.Error,
                     trailingContent = {
-                        IconButton(onClick = { vm.refreshManagerSettings(force = true) }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "重试")
+                        IconButton(onClick = {
+                            refreshPresentation.beginRefresh()
+                            vm.refreshManagerSettings(force = true)
+                        }) {
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.retry))
                         }
                     }
                 )
             }
         }
 
-        state.managerSettingsItems.forEach { item ->
-            val actionInFlight = state.managerSettingActionId == item.id
-            when (item.kind) {
-                ManagerSettingKind.NAVIGATION -> ExpressiveListItem(
-                    title = item.title,
-                    subtitle = item.subtitle,
-                    leadingIcon = managerSettingIcon(item.id),
-                    enabled = item.enabled && !actionInFlight,
-                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = "进入") },
-                    onClick = {
-                        when (item.id) {
-                            "app_profile_templates" -> onOpenAppProfileTemplates()
-                            "manager_tools" -> onOpenManagerTools()
-                            "kpm" -> onOpenInstalledModules()
+        if (showRefreshLoading) {
+            AbkInlineLoadingPill(
+                text = stringResource(R.string.settings_manager_loading_title),
+                modifier = Modifier.fillMaxWidth(),
+                compact = false
+            )
+        } else {
+            state.managerSettingsItems.forEach { item ->
+                val actionInFlight = state.managerSettingActionId == item.id
+                when (item.kind) {
+                    ManagerSettingKind.NAVIGATION -> ExpressiveListItem(
+                        title = item.title,
+                        subtitle = item.subtitle,
+                        leadingIcon = managerSettingIcon(item.id),
+                        enabled = item.enabled && !actionInFlight,
+                        trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_enter)) },
+                        onClick = {
+                            when (item.id) {
+                                "app_profile_templates" -> onOpenAppProfileTemplates()
+                                "manager_tools" -> onOpenManagerTools()
+                                "kernel_capabilities" -> onOpenKernelCapabilities()
+                                "susfs_control" -> onOpenSusfsControl()
+                                "kpm" -> onOpenInstalledModules()
+                            }
                         }
-                    }
-                )
-                ManagerSettingKind.MODE -> ManagerModeSettingItem(
-                    item = item,
-                    actionInFlight = actionInFlight,
-                    onSelected = { index -> vm.setManagerSettingMode(item.id, index) }
-                )
-                ManagerSettingKind.SWITCH -> SwitchSettingsItem(
-                    icon = managerSettingIcon(item.id),
-                    title = item.title,
-                    subtitle = item.subtitle,
-                    checked = item.checked,
-                    enabled = item.enabled && !actionInFlight,
-                    onCheckedChange = { checked -> vm.setManagerSettingChecked(item.id, checked) }
-                )
+                    )
+                    ManagerSettingKind.MODE -> ManagerModeSettingItem(
+                        item = item,
+                        actionInFlight = actionInFlight,
+                        onSelected = { index -> vm.setManagerSettingMode(item.id, index) }
+                    )
+                    ManagerSettingKind.SWITCH -> SwitchSettingsItem(
+                        icon = managerSettingIcon(item.id),
+                        title = item.title,
+                        subtitle = item.subtitle,
+                        checked = item.checked,
+                        enabled = item.enabled && !actionInFlight,
+                        onCheckedChange = { checked -> vm.setManagerSettingChecked(item.id, checked) }
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun SecuritySettingsGroup(
+    state: MainUiState,
+    vm: MainViewModel,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val canManageKeys = state.isLoggedIn && state.forkRepo != null
+    var showImportDialog by remember { mutableStateOf(false) }
+    var showDisableConfirm1 by remember { mutableStateOf(false) }
+    var showDisableConfirm2 by remember { mutableStateOf(false) }
+    var showResetConfirm by remember { mutableStateOf(false) }
+    var showCustomSourceSecretDialog by remember { mutableStateOf(false) }
+    var showDeleteCustomSourceSecretConfirm by remember { mutableStateOf(false) }
+    var customSourcePat by remember { mutableStateOf("") }
+    var importPublicKeyText by remember { mutableStateOf("") }
+    var importPrivateKeyText by remember { mutableStateOf("") }
+    var importError by remember { mutableStateOf<String?>(null) }
+    var importPickerTarget by remember { mutableStateOf<SecurityKeyImportTarget?>(null) }
+    val importKeyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val target = importPickerTarget ?: return@rememberLauncherForActivityResult
+        importPickerTarget = null
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = try {
+                readTextFromUri(context, uri)
+            } catch (_: Throwable) {
+                importError = context.getString(R.string.settings_security_import_read_failed)
+                return@launch
+            }
+            when (target) {
+                SecurityKeyImportTarget.PUBLIC -> importPublicKeyText = text
+                SecurityKeyImportTarget.PRIVATE -> importPrivateKeyText = text
+            }
+            importError = null
+        }
+    }
+    LaunchedEffect(canManageKeys) {
+        if (canManageKeys) vm.refreshCustomSourceSecretStatus()
+    }
+    SettingsGroup(title = stringResource(R.string.settings_security)) {
+        SwitchSettingsItem(
+            icon = Icons.Default.VerifiedUser,
+            title = stringResource(R.string.settings_security_signing_title),
+            subtitle = when {
+                !canManageKeys -> stringResource(R.string.settings_security_requires_fork)
+                state.artifactSigningVerificationEnabled && state.artifactSigningConfigured ->
+                    stringResource(R.string.settings_security_status_enabled_configured)
+                state.artifactSigningVerificationEnabled ->
+                    stringResource(R.string.settings_security_status_enabled_pending)
+                else ->
+                    stringResource(R.string.settings_security_status_disabled)
+            },
+            checked = state.artifactSigningVerificationEnabled,
+            enabled = !state.artifactSigningOperationInFlight && canManageKeys,
+            onCheckedChange = { enabled ->
+                when {
+                    enabled -> vm.enableArtifactSigningVerification()
+                    else -> showDisableConfirm1 = true
+                }
+            }
+        )
+        ExpressiveListItem(
+            title = stringResource(R.string.settings_security_import_keys),
+            subtitle = when {
+                !canManageKeys -> stringResource(R.string.settings_security_requires_fork)
+                !state.artifactSigningVerificationEnabled -> stringResource(R.string.settings_security_import_requires_enabled)
+                else -> stringResource(R.string.settings_security_import_keys_desc)
+            },
+            leadingIcon = Icons.Default.UploadFile,
+            enabled = !state.artifactSigningOperationInFlight && canManageKeys && state.artifactSigningVerificationEnabled,
+            onClick = {
+                importPublicKeyText = ""
+                importPrivateKeyText = ""
+                importError = null
+                showImportDialog = true
+            }
+        )
+        ExpressiveListItem(
+            title = stringResource(R.string.settings_security_reset_keys),
+            subtitle = stringResource(R.string.settings_security_reset_keys_desc),
+            leadingIcon = Icons.Default.Key,
+            enabled = !state.artifactSigningOperationInFlight && state.artifactSigningVerificationEnabled && canManageKeys,
+            onClick = { showResetConfirm = true }
+        )
+        ExpressiveListItem(
+            title = stringResource(R.string.settings_custom_source_secret_title),
+            subtitle = when {
+                !canManageKeys -> stringResource(R.string.settings_security_requires_fork)
+                state.customSourceSecretConfigured -> stringResource(R.string.settings_custom_source_secret_configured)
+                else -> stringResource(R.string.settings_custom_source_secret_missing)
+            },
+            leadingIcon = Icons.Default.Password,
+            enabled = canManageKeys && !state.customSourceSecretOperationInFlight,
+            onClick = {
+                customSourcePat = ""
+                showCustomSourceSecretDialog = true
+            }
+        )
+        if (state.customSourceSecretConfigured) {
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_custom_source_secret_delete),
+                subtitle = stringResource(R.string.settings_custom_source_secret_delete_desc),
+                leadingIcon = Icons.Default.Delete,
+                enabled = canManageKeys && !state.customSourceSecretOperationInFlight,
+                onClick = { showDeleteCustomSourceSecretConfirm = true }
+            )
+        }
+        if (state.customSourceSecretOperationInFlight) {
+            AbkInlineLoadingPill(
+                text = stringResource(R.string.settings_custom_source_secret_operation),
+                modifier = Modifier.fillMaxWidth(),
+                compact = false
+            )
+        }
+        if (state.artifactSigningOperationInFlight) {
+            AbkInlineLoadingPill(
+                text = stringResource(R.string.settings_security_operation_running),
+                modifier = Modifier.fillMaxWidth(),
+                compact = false
+            )
+        }
+    }
+
+    if (showImportDialog) {
+        ImportArtifactSigningKeysDialog(
+            publicKeyText = importPublicKeyText,
+            privateKeyText = importPrivateKeyText,
+            error = importError,
+            importing = state.artifactSigningOperationInFlight,
+            onPublicKeyTextChange = {
+                importPublicKeyText = it
+                importError = null
+            },
+            onPrivateKeyTextChange = {
+                importPrivateKeyText = it
+                importError = null
+            },
+            onPickPublicKey = {
+                importPickerTarget = SecurityKeyImportTarget.PUBLIC
+                importKeyPicker.launch(arrayOf("text/*", "*/*"))
+            },
+            onPickPrivateKey = {
+                importPickerTarget = SecurityKeyImportTarget.PRIVATE
+                importKeyPicker.launch(arrayOf("text/*", "*/*"))
+            },
+            onImport = {
+                scope.launch {
+                    importError = null
+                    when (val result = vm.importArtifactSigningKeys(importPublicKeyText, importPrivateKeyText)) {
+                        is Result.Success -> {
+                            showImportDialog = false
+                            importPublicKeyText = ""
+                            importPrivateKeyText = ""
+                        }
+                        is Result.Error -> importError = result.message
+                        Result.Loading -> Unit
+                    }
+                }
+            },
+            onDismiss = {
+                if (!state.artifactSigningOperationInFlight) {
+                    showImportDialog = false
+                }
+            }
+        )
+    }
+
+    if (showDisableConfirm1) {
+        TimedConfirmationDialog(
+            title = stringResource(R.string.settings_security_disable_dialog_title_1),
+            message = stringResource(R.string.settings_security_disable_dialog_message_1),
+            confirmLabel = stringResource(R.string.confirm),
+            onDismiss = { showDisableConfirm1 = false },
+            onConfirm = {
+                showDisableConfirm1 = false
+                showDisableConfirm2 = true
+            }
+        )
+    }
+
+    if (showDisableConfirm2) {
+        TimedConfirmationDialog(
+            title = stringResource(R.string.settings_security_disable_dialog_title_2),
+            message = stringResource(R.string.settings_security_disable_dialog_message_2),
+            confirmLabel = stringResource(R.string.confirm),
+            onDismiss = { showDisableConfirm2 = false },
+            onConfirm = {
+                showDisableConfirm2 = false
+                vm.disableArtifactSigningVerification()
+            }
+        )
+    }
+
+    if (showResetConfirm) {
+        TimedConfirmationDialog(
+            title = stringResource(R.string.settings_security_reset_dialog_title),
+            message = stringResource(R.string.settings_security_reset_dialog_message),
+            confirmLabel = stringResource(R.string.confirm),
+            onDismiss = { showResetConfirm = false },
+            onConfirm = {
+                showResetConfirm = false
+                vm.resetArtifactSigningKeys()
+            }
+        )
+    }
+
+    if (showCustomSourceSecretDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!state.customSourceSecretOperationInFlight) showCustomSourceSecretDialog = false
+            },
+            icon = { Icon(Icons.Default.Password, contentDescription = null) },
+            title = { Text(stringResource(R.string.settings_custom_source_secret_dialog_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.settings_custom_source_secret_dialog_desc))
+                    OutlinedTextField(
+                        value = customSourcePat,
+                        onValueChange = { customSourcePat = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.build_source_pat)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.updateCustomSourceSecret(customSourcePat)
+                        customSourcePat = ""
+                        showCustomSourceSecretDialog = false
+                    },
+                    enabled = customSourcePat.isNotBlank() && !state.customSourceSecretOperationInFlight
+                ) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showCustomSourceSecretDialog = false },
+                    enabled = !state.customSourceSecretOperationInFlight
+                ) { Text(stringResource(android.R.string.cancel)) }
+            }
+        )
+    }
+
+    if (showDeleteCustomSourceSecretConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteCustomSourceSecretConfirm = false },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+            title = { Text(stringResource(R.string.settings_custom_source_secret_delete)) },
+            text = { Text(stringResource(R.string.settings_custom_source_secret_delete_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteCustomSourceSecret()
+                    showDeleteCustomSourceSecretConfirm = false
+                }) { Text(stringResource(R.string.delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteCustomSourceSecretConfirm = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun TimedConfirmationDialog(
+    title: String,
+    message: String,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    delaySeconds: Int = 5,
+) {
+    var remainingSeconds by remember { mutableStateOf(delaySeconds) }
+    LaunchedEffect(Unit) {
+        while (remainingSeconds > 0) {
+            delay(1_000)
+            remainingSeconds -= 1
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Warning, null) },
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = remainingSeconds <= 0,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text(
+                    if (remainingSeconds > 0) {
+                        "$confirmLabel (${remainingSeconds}s)"
+                    } else {
+                        confirmLabel
+                    }
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+private enum class SecurityKeyImportTarget {
+    PUBLIC,
+    PRIVATE,
+}
+
+@Composable
+private fun KernelCapabilitiesSettingsScreen(
+    topBarHeight: Dp,
+    state: MainUiState,
+    showRefreshLoading: Boolean,
+    onRefresh: () -> Unit,
+    onTcpAlgorithmSelected: (String) -> Unit
+) {
+    val tcp = state.kernelTcpCongestionControl
+    val showInitialLoading = state.kernelCapabilitiesLoading && tcp == null && state.kernelCapabilitiesError == null
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = AbkScreenHorizontalPadding),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Spacer(Modifier.height(topBarHeight + 16.dp))
+        Crossfade(targetState = showRefreshLoading || showInitialLoading, label = "kernel-capabilities-refresh") { refreshing ->
+            if (refreshing) {
+                AbkInlineLoadingPill(
+                    text = stringResource(
+                        if (showRefreshLoading) {
+                            R.string.settings_kernel_capabilities_refreshing
+                        } else {
+                            R.string.loading
+                        }
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    compact = false
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (tcp != null && tcp.available) {
+                        SettingsGroup(title = stringResource(R.string.settings_tcp_congestion_control)) {
+                            val actionId = state.kernelCapabilityActionId
+                            val actionRunning = actionId != null
+                            tcp.availableAlgorithms.forEach { algorithm ->
+                                val selected = algorithm == tcp.currentAlgorithm
+                                val itemActionId = "tcp_congestion:$algorithm"
+                                ExpressiveListItem(
+                                    title = algorithm,
+                                    subtitle = if (selected) {
+                                        stringResource(R.string.settings_tcp_congestion_selected)
+                                    } else {
+                                        stringResource(R.string.settings_tcp_congestion_available)
+                                    },
+                                    leadingIcon = Icons.Default.Tune,
+                                    selected = selected,
+                                    enabled = !actionRunning && !selected,
+                                    trailingContent = {
+                                        when {
+                                            actionId == itemActionId -> LoadingIndicator(Modifier.size(22.dp))
+                                            selected -> Icon(Icons.Default.Check, contentDescription = null)
+                                        }
+                                    },
+                                    onClick = if (!selected) {
+                                        { onTcpAlgorithmSelected(algorithm) }
+                                    } else {
+                                        null
+                                    }
+                                )
+                            }
+                        }
+                    } else {
+                        SettingsGroup(title = stringResource(R.string.settings_kernel_capabilities)) {
+                            ExpressiveListItem(
+                                title = stringResource(R.string.settings_kernel_capabilities_unavailable),
+                                subtitle = state.kernelCapabilitiesError
+                                    ?: stringResource(R.string.settings_kernel_capabilities_unavailable_desc),
+                                leadingIcon = Icons.Default.Extension,
+                                trailingContent = {
+                                    IconButton(onClick = onRefresh) {
+                                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    state.kernelCapabilitiesError?.takeIf { it.isNotBlank() && tcp != null }?.let { error ->
+                        SettingsGroup(title = stringResource(R.string.settings_status)) {
+                            ExpressiveListItem(
+                                title = stringResource(R.string.settings_operation_incomplete),
+                                subtitle = error,
+                                leadingIcon = Icons.Default.Error,
+                                trailingContent = {
+                                    IconButton(onClick = onRefresh) {
+                                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(80.dp))
+    }
+}
+
+@Composable
+private fun ImportArtifactSigningKeysDialog(
+    publicKeyText: String,
+    privateKeyText: String,
+    error: String?,
+    importing: Boolean,
+    onPublicKeyTextChange: (String) -> Unit,
+    onPrivateKeyTextChange: (String) -> Unit,
+    onPickPublicKey: () -> Unit,
+    onPickPrivateKey: () -> Unit,
+    onImport: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Key, null) },
+        title = { Text(stringResource(R.string.settings_security_import_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.settings_security_import_keys_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = publicKeyText,
+                    onValueChange = onPublicKeyTextChange,
+                    label = { Text(stringResource(R.string.settings_security_import_public_key)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 8,
+                    enabled = !importing
+                )
+                OutlinedButton(
+                    onClick = onPickPublicKey,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !importing
+                ) {
+                    Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.settings_security_import_pick_public_key))
+                }
+                OutlinedTextField(
+                    value = privateKeyText,
+                    onValueChange = onPrivateKeyTextChange,
+                    label = { Text(stringResource(R.string.settings_security_import_private_key)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 8,
+                    enabled = !importing
+                )
+                OutlinedButton(
+                    onClick = onPickPrivateKey,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !importing
+                ) {
+                    Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.settings_security_import_pick_private_key))
+                }
+                error?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onImport,
+                enabled = !importing && publicKeyText.isNotBlank() && privateKeyText.isNotBlank()
+            ) {
+                if (importing) {
+                    LoadingIndicator(Modifier.size(18.dp))
+                } else {
+                    Text(stringResource(R.string.settings_import))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !importing) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+private suspend fun readTextFromUri(context: Context, uri: Uri): String = withContext(Dispatchers.IO) {
+    context.contentResolver.openInputStream(uri)?.use { input ->
+        input.bufferedReader(Charsets.UTF_8).readText()
+    } ?: error(context.getString(R.string.settings_security_import_read_failed))
 }
 
 @Composable
@@ -670,7 +1749,7 @@ private fun ManagerModeSettingItem(
     } else {
         0
     }
-    val selectedLabel = options.getOrNull(selectedIndex) ?: "不可用"
+    val selectedLabel = options.getOrNull(selectedIndex) ?: stringResource(R.string.settings_unknown)
     val enabled = item.enabled && !actionInFlight && options.isNotEmpty()
     ExpressiveListItem(
         title = item.title,
@@ -717,8 +1796,9 @@ private fun ManagerModeSettingItem(
 
 @Composable
 private fun ManagerToolsSettingsScreen(
-    padding: PaddingValues,
+    topBarHeight: Dp,
     state: MainUiState,
+    showRefreshLoading: Boolean,
     onSelinuxChange: (Boolean) -> Unit,
     onBackupAllowlist: (Uri) -> Unit,
     onRestoreAllowlist: (Uri) -> Unit
@@ -736,76 +1816,92 @@ private fun ManagerToolsSettingsScreen(
     val selinuxBusy = state.managerToolActionId == "selinux_mode"
     val backupBusy = state.managerToolActionId == "backup_allowlist"
     val restoreBusy = state.managerToolActionId == "restore_allowlist"
+    val showInitialLoading = state.managerToolsLoading && state.umountPaths.isEmpty() && state.managerToolsError == null
 
     Column(
         modifier = Modifier
-            .padding(padding)
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SettingsGroup(title = "系统工具") {
-            SwitchSettingsItem(
-                icon = Icons.Default.Security,
-                title = "SELinux 模式",
-                subtitle = "当前：${selinuxModeLabel(state.selinuxModeText)}",
-                checked = state.selinuxEnforcing,
-                enabled = !state.managerToolsLoading && !selinuxBusy,
-                onCheckedChange = onSelinuxChange
-            )
-            ExpressiveListItem(
-                title = "Umount 路径管理",
-                subtitle = if (state.umountPaths.isEmpty()) {
-                    "当前无自定义路径"
-                } else {
-                    "已配置 ${state.umountPaths.size} 条路径"
-                },
-                leadingIcon = Icons.Default.FolderDelete,
-                trailingContent = {
-                    if (state.managerToolsLoading) LoadingIndicator(Modifier.size(22.dp))
-                }
-            )
-        }
-
-        SettingsGroup(title = "授权列表") {
-            ExpressiveListItem(
-                title = "备份允许列表",
-                subtitle = "选择位置导出允许列表",
-                leadingIcon = Icons.Default.CloudUpload,
-                enabled = !backupBusy,
-                trailingContent = {
-                    if (backupBusy) {
-                        LoadingIndicator(Modifier.size(22.dp))
-                    } else {
-                        Icon(Icons.Default.ChevronRight, contentDescription = "导出")
-                    }
-                },
-                onClick = { backupLauncher.launch("abk-root-allowlist.json") }
-            )
-            ExpressiveListItem(
-                title = "还原允许列表",
-                subtitle = "选择备份文件进行导入",
-                leadingIcon = Icons.Default.History,
-                enabled = !restoreBusy,
-                trailingContent = {
-                    if (restoreBusy) {
-                        LoadingIndicator(Modifier.size(22.dp))
-                    } else {
-                        Icon(Icons.Default.ChevronRight, contentDescription = "导入")
-                    }
-                },
-                onClick = { restoreLauncher.launch(arrayOf("application/json", "text/*", "*/*")) }
-            )
-        }
-
-        if (state.managerToolsError != null) {
-            SettingsGroup(title = "工具状态") {
-                ExpressiveListItem(
-                    title = "操作未完成",
-                    subtitle = state.managerToolsError,
-                    leadingIcon = Icons.Default.Error
+        Spacer(Modifier.height(topBarHeight + 16.dp))
+        Crossfade(targetState = showRefreshLoading || showInitialLoading, label = "manager-tools-refresh") { refreshing ->
+            if (refreshing) {
+                AbkInlineLoadingPill(
+                    text = stringResource(
+                        if (showRefreshLoading) {
+                            R.string.settings_tools_refreshing
+                        } else {
+                            R.string.loading
+                        }
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    compact = false
                 )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SettingsGroup(title = stringResource(R.string.settings_system_tools)) {
+                        SwitchSettingsItem(
+                            icon = Icons.Default.Security,
+                            title = stringResource(R.string.settings_selinux_mode),
+                            subtitle = stringResource(R.string.settings_current_value, selinuxModeLabel(state.selinuxModeText)),
+                            checked = state.selinuxEnforcing,
+                            enabled = !state.managerToolsLoading && !selinuxBusy,
+                            onCheckedChange = onSelinuxChange
+                        )
+                        ExpressiveListItem(
+                            title = stringResource(R.string.settings_umount_paths),
+                            subtitle = if (state.umountPaths.isEmpty()) {
+                                stringResource(R.string.settings_umount_no_paths)
+                            } else {
+                                stringResource(R.string.settings_umount_path_count, state.umountPaths.size)
+                            },
+                            leadingIcon = Icons.Default.FolderDelete,
+                        )
+                    }
+
+                    SettingsGroup(title = stringResource(R.string.settings_allowlist)) {
+                        ExpressiveListItem(
+                            title = stringResource(R.string.settings_backup_allowlist),
+                            subtitle = stringResource(R.string.settings_backup_allowlist_desc),
+                            leadingIcon = Icons.Default.CloudUpload,
+                            enabled = !backupBusy,
+                            trailingContent = {
+                                if (backupBusy) {
+                                    LoadingIndicator(Modifier.size(22.dp))
+                                } else {
+                                    Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_export))
+                                }
+                            },
+                            onClick = { backupLauncher.launch("abk-root-allowlist.json") }
+                        )
+                        ExpressiveListItem(
+                            title = stringResource(R.string.settings_restore_allowlist),
+                            subtitle = stringResource(R.string.settings_restore_allowlist_desc),
+                            leadingIcon = Icons.Default.History,
+                            enabled = !restoreBusy,
+                            trailingContent = {
+                                if (restoreBusy) {
+                                    LoadingIndicator(Modifier.size(22.dp))
+                                } else {
+                                    Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_import))
+                                }
+                            },
+                            onClick = { restoreLauncher.launch(arrayOf("application/json", "text/*", "*/*")) }
+                        )
+                    }
+
+                    if (state.managerToolsError != null) {
+                        SettingsGroup(title = stringResource(R.string.settings_tool_status)) {
+                            ExpressiveListItem(
+                                title = stringResource(R.string.settings_operation_incomplete),
+                                subtitle = state.managerToolsError,
+                                leadingIcon = Icons.Default.Error
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -813,18 +1909,20 @@ private fun ManagerToolsSettingsScreen(
     }
 }
 
+@Composable
 private fun selinuxModeLabel(mode: String): String =
     when (mode.trim().lowercase()) {
-        "enforcing" -> "强制执行"
-        "permissive" -> "宽容"
-        "disabled" -> "已禁用"
-        else -> mode.ifBlank { "未知" }
+        "enforcing" -> stringResource(R.string.settings_selinux_enforcing)
+        "permissive" -> stringResource(R.string.settings_selinux_permissive)
+        "disabled" -> stringResource(R.string.settings_selinux_disabled)
+        else -> mode.ifBlank { stringResource(R.string.settings_unknown) }
     }
 
 @Composable
 private fun AppProfileTemplateSettingsScreen(
-    padding: PaddingValues,
+    topBarHeight: Dp,
     state: MainUiState,
+    showRefreshLoading: Boolean,
     onRefresh: () -> Unit,
     onSelect: (String?) -> Unit,
     onSave: (String, String) -> Unit,
@@ -844,105 +1942,121 @@ private fun AppProfileTemplateSettingsScreen(
 
     Column(
         modifier = Modifier
-            .padding(padding)
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SettingsGroup(title = "本地模板") {
-            when {
-                state.appProfileTemplatesLoading -> ExpressiveListItem(
-                    title = "正在读取模板",
-                    subtitle = "从 ReSukiSU profile 存储加载",
-                    leadingContent = { LoadingIndicator(Modifier.size(24.dp)) }
+        Spacer(Modifier.height(topBarHeight + 16.dp))
+        Crossfade(targetState = showRefreshLoading, label = "template-refresh") { refreshing ->
+            if (refreshing) {
+                AbkInlineLoadingPill(
+                    text = stringResource(R.string.settings_templates_loading),
+                    modifier = Modifier.fillMaxWidth(),
+                    compact = false
                 )
-                state.appProfileTemplates.isEmpty() -> ExpressiveListItem(
-                    title = "暂无模板",
-                    subtitle = "保存后会出现在这里",
-                    leadingIcon = Icons.Default.Description
-                )
-            }
-            state.appProfileTemplates.forEach { template ->
-                ExpressiveListItem(
-                    title = template.id,
-                    subtitle = if (state.selectedAppProfileTemplateId == template.id) "正在编辑" else "App Profile 模板",
-                    leadingIcon = Icons.Default.Description,
-                    selected = state.selectedAppProfileTemplateId == template.id,
-                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = "编辑") },
-                    onClick = { onSelect(template.id) }
-                )
-            }
-            ExpressiveListItem(
-                title = "新建模板",
-                subtitle = "创建新的 App Profile 模板 JSON",
-                leadingIcon = Icons.Default.Add,
-                onClick = {
-                    creating = true
-                    editingId = ""
-                    editingContent = defaultAppProfileTemplateJson()
-                    onSelect(null)
-                }
-            )
-        }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SettingsGroup(title = stringResource(R.string.settings_local_templates)) {
+                        when {
+                            state.appProfileTemplatesLoading -> AbkInlineLoadingPill(
+                                text = stringResource(R.string.settings_templates_loading),
+                                modifier = Modifier.fillMaxWidth(),
+                                compact = false
+                            )
+                            state.appProfileTemplates.isEmpty() -> ExpressiveListItem(
+                                title = stringResource(R.string.settings_templates_empty),
+                                subtitle = stringResource(R.string.settings_templates_empty_desc),
+                                leadingIcon = Icons.Default.Description
+                            )
+                        }
+                        state.appProfileTemplates.forEach { template ->
+                            ExpressiveListItem(
+                                title = template.id,
+                                subtitle = if (state.selectedAppProfileTemplateId == template.id) {
+                                    stringResource(R.string.settings_template_editing)
+                                } else {
+                                    stringResource(R.string.settings_app_profile_templates)
+                                },
+                                leadingIcon = Icons.Default.Description,
+                                selected = state.selectedAppProfileTemplateId == template.id,
+                                trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_edit)) },
+                                onClick = { onSelect(template.id) }
+                            )
+                        }
+                        ExpressiveListItem(
+                            title = stringResource(R.string.settings_new_template),
+                            subtitle = stringResource(R.string.settings_new_template_desc),
+                            leadingIcon = Icons.Default.Add,
+                            onClick = {
+                                creating = true
+                                editingId = ""
+                                editingContent = defaultAppProfileTemplateJson()
+                                onSelect(null)
+                            }
+                        )
+                    }
 
-        if (state.appProfileTemplatesError != null) {
-            SettingsGroup(title = "状态") {
-                ExpressiveListItem(
-                    title = "操作未完成",
-                    subtitle = state.appProfileTemplatesError,
-                    leadingIcon = Icons.Default.Error,
-                    trailingContent = {
-                        IconButton(onClick = onRefresh) {
-                            Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                    if (state.appProfileTemplatesError != null) {
+                        SettingsGroup(title = stringResource(R.string.settings_status)) {
+                            ExpressiveListItem(
+                                title = stringResource(R.string.settings_operation_incomplete),
+                                subtitle = state.appProfileTemplatesError,
+                                leadingIcon = Icons.Default.Error,
+                                trailingContent = {
+                                    IconButton(onClick = onRefresh) {
+                                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                                    }
+                                }
+                            )
                         }
                     }
-                )
-            }
-        }
 
-        val hasEditor = creating || !state.selectedAppProfileTemplateId.isNullOrBlank()
-        if (hasEditor) {
-            SettingsGroup(title = "编辑模板") {
-                OutlinedTextField(
-                    value = editingId,
-                    onValueChange = { editingId = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("模板名称") },
-                    singleLine = true,
-                    enabled = state.selectedAppProfileTemplateId.isNullOrBlank()
-                )
-                OutlinedTextField(
-                    value = editingContent,
-                    onValueChange = { editingContent = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 220.dp),
-                    label = { Text("模板 JSON") },
-                    minLines = 10
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (state.appProfileTemplateSaving) {
-                        LoadingIndicator(Modifier.size(22.dp))
-                    }
-                    if (!state.selectedAppProfileTemplateId.isNullOrBlank()) {
-                        TextButton(
-                            onClick = { onDelete(state.selectedAppProfileTemplateId.orEmpty()) },
-                            enabled = !state.appProfileTemplateSaving,
-                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            Text("删除")
+                    val hasEditor = creating || !state.selectedAppProfileTemplateId.isNullOrBlank()
+                    if (hasEditor) {
+                        SettingsGroup(title = stringResource(R.string.settings_edit_template)) {
+                            OutlinedTextField(
+                                value = editingId,
+                                onValueChange = { editingId = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(stringResource(R.string.settings_template_name)) },
+                                singleLine = true,
+                                enabled = state.selectedAppProfileTemplateId.isNullOrBlank()
+                            )
+                            OutlinedTextField(
+                                value = editingContent,
+                                onValueChange = { editingContent = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 220.dp),
+                                label = { Text(stringResource(R.string.settings_template_json)) },
+                                minLines = 10
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (state.appProfileTemplateSaving) {
+                                    LoadingIndicator(Modifier.size(22.dp))
+                                }
+                                if (!state.selectedAppProfileTemplateId.isNullOrBlank()) {
+                                    TextButton(
+                                        onClick = { onDelete(state.selectedAppProfileTemplateId.orEmpty()) },
+                                        enabled = !state.appProfileTemplateSaving,
+                                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                                    ) {
+                                        Text(stringResource(R.string.delete))
+                                    }
+                                }
+                                Button(
+                                    onClick = { onSave(editingId, editingContent) },
+                                    enabled = !state.appProfileTemplateSaving && editingId.isNotBlank()
+                                ) {
+                                    Text(stringResource(R.string.save))
+                                }
+                            }
                         }
-                    }
-                    Button(
-                        onClick = { onSave(editingId, editingContent) },
-                        enabled = !state.appProfileTemplateSaving && editingId.isNotBlank()
-                    ) {
-                        Text("保存")
                     }
                 }
             }
@@ -963,6 +2077,8 @@ private fun managerSettingIcon(id: String) = when (id) {
     "selinux_hide" -> Icons.Default.Shield
     "default_umount_modules" -> Icons.Default.FolderDelete
     "webview_debug" -> Icons.Default.Code
+    "susfs_control" -> Icons.Default.Extension
+    "kernel_capabilities" -> Icons.Default.Tune
     else -> Icons.Default.Settings
 }
 
@@ -981,7 +2097,7 @@ private fun defaultAppProfileTemplateJson(): String =
 
 @Composable
 private fun ThemeSettingsScreen(
-    padding: PaddingValues,
+    topBarHeight: Dp,
     themeMode: String,
     dynamicColorEnabled: Boolean,
     customThemeColorArgb: Int?,
@@ -989,13 +2105,26 @@ private fun ThemeSettingsScreen(
     backgroundUri: String?,
     backgroundImageEnabled: Boolean,
     uiSurfaceAlpha: Float,
+    blurEnabled: Boolean,
+    blurBackgroundExpEnabled: Boolean,
     onThemeModeChange: (String) -> Unit,
     onDynamicColorEnabledChange: (Boolean, Int?, Int?) -> Unit,
     onCustomThemeColorsChange: (Int, Int) -> Unit,
     onBackgroundImageChange: (String?) -> Unit,
     onBackgroundImageEnabledChange: (Boolean) -> Unit,
-    onUiSurfaceAlphaChange: (Float) -> Unit
+    onUiSurfaceAlphaChange: (Float) -> Unit,
+    onUiSurfaceAlphaPreviewChange: (Float) -> Unit,
+    onBlurEnabledChange: (Boolean) -> Unit,
+    onBlurBackgroundExpEnabledChange: (Boolean) -> Unit,
+    onUiSurfaceAlphaSync: () -> Unit
 ) {
+    // An interrupted slider drag (back gesture / backgrounding / the slider being
+    // disabled mid-drag) never fires onValueChangeFinished, so the in-memory preview
+    // would stay stuck on an un-persisted alpha for the whole session. Restore it from
+    // prefs when the settings page goes away.
+    DisposableEffect(Unit) {
+        onDispose(onUiSurfaceAlphaSync)
+    }
     val context = LocalContext.current
     val dynamicColorAvailable = isDynamicColorAvailable()
     val effectiveDynamicColorEnabled = dynamicColorAvailable && dynamicColorEnabled
@@ -1023,13 +2152,13 @@ private fun ThemeSettingsScreen(
 
     Column(
         modifier = Modifier
-            .padding(padding)
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SettingsGroup(title = "外观模式") {
+        Spacer(Modifier.height(topBarHeight + 16.dp))
+        SettingsGroup(title = stringResource(R.string.settings_appearance_mode)) {
             themes.forEach { (key, label, icon) ->
                 val selected = themeMode == key
                 ExpressiveListItem(
@@ -1046,14 +2175,14 @@ private fun ThemeSettingsScreen(
             }
         }
 
-        SettingsGroup(title = "颜色来源") {
+        SettingsGroup(title = stringResource(R.string.settings_color_source)) {
             SwitchSettingsItem(
                 icon = Icons.Default.AutoAwesome,
-                title = "莫奈取色",
+                title = stringResource(R.string.settings_monet),
                 subtitle = if (dynamicColorAvailable) {
-                    "使用系统壁纸生成的 Material You 动态颜色"
+                    stringResource(R.string.settings_monet_desc)
                 } else {
-                    "Android 12 及以上可用，当前使用自定义色板"
+                    stringResource(R.string.settings_monet_unavailable_desc)
                 },
                 checked = effectiveDynamicColorEnabled,
                 enabled = dynamicColorAvailable,
@@ -1068,10 +2197,10 @@ private fun ThemeSettingsScreen(
         }
 
         if (!effectiveDynamicColorEnabled) {
-            SettingsGroup(title = "自定义颜色") {
+            SettingsGroup(title = stringResource(R.string.settings_custom_colors)) {
                 ThemeColorPicker(
-                    title = "主题色",
-                    subtitle = "主操作、选中状态和主要强调区域",
+                    title = stringResource(R.string.settings_theme_color),
+                    subtitle = stringResource(R.string.settings_theme_color_desc),
                     selectedColorArgb = selectedThemeColorArgb,
                     presets = themeColorPresets(),
                     onColorSelected = { color ->
@@ -1080,8 +2209,8 @@ private fun ThemeSettingsScreen(
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 ThemeColorPicker(
-                    title = "强调色",
-                    subtitle = "辅助状态、标签和次级强调区域",
+                    title = stringResource(R.string.settings_accent_color),
+                    subtitle = stringResource(R.string.settings_accent_color_desc),
                     selectedColorArgb = selectedAccentColorArgb,
                     presets = themeColorPresets(),
                     onColorSelected = { color ->
@@ -1091,37 +2220,81 @@ private fun ThemeSettingsScreen(
             }
         }
 
-        SettingsGroup(title = "背景") {
+        SettingsGroup(title = stringResource(R.string.settings_background)) {
             SwitchSettingsItem(
                 icon = Icons.Default.Image,
-                title = "自定义背景",
+                title = stringResource(R.string.settings_custom_background),
                 subtitle = if (backgroundUri.isNullOrBlank()) {
-                    "选择图片后可启用全局背景"
+                    stringResource(R.string.settings_custom_background_desc)
                 } else {
-                    "已选择背景图片"
+                    stringResource(R.string.settings_background_selected)
                 },
                 checked = backgroundImageEnabled && !backgroundUri.isNullOrBlank(),
                 enabled = !backgroundUri.isNullOrBlank(),
                 onCheckedChange = onBackgroundImageEnabledChange
             )
             ExpressiveListItem(
-                title = if (backgroundUri.isNullOrBlank()) "选择背景图片" else "更换背景图片",
-                subtitle = "从本机选择一张图片作为应用背景",
+                title = if (backgroundUri.isNullOrBlank()) {
+                    stringResource(R.string.settings_choose_background)
+                } else {
+                    stringResource(R.string.settings_change_background)
+                },
+                subtitle = stringResource(R.string.settings_choose_background_desc),
                 leadingIcon = Icons.Default.Image,
                 onClick = { backgroundPicker.launch(arrayOf("image/*")) }
             )
             if (!backgroundUri.isNullOrBlank()) {
                 ExpressiveListItem(
-                    title = "移除背景图片",
-                    subtitle = "恢复纯色 Material 主题背景",
+                    title = stringResource(R.string.settings_remove_background),
+                    subtitle = stringResource(R.string.settings_remove_background_desc),
                     leadingIcon = Icons.Default.Delete,
                     onClick = { onBackgroundImageChange(null) }
                 )
             }
+            // Blur controls (merged in from the former "模糊" card): they pop out above the
+            // opacity slider once a custom background is configured, reusing the original
+            // expand/fade animation. The master switch controls every blur surface (AGSL
+            // bars on API 33+ and the software card blur on every API level); the nested
+            // "render custom background into blur" item expands out from below the toggle
+            // when blur is enabled.
+            val backgroundConfigured = backgroundImageEnabled && !backgroundUri.isNullOrBlank()
+            AnimatedVisibility(
+                visible = backgroundConfigured,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ExpressiveSwitchItem(
+                        title = stringResource(R.string.settings_blur),
+                        subtitle = stringResource(R.string.settings_blur_desc),
+                        icon = Icons.Default.BlurOn,
+                        checked = blurEnabled,
+                        onCheckedChange = onBlurEnabledChange
+                    )
+                    AnimatedVisibility(
+                        visible = blurEnabled,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        ExpressiveSwitchItem(
+                            title = stringResource(R.string.settings_blur_background),
+                            subtitle = stringResource(R.string.settings_blur_background_desc),
+                            icon = Icons.Default.Image,
+                            checked = blurBackgroundExpEnabled,
+                            enabled = backgroundConfigured,
+                            onCheckedChange = onBlurBackgroundExpEnabledChange
+                        )
+                    }
+                }
+            }
             BackgroundAlphaControl(
                 alpha = uiSurfaceAlpha,
                 enabled = backgroundImageEnabled && !backgroundUri.isNullOrBlank(),
-                onAlphaChange = onUiSurfaceAlphaChange
+                onAlphaChange = onUiSurfaceAlphaPreviewChange,
+                onAlphaChangeFinished = onUiSurfaceAlphaChange
             )
         }
 
@@ -1133,8 +2306,13 @@ private fun ThemeSettingsScreen(
 private fun BackgroundAlphaControl(
     alpha: Float,
     enabled: Boolean,
-    onAlphaChange: (Float) -> Unit
+    onAlphaChange: (Float) -> Unit,
+    onAlphaChangeFinished: ((Float) -> Unit)? = null
 ) {
+    // Keep drag state local so every pointer tick redraws the slider and the shared
+    // surface-alpha CompositionLocal without recomposing this entire settings page.
+    // Persistence remains deferred until the gesture finishes.
+    var previewAlpha by remember(alpha) { mutableFloatStateOf(alpha.coerceIn(0f, 1f)) }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -1145,25 +2323,31 @@ private fun BackgroundAlphaControl(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "界面不透明度",
+                text = stringResource(R.string.settings_ui_opacity),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = "${(alpha.coerceIn(0f, 1f) * 100).toInt()}%",
+                text = "${(previewAlpha * 100).toInt()}%",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Slider(
-            value = alpha.coerceIn(0f, 1f),
-            onValueChange = onAlphaChange,
+            value = previewAlpha,
+            onValueChange = {
+                previewAlpha = it
+                onAlphaChange(it)
+            },
+            onValueChangeFinished = {
+                onAlphaChangeFinished?.invoke(previewAlpha)
+            },
             valueRange = 0f..1f,
             enabled = enabled
         )
         Text(
-            text = "调低后卡片、顶部栏和底部栏会透出背景。",
+            text = stringResource(R.string.settings_ui_opacity_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1203,7 +2387,7 @@ private fun ThemeColorPicker(
         ) {
             if (presets.none { colorsMatch(selectedColorArgb, it.argb) }) {
                 ThemeColorSwatch(
-                    preset = ThemeColorPreset("当前", selectedColorArgb),
+                    preset = ThemeColorPreset(stringResource(R.string.settings_current_color), selectedColorArgb),
                     selected = true,
                     enabled = false,
                     onClick = {}
@@ -1260,13 +2444,14 @@ private data class ThemeColorPreset(
     val argb: Int
 )
 
+@Composable
 private fun themeColorPresets(): List<ThemeColorPreset> = listOf(
-    ThemeColorPreset("绿", 0xFF8BC34A.toInt()),
-    ThemeColorPreset("蓝", 0xFF42A5F5.toInt()),
-    ThemeColorPreset("紫", 0xFF9575CD.toInt()),
-    ThemeColorPreset("粉", 0xFFEC6A9A.toInt()),
-    ThemeColorPreset("橙", 0xFFFFA726.toInt()),
-    ThemeColorPreset("青", 0xFF26C6DA.toInt())
+    ThemeColorPreset(stringResource(R.string.settings_color_green), 0xFF8BC34A.toInt()),
+    ThemeColorPreset(stringResource(R.string.settings_color_blue), 0xFF42A5F5.toInt()),
+    ThemeColorPreset(stringResource(R.string.settings_color_purple), 0xFF9575CD.toInt()),
+    ThemeColorPreset(stringResource(R.string.settings_color_pink), 0xFFEC6A9A.toInt()),
+    ThemeColorPreset(stringResource(R.string.settings_color_orange), 0xFFFFA726.toInt()),
+    ThemeColorPreset(stringResource(R.string.settings_color_cyan), 0xFF26C6DA.toInt())
 )
 
 private fun colorsMatch(left: Int, right: Int): Boolean {
@@ -1290,65 +2475,104 @@ private fun themeModeLabel(themeMode: String): String = when (themeMode) {
 
 @Composable
 private fun dynamicColorLabel(enabled: Boolean): String = when {
-    !isDynamicColorAvailable() -> "莫奈取色不可用"
-    enabled -> "莫奈取色"
-    else -> "自定义色板"
+    !isDynamicColorAvailable() -> stringResource(R.string.settings_monet_unavailable)
+    enabled -> stringResource(R.string.settings_monet)
+    else -> stringResource(R.string.settings_custom_palette)
 }
 
 private fun isDynamicColorAvailable(): Boolean =
     Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
 @Composable
-private fun AboutDialog(
-    onDismiss: () -> Unit,
-    onOpenUrl: (String) -> Unit
+private fun AboutRepositoryScreen(
+    topBarHeight: Dp,
+    onOpenUrl: (String) -> Unit,
+    onOpenSourceLicenses: () -> Unit
 ) {
-    val links = remember { aboutLinks() }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Info, null) },
-        title = { Text("关于 AnyBase Kernel") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 460.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    "AnyBase Kernel 用于构建、分发和管理 GKI KernelSU / SUSFS 内核。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                AboutLinkRow(AboutLink("源仓库", sourceRepoUrl()), onOpenUrl)
-                AboutSectionTitle("致谢")
-                Text(
-                    "ABK 基于以下项目、仓库和社区工作继续开发。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                links.forEach {
-                    AboutLinkRow(it, onOpenUrl)
-                }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = AbkScreenHorizontalPadding)
+            .padding(bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Spacer(Modifier.height(topBarHeight + 16.dp))
+        ExpressiveHeroCard(
+            title = stringResource(R.string.app_full_name),
+            subtitle = stringResource(R.string.settings_about_intro),
+            icon = Icons.Default.Info
+        ) {
+            Text(
+                text = stringResource(R.string.settings_about_version, BuildConfig.VERSION_NAME),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+            )
+        }
+
+        SettingsGroup(title = stringResource(R.string.settings_repository_info)) {
+            repositoryLinks().forEach { link ->
+                AboutLinkRow(link, onOpenUrl)
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.close))
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_open_source_licenses),
+                subtitle = stringResource(R.string.settings_open_source_licenses_desc),
+                leadingIcon = Icons.Default.Article,
+                trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                onClick = onOpenSourceLicenses
+            )
+        }
+
+        SettingsGroup(title = stringResource(R.string.settings_contributors)) {
+            Text(
+                text = stringResource(R.string.settings_contributors_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            )
+            contributors().forEach { contributor ->
+                val profileUrl = "https://github.com/${contributor.username}"
+                ExpressiveListItem(
+                    title = "@${contributor.username}",
+                    leadingIcon = Icons.Default.Person,
+                    trailingContent = { Icon(Icons.Default.OpenInBrowser, null) },
+                    onClick = { onOpenUrl(profileUrl) }
+                )
             }
         }
-    )
+        Spacer(Modifier.height(80.dp))
+    }
 }
 
 @Composable
-private fun AboutSectionTitle(title: String) {
-    Text(
-        title,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary
-    )
+private fun OpenSourceLicensesScreen(
+    topBarHeight: Dp,
+    onOpenUrl: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = AbkScreenHorizontalPadding)
+            .padding(bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Spacer(Modifier.height(topBarHeight + 16.dp))
+        ExpressiveHeroCard(
+            title = stringResource(R.string.settings_open_source_licenses),
+            subtitle = stringResource(R.string.settings_open_source_licenses_intro),
+            icon = Icons.Default.Gavel
+        )
+
+        openSourceNoticeGroups().forEach { group ->
+            SettingsGroup(title = stringResource(group.titleRes)) {
+                group.items.forEach { notice ->
+                    OpenSourceNoticeRow(notice, onOpenUrl)
+                }
+            }
+        }
+        Spacer(Modifier.height(80.dp))
+    }
 }
 
 @Composable
@@ -1365,39 +2589,302 @@ private fun AboutLinkRow(
     )
 }
 
+@Composable
+private fun OpenSourceNoticeRow(
+    notice: OpenSourceNotice,
+    onOpenUrl: (String) -> Unit
+) {
+    val subtitle = listOfNotNull(
+        notice.license,
+        notice.source.takeIf { it.isNotBlank() }
+    ).joinToString(" · ")
+    ExpressiveListItem(
+        title = notice.name,
+        subtitle = subtitle,
+        leadingIcon = Icons.Default.Source,
+        trailingContent = {
+            if (!notice.url.isNullOrBlank()) {
+                Icon(Icons.Default.OpenInBrowser, null)
+            }
+        },
+        onClick = notice.url?.let { url -> { onOpenUrl(url) } }
+    )
+}
+
 private data class AboutLink(
     val title: String,
     val url: String
 )
 
-private fun aboutLinks(): List<AboutLink> {
-    return listOf(
-        AboutLink("上游仓库", BuildConfig.UPSTREAM_REPO_URL),
-        AboutLink("顶层仓库", BuildConfig.TOP_LEVEL_REPO_URL),
-        AboutLink("第三方声明", "${sourceRepoUrl()}/blob/main/THIRD_PARTY_NOTICES.md"),
-        AboutLink("KernelSU", "https://github.com/tiann/KernelSU"),
-        AboutLink("KernelSU Next", "https://github.com/KernelSU-Next/KernelSU-Next"),
-        AboutLink("SukiSU Ultra", "https://github.com/SukiSU-Ultra/SukiSU-Ultra"),
-        AboutLink("ReSukiSU", "https://github.com/ReSukiSU/ReSukiSU"),
-        AboutLink("SUSFS", "https://gitlab.com/simonpunk/susfs4ksu"),
-        AboutLink("SUSFS GitHub 镜像/补丁来源", "https://github.com/ShirkNeko/susfs4ksu"),
-        AboutLink("SukiSU patch", "https://github.com/ShirkNeko/SukiSU_patch"),
-        AboutLink("AnyKernel3", "https://github.com/WildKernels/AnyKernel3"),
-        AboutLink("Kernel patches", "https://github.com/WildKernels/kernel_patches"),
-        AboutLink("NTsync / IPSet / BBR 来源", "https://github.com/WildKernels/kernel_patches"),
-        AboutLink("NTsync / IPSet / BBR PR by huime180", "https://github.com/huime180"),
-        AboutLink("Action-Build", "https://github.com/Numbersf/Action-Build"),
-        AboutLink("SUSFS 模块构建来源", "https://github.com/sidex15/susfs4ksu-module"),
-        AboutLink(
-            "GCC prebuilts",
-            "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1"
-        ),
-        AboutLink("Baseband Guard", "https://github.com/vc-teahouse/Baseband-guard"),
-        AboutLink("Re-Kernel", "https://github.com/Sakion-Team/Re-Kernel"),
-        AboutLink("Droidspaces / 虚拟化支持补丁来源", "https://github.com/ravindu644/Droidspaces-OSS"),
-        AboutLink("KernelSU 官方站点", "https://kernelsu.org/")
+private data class AboutContributor(
+    val username: String
+)
+
+private data class OpenSourceNotice(
+    val name: String,
+    val license: String,
+    val source: String,
+    val url: String? = null
+)
+
+private data class OpenSourceNoticeGroup(
+    val titleRes: Int,
+    val items: List<OpenSourceNotice>
+)
+
+@Composable
+private fun repositoryLinks(): List<AboutLink> = listOf(
+    AboutLink(stringResource(R.string.settings_source_repository), sourceRepoUrl()),
+    AboutLink("Releases", "${sourceRepoUrl()}/releases"),
+    AboutLink("Actions", "${sourceRepoUrl()}/actions"),
+    AboutLink("Pages", "https://${BuildConfig.SOURCE_REPO_OWNER}.github.io/${BuildConfig.SOURCE_REPO_NAME}/"),
+    AboutLink("README", "${sourceRepoUrl()}/blob/main/README.md"),
+    AboutLink(stringResource(R.string.settings_third_party_notices), "${sourceRepoUrl()}/blob/main/THIRD_PARTY_NOTICES.md")
+)
+
+private fun contributors(): List<AboutContributor> = listOf(
+    AboutContributor("Akuma-Noko"),
+    AboutContributor("DebugBoard"),
+    AboutContributor("DreamFerry"),
+    AboutContributor("elysias123"),
+    AboutContributor("fanziyun"),
+    AboutContributor("Fede2782"),
+    AboutContributor("FixeQyt"),
+    AboutContributor("FunLay123"),
+    AboutContributor("gsf114"),
+    AboutContributor("guruji-byte"),
+    AboutContributor("huime180"),
+    AboutContributor("liqideqq"),
+    AboutContributor("LX200944"),
+    AboutContributor("Mazha0309"),
+    AboutContributor("MiRinChan"),
+    AboutContributor("prpjzz"),
+    AboutContributor("ReeViiS69"),
+    AboutContributor("ShirkNeko"),
+    AboutContributor("Starsun"),
+    AboutContributor("TheSillyOk"),
+    AboutContributor("TheWildJames"),
+    AboutContributor("Tools-cx-app"),
+    AboutContributor("ukriu"),
+    AboutContributor("wrnxr233"),
+    AboutContributor("Xiaomichael"),
+    AboutContributor("xingguangcuican6666"),
+    AboutContributor("yx1234587"),
+    AboutContributor("zzh20188")
+)
+
+private fun openSourceNoticeGroups(): List<OpenSourceNoticeGroup> = listOf(
+    OpenSourceNoticeGroup(
+        R.string.settings_license_group_repository,
+        listOf(
+            OpenSourceNotice("AnyBase Kernel", "GPL-3.0", "LICENSE", sourceRepoUrl()),
+            OpenSourceNotice("ABK Control native bridge", "GPL-2.0", "app/src/main/cpp/uapi/abk_control.h"),
+            OpenSourceNotice("xingguang DDK module", "GPL", "ddk/xingguang-ddk/xingguang_ddk.c"),
+            OpenSourceNotice("DDK kernel API patch", "GPL-2.0", "ddk/patches/xingguang-ddk/0001-xingguang-ddk-api.patch"),
+            OpenSourceNotice("ZRAM LZ4 kernel glue", "GPL-2.0-only", "zram/lz4/Makefile")
+        )
+    ),
+    OpenSourceNoticeGroup(
+        R.string.settings_license_group_upstream,
+        listOf(
+            OpenSourceNotice("zzh20188/GKI_KernelSU_SUSFS", "Upstream repository license", "BuildConfig.UPSTREAM_REPO_URL", BuildConfig.UPSTREAM_REPO_URL),
+            OpenSourceNotice("WildKernels/GKI_KernelSU_SUSFS", "Upstream repository license", "BuildConfig.TOP_LEVEL_REPO_URL", BuildConfig.TOP_LEVEL_REPO_URL),
+            OpenSourceNotice("CodeLinaro CLO LA", "Top-level upstream project licenses", "OnePlus manifest upstream", "https://git.codelinaro.org/clo/la"),
+            OpenSourceNotice("OnePlusOSS/kernel_manifest", "Upstream repository license / no SPDX detected", "OnePlus manifest parent", "https://github.com/OnePlusOSS/kernel_manifest"),
+            OpenSourceNotice("Xiaomichael/kernel_manifest", "Upstream repository license / no SPDX detected", "OnePlus manifest branch source", "https://github.com/Xiaomichael/kernel_manifest"),
+            OpenSourceNotice("Xiaomichael/kernel_patches", "Upstream repository license / no SPDX detected", "OnePlus patch source", "https://github.com/Xiaomichael/kernel_patches"),
+            OpenSourceNotice("KernelSU", "GPL-3.0", "workflow setup.sh source", "https://github.com/tiann/KernelSU"),
+            OpenSourceNotice("KernelSU Next", "GPL-3.0", "workflow setup.sh source", "https://github.com/KernelSU-Next/KernelSU-Next"),
+            OpenSourceNotice("SukiSU Ultra", "GPL-3.0", "kernel setup, ksud, android_bootimg", "https://github.com/SukiSU-Ultra/SukiSU-Ultra"),
+            OpenSourceNotice("ReSukiSU", "GPL-3.0", "workflow setup.sh source", "https://github.com/ReSukiSU/ReSukiSU"),
+            OpenSourceNotice("SUSFS", "GPL-2.0", "kernel patches and module integration", "https://gitlab.com/simonpunk/susfs4ksu"),
+            OpenSourceNotice("ShirkNeko/susfs4ksu", "GPL-2.0", "GitHub mirror / patch source", "https://github.com/ShirkNeko/susfs4ksu"),
+            OpenSourceNotice("SukiSU_patch", "GPL-2.0", "workflow patch source", "https://github.com/ShirkNeko/SukiSU_patch"),
+            OpenSourceNotice("AnyKernel3", "GPL-2.0", "flashable kernel packaging", "https://github.com/WildKernels/AnyKernel3"),
+            OpenSourceNotice("Xiaomichael/AnyKernel3", "Upstream repository license / NOASSERTION", "OnePlus flashable packaging source", "https://github.com/Xiaomichael/AnyKernel3"),
+            OpenSourceNotice("WildKernels/kernel_patches", "GPL-2.0", "NTsync, IPSet, BBR and related patches", "https://github.com/WildKernels/kernel_patches"),
+            OpenSourceNotice("cctv18/susfs4oki", "GPL-3.0", "OnePlus/OPPO/Realme SUSFS patch source", "https://github.com/cctv18/susfs4oki"),
+            OpenSourceNotice("SukiSU_KernelPatch_patch", "Upstream repository license", "KPM patch source", "https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch"),
+            OpenSourceNotice("Action-Build", "Upstream repository license", "workflow integration", "https://github.com/Numbersf/Action-Build"),
+            OpenSourceNotice("sidex15/susfs4ksu-module", "Upstream repository license", "SUSFS module build source", "https://github.com/sidex15/susfs4ksu-module"),
+            OpenSourceNotice("LineageOS GCC prebuilts", "GPL-family toolchain notices", "workflow toolchain source", "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1"),
+            OpenSourceNotice("Baseband Guard", "Upstream repository license", "workflow setup source", "https://github.com/vc-teahouse/Baseband-guard"),
+            OpenSourceNotice("Re-Kernel", "Upstream repository license", "workflow patch source", "https://github.com/Sakion-Team/Re-Kernel"),
+            OpenSourceNotice("Droidspaces-OSS", "Upstream repository license", "virtualization support patches", "https://github.com/ravindu644/Droidspaces-OSS"),
+            OpenSourceNotice("ABK_repo module catalog", "Upstream repository license", "official module catalog", "https://github.com/xingguangcuican6666/ABK_repo")
+        )
+    ),
+    OpenSourceNoticeGroup(
+        R.string.settings_license_group_embedded,
+        listOf(
+            OpenSourceNotice("LZ4", "BSD-2-Clause", "zram/lz4 and zram/include/linux/lz4.h", "https://github.com/lz4/lz4"),
+            OpenSourceNotice("AOSP kernel/common", "GPL-2.0 WITH Linux-syscall-note and AOSP notices", "android.googlesource.com/kernel/common", "https://android.googlesource.com/kernel/common"),
+            OpenSourceNotice("AOSP kernel manifest", "AOSP project notices", "android.googlesource.com/kernel/manifest", "https://android.googlesource.com/kernel/manifest"),
+            OpenSourceNotice("AOSP mkbootimg", "Apache-2.0", "android.googlesource.com/platform/system/tools/mkbootimg", "https://android.googlesource.com/platform/system/tools/mkbootimg"),
+            OpenSourceNotice("AOSP kernel build-tools", "AOSP project notices", "android.googlesource.com/kernel/prebuilts/build-tools", "https://android.googlesource.com/kernel/prebuilts/build-tools"),
+            OpenSourceNotice("Android GKI certified boot images", "Android image distribution terms", "dl.google.com/android/gki"),
+            OpenSourceNotice("Android command line tools", "Android SDK License", "Dockerfile.test", "https://developer.android.com/studio")
+        )
+    ),
+    OpenSourceNoticeGroup(
+        R.string.settings_license_group_android,
+        androidDependencyNotices()
+    ),
+    OpenSourceNoticeGroup(
+        R.string.settings_license_group_web,
+        webDependencyNotices()
     )
-}
+)
+
+private fun androidDependencyNotices(): List<OpenSourceNotice> = listOf(
+    OpenSourceNotice("Android Gradle Plugin 9.1.1", "Apache-2.0", "com.android.application"),
+    OpenSourceNotice("Kotlin Gradle/Compose plugin 2.3.21", "Apache-2.0", "org.jetbrains.kotlin.plugin.compose"),
+    OpenSourceNotice("androidx.core:core-ktx 1.15.0", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("androidx.lifecycle:lifecycle-runtime-ktx 2.8.7", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("androidx.lifecycle:lifecycle-viewmodel-compose 2.8.7", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("androidx.activity:activity-compose 1.9.3", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("androidx.compose:compose-bom 2026.05.00", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("androidx.compose.ui:ui", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("androidx.compose.ui:ui-graphics", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("androidx.compose.ui:ui-tooling-preview", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("androidx.compose.material3:material3 1.5.0-alpha19", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("androidx.compose.material:material-icons-extended", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("com.google.android.material:material 1.12.0", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("androidx.navigation:navigation-compose 2.8.5", "Apache-2.0", "Gradle direct dependency"),
+    OpenSourceNotice("Retrofit 2.11.0", "Apache-2.0", "com.squareup.retrofit2:retrofit"),
+    OpenSourceNotice("Retrofit Gson converter 2.11.0", "Apache-2.0", "com.squareup.retrofit2:converter-gson"),
+    OpenSourceNotice("OkHttp 4.12.0", "Apache-2.0", "com.squareup.okhttp3:okhttp"),
+    OpenSourceNotice("OkHttp logging-interceptor 4.12.0", "Apache-2.0", "com.squareup.okhttp3:logging-interceptor"),
+    OpenSourceNotice("Gson 2.11.0", "Apache-2.0", "com.google.code.gson:gson"),
+    OpenSourceNotice("kotlinx-serialization-json 1.7.3", "Apache-2.0", "org.jetbrains.kotlinx:kotlinx-serialization-json"),
+    OpenSourceNotice("libsu core 5.2.2", "Apache-2.0", "com.github.topjohnwu.libsu:core"),
+    OpenSourceNotice("libsu io 5.2.2", "Apache-2.0", "com.github.topjohnwu.libsu:io"),
+    OpenSourceNotice("Coil Compose 2.7.0", "Apache-2.0", "io.coil-kt:coil-compose"),
+    OpenSourceNotice("WorkManager runtime-ktx 2.10.0", "Apache-2.0", "androidx.work:work-runtime-ktx"),
+    OpenSourceNotice("DataStore preferences 1.1.2", "Apache-2.0", "androidx.datastore:datastore-preferences"),
+    OpenSourceNotice("JUnit 4.13.2", "EPL-1.0", "testImplementation"),
+    OpenSourceNotice("AndroidX Test JUnit 1.2.1", "Apache-2.0", "androidTestImplementation"),
+    OpenSourceNotice("Espresso Core 3.6.1", "Apache-2.0", "androidTestImplementation")
+)
+
+private fun webDependencyNotices(): List<OpenSourceNotice> = listOf(
+    OpenSourceNotice("@discoveryjs/json-ext 0.6.3", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("@jridgewell/gen-mapping 0.3.13", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("@jridgewell/resolve-uri 3.1.2", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("@jridgewell/source-map 0.3.11", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("@jridgewell/sourcemap-codec 1.5.5", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("@jridgewell/trace-mapping 0.3.31", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("@parcel/watcher 2.5.6 and platform packages", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("@types/eslint 9.6.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("@types/eslint-scope 3.7.7", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("@types/estree 1.0.8", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("@types/json-schema 7.0.15", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("@types/node 25.3.3", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("@webassemblyjs/* 1.13.2-1.14.1", "MIT / Apache-2.0", "web/package-lock.json"),
+    OpenSourceNotice("@webpack-cli/* 3.0.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("@xtuc/ieee754 1.2.0", "BSD-3-Clause", "web/package-lock.json"),
+    OpenSourceNotice("@xtuc/long 4.2.2", "Apache-2.0", "web/package-lock.json"),
+    OpenSourceNotice("acorn 8.16.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("acorn-import-phases 1.0.4", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("ajv 8.18.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("ajv-formats 2.1.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("ajv-keywords 5.1.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("baseline-browser-mapping 2.10.0", "Apache-2.0", "web/package-lock.json"),
+    OpenSourceNotice("browserslist 4.28.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("buffer-from 1.1.2", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("caniuse-lite 1.0.30001776", "CC-BY-4.0", "web/package-lock.json"),
+    OpenSourceNotice("chokidar 4.0.3", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("chrome-trace-event 1.0.4", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("clone-deep 4.0.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("colorette 2.0.20", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("commander 2.20.3 / 12.1.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("cross-spawn 7.0.6", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("css-loader 7.1.4", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("cssesc 3.0.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("detect-libc 2.1.2", "Apache-2.0", "web/package-lock.json"),
+    OpenSourceNotice("electron-to-chromium 1.5.307", "ISC", "web/package-lock.json"),
+    OpenSourceNotice("enhanced-resolve 5.20.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("envinfo 7.21.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("es-module-lexer 2.0.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("escalade 3.2.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("eslint-scope 5.1.1", "BSD-2-Clause", "web/package-lock.json"),
+    OpenSourceNotice("esrecurse 4.3.0", "BSD-2-Clause", "web/package-lock.json"),
+    OpenSourceNotice("estraverse 4.3.0 / 5.3.0", "BSD-2-Clause", "web/package-lock.json"),
+    OpenSourceNotice("events 3.3.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("fast-deep-equal 3.1.3", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("fast-uri 3.1.0", "BSD-3-Clause", "web/package-lock.json"),
+    OpenSourceNotice("fastest-levenshtein 1.0.16", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("find-up 4.1.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("flat 5.0.2", "BSD-3-Clause", "web/package-lock.json"),
+    OpenSourceNotice("function-bind 1.1.2", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("glob-to-regexp 0.4.1", "BSD-2-Clause", "web/package-lock.json"),
+    OpenSourceNotice("graceful-fs 4.2.11", "ISC", "web/package-lock.json"),
+    OpenSourceNotice("has-flag 4.0.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("hasown 2.0.2", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("icss-utils 5.1.0", "ISC", "web/package-lock.json"),
+    OpenSourceNotice("immutable 5.1.5", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("import-local 3.2.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("interpret 3.1.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("is-core-module 2.16.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("is-extglob 2.1.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("is-glob 4.0.3", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("is-plain-object 2.0.4", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("isexe 2.0.0", "ISC", "web/package-lock.json"),
+    OpenSourceNotice("isobject 3.0.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("jest-worker 27.5.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("json-parse-even-better-errors 2.3.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("json-schema-traverse 1.0.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("kind-of 6.0.3", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("loader-runner 4.3.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("locate-path 5.0.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("merge-stream 2.0.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("mime-db 1.52.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("mime-types 2.1.35", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("mini-css-extract-plugin 2.10.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("nanoid 3.3.11", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("neo-async 2.6.2", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("node-addon-api 7.1.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("node-releases 2.0.36", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("p-limit / p-locate / p-try", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("path-exists / path-key / path-parse", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("picocolors 1.1.1", "ISC", "web/package-lock.json"),
+    OpenSourceNotice("picomatch 4.0.3", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("pkg-dir 4.2.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("postcss 8.5.8", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("postcss-modules-*", "ISC / MIT", "web/package-lock.json"),
+    OpenSourceNotice("postcss-selector-parser 7.1.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("postcss-value-parser 4.2.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("readdirp 4.1.2", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("rechoir 0.8.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("require-from-string 2.0.2", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("resolve 1.22.11", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("resolve-cwd 3.0.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("resolve-from 5.0.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("sass 1.97.3", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("sass-loader 16.0.7", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("schema-utils 4.3.3", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("semver 7.7.4", "ISC", "web/package-lock.json"),
+    OpenSourceNotice("shallow-clone 3.0.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("shebang-command / shebang-regex", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("source-map 0.6.1", "BSD-3-Clause", "web/package-lock.json"),
+    OpenSourceNotice("source-map-js 1.2.1", "BSD-3-Clause", "web/package-lock.json"),
+    OpenSourceNotice("source-map-support 0.5.21", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("supports-color 8.1.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("supports-preserve-symlinks-flag 1.0.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("tapable 2.3.0", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("terser 5.46.0", "BSD-2-Clause", "web/package-lock.json"),
+    OpenSourceNotice("terser-webpack-plugin 5.3.17", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("undici-types 7.18.2", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("update-browserslist-db 1.2.3", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("util-deprecate 1.0.2", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("watchpack 2.5.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("webpack 5.105.4", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("webpack-cli 6.0.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("webpack-merge 6.0.1", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("webpack-sources 3.3.4", "MIT", "web/package-lock.json"),
+    OpenSourceNotice("which 2.0.2", "ISC", "web/package-lock.json"),
+    OpenSourceNotice("wildcard 2.0.1", "MIT", "web/package-lock.json")
+)
 
 private fun sourceRepoUrl(): String =
     "https://github.com/${BuildConfig.SOURCE_REPO_OWNER}/${BuildConfig.SOURCE_REPO_NAME}"
@@ -1408,6 +2895,61 @@ private fun openUrl(context: android.content.Context, url: String) {
     }
 }
 
+private fun launchAppUpdateInstaller(context: android.content.Context, apkPath: String) {
+    val apkFile = File(apkPath)
+    if (!apkFile.isFile) {
+        Toast.makeText(context, context.getString(R.string.ru_apk_not_found, apkPath), Toast.LENGTH_SHORT).show()
+        return
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+        !context.packageManager.canRequestPackageInstalls()
+    ) {
+        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+            data = Uri.parse("package:${context.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(intent) }
+            .onFailure {
+                Toast.makeText(context, context.getString(R.string.settings_app_update_install_permission), Toast.LENGTH_LONG).show()
+            }
+        return
+    }
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        apkFile
+    )
+    val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+        data = uri
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+        putExtra(Intent.EXTRA_RETURN_RESULT, false)
+    }
+    runCatching { context.startActivity(intent) }
+        .onFailure {
+            Toast.makeText(context, context.getString(R.string.settings_app_update_install_failed), Toast.LENGTH_LONG).show()
+        }
+}
+
+private fun shareDiagnosticBundle(context: Context, zipFile: File) {
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        zipFile
+    )
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "application/zip"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_SUBJECT, zipFile.name)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(
+        Intent.createChooser(intent, context.getString(R.string.settings_export_diagnostics_share))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    )
+}
+
 @Composable
 private fun SettingsHero(
     login: String?,
@@ -1415,23 +2957,28 @@ private fun SettingsHero(
     themeMode: String
 ) {
     ExpressiveHeroCard(
-        title = login?.let { "已连接 GitHub：$it" } ?: "AnyBase Kernel 设置中心",
-        subtitle = forkName ?: "管理构建自动化、通知、主题和仓库来源。",
+        title = login?.let { stringResource(R.string.settings_connected_github, it) }
+            ?: stringResource(R.string.settings_center_title),
+        subtitle = forkName ?: stringResource(R.string.settings_center_subtitle),
         icon = Icons.Default.Tune,
         containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         badge = {
             ExpressiveStatusChip(
                 label = when (themeMode) {
-                    "dark" -> "深色主题"
-                    "light" -> "浅色主题"
-                    else -> "跟随系统"
+                    "dark" -> stringResource(R.string.settings_dark_theme)
+                    "light" -> stringResource(R.string.settings_light_theme)
+                    else -> stringResource(R.string.settings_theme_system)
                 },
                 icon = Icons.Default.Palette,
                 color = MaterialTheme.colorScheme.primary
             )
             ExpressiveStatusChip(
-                label = if (forkName != null) "Fork 已连接" else "等待 Fork",
+                label = if (forkName != null) {
+                    stringResource(R.string.settings_fork_connected)
+                } else {
+                    stringResource(R.string.settings_waiting_fork)
+                },
                 icon = Icons.Default.ForkRight,
                 color = if (forkName != null) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
             )
@@ -1444,48 +2991,217 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
     ExpressiveSectionCard(
         title = title,
         subtitle = when (title) {
-            stringResource(R.string.settings_account) -> "GitHub 账户、fork 仓库和退出登录。"
-            stringResource(R.string.settings_build) -> "控制构建成功后的自动化行为。"
-            stringResource(R.string.settings_notification) -> "同步工作流状态到系统通知。"
-            "导航" -> "控制返回手势和页面切换体验。"
-            stringResource(R.string.settings_theme) -> "Material 3 Expressive 主题显示模式。"
-            "ReSukiSU" -> "按当前 ReSukiSU 后端能力动态加载。"
-            "SukiSU" -> "按当前 SukiSU 后端能力动态加载。"
-            "KernelSU" -> "按当前 KernelSU 后端能力动态加载。"
-            "管理器设置" -> "按当前 KSU 后端能力动态加载。"
-            "系统工具" -> "SELinux 和模块卸载路径相关工具。"
-            "授权列表" -> "导出或导入当前 Root 授权列表。"
-            "工具状态" -> "最近一次工具操作的执行结果。"
-            "本地模板" -> "管理保存在 ReSukiSU profile 存储中的模板。"
-            "状态" -> "最近一次模板操作的执行结果。"
-            "编辑模板" -> "直接编辑 App Profile 模板 JSON。"
-            "外观模式" -> "控制应用明暗显示方式。"
-            "颜色来源" -> "选择系统动态颜色或自定义色板。"
-            "自定义颜色" -> "莫奈关闭时使用的主题色和强调色。"
-            "背景" -> "选择背景图片并调整上层界面透明度。"
-            else -> "应用版本与源码信息。"
+            stringResource(R.string.settings_account) -> stringResource(R.string.settings_group_account_desc)
+            stringResource(R.string.settings_build) -> stringResource(R.string.settings_group_build_desc)
+            stringResource(R.string.settings_security) -> stringResource(R.string.settings_group_security_desc)
+            stringResource(R.string.settings_app_update) -> stringResource(R.string.settings_group_app_update_desc)
+            stringResource(R.string.settings_notification) -> stringResource(R.string.settings_group_notification_desc)
+            stringResource(R.string.settings_navigation) -> stringResource(R.string.settings_group_navigation_desc)
+            stringResource(R.string.settings_language) -> stringResource(R.string.settings_language_desc)
+            stringResource(R.string.settings_theme) -> stringResource(R.string.settings_group_theme_desc)
+            "ReSukiSU" -> stringResource(R.string.settings_group_backend_desc, "ReSukiSU")
+            "SukiSU" -> stringResource(R.string.settings_group_backend_desc, "SukiSU")
+            "KernelSU" -> stringResource(R.string.settings_group_backend_desc, "KernelSU")
+            stringResource(R.string.settings_manager_settings) -> stringResource(R.string.settings_group_manager_settings_desc)
+            stringResource(R.string.settings_kernel_capabilities) -> stringResource(R.string.settings_group_kernel_capabilities_desc)
+            stringResource(R.string.settings_tcp_congestion_control) -> stringResource(R.string.settings_group_tcp_congestion_control_desc)
+            stringResource(R.string.settings_system_tools) -> stringResource(R.string.settings_group_system_tools_desc)
+            stringResource(R.string.settings_allowlist) -> stringResource(R.string.settings_group_allowlist_desc)
+            stringResource(R.string.settings_tool_status) -> stringResource(R.string.settings_group_tool_status_desc)
+            stringResource(R.string.settings_local_templates) -> stringResource(R.string.settings_group_local_templates_desc)
+            stringResource(R.string.settings_status) -> stringResource(R.string.settings_group_status_desc)
+            stringResource(R.string.settings_edit_template) -> stringResource(R.string.settings_group_edit_template_desc)
+            stringResource(R.string.settings_appearance_mode) -> stringResource(R.string.settings_group_appearance_desc)
+            stringResource(R.string.settings_color_source) -> stringResource(R.string.settings_group_color_source_desc)
+            stringResource(R.string.settings_custom_colors) -> stringResource(R.string.settings_group_custom_colors_desc)
+            stringResource(R.string.settings_background) -> stringResource(R.string.settings_group_background_desc)
+            else -> stringResource(R.string.settings_group_about_desc)
         },
         icon = when (title) {
             stringResource(R.string.settings_account) -> Icons.Default.AccountCircle
             stringResource(R.string.settings_build) -> Icons.Default.Build
+            stringResource(R.string.settings_security) -> Icons.Default.VerifiedUser
+            stringResource(R.string.settings_app_update) -> Icons.Default.Download
             stringResource(R.string.settings_notification) -> Icons.Default.Notifications
-            "导航" -> Icons.Default.ArrowBack
+            stringResource(R.string.settings_navigation) -> Icons.Default.ArrowBack
+            stringResource(R.string.settings_language) -> Icons.Default.Language
             stringResource(R.string.settings_theme) -> Icons.Default.Palette
-            "ReSukiSU", "SukiSU", "KernelSU", "管理器设置" -> Icons.Default.AdminPanelSettings
-            "系统工具" -> Icons.Default.Build
-            "授权列表" -> Icons.Default.VerifiedUser
-            "工具状态" -> Icons.Default.Info
-            "本地模板" -> Icons.Default.Apps
-            "状态" -> Icons.Default.Info
-            "编辑模板" -> Icons.Default.Edit
-            "外观模式" -> Icons.Default.BrightnessMedium
-            "颜色来源" -> Icons.Default.AutoAwesome
-            "自定义颜色" -> Icons.Default.Palette
-            "背景" -> Icons.Default.Image
+            "ReSukiSU", "SukiSU", "KernelSU" -> Icons.Default.AdminPanelSettings
+            stringResource(R.string.settings_manager_settings) -> Icons.Default.AdminPanelSettings
+            stringResource(R.string.settings_kernel_capabilities) -> Icons.Default.Tune
+            stringResource(R.string.settings_tcp_congestion_control) -> Icons.Default.Tune
+            stringResource(R.string.settings_system_tools) -> Icons.Default.Build
+            stringResource(R.string.settings_allowlist) -> Icons.Default.VerifiedUser
+            stringResource(R.string.settings_tool_status) -> Icons.Default.Info
+            stringResource(R.string.settings_local_templates) -> Icons.Default.Apps
+            stringResource(R.string.settings_status) -> Icons.Default.Info
+            stringResource(R.string.settings_edit_template) -> Icons.Default.Edit
+            stringResource(R.string.settings_appearance_mode) -> Icons.Default.BrightnessMedium
+            stringResource(R.string.settings_color_source) -> Icons.Default.AutoAwesome
+            stringResource(R.string.settings_custom_colors) -> Icons.Default.Palette
+            stringResource(R.string.settings_background) -> Icons.Default.Image
             else -> Icons.Default.Info
         }
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
+    }
+}
+
+@Composable
+private fun AppUpdateStabilityPicker(
+    selected: String,
+    onSelect: (String) -> Unit
+) {
+    val options = listOf(
+        AbkSegmentedButtonOption(
+            value = APP_UPDATE_STABILITY_STABLE,
+            label = stringResource(R.string.settings_app_update_stable)
+        ),
+        AbkSegmentedButtonOption(
+            value = APP_UPDATE_STABILITY_UNSTABLE,
+            label = stringResource(R.string.settings_app_update_unstable)
+        )
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 8.dp, bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.settings_app_update_stability),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        AbkSingleChoiceSegmentedButtonRow(
+            options = options,
+            selectedValue = normalizeAppUpdateStability(selected),
+            onSelect = onSelect,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun AppUpdateLinePicker(
+    selected: String,
+    onSelect: (String) -> Unit
+) {
+    val options = listOf(
+        AbkSegmentedButtonOption(
+            value = APP_UPDATE_LINE_NORMAL,
+            label = stringResource(R.string.settings_app_update_line_normal)
+        ),
+        AbkSegmentedButtonOption(
+            value = APP_UPDATE_LINE_DEV,
+            label = stringResource(R.string.settings_app_update_line_dev)
+        )
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 8.dp, bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.settings_app_update_line),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        AbkSingleChoiceSegmentedButtonRow(
+            options = options,
+            selectedValue = normalizeAppUpdateLine(selected),
+            onSelect = onSelect,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun appUpdateCheckSubtitle(state: MainUiState): String = when {
+    state.appUpdateDownloading -> stringResource(
+        R.string.settings_app_update_downloading_progress,
+        state.appUpdateDownloadProgress
+    )
+    state.appUpdateChecking -> stringResource(R.string.settings_app_update_checking)
+    state.appUpdateInfo != null -> appUpdateResultSubtitle(state.appUpdateInfo)
+    state.appUpdateError?.isNotBlank() == true -> state.appUpdateError
+    else -> stringResource(
+        R.string.settings_app_update_desc,
+        appUpdateStabilityLabel(state.appUpdateStability),
+        appUpdateLineLabel(state.appUpdateLine)
+    )
+}
+
+@Composable
+private fun appUpdateResultSubtitle(info: AppUpdateCheckResult): String {
+    val status = if (info.hasUpdate) {
+        stringResource(R.string.settings_app_update_status_available)
+    } else {
+        stringResource(R.string.settings_app_update_status_latest)
+    }
+    val publishedAt = info.remote.publishedAt.ifBlank {
+        stringResource(R.string.settings_unknown)
+    }
+    return stringResource(
+        R.string.settings_app_update_result,
+        info.currentVersionName,
+        info.remote.versionName,
+        appUpdateStabilityLabel(info.stability),
+        appUpdateLineLabel(info.line),
+        publishedAt,
+        status
+    )
+}
+
+@Composable
+private fun appUpdateStabilityLabel(value: String): String = when (normalizeAppUpdateStability(value)) {
+    APP_UPDATE_STABILITY_UNSTABLE -> stringResource(R.string.settings_app_update_unstable)
+    else -> stringResource(R.string.settings_app_update_stable)
+}
+
+@Composable
+private fun appUpdateLineLabel(value: String): String = when (normalizeAppUpdateLine(value)) {
+    APP_UPDATE_LINE_DEV -> stringResource(R.string.settings_app_update_line_dev)
+    else -> stringResource(R.string.settings_app_update_line_normal)
+}
+
+@Composable
+private fun WorkflowForegroundRefreshIntervalPicker(
+    selectedSec: Int,
+    onSelect: (Int) -> Unit
+) {
+    val options = PreferencesRepository.WORKFLOW_FOREGROUND_REFRESH_INTERVALS_SEC
+        .sorted()
+        .map { sec ->
+            AbkSegmentedButtonOption(
+                value = sec,
+                label = stringResource(R.string.settings_workflow_foreground_refresh_interval_sec, sec)
+            )
+        }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 8.dp, bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.settings_workflow_foreground_refresh_interval),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        AbkSingleChoiceSegmentedButtonRow(
+            options = options,
+            selectedValue = selectedSec,
+            onSelect = onSelect,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -1509,25 +3225,202 @@ private fun SwitchSettingsItem(
 }
 
 @Composable
-private fun MirrorSettingsItem(
+private fun DownloadDirectorySettingsItem(
     value: String,
     onValueChange: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val defaultDirectory = remember { DownloadDirectoryUtils.defaultDirectoryPath() }
+    val needsAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()
+    val unsupportedTreeMessage = stringResource(R.string.settings_download_directory_tree_unsupported)
+    val restoredMessage = stringResource(R.string.settings_download_directory_default_restored)
+    var draft by rememberSaveable { mutableStateOf(value) }
+    var isEditing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(value, isEditing) {
+        if (shouldSyncSettingsTextDraft(isEditing = isEditing, persistedValue = value, draftValue = draft)) {
+            draft = value
+        }
+    }
+
+    fun commitDraft(newValue: String = draft) {
+        draft = newValue
+        pendingSettingsTextCommit(persistedValue = value, draftValue = newValue)?.let(onValueChange)
+    }
+
+    val folderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            val selectedPath = DownloadDirectoryUtils.directoryPathFromTreeUri(uri)
+            if (selectedPath == null) {
+                Toast.makeText(context, unsupportedTreeMessage, Toast.LENGTH_SHORT).show()
+            } else {
+                commitDraft(selectedPath)
+            }
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         ExpressiveListItem(
-            title = "下载镜像站",
-            subtitle = "留空直连 GitHub；填写后会先镜像到 Release 再下载",
+            title = stringResource(R.string.settings_download_directory),
+            subtitle = stringResource(R.string.settings_download_directory_desc),
+            leadingIcon = Icons.Default.FolderOpen
+        )
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            singleLine = true,
+            placeholder = { Text(defaultDirectory) },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focusState ->
+                    val wasEditing = isEditing
+                    isEditing = focusState.isFocused
+                    if (wasEditing && !focusState.isFocused) {
+                        commitDraft()
+                    }
+                },
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = { folderPicker.launch(null) },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.settings_download_directory_choose))
+            }
+            TextButton(
+                onClick = {
+                    commitDraft(defaultDirectory)
+                    Toast.makeText(context, restoredMessage, Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.settings_download_directory_reset))
+            }
+        }
+        AnimatedVisibility(visible = needsAllFilesAccess) {
+            OutlinedButton(
+                onClick = { openAllFilesAccessSettings(context) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.FolderSpecial, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.settings_download_directory_storage_permission))
+            }
+        }
+    }
+}
+
+private fun openAllFilesAccessSettings(context: android.content.Context) {
+    val packageUri = Uri.parse("package:${context.packageName}")
+    val appSettings = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, packageUri)
+    runCatching {
+        context.startActivity(appSettings)
+    }.getOrElse {
+        context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+    }
+}
+
+@Composable
+private fun MirrorSettingsItem(
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    val focusManager = LocalFocusManager.current
+    var draft by rememberSaveable { mutableStateOf(value) }
+    var isEditing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(value, isEditing) {
+        if (shouldSyncSettingsTextDraft(isEditing = isEditing, persistedValue = value, draftValue = draft)) {
+            draft = value
+        }
+    }
+
+    fun commitDraft(newValue: String = draft) {
+        draft = newValue
+        pendingSettingsTextCommit(persistedValue = value, draftValue = newValue)?.let(onValueChange)
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        ExpressiveListItem(
+            title = stringResource(R.string.settings_download_mirror),
+            subtitle = stringResource(R.string.settings_download_mirror_desc),
             leadingIcon = Icons.Default.Public
         )
         OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
+            value = draft,
+            onValueChange = { draft = it },
             singleLine = true,
             placeholder = { Text("https://hk.gh-proxy.org/") },
-            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focusState ->
+                    val wasEditing = isEditing
+                    isEditing = focusState.isFocused
+                    if (wasEditing && !focusState.isFocused) {
+                        commitDraft()
+                    }
+                },
+        )
+    }
+}
+
+internal fun shouldSyncSettingsTextDraft(
+    isEditing: Boolean,
+    persistedValue: String,
+    draftValue: String
+): Boolean = !isEditing && persistedValue != draftValue
+
+internal fun pendingSettingsTextCommit(
+    persistedValue: String,
+    draftValue: String
+): String? = draftValue.takeIf { it != persistedValue }
+
+@Composable
+private fun LanguageSettingsItem(
+    current: String,
+    onSelect: (String) -> Unit
+) {
+    val options = listOf(
+        Triple(LocaleHelper.LANG_ZH, stringResource(R.string.settings_language_zh), Icons.Default.Language),
+        Triple(LocaleHelper.LANG_EN, stringResource(R.string.settings_language_en), Icons.Default.Language),
+        Triple(LocaleHelper.LANG_RU, stringResource(R.string.settings_language_ru), Icons.Default.Language)
+    )
+    options.forEach { (lang, label, icon) ->
+        val selected = current == lang
+        ExpressiveListItem(
+            title = label,
+            leadingIcon = icon,
+            selected = selected,
+            trailingContent = {
+                if (selected) Icon(Icons.Default.Check, null)
+            },
+            onClick = { onSelect(lang) }
         )
     }
 }

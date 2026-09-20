@@ -1,9 +1,19 @@
 package com.abk.kernel.viewmodel
 
 import com.abk.kernel.data.model.CustomExternalModule
+import com.abk.kernel.data.model.CustomExternalModuleEntryKind
 import com.abk.kernel.data.model.CustomExternalModuleStage
-import com.abk.kernel.data.model.KSU_BRANCH_DEV
+import com.abk.kernel.data.model.CustomKernelOption
+import com.abk.kernel.data.model.CustomKernelOptionMode
+import com.abk.kernel.data.model.BUILD_TARGET_GKI
+import com.abk.kernel.data.model.BUILD_TARGET_CUSTOM_SOURCE
+import com.abk.kernel.data.model.BUILD_TARGET_ONEPLUS
+import com.abk.kernel.data.model.KSU_BRANCH_CUSTOM
+import com.abk.kernel.data.model.KSU_BRANCH_STABLE
+import com.abk.kernel.data.model.KSU_VARIANT_NONE
+import com.abk.kernel.data.model.KSU_VARIANT_RESUKISU
 import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
+import com.abk.kernel.data.model.SOURCE_ACCESS_GITHUB_PRIVATE
 import com.abk.kernel.data.model.KernelBuildConfig
 import com.abk.kernel.data.model.KernelSupport
 import org.junit.Assert.assertEquals
@@ -20,7 +30,8 @@ class BuildPlanLogicTest {
                 subLevel = "162",
                 osPatchLevel = "2026-03",
                 kernelsuVariant = KSU_VARIANT_SUKISU,
-                kernelsuBranch = KSU_BRANCH_DEV,
+                kernelsuBranch = KSU_BRANCH_CUSTOM,
+                customRef = "feature:5",
                 version = "test-build",
                 buildTime = "Sun Dec 01 08:10:00 UTC 2024",
                 useZram = true,
@@ -36,6 +47,10 @@ class BuildPlanLogicTest {
                 zramExtraAlgos = "lz4,zstd",
                 kpmPassword = "super-secret",
                 virtualizationSupport = "678",
+                customKernelOptions = listOf(
+                    CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
+                    CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534")
+                ),
                 useCustomExternalModules = true,
                 customExternalModules = listOf(
                     CustomExternalModule(" https://github.com/example/module.git ", "before-build")
@@ -54,11 +69,13 @@ class BuildPlanLogicTest {
         assertEquals(config.osPatchLevel, decoded.config.osPatchLevel)
         assertEquals(config.kernelsuVariant, decoded.config.kernelsuVariant)
         assertEquals(config.kernelsuBranch, decoded.config.kernelsuBranch)
+        assertEquals(config.customRef, decoded.config.customRef)
         assertEquals(config.version, decoded.config.version)
         assertEquals(config.buildTime, decoded.config.buildTime)
         assertEquals(config.zramExtraAlgos, decoded.config.zramExtraAlgos)
         assertEquals(config.kpmPassword, decoded.config.kpmPassword)
         assertEquals(config.virtualizationSupport, decoded.config.virtualizationSupport)
+        assertEquals(config.customKernelOptions, decoded.config.customKernelOptions)
         assertEquals(
             listOf(CustomExternalModule("https://github.com/example/module.git", CustomExternalModuleStage.BEFORE_BUILD)),
             decoded.config.customExternalModules
@@ -83,7 +100,10 @@ class BuildPlanLogicTest {
                 osPatchLevel = "2026-03",
                 useZram = true,
                 useNetworking = true,
-                virtualizationSupport = "678"
+                virtualizationSupport = "678",
+                customKernelOptions = listOf(
+                    CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y)
+                )
             )
         )
 
@@ -97,6 +117,58 @@ class BuildPlanLogicTest {
         assertEquals(baseConfig.osPatchLevel, decoded.config.osPatchLevel)
         assertEquals(sharedFeatures.useZram, decoded.config.useZram)
         assertEquals(sharedFeatures.useNetworking, decoded.config.useNetworking)
+        assertEquals(sharedFeatures.customKernelOptions, decoded.config.customKernelOptions)
+    }
+
+    @Test
+    fun customSourceFullPlanRoundTripsWithoutCredentials() {
+        val config = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_CUSTOM_SOURCE,
+                sourceUrl = "https://github.com/example/private-kernel.git",
+                sourceRef = "lineage-23.2",
+                sourceAccessMode = SOURCE_ACCESS_GITHUB_PRIVATE,
+                sourceDefconfigs = listOf(
+                    "gki_defconfig",
+                    "vendor/pineapple_GKI.config",
+                    "vendor/peridot_GKI.config"
+                ),
+                sourceDeviceLabel = "POCO F6 / peridot",
+                osPatchLevel = "2025-09",
+                kernelsuVariant = KSU_VARIANT_NONE,
+            )
+        )
+
+        val payload = encodeBuildPlanPayload(config, "private source", BuildPlanShareScope.FULL)
+        val decoded = decodeBuildPlanPayload(payload, KernelBuildConfig())
+
+        assertEquals(BUILD_TARGET_CUSTOM_SOURCE, decoded.config.buildTarget)
+        assertEquals(config.sourceUrl, decoded.config.sourceUrl)
+        assertEquals(config.sourceRef, decoded.config.sourceRef)
+        assertEquals(config.sourceAccessMode, decoded.config.sourceAccessMode)
+        assertEquals(config.sourceDefconfigs, decoded.config.sourceDefconfigs)
+        assertEquals(config.sourceDeviceLabel, decoded.config.sourceDeviceLabel)
+        assertEquals(config.osPatchLevel, decoded.config.osPatchLevel)
+    }
+
+    @Test
+    fun customSourceWorkflowInputMapMatchesTwentyFiveInputContract() {
+        val inputs = KernelBuildConfig(
+            buildTarget = BUILD_TARGET_CUSTOM_SOURCE,
+            sourceUrl = "https://github.com/LineageOS/android_kernel_xiaomi_sm8635.git",
+            sourceRef = "lineage-23.2",
+            sourceAccessMode = SOURCE_ACCESS_GITHUB_PRIVATE,
+            sourceDefconfigs = listOf("gki_defconfig", "vendor/peridot_GKI.config"),
+            sourceDeviceLabel = "POCO F6 / peridot",
+            osPatchLevel = "2025-09",
+            kernelsuVariant = KSU_VARIANT_NONE,
+        ).toInputMap()
+
+        assertEquals(25, inputs.size)
+        assertEquals("true", inputs["source_private"])
+        assertEquals("gki_defconfig\nvendor/peridot_GKI.config", inputs["defconfigs"])
+        assertEquals("None", inputs["kernelsu_variant"])
+        assertEquals(false, inputs.keys.any { it.contains("token", ignoreCase = true) || it.contains("credential", ignoreCase = true) })
     }
 
     @Test
@@ -108,6 +180,8 @@ class BuildPlanLogicTest {
             osPatchLevel = "2026-03",
             useZram = true,
             useDdk = true,
+            kernelsuBranch = KSU_BRANCH_CUSTOM,
+            customRef = "  main:5  ",
             useCustomExternalModules = true,
             customExternalModules = listOf(
                 CustomExternalModule(" https://github.com/example/a.git ", "after-patch"),
@@ -120,10 +194,241 @@ class BuildPlanLogicTest {
         assertEquals("162", inputs["sub_level"])
         assertEquals("true", inputs["use_zram"])
         assertEquals("true", inputs["use_ddk"])
-        assertEquals("true", inputs["use_custom_external_modules"])
+        assertEquals(KSU_BRANCH_CUSTOM, inputs["kernelsu_branch"])
+        assertEquals("main:5", inputs["custom_ref"])
+        assertEquals("", inputs["custom_kernel_options"])
         assertEquals(
-            "https://github.com/example/a.git;after_patch|https://github.com/example/b.git;before_build",
+            "module:https://github.com/example/a.git;after_patch|module:https://github.com/example/b.git;before_build",
             inputs["custom_external_modules"]
+        )
+    }
+
+    @Test
+    fun workflowInputMapSerializesModuleSetChildren() {
+        val inputs = KernelBuildConfig(
+            useCustomExternalModules = true,
+            customExternalModules = listOf(
+                CustomExternalModule(
+                    url = "https://github.com/example/security-suite.git",
+                    stage = "before_build",
+                    entryKind = CustomExternalModuleEntryKind.MODULE_SET_CHILD,
+                    groupRepoUrl = "https://github.com/example/security-suite.git",
+                    childId = "fix_cleanup",
+                    childName = "Policy Cleanup",
+                    groupId = "security_suite",
+                    groupName = "Security Suite"
+                )
+            )
+        ).toInputMap()
+
+        assertEquals(
+            "set:https://github.com/example/security-suite.git#fix_cleanup;before_build",
+            inputs["custom_external_modules"]
+        )
+    }
+
+    @Test
+    fun workflowInputMapSerializesCustomKernelOptionsWithoutIgnoreEntries() {
+        val inputs = KernelBuildConfig(
+            customKernelOptions = listOf(
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
+                CustomKernelOption("CONFIG_NETFILTER", CustomKernelOptionMode.ENABLED_M),
+                CustomKernelOption("CONFIG_UNUSED", CustomKernelOptionMode.IGNORE),
+                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534"),
+                CustomKernelOption("CONFIG_FOO", CustomKernelOptionMode.DISABLED)
+            )
+        ).toInputMap()
+
+        assertEquals(
+            "CONFIG_TMPFS=y\nCONFIG_NETFILTER=m\nCONFIG_IP_SET_MAX=65534\n# CONFIG_FOO is not set",
+            inputs["custom_kernel_options"]
+        )
+    }
+
+    @Test
+    fun workflowInputMapKeepsNoneVariantAsNone() {
+        val inputs = KernelBuildConfig(
+            kernelsuVariant = KSU_VARIANT_NONE,
+            kernelsuBranch = KSU_BRANCH_CUSTOM,
+            customRef = "ignored"
+        ).toInputMap()
+
+        assertEquals(KSU_VARIANT_NONE, inputs["kernelsu_variant"])
+        assertEquals(KSU_BRANCH_STABLE, inputs["kernelsu_branch"])
+        assertEquals("", inputs["custom_ref"])
+    }
+
+    @Test
+    fun onePlusWorkflowInputMapUsesOnePlusWorkflowFields() {
+        val inputs = KernelBuildConfig(
+            buildTarget = BUILD_TARGET_ONEPLUS,
+            androidVersion = "android14",
+            kernelVersion = "6.1",
+            kernelsuVariant = KSU_VARIANT_SUKISU,
+            cancelSusfs = false,
+            useKpm = true,
+            useBbg = true,
+            onePlusCpu = "sm8650",
+            onePlusDeviceManifest = "oneplus_12_b",
+            onePlusUseLz4kd = true,
+            onePlusUseBbr = true,
+            onePlusUseProxyOptimization = true,
+            onePlusUseUnicodeBypass = true
+        ).toInputMap()
+
+        assertEquals("sm8650", inputs["cpu"])
+        assertEquals("oneplus_12_b", inputs["device_manifest"])
+        assertEquals("android14", inputs["android_version"])
+        assertEquals("6.1", inputs["kernel_version"])
+        assertEquals(KSU_VARIANT_SUKISU, inputs["ksu_variant"])
+        assertEquals("true", inputs["enable_susfs"])
+        assertEquals("true", inputs["use_kpm"])
+        assertEquals("true", inputs["use_lz4kd"])
+        assertEquals("true", inputs["use_bbr"])
+        assertEquals("true", inputs["use_proxy_optimization"])
+        assertEquals("true", inputs["use_unicode_bypass"])
+    }
+
+    @Test
+    fun onePlusBuildPlanPayloadRoundTripsTargetAndDeviceFields() {
+        val config = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_ONEPLUS,
+                androidVersion = "android15",
+                kernelVersion = "6.6",
+                kernelsuVariant = KSU_VARIANT_SUKISU,
+                onePlusCpu = "sm8750",
+                onePlusDeviceManifest = "oneplus_13_b",
+                onePlusUseLz4kd = true,
+                onePlusUseBbr = true,
+                onePlusUseProxyOptimization = true,
+                onePlusUseUnicodeBypass = true
+            )
+        )
+
+        val payload = encodeBuildPlanPayload(config, "OnePlus", BuildPlanShareScope.FULL)
+        val decoded = decodeBuildPlanPayload(payload, KernelBuildConfig())
+
+        assertEquals(BUILD_TARGET_ONEPLUS, decoded.config.buildTarget)
+        assertEquals("sm8750", decoded.config.onePlusCpu)
+        assertEquals("oneplus_13_b", decoded.config.onePlusDeviceManifest)
+        assertEquals(config.onePlusUseLz4kd, decoded.config.onePlusUseLz4kd)
+        assertEquals(config.onePlusUseBbr, decoded.config.onePlusUseBbr)
+        assertEquals(config.onePlusUseProxyOptimization, decoded.config.onePlusUseProxyOptimization)
+        assertEquals(config.onePlusUseUnicodeBypass, decoded.config.onePlusUseUnicodeBypass)
+    }
+
+    @Test
+    fun onePlusFeaturesOnlyPayloadKeepsBaseBuildTarget() {
+        val baseConfig = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_GKI,
+                kernelsuVariant = KSU_VARIANT_RESUKISU
+            )
+        )
+        val sharedFeatures = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_ONEPLUS,
+                kernelsuVariant = KSU_VARIANT_SUKISU,
+                onePlusUseLz4kd = true,
+                onePlusUseBbr = true
+            )
+        )
+
+        val payload = encodeBuildPlanPayload(sharedFeatures, "features", BuildPlanShareScope.FEATURES_ONLY)
+        val decoded = decodeBuildPlanPayload(payload, baseConfig)
+
+        assertEquals(BUILD_TARGET_GKI, decoded.config.buildTarget)
+        assertEquals(baseConfig.onePlusDeviceManifest, decoded.config.onePlusDeviceManifest)
+        assertEquals(false, decoded.config.onePlusUseLz4kd)
+        assertEquals(false, decoded.config.onePlusUseBbr)
+    }
+
+    @Test
+    fun parseCustomKernelOptionsTextSupportsCommonKconfigFormats() {
+        val result = parseCustomKernelOptionsText(
+            """
+            CONFIG_TMPFS=y
+            CONFIG_NETFILTER=m
+            # CONFIG_FOO is not set
+            CONFIG_IP_SET_MAX=65534
+            CONFIG_LOCALVERSION=\"-abk\"
+            CONFIG_KEEP
+            CONFIG_TMPFS=m
+            # comment only
+
+            """.trimIndent()
+        )
+
+        assertEquals(6, result.importedCount)
+        assertEquals(1, result.duplicateCount)
+        assertEquals(2, result.skippedCount)
+        assertEquals(CustomKernelOptionMode.ENABLED_M, result.options.first { it.symbol == "CONFIG_TMPFS" }.mode)
+        assertEquals(CustomKernelOptionMode.ENABLED_M, result.options.first { it.symbol == "CONFIG_NETFILTER" }.mode)
+        assertEquals(CustomKernelOptionMode.DISABLED, result.options.first { it.symbol == "CONFIG_FOO" }.mode)
+        assertEquals("65534", result.options.first { it.symbol == "CONFIG_IP_SET_MAX" }.rawValue)
+        assertEquals("\"-abk\"", result.options.first { it.symbol == "CONFIG_LOCALVERSION" }.rawValue)
+        assertEquals(CustomKernelOptionMode.IGNORE, result.options.first { it.symbol == "CONFIG_KEEP" }.mode)
+    }
+
+    @Test
+    fun summarizeCustomKernelOptionsCountsRawAsEnabled() {
+        val summary = summarizeCustomKernelOptions(
+            listOf(
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
+                CustomKernelOption("CONFIG_NETFILTER", CustomKernelOptionMode.ENABLED_M),
+                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534"),
+                CustomKernelOption("CONFIG_FOO", CustomKernelOptionMode.DISABLED),
+                CustomKernelOption("CONFIG_KEEP", CustomKernelOptionMode.IGNORE)
+            )
+        )
+
+        assertEquals(5, summary.total)
+        assertEquals(3, summary.enabled)
+        assertEquals(1, summary.disabled)
+        assertEquals(1, summary.ignored)
+    }
+
+    @Test
+    fun mergeCustomKernelOptionsLetsLaterEntriesOverrideEarlierOnes() {
+        val merged = mergeCustomKernelOptions(
+            options = listOf(
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
+                CustomKernelOption("CONFIG_NETFILTER", CustomKernelOptionMode.ENABLED_M)
+            ),
+            updates = listOf(
+                CustomKernelOption("config_tmpfs", CustomKernelOptionMode.DISABLED),
+                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534")
+            )
+        )
+
+        assertEquals(
+            listOf(
+                CustomKernelOption("CONFIG_NETFILTER", CustomKernelOptionMode.ENABLED_M),
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.DISABLED),
+                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534")
+            ),
+            merged
+        )
+    }
+
+    @Test
+    fun removeCustomKernelOptionsAtIndicesOnlyDropsSelectedRows() {
+        val remaining = removeCustomKernelOptionsAtIndices(
+            options = listOf(
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.DISABLED),
+                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534")
+            ),
+            indices = listOf(1)
+        )
+
+        assertEquals(
+            listOf(
+                CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
+                CustomKernelOption("CONFIG_IP_SET_MAX", CustomKernelOptionMode.RAW, "65534")
+            ),
+            remaining
         )
     }
 }

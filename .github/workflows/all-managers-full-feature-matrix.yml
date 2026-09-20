@@ -1,0 +1,311 @@
+name: 全管理器全矩阵编译
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_scope:
+        description: "构建范围"
+        required: true
+        type: choice
+        options:
+          - Both
+          - GKI
+          - OnePlus
+        default: Both
+      manager_variants:
+        description: "管理器变体，逗号分隔；all=全部"
+        required: true
+        type: string
+        default: "all"
+      kernelsu_branch:
+        description: "GKI KSU 分支"
+        required: true
+        type: choice
+        options:
+          - Stable(标准)
+          - Dev(开发)
+          - Latest(最新)
+          - Custom(自定义)
+        default: Dev(开发)
+      version:
+        description: "GKI 自定义版本名 (可选)"
+        required: false
+        type: string
+        default: ""
+      revision:
+        description: "GKI 修订版本 (如 r11，仅 5.10 需要)"
+        required: false
+        type: string
+        default: "r11"
+      build_time:
+        description: "GKI 自定义构建时间 (可选，N或留空=当前UTC)"
+        required: false
+        type: string
+        default: "Sun Dec 01 08:10:00 UTC 2024"
+      kpm_password:
+        description: "GKI 自定义 KPM 超级密码（留空=使用默认密码）"
+        required: false
+        type: string
+        default: ""
+      enable_susfs:
+        description: "GKI 启用 SUSFS"
+        required: false
+        type: boolean
+        default: true
+      use_zram:
+        description: "GKI 启用 ZRAM 增强算法（6.12 跳过 legacy LZ4K 栈）"
+        required: false
+        type: boolean
+        default: true
+      zram_full_algo:
+        description: "GKI 启用 ZRAM 完整算法支持（6.12 自动跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS）"
+        required: false
+        type: boolean
+        default: true
+      zram_extra_algos:
+        description: "GKI 自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；6.12 会忽略 lz4k/lz4kd/lz4k_oplus）"
+        required: false
+        type: string
+        default: ""
+      use_bbg:
+        description: "GKI 启用 BBG 防格机"
+        required: false
+        type: boolean
+        default: true
+      use_ddk:
+        description: "GKI 启用 DDK 防格机 LSM"
+        required: false
+        type: boolean
+        default: true
+      use_ntsync:
+        description: "GKI 启用 NTsync"
+        required: false
+        type: boolean
+        default: true
+      use_networking:
+        description: "GKI 启用网络增强（IPSet + BBR）"
+        required: false
+        type: boolean
+        default: true
+      use_kpm:
+        description: "GKI 启用 KPM 功能"
+        required: false
+        type: boolean
+        default: true
+      use_rekernel:
+        description: "GKI 启用 Re-Kernel 驱动"
+        required: false
+        type: boolean
+        default: true
+      supp_op:
+        description: "GKI 启用一加 8E 支持"
+        required: false
+        type: boolean
+        default: true
+      virtualization_support:
+        description: "GKI 虚拟化支持"
+        required: false
+        type: choice
+        options:
+          - "off"
+          - "on"
+          - "678"
+          - "123"
+          - "345"
+        default: "on"
+      custom_external_modules:
+        description: "GKI 自定义外部模块（兼容旧 repo;stage，也支持 module:repo;stage 与 set:repo#child;stage，用 | 分隔）"
+        required: false
+        type: string
+        default: ""
+      custom_kernel_options:
+        description: "GKI 自定义内核选项（每行一条 Kconfig/defconfig 片段）"
+        required: false
+        type: string
+        default: ""
+      upload_aux_artifacts:
+        description: "GKI 上传辅助产物"
+        required: false
+        type: boolean
+        default: false
+      oneplus_options_json:
+        description: "OnePlus 专属开关 JSON；留空或 {} 使用默认"
+        required: false
+        type: string
+        default: '{"enable_susfs":true,"use_kpm":true,"use_lz4kd":true,"use_bbg":true,"use_bbr":true,"use_proxy_optimization":true,"use_unicode_bypass":true}'
+
+jobs:
+  prepare-variant-matrix:
+    name: 准备管理器矩阵
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.variant-matrix.outputs.matrix }}
+      count: ${{ steps.variant-matrix.outputs.count }}
+      oneplus_enable_susfs: ${{ steps.variant-matrix.outputs.oneplus_enable_susfs }}
+      oneplus_use_kpm: ${{ steps.variant-matrix.outputs.oneplus_use_kpm }}
+      oneplus_use_lz4kd: ${{ steps.variant-matrix.outputs.oneplus_use_lz4kd }}
+      oneplus_use_bbg: ${{ steps.variant-matrix.outputs.oneplus_use_bbg }}
+      oneplus_use_bbr: ${{ steps.variant-matrix.outputs.oneplus_use_bbr }}
+      oneplus_use_proxy_optimization: ${{ steps.variant-matrix.outputs.oneplus_use_proxy_optimization }}
+      oneplus_use_unicode_bypass: ${{ steps.variant-matrix.outputs.oneplus_use_unicode_bypass }}
+    steps:
+      - name: 检出代码仓库
+        uses: actions/checkout@v6
+
+      - name: 生成管理器矩阵
+        id: variant-matrix
+        shell: bash
+        env:
+          MATRIX_BUILD_SCOPE: ${{ inputs.build_scope }}
+          MATRIX_MANAGER_VARIANTS: ${{ inputs.manager_variants }}
+          MATRIX_ONEPLUS_OPTIONS_JSON: ${{ inputs.oneplus_options_json || '{}' }}
+        run: |
+          set -euo pipefail
+
+          python3 <<'PY'
+          import json
+          import os
+          import re
+          import sys
+
+          variant_order = ["Official", "SukiSU", "ReSukiSU", "None"]
+          variant_aliases = {
+              "official": "Official",
+              "sukisu": "SukiSU",
+              "resukisu": "ReSukiSU",
+              "none": "None",
+          }
+
+          raw_variants = os.environ.get("MATRIX_MANAGER_VARIANTS", "").strip()
+          if raw_variants.lower() in {"", "all", "*"}:
+              selected_variants = variant_order
+          else:
+              selected_variants = []
+              seen = set()
+              for token in re.split(r"[,\n]+", raw_variants):
+                  key = token.strip().lower().replace("-", "").replace("_", "")
+                  if not key:
+                      continue
+                  if key not in variant_aliases:
+                      raise SystemExit(f"Unknown manager variant: {token}")
+                  variant = variant_aliases[key]
+                  if variant not in seen:
+                      selected_variants.append(variant)
+                      seen.add(variant)
+
+          if not selected_variants:
+              raise SystemExit("No manager variants selected")
+
+          oneplus_defaults = {
+              "enable_susfs": False,
+              "use_kpm": False,
+              "use_lz4kd": False,
+              "use_bbg": True,
+              "use_bbr": False,
+              "use_proxy_optimization": True,
+              "use_unicode_bypass": False,
+          }
+
+          def bool_value(key, value):
+              if isinstance(value, bool):
+                  return value
+              if isinstance(value, str) and value.lower() in {"true", "false"}:
+                  return value.lower() == "true"
+              raise SystemExit(f"OnePlus option {key} must be a boolean")
+
+          oneplus_options = dict(oneplus_defaults)
+          raw_oneplus_options = os.environ.get("MATRIX_ONEPLUS_OPTIONS_JSON", "").strip()
+          if raw_oneplus_options and raw_oneplus_options != "{}":
+              try:
+                  user_options = json.loads(raw_oneplus_options)
+              except json.JSONDecodeError as exc:
+                  raise SystemExit(f"Invalid oneplus_options_json: {exc}") from exc
+              if not isinstance(user_options, dict):
+                  raise SystemExit("oneplus_options_json must be a JSON object")
+              for key, value in user_options.items():
+                  if key not in oneplus_defaults:
+                      raise SystemExit(
+                          "Unknown OnePlus option: "
+                          f"{key}. Allowed: {', '.join(oneplus_defaults)}"
+                      )
+                  oneplus_options[key] = bool_value(key, value)
+
+          matrix = [{"ksu_variant": variant} for variant in selected_variants]
+          matrix_json = json.dumps({"include": matrix}, separators=(",", ":"))
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"matrix={matrix_json}\n")
+              output.write(f"count={len(matrix)}\n")
+              for key, value in oneplus_options.items():
+                  output.write(f"oneplus_{key}={str(value).lower()}\n")
+
+          build_scope = os.environ.get("MATRIX_BUILD_SCOPE", "Both")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("## 全管理器全矩阵编译\n\n")
+              summary.write(f"- 构建范围: {build_scope}\n")
+              summary.write(f"- 管理器变体数: {len(matrix)}\n")
+              summary.write(f"- 管理器变体: {', '.join(selected_variants)}\n")
+              summary.write("- OnePlus 专属开关:\n")
+              for key in oneplus_defaults:
+                  summary.write(f"  - {key}: {oneplus_options[key]}\n")
+
+          print(matrix_json)
+          PY
+
+  build-gki-full-matrix:
+    name: "GKI · ${{ matrix.ksu_variant }}"
+    needs: prepare-variant-matrix
+    if: ${{ inputs.build_scope != 'OnePlus' && needs.prepare-variant-matrix.outputs.count != '0' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJson(needs.prepare-variant-matrix.outputs.matrix) }}
+    uses: ./.github/workflows/kernel-full-feature-matrix.yml
+    secrets: inherit
+    with:
+      kernelsu_variant: ${{ matrix.ksu_variant }}
+      kernelsu_branch: ${{ inputs.kernelsu_branch }}
+      version: ${{ inputs.version }}
+      revision: ${{ inputs.revision }}
+      build_time: ${{ inputs.build_time }}
+      kpm_password: ${{ inputs.kpm_password }}
+      enable_susfs: ${{ inputs.enable_susfs }}
+      use_zram: ${{ inputs.use_zram }}
+      zram_full_algo: ${{ inputs.zram_full_algo }}
+      zram_extra_algos: ${{ inputs.zram_extra_algos }}
+      use_bbg: ${{ inputs.use_bbg }}
+      use_ddk: ${{ inputs.use_ddk }}
+      use_ntsync: ${{ inputs.use_ntsync }}
+      use_networking: ${{ inputs.use_networking }}
+      use_kpm: ${{ inputs.use_kpm }}
+      use_rekernel: ${{ inputs.use_rekernel }}
+      supp_op: ${{ inputs.supp_op }}
+      virtualization_support: ${{ inputs.virtualization_support }}
+      custom_external_modules: ${{ inputs.custom_external_modules }}
+      custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
+      upload_aux_artifacts: ${{ inputs.upload_aux_artifacts }}
+      trigger_release: false
+
+  build-oneplus-full-matrix:
+    name: "OnePlus · ${{ matrix.ksu_variant }}"
+    needs: prepare-variant-matrix
+    if: ${{ inputs.build_scope != 'GKI' && needs.prepare-variant-matrix.outputs.count != '0' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJson(needs.prepare-variant-matrix.outputs.matrix) }}
+    uses: ./.github/workflows/oneplus-full-feature-matrix.yml
+    secrets: inherit
+    with:
+      kernelsu_variant: ${{ matrix.ksu_variant }}
+      enable_susfs: ${{ needs.prepare-variant-matrix.outputs.oneplus_enable_susfs == 'true' }}
+      use_kpm: ${{ needs.prepare-variant-matrix.outputs.oneplus_use_kpm == 'true' }}
+      use_lz4kd: ${{ needs.prepare-variant-matrix.outputs.oneplus_use_lz4kd == 'true' }}
+      use_bbg: ${{ needs.prepare-variant-matrix.outputs.oneplus_use_bbg == 'true' }}
+      use_bbr: ${{ needs.prepare-variant-matrix.outputs.oneplus_use_bbr == 'true' }}
+      use_proxy_optimization: ${{ needs.prepare-variant-matrix.outputs.oneplus_use_proxy_optimization == 'true' }}
+      use_unicode_bypass: ${{ needs.prepare-variant-matrix.outputs.oneplus_use_unicode_bypass == 'true' }}

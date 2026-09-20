@@ -1,0 +1,18 @@
+pkgbase = abk-cli-git
+	pkgdesc = Command-line tool to trigger ABK kernel builds
+	pkgver = r2141.g0da65a2d
+	pkgrel = 1
+	url = https://github.com/xingguangcuican6666/abk
+	arch = any
+	license = GPL-3.0-or-later
+	makedepends = git
+	depends = python
+	depends = python-certifi
+	depends = python-cryptography
+	depends = python-pynacl
+	provides = abk-cli
+	conflicts = abk-cli
+	source = abk-cli-git::git+https://github.com/xingguangcuican6666/abk.git#branch=dev
+	sha256sums = SKIP
+
+pkgname = abk-cli-git

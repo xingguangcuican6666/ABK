@@ -15,6 +15,7 @@ on:
           - Official
           - ReSukiSU
           - SukiSU
+          - None
         default: ReSukiSU
       kernelsu_branch:
         description: "KSU 分支"
@@ -23,6 +24,7 @@ on:
         options:
           - Stable(标准)
           - Dev(开发)
+          - Latest(最新)
           - Custom(自定义)
         default: Dev(开发)
       version:
@@ -51,17 +53,17 @@ on:
         type: boolean
         default: true
       use_zram:
-        description: "启用 ZRAM 增强算法（6.12 会自动关闭）"
+        description: "启用 ZRAM 增强算法（6.12 跳过 legacy LZ4K 栈）"
         required: false
         type: boolean
         default: true
       zram_full_algo:
-        description: "启用 ZRAM 完整算法支持（6.12 会自动关闭）"
+        description: "启用 ZRAM 完整算法支持（6.12 自动跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS）"
         required: false
         type: boolean
         default: true
       zram_extra_algos:
-        description: "自定义 ZRAM 算法（逗号分隔，仅未启用完整算法时生效）"
+        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；6.12 会忽略 lz4k/lz4kd/lz4k_oplus）"
         required: false
         type: string
         default: ""
@@ -111,16 +113,114 @@ on:
           - "123"
           - "345"
         default: "off"
-      use_custom_external_modules:
-        description: "启用自定义外部模块注入"
-        required: false
-        type: boolean
-        default: false
       custom_external_modules:
-        description: "自定义外部模块（repo;stage|repo;stage，stage=after_patch/before_build）"
+        description: "自定义外部模块（兼容旧 repo;stage，也支持 module:repo;stage 与 set:repo#child;stage，用 | 分隔）"
         required: false
         type: string
         default: ""
+      custom_kernel_options:
+        description: "自定义内核选项（每行一条 Kconfig/defconfig 片段）"
+        required: false
+        type: string
+        default: ""
+      upload_aux_artifacts:
+        description: "上传辅助产物"
+        required: false
+        type: boolean
+        default: false
+      trigger_release:
+        description: "触发补发 Release"
+        required: false
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      kernelsu_variant:
+        required: true
+        type: string
+      kernelsu_branch:
+        required: true
+        type: string
+      version:
+        required: false
+        type: string
+        default: ""
+      revision:
+        required: false
+        type: string
+        default: "r11"
+      build_time:
+        required: false
+        type: string
+        default: "Sun Dec 01 08:10:00 UTC 2024"
+      kpm_password:
+        required: false
+        type: string
+        default: ""
+      enable_susfs:
+        required: false
+        type: boolean
+        default: true
+      use_zram:
+        required: false
+        type: boolean
+        default: true
+      zram_full_algo:
+        required: false
+        type: boolean
+        default: true
+      zram_extra_algos:
+        required: false
+        type: string
+        default: ""
+      use_bbg:
+        required: false
+        type: boolean
+        default: true
+      use_ddk:
+        required: false
+        type: boolean
+        default: true
+      use_ntsync:
+        required: false
+        type: boolean
+        default: true
+      use_networking:
+        required: false
+        type: boolean
+        default: true
+      use_kpm:
+        required: false
+        type: boolean
+        default: true
+      use_rekernel:
+        required: false
+        type: boolean
+        default: true
+      supp_op:
+        required: false
+        type: boolean
+        default: true
+      virtualization_support:
+        required: false
+        type: string
+        default: "off"
+      custom_external_modules:
+        required: false
+        type: string
+        default: ""
+      custom_kernel_options:
+        required: false
+        type: string
+        default: ""
+      upload_aux_artifacts:
+        required: false
+        type: boolean
+        default: false
+      trigger_release:
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   prepare-matrix:
@@ -139,6 +239,8 @@ jobs:
         env:
           MATRIX_KSU_VARIANT: ${{ inputs.kernelsu_variant }}
           MATRIX_KSU_BRANCH: ${{ inputs.kernelsu_branch }}
+          MATRIX_EFFECTIVE_USE_KPM: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
+          MATRIX_EFFECTIVE_KPM_PASSWORD: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
           MATRIX_REVISION: ${{ inputs.revision || '' }}
           MATRIX_BUILD_TIME: ${{ inputs.build_time || '' }}
           MATRIX_ENABLE_SUSFS: ${{ inputs.enable_susfs }}
@@ -154,8 +256,8 @@ jobs:
           MATRIX_KPM_PASSWORD: ${{ inputs.kpm_password || '' }}
           MATRIX_USE_REKERNEL: ${{ inputs.use_rekernel }}
           MATRIX_SUPP_OP: ${{ inputs.supp_op }}
-          MATRIX_USE_CUSTOM_EXTERNAL_MODULES: ${{ inputs.use_custom_external_modules }}
           MATRIX_CUSTOM_EXTERNAL_MODULES: ${{ inputs.custom_external_modules || '' }}
+          MATRIX_UPLOAD_AUX_ARTIFACTS: ${{ inputs.upload_aux_artifacts }}
         run: |
           set -euo pipefail
 
@@ -248,12 +350,13 @@ jobs:
               summary.write(f"- 虚拟化支持: {env_value('MATRIX_VIRTUALIZATION_SUPPORT', 'off')}\n")
               summary.write(f"- NTsync: {env_enabled('MATRIX_USE_NTSYNC')}\n")
               summary.write(f"- Networking: {env_enabled('MATRIX_USE_NETWORKING')}\n")
-              summary.write(f"- KPM: {env_enabled('MATRIX_USE_KPM')}\n")
-              summary.write(f"- KPM 密码: {'已自定义' if os.environ.get('MATRIX_KPM_PASSWORD', '') else '默认'}\n")
+              summary.write(f"- KPM: {env_enabled('MATRIX_EFFECTIVE_USE_KPM')}\n")
+              summary.write(f"- KPM 密码: {'已自定义' if os.environ.get('MATRIX_EFFECTIVE_KPM_PASSWORD', '') else '默认'}\n")
               summary.write(f"- Re-Kernel: {env_enabled('MATRIX_USE_REKERNEL')}\n")
               summary.write(f"- 一加 8E: {env_enabled('MATRIX_SUPP_OP')}\n")
-              summary.write(f"- 自定义外部模块: {env_enabled('MATRIX_USE_CUSTOM_EXTERNAL_MODULES')}\n")
+              summary.write(f"- 自定义外部模块: {'true' if os.environ.get('MATRIX_CUSTOM_EXTERNAL_MODULES', '').strip() else 'false'}\n")
               summary.write(f"- 自定义外部模块参数: {env_value('MATRIX_CUSTOM_EXTERNAL_MODULES')}\n")
+              summary.write(f"- 上传辅助产物: {env_enabled('MATRIX_UPLOAD_AUX_ARTIFACTS')}\n")
               summary.write("- Android16/6.12: ZRAM off\n")
               summary.write("- LTS: 已排除\n\n")
               for combo in sorted(counts):
@@ -282,29 +385,29 @@ jobs:
       version: ${{ inputs.version || '' }}
       revision: ${{ inputs.revision || '' }}
       build_time: ${{ inputs.build_time || '' }}
-      use_zram: ${{ inputs.use_zram && matrix.kernel_version != '6.12' }}
+      use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync }}
       use_networking: ${{ inputs.use_networking }}
-      use_kpm: ${{ inputs.use_kpm }}
+      use_kpm: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
       use_rekernel: ${{ inputs.use_rekernel }}
       enable_susfs: ${{ inputs.enable_susfs }}
       supp_op: ${{ inputs.supp_op }}
       virtualization_support: ${{ inputs.virtualization_support == 'off' && 'off' || (matrix.kernel_version == '6.12' && 'on' || (inputs.virtualization_support == 'on' && '678' || inputs.virtualization_support)) }}
-      zram_full_algo: ${{ inputs.zram_full_algo && matrix.kernel_version != '6.12' }}
+      zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
-      use_custom_external_modules: ${{ inputs.use_custom_external_modules }}
+      kpm_password: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
-      upload_aux_artifacts: false
+      custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
+      upload_aux_artifacts: ${{ inputs.upload_aux_artifacts }}
 
   trigger-full-feature-release:
     name: 触发全属性矩阵 Release 补发
     needs:
       - prepare-matrix
       - build-full-feature-matrix
-    if: ${{ needs.prepare-matrix.outputs.count != '0' && needs.build-full-feature-matrix.result == 'success' && github.repository == 'xingguangcuican6666/ABK' }}
+    if: ${{ inputs.trigger_release && needs.prepare-matrix.outputs.count != '0' && needs.build-full-feature-matrix.result == 'success' && github.repository == 'xingguangcuican6666/ABK' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -323,15 +426,16 @@ jobs:
       ZRAM_EXTRA_ALGOS: ${{ inputs.zram_extra_algos || '' }}
       USE_BBG: ${{ inputs.use_bbg }}
       USE_DDK: ${{ inputs.use_ddk }}
-      KPM_PASSWORD: ${{ inputs.kpm_password || '' }}
-      USE_KPM: ${{ inputs.use_kpm }}
+      KPM_PASSWORD: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
+      USE_KPM: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'ReSukiSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
       USE_REKERNEL: ${{ inputs.use_rekernel }}
       SUPP_OP: ${{ inputs.supp_op }}
-      USE_CUSTOM_EXTERNAL_MODULES: ${{ inputs.use_custom_external_modules }}
       CUSTOM_EXTERNAL_MODULES: ${{ inputs.custom_external_modules || '' }}
+      CUSTOM_KERNEL_OPTIONS: ${{ inputs.custom_kernel_options || '' }}
       USE_NTSYNC: ${{ inputs.use_ntsync }}
       USE_NETWORKING: ${{ inputs.use_networking }}
       VIRTUALIZATION_SUPPORT: ${{ inputs.virtualization_support }}
+      UPLOAD_AUX_ARTIFACTS: ${{ inputs.upload_aux_artifacts }}
     steps:
       - name: 触发补发 Release 工作流
         shell: bash
@@ -368,6 +472,12 @@ jobs:
             custom_modules_label="无"
           fi
 
+          if [ -n "$CUSTOM_KERNEL_OPTIONS" ]; then
+            custom_kernel_options_label="已设置"
+          else
+            custom_kernel_options_label="无"
+          fi
+
           if [ "$VIRTUALIZATION_SUPPORT" = "off" ]; then
             virtualization_support_label="off"
           else
@@ -391,11 +501,12 @@ jobs:
               --arg kpm_password "$kpm_password_label" \
               --arg use_rekernel "$USE_REKERNEL" \
               --arg supp_op "$SUPP_OP" \
-              --arg use_custom_external_modules "$USE_CUSTOM_EXTERNAL_MODULES" \
               --arg custom_external_modules "$custom_modules_label" \
+              --arg custom_kernel_options "$custom_kernel_options_label" \
               --arg use_ntsync "$USE_NTSYNC" \
               --arg use_networking "$USE_NETWORKING" \
               --arg virtualization_support "$virtualization_support_label" \
+              --arg upload_aux_artifacts "$UPLOAD_AUX_ARTIFACTS" \
               '{
                 ksu_variant: $ksu_variant,
                 ksu_branch: $ksu_branch,
@@ -412,11 +523,12 @@ jobs:
                 kpm_password: $kpm_password,
                 use_rekernel: $use_rekernel,
                 supp_op: $supp_op,
-                use_custom_external_modules: $use_custom_external_modules,
                 custom_external_modules: $custom_external_modules,
+                custom_kernel_options: $custom_kernel_options,
                 use_ntsync: $use_ntsync,
                 use_networking: $use_networking,
-                virtualization_support: $virtualization_support
+                virtualization_support: $virtualization_support,
+                upload_aux_artifacts: $upload_aux_artifacts
               }'
           )"
           release_metadata_base64="$(printf '%s' "$release_metadata" | base64 -w0)"
@@ -448,8 +560,13 @@ jobs:
             echo "- KPM: ${USE_KPM}"
             echo "- Re-Kernel: ${USE_REKERNEL}"
             echo "- 一加 8E: ${SUPP_OP}"
-            echo "- 自定义注入: ${USE_CUSTOM_EXTERNAL_MODULES}"
+            if [ -n "$CUSTOM_EXTERNAL_MODULES" ]; then
+              echo "- 自定义注入: true"
+            else
+              echo "- 自定义注入: false"
+            fi
             echo "- 自定义注入参数列表: ${custom_modules_label}"
+            echo "- 上传辅助产物: ${UPLOAD_AUX_ARTIFACTS}"
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "已触发补发 Release 工作流: ${release_title}"

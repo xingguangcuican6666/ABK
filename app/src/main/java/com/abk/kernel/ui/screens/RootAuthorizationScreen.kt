@@ -6,14 +6,10 @@
 package com.abk.kernel.ui.screens
 
 import android.graphics.drawable.Drawable
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -56,7 +52,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -82,33 +77,40 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.abk.kernel.R
 import com.abk.kernel.data.model.RootGrantApp
 import com.abk.kernel.data.model.RootGrantProfile
+import com.abk.kernel.ui.blur.BlurScreenScaffold
+import com.abk.kernel.ui.blur.blurredCardBackground
+import com.abk.kernel.ui.blur.blurredCardSurfaceColor
+import com.abk.kernel.ui.components.AbkCenteredLoadingTransition
+import com.abk.kernel.ui.components.AbkInlineLoadingPill
+import com.abk.kernel.ui.components.AbkLoadingPill
+import com.abk.kernel.ui.components.ExpressiveSwitchItem
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.components.AppPageBackground
+import com.abk.kernel.ui.components.ObserveChildPageVisibility
+import com.abk.kernel.ui.components.childPageOverlayEnterTransition
+import com.abk.kernel.ui.components.childPageOverlayExitTransition
+import com.abk.kernel.ui.components.childPageScrimExitTransition
+import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
+import com.abk.kernel.ui.components.rememberChildPageBackController
+import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveSwitch
 import com.abk.kernel.ui.components.ExpressiveTopBar
+import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.viewmodel.MainViewModel
-import kotlin.math.pow
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
-
-private const val ROOT_AUTH_BACK_VISUAL_EXPONENT = 1.8f
-private const val ROOT_AUTH_BACK_SCALE_DELTA = 0.09f
-private const val ROOT_AUTH_BACK_SCRIM_ALPHA = 0.32f
-private const val ROOT_AUTH_DETAIL_EXIT_DELAY_MS = 280L
-private val ROOT_AUTH_BACK_MAX_OFFSET = 56.dp
-private val ROOT_AUTH_BACK_MAX_CORNER = 32.dp
 
 @Composable
 fun RootAuthorizationScreen(
@@ -119,20 +121,8 @@ fun RootAuthorizationScreen(
     val state by vm.uiState.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
     var showSystemApps by rememberSaveable { mutableStateOf(false) }
-    var selectedPackage by rememberSaveable { mutableStateOf<String?>(null) }
-    var detailBackProgress by remember { mutableFloatStateOf(0f) }
+    var selectedPackage by remember { mutableStateOf<String?>(null) }
     val motionScheme = MaterialTheme.motionScheme
-    val animatedDetailBackProgress by animateFloatAsState(
-        targetValue = detailBackProgress.coerceIn(0f, 1f),
-        animationSpec = motionScheme.fastSpatialSpec(),
-        label = "root-auth-detail-back-progress"
-    )
-    val visualDetailBackProgress = animatedDetailBackProgress
-        .coerceIn(0f, 1f)
-        .pow(ROOT_AUTH_BACK_VISUAL_EXPONENT)
-    val density = LocalDensity.current
-    val detailBackOffsetPx = with(density) { ROOT_AUTH_BACK_MAX_OFFSET.toPx() }
-    val detailBackCorner = with(density) { (ROOT_AUTH_BACK_MAX_CORNER.toPx() * visualDetailBackProgress).toDp() }
     val apps = remember(state.rootGrantApps, query, showSystemApps) {
         state.rootGrantApps
             .filter { showSystemApps || !it.isSystemApp }
@@ -144,51 +134,50 @@ fun RootAuthorizationScreen(
                     app.uid.toString().contains(needle)
             }
     }
-    val selectedApp = remember(state.rootGrantApps, selectedPackage) {
+    val selectedListApp = remember(state.rootGrantApps, selectedPackage) {
         selectedPackage?.let { packageName ->
             state.rootGrantApps.firstOrNull { it.packageName == packageName }
         }
     }
-    val canLeaveDetail = state.rootGrantSavingPackage == null
+    val selectedDetailApp = remember(state.rootGrantDetailApp, selectedPackage) {
+        state.rootGrantDetailApp?.takeIf { it.packageName == selectedPackage }
+    }
+    val detailPageVisible = selectedPackage != null
+    val detailPageTransition = rememberChildPageOverlayTransition(
+        visible = detailPageVisible,
+        label = "root-auth-detail"
+    )
+    val canLeaveDetail = state.rootGrantSavingPackage == null && !state.rootGrantDetailLoading
+    val showInitialLoading = state.rootGrantLoading && state.rootGrantApps.isEmpty()
+    val refreshPresentation = rememberAbkInteractiveRefreshPresentation(loading = state.rootGrantLoading)
+    val showRefreshListLoading = refreshPresentation.showLoading && !showInitialLoading
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     LaunchedEffect(state.runtimeNavigationEnabled, state.abkRuntimeStatus?.runtimeBackend?.backend) {
         if (state.runtimeNavigationEnabled) vm.refreshRootGrantApps()
     }
 
-    LaunchedEffect(selectedApp != null) {
-        if (selectedApp != null) {
-            onDetailPageVisibleChange(true)
-        } else {
-            delay(ROOT_AUTH_DETAIL_EXIT_DELAY_MS)
-            detailBackProgress = 0f
-            onDetailPageVisibleChange(false)
+    fun closeDetailPage() {
+        if (canLeaveDetail) {
+            selectedPackage = null
+            vm.clearRootGrantDetail()
         }
     }
+
+    val childPageBack = rememberChildPageBackController(
+        enabled = detailPageVisible && canLeaveDetail,
+        predictiveBackEnabled = state.predictiveBackEnabled,
+        onBack = ::closeDetailPage,
+    )
+
+    ObserveChildPageVisibility(
+        transition = detailPageTransition,
+        onVisibleChange = onDetailPageVisibleChange,
+        onAfterExitAnimation = { childPageBack.resetProgress() }
+    )
 
     DisposableEffect(Unit) {
         onDispose { onDetailPageVisibleChange(false) }
-    }
-
-    fun closeDetailPage() {
-        if (canLeaveDetail) selectedPackage = null
-    }
-
-    PredictiveBackHandler(
-        enabled = selectedApp != null && canLeaveDetail && state.predictiveBackEnabled
-    ) { progress ->
-        try {
-            progress.collect { backEvent ->
-                detailBackProgress = backEvent.progress.coerceIn(0f, 1f)
-            }
-            closeDetailPage()
-        } catch (_: CancellationException) {
-            detailBackProgress = 0f
-        }
-    }
-
-    BackHandler(enabled = selectedApp != null && canLeaveDetail && !state.predictiveBackEnabled) {
-        closeDetailPage()
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -199,178 +188,200 @@ fun RootAuthorizationScreen(
             .height(maxHeight + childPageTopInset + childPageBottomInset)
             .offset(y = -childPageTopInset)
 
-        Scaffold(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surface),
+        BlurScreenScaffold(
+            blurConfig = state.blurConfig,
+            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
             topBar = {
                 ExpressiveTopBar(
-                    title = "超级用户",
+                    title = stringResource(R.string.root_auth_title),
                     scrollBehavior = scrollBehavior,
+                    enableBlur = state.blurEnabled,
                     actions = {
                         IconButton(
-                            onClick = { vm.refreshRootGrantApps(force = true) },
+                            onClick = {
+                                refreshPresentation.beginRefresh()
+                                vm.refreshRootGrantApps(force = true)
+                            },
                             enabled = !state.rootGrantLoading
                         ) {
                             if (state.rootGrantLoading) {
                                 LoadingIndicator(Modifier.size(22.dp))
                             } else {
-                                Icon(Icons.Default.Refresh, contentDescription = "刷新授权列表")
+                                Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.root_auth_refresh_list))
                             }
                         }
                     }
                 )
             }
-        ) { padding ->
-            LazyColumn(
+        ) { topBarHeight ->
+            if (showInitialLoading) {
+                RootGrantInitialLoadingScreen(
+                    topBarHeight = topBarHeight,
+                    outerPadding = outerPadding,
+                    query = query,
+                    onQueryChange = { query = it },
+                    showSystemApps = showSystemApps,
+                    onShowSystemAppsChange = { showSystemApps = it },
+                    modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                )
+                return@BlurScreenScaffold
+            }
+
+            Column(
                 modifier = Modifier
-                    .padding(padding)
                     .fillMaxSize()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(
-                    start = AbkScreenHorizontalPadding,
-                    end = AbkScreenHorizontalPadding,
-                    bottom = 80.dp
-                ),
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
+                    .padding(horizontal = AbkScreenHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item(key = "search") {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Default.Search, null) },
-                        placeholder = { Text("搜索应用") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp)
-                    )
-                }
+                Spacer(Modifier.height(topBarHeight + 16.dp))
+                RootGrantSearchField(
+                    query = query,
+                    onQueryChange = { query = it }
+                )
 
-                item(key = "controls") {
-                    ExpressiveSectionCard(
-                        title = "Root 授权",
-                        subtitle = "管理其他应用的内核权限配置",
-                        icon = Icons.Default.AdminPanelSettings
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "显示系统应用",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Switch(checked = showSystemApps, onCheckedChange = { showSystemApps = it })
+                RootGrantControlsCard(
+                    showSystemApps = showSystemApps,
+                    onShowSystemAppsChange = { showSystemApps = it }
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    if (showInitialLoading) {
+                        RootGrantInitialLoading(modifier = Modifier.fillMaxSize())
+                    } else {
+                        Crossfade(
+                            targetState = showRefreshListLoading,
+                            label = "root-grant-refresh"
+                        ) { refreshing ->
+                            if (refreshing) {
+                                RootGrantRefreshingRow(
+                                    text = stringResource(R.string.root_auth_refreshing_list),
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(
+                                        bottom = 80.dp + outerPadding.calculateBottomPadding()
+                                    ),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    state.rootGrantError?.let {
+                                        item(key = "error") {
+                                            RootGrantMessageCard(it) {
+                                                refreshPresentation.beginRefresh()
+                                                vm.refreshRootGrantApps(force = true)
+                                            }
+                                        }
+                                    }
+
+                                    if (!state.rootGrantLoading && apps.isEmpty()) {
+                                        item(key = "empty") {
+                                            Text(
+                                                text = if (query.isBlank()) {
+                                                    stringResource(R.string.root_auth_no_apps)
+                                                } else {
+                                                    stringResource(R.string.root_auth_no_matching_apps)
+                                                },
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(vertical = 24.dp)
+                                            )
+                                        }
+                                    }
+
+                                    items(
+                                        items = apps,
+                                        key = { app -> "${app.uid}:${app.packageName}" }
+                                    ) { app ->
+                                        RootGrantAppCard(
+                                            app = app,
+                                            saving = state.rootGrantSavingPackage == app.packageName,
+                                            anySaving = state.rootGrantSavingPackage != null,
+                                            onToggle = { allowed -> vm.setRootGrantAllowed(app.packageName, allowed) },
+                                            onOpen = {
+                                                childPageBack.resetProgress()
+                                                selectedPackage = app.packageName
+                                                vm.openRootGrantProfile(app.packageName)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
-                }
-
-                if (state.rootGrantLoading && state.rootGrantApps.isEmpty()) {
-                    item(key = "initial-loading") {
-                        RootGrantInitialLoading()
-                    }
-                }
-
-                if (state.rootGrantLoading && state.rootGrantApps.isNotEmpty()) {
-                    item(key = "refreshing") {
-                        RootGrantRefreshingRow()
-                    }
-                }
-
-                state.rootGrantError?.let {
-                    item(key = "error") {
-                        RootGrantMessageCard(it) { vm.refreshRootGrantApps(force = true) }
-                    }
-                }
-
-                if (!state.rootGrantLoading && apps.isEmpty()) {
-                    item(key = "empty") {
-                        Text(
-                            text = if (query.isBlank()) "没有可显示的应用" else "没有匹配的应用",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 24.dp)
-                        )
-                    }
-                }
-
-                items(
-                    items = apps,
-                    key = { app -> "${app.uid}:${app.packageName}" }
-                ) { app ->
-                    RootGrantAppCard(
-                        app = app,
-                        saving = state.rootGrantSavingPackage == app.packageName,
-                        anySaving = state.rootGrantSavingPackage != null,
-                        onToggle = { allowed -> vm.setRootGrantAllowed(app.packageName, allowed) },
-                        onOpen = { selectedPackage = app.packageName }
-                    )
                 }
             }
         }
 
-        AnimatedVisibility(
-            visible = selectedApp != null,
+        detailPageTransition.AnimatedVisibility(
+            visible = { it },
             enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()),
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()),
+            exit = childPageScrimExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = ROOT_AUTH_BACK_SCRIM_ALPHA * visualDetailBackProgress))
+                    .background(Color.Black.copy(alpha = childPageBack.scrimAlpha))
             )
         }
 
-        AnimatedVisibility(
-            visible = selectedApp != null,
-            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
-                slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { width -> width / 4 },
-            exit = fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
-                slideOutHorizontally(animationSpec = motionScheme.fastSpatialSpec()) { width -> width },
+        detailPageTransition.AnimatedVisibility(
+            visible = { it },
+            enter = childPageOverlayEnterTransition(state.predictiveBackEnabled, motionScheme),
+            exit = childPageOverlayExitTransition(state.predictiveBackEnabled, motionScheme),
             modifier = childPageModifier
         ) {
-            selectedApp?.let { app ->
+            selectedPackage?.let { packageName ->
+                val headerApp = selectedDetailApp ?: selectedListApp
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .graphicsLayer {
-                            translationX = detailBackOffsetPx * visualDetailBackProgress
-                            scaleX = 1f - ROOT_AUTH_BACK_SCALE_DELTA * visualDetailBackProgress
-                            scaleY = 1f - ROOT_AUTH_BACK_SCALE_DELTA * visualDetailBackProgress
-                            alpha = 1f - 0.06f * visualDetailBackProgress
-                            shape = RoundedCornerShape(detailBackCorner)
-                            clip = visualDetailBackProgress > 0.01f
-                        }
+                        .then(childPageBack.backTransformModifier())
                 ) {
                     RootGrantDetailPageBackground(
                         backgroundUri = state.customBackgroundUri,
                         backgroundImageEnabled = state.backgroundImageEnabled
                     )
-                    Scaffold(
+                    BlurScreenScaffold(
+                        blurConfig = state.blurConfig,
                         containerColor = Color.Transparent,
                         topBar = {
                             ExpressiveTopBar(
-                                title = app.label.ifBlank { app.packageName },
+                                title = headerApp?.label?.ifBlank { packageName } ?: packageName,
                                 navigationIcon = {
                                     IconButton(
                                         enabled = canLeaveDetail,
-                                        onClick = ::closeDetailPage
+                                        onClick = childPageBack::requestDismiss
                                     ) {
-                                        Icon(Icons.Default.ArrowBack, contentDescription = "返回授权列表")
+                                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.root_auth_back_to_list))
                                     }
-                                }
+                                },
+                                enableBlur = state.blurEnabled
                             )
                         }
-                    ) { padding ->
-                        RootGrantProfilePage(
-                            app = app,
-                            padding = padding,
-                            saving = state.rootGrantSavingPackage == app.packageName,
-                            onSave = { profile ->
-                                vm.saveRootGrantProfile(profile)
-                            }
-                        )
+                    ) { topBarHeight ->
+                        when {
+                            state.rootGrantDetailLoading -> RootGrantDetailLoadingPage(topBarHeight = topBarHeight)
+                            selectedDetailApp != null -> RootGrantProfilePage(
+                                app = selectedDetailApp,
+                                topBarHeight = topBarHeight,
+                                saving = state.rootGrantSavingPackage == selectedDetailApp.packageName,
+                                warning = state.rootGrantDetailWarning,
+                                onSave = { profile ->
+                                    vm.saveRootGrantProfile(profile)
+                                }
+                            )
+                            else -> RootGrantDetailMessagePage(
+                                topBarHeight = topBarHeight,
+                                message = state.rootGrantError ?: stringResource(R.string.runtime_manager_inactive)
+                            )
+                        }
                     }
                 }
             }
@@ -379,39 +390,130 @@ fun RootAuthorizationScreen(
 }
 
 @Composable
-private fun RootGrantInitialLoading() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 48.dp),
-        contentAlignment = Alignment.Center
+private fun RootGrantInitialLoadingScreen(
+    topBarHeight: Dp,
+    outerPadding: PaddingValues,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    showSystemApps: Boolean,
+    onShowSystemAppsChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(
+                start = AbkScreenHorizontalPadding,
+                top = topBarHeight + 16.dp,
+                end = AbkScreenHorizontalPadding,
+                bottom = 80.dp + outerPadding.calculateBottomPadding()
+            ),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+        RootGrantSearchField(
+            query = query,
+            onQueryChange = onQueryChange
+        )
+        RootGrantControlsCard(
+            showSystemApps = showSystemApps,
+            onShowSystemAppsChange = onShowSystemAppsChange
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentAlignment = Alignment.Center
         ) {
-            LoadingIndicator(Modifier.size(42.dp))
-            Text(
-                text = "正在构建授权列表",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            RootGrantInitialLoading()
         }
     }
 }
 
 @Composable
-private fun RootGrantRefreshingRow() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically
+private fun RootGrantSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = Modifier.fillMaxWidth(),
+        leadingIcon = { Icon(Icons.Default.Search, null) },
+        placeholder = { Text(stringResource(R.string.root_auth_search_apps)) },
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp)
+    )
+}
+
+@Composable
+private fun RootGrantControlsCard(
+    showSystemApps: Boolean,
+    onShowSystemAppsChange: (Boolean) -> Unit
+) {
+    ExpressiveSectionCard(
+        title = stringResource(R.string.root_auth_section_title),
+        subtitle = stringResource(R.string.root_auth_section_desc),
+        icon = Icons.Default.AdminPanelSettings
     ) {
-        LoadingIndicator(Modifier.size(24.dp))
+        ExpressiveSwitchItem(
+            title = stringResource(R.string.root_auth_show_system_apps),
+            icon = Icons.Default.Apps,
+            checked = showSystemApps,
+            onCheckedChange = onShowSystemAppsChange
+        )
+    }
+}
+
+@Composable
+private fun RootGrantInitialLoading(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        AbkLoadingPill(text = stringResource(R.string.loading))
+    }
+}
+
+@Composable
+private fun RootGrantRefreshingRow(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        AbkInlineLoadingPill(text = text)
+    }
+}
+
+@Composable
+private fun RootGrantDetailLoadingPage(
+    topBarHeight: Dp
+) {
+    AbkCenteredLoadingTransition(
+        text = stringResource(R.string.loading),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = AbkScreenHorizontalPadding)
+            .padding(top = topBarHeight + 16.dp)
+    )
+}
+
+@Composable
+private fun RootGrantDetailMessagePage(
+    topBarHeight: Dp,
+    message: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = AbkScreenHorizontalPadding)
+            .padding(top = topBarHeight + 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
         Text(
-            text = "正在刷新授权列表",
+            text = message,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -423,32 +525,10 @@ private fun RootGrantDetailPageBackground(
     backgroundUri: String?,
     backgroundImageEnabled: Boolean
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val hasBackground = backgroundImageEnabled && !backgroundUri.isNullOrBlank()
-    val scrimColor = if (colorScheme.surface.luminance() > 0.5f) {
-        colorScheme.surface.copy(alpha = 0.28f)
-    } else {
-        Color.Black.copy(alpha = 0.38f)
-    }
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colorScheme.surface)
-    ) {
-        if (hasBackground) {
-            AsyncImage(
-                model = backgroundUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(scrimColor)
-            )
-        }
-    }
+    AppPageBackground(
+        backgroundUri = backgroundUri,
+        backgroundImageEnabled = backgroundImageEnabled
+    )
 }
 
 @Composable
@@ -459,11 +539,14 @@ private fun RootGrantAppCard(
     onToggle: (Boolean) -> Unit,
     onOpen: () -> Unit
 ) {
+    val shape = RoundedCornerShape(8.dp)
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         onClick = onOpen
@@ -525,10 +608,20 @@ private fun RootGrantAppCard(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                RootGrantChip(if (app.profile.allowSu) "允许 Root" else "拒绝 Root")
-                RootGrantChip(if (app.profile.rootUseDefault) "默认 Root 配置" else "自定义 Root 配置")
-                if (app.isSystemApp) RootGrantChip("系统应用")
-                if (app.profile.umountModules) RootGrantChip("卸载模块")
+                RootGrantChip(if (app.profile.allowSu) stringResource(R.string.root_auth_allow) else stringResource(R.string.root_auth_deny))
+                if (app.isSystemApp) RootGrantChip(stringResource(R.string.root_auth_system_app))
+                if (app.profileLoaded) {
+                    RootGrantChip(
+                        if (app.profile.rootUseDefault) {
+                            stringResource(R.string.root_auth_default_profile)
+                        } else {
+                            stringResource(R.string.root_auth_custom_profile)
+                        }
+                    )
+                    if (app.profile.umountModules) {
+                        RootGrantChip(stringResource(R.string.root_auth_umount_modules))
+                    }
+                }
             }
         }
     }
@@ -574,8 +667,9 @@ private fun AppIcon(
 @Composable
 private fun RootGrantProfilePage(
     app: RootGrantApp,
-    padding: androidx.compose.foundation.layout.PaddingValues,
+    topBarHeight: Dp,
     saving: Boolean,
+    warning: String?,
     onSave: (RootGrantProfile) -> Unit
 ) {
     val profile = app.profile
@@ -615,12 +709,20 @@ private fun RootGrantProfilePage(
 
     Column(
         modifier = Modifier
-            .padding(padding)
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        Spacer(Modifier.height(topBarHeight + 16.dp))
+        if (!warning.isNullOrBlank()) {
+            ExpressiveSectionCard(
+                title = stringResource(R.string.root_auth_profile_read_disabled_title),
+                subtitle = warning,
+                icon = Icons.Default.AdminPanelSettings
+            ) {}
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -655,8 +757,8 @@ private fun RootGrantProfilePage(
         }
 
         ExpressiveSectionCard(
-            title = "超级用户",
-            subtitle = if (allowSu) "允许请求 Root 权限" else "拒绝 Root 权限",
+            title = stringResource(R.string.root_auth_title),
+            subtitle = if (allowSu) stringResource(R.string.root_auth_allow_request) else stringResource(R.string.root_auth_deny_request),
             icon = Icons.Default.Security
         ) {
             Row(
@@ -665,7 +767,7 @@ private fun RootGrantProfilePage(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (allowSu) "已允许" else "未允许",
+                    text = if (allowSu) stringResource(R.string.root_auth_allowed) else stringResource(R.string.root_auth_not_allowed),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -680,9 +782,13 @@ private fun RootGrantProfilePage(
         ExpressiveSectionCard(
             title = "App Profile",
             subtitle = if (allowSu) {
-                if (rootUseDefault) "默认" else "自定义"
+                if (rootUseDefault) stringResource(R.string.root_auth_default) else stringResource(R.string.root_auth_custom)
             } else {
-                if (nonRootUseDefault) "默认非 Root 配置" else "自定义非 Root 配置"
+                if (nonRootUseDefault) {
+                    stringResource(R.string.root_auth_default_non_root)
+                } else {
+                    stringResource(R.string.root_auth_custom_non_root)
+                }
             },
             icon = Icons.Default.AccountCircle
         ) {
@@ -692,7 +798,7 @@ private fun RootGrantProfilePage(
                         FilterChip(
                             selected = rootUseDefault,
                             onClick = { rootUseDefault = true },
-                            label = { Text("默认") }
+                            label = { Text(stringResource(R.string.root_auth_default)) }
                         )
                         FilterChip(
                             selected = !rootUseDefault && rootTemplate.isNotBlank(),
@@ -700,7 +806,7 @@ private fun RootGrantProfilePage(
                                 rootUseDefault = false
                                 if (rootTemplate.isBlank()) rootTemplate = "default"
                             },
-                            label = { Text("模板") }
+                            label = { Text(stringResource(R.string.root_auth_template)) }
                         )
                         FilterChip(
                             selected = !rootUseDefault && rootTemplate.isBlank(),
@@ -708,24 +814,29 @@ private fun RootGrantProfilePage(
                                 rootUseDefault = false
                                 rootTemplate = ""
                             },
-                            label = { Text("自定义") }
+                            label = { Text(stringResource(R.string.root_auth_custom)) }
                         )
                     }
                     if (!rootUseDefault && rootTemplate.isNotBlank()) {
-                        RootGrantTextField("模板", rootTemplate, { rootTemplate = it }, "模板名称")
+                        RootGrantTextField(
+                            stringResource(R.string.root_auth_template),
+                            rootTemplate,
+                            { rootTemplate = it },
+                            stringResource(R.string.root_auth_template_name)
+                        )
                     }
                     if (!rootUseDefault) {
                         RootGrantTextField("UID", uidText, { uidText = it })
                         RootGrantTextField("GID", gidText, { gidText = it })
-                        RootGrantTextField("Groups", groupsText, { groupsText = it }, "逗号分隔")
-                        RootGrantTextField("Capabilities", capabilitiesText, { capabilitiesText = it }, "逗号分隔")
+                        RootGrantTextField("Groups", groupsText, { groupsText = it }, stringResource(R.string.root_auth_comma_separated))
+                        RootGrantTextField("Capabilities", capabilitiesText, { capabilitiesText = it }, stringResource(R.string.root_auth_comma_separated))
                         RootGrantTextField("SELinux Context", contextText, { contextText = it })
-                        RootGrantTextField("Namespace", namespaceText, { namespaceText = it }, "0 继承 / 1 全局 / 2 独立")
-                        RootGrantTextField("SEPolicy Rules", rulesText, { rulesText = it }, "可留空", singleLine = false)
+                        RootGrantTextField("Namespace", namespaceText, { namespaceText = it }, stringResource(R.string.root_auth_namespace_hint))
+                        RootGrantTextField("SEPolicy Rules", rulesText, { rulesText = it }, stringResource(R.string.root_auth_optional_empty), singleLine = false)
                     }
                 } else {
-                    RootGrantSwitchRow("使用默认非 Root 配置", nonRootUseDefault) { nonRootUseDefault = it }
-                    RootGrantSwitchRow("卸载模块", umountModules) { umountModules = it }
+                    RootGrantSwitchRow(stringResource(R.string.root_auth_use_default_non_root), nonRootUseDefault) { nonRootUseDefault = it }
+                    RootGrantSwitchRow(stringResource(R.string.root_auth_umount_modules), umountModules) { umountModules = it }
                 }
             }
         }
@@ -740,7 +851,7 @@ private fun RootGrantProfilePage(
             } else {
                 Icon(Icons.Default.Done, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("保存")
+                Text(stringResource(R.string.save))
             }
         }
 
@@ -794,11 +905,14 @@ private fun RootGrantChip(label: String) {
 
 @Composable
 private fun RootGrantMessageCard(message: String, onRefresh: () -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.errorContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.errorContainer)
         )
     ) {
         Column(
@@ -811,7 +925,7 @@ private fun RootGrantMessageCard(message: String, onRefresh: () -> Unit) {
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
             TextButton(onClick = onRefresh) {
-                Text("重新检测")
+                Text(stringResource(R.string.runtime_recheck))
             }
         }
     }

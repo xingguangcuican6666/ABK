@@ -8,6 +8,31 @@ import org.junit.Test
 class KernelSupportTest {
 
     @Test
+    fun customSourceValidationAcceptsOrderedDuplicatesAndRejectsUnsafePaths() {
+        val valid = KernelBuildConfig(
+            buildTarget = BUILD_TARGET_CUSTOM_SOURCE,
+            sourceUrl = "https://github.com/LineageOS/android_kernel_xiaomi_sm8635.git",
+            sourceRef = "lineage-23.2",
+            sourceDefconfigs = listOf("vendor/base.config", "gki_defconfig", "vendor/base.config"),
+            osPatchLevel = "2025-09",
+            kernelsuVariant = KSU_VARIANT_NONE,
+        )
+        assertEquals(null, KernelSupport.validateCustomSource(valid))
+        assertTrue(
+            KernelSupport.validateCustomSource(
+                valid.copy(sourceDefconfigs = listOf("gki_defconfig", "../secret"))
+            ) != null
+        )
+        assertTrue(
+            KernelSupport.validateCustomSource(
+                valid.copy(sourceUrl = "https://user:pass@github.com/example/kernel.git")
+            ) != null
+        )
+        assertTrue(KernelSupport.validateCustomSource(valid.copy(sourceRef = "refs/heads/../main")) != null)
+        assertTrue(KernelSupport.validateCustomSource(valid.copy(sourceRef = "lineage\n23.2")) != null)
+    }
+
+    @Test
     fun normalizeCoercesInvalidValuesAndDisablesKsuOnlyFeaturesForNoneVariant() {
         val normalized = KernelSupport.normalize(
             KernelBuildConfig(
@@ -46,6 +71,20 @@ class KernelSupportTest {
     }
 
     @Test
+    fun normalizePreservesCustomKsuBranchAndTrimsCustomRef() {
+        val normalized = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_SUKISU,
+                kernelsuBranch = KSU_BRANCH_CUSTOM,
+                customRef = "  feature:5  "
+            )
+        )
+
+        assertEquals(KSU_BRANCH_CUSTOM, normalized.kernelsuBranch)
+        assertEquals("feature:5", normalized.customRef)
+    }
+
+    @Test
     fun recommendedFromKernelDetectsAndroidLineSubLevelAndPatch() {
         val config = KernelSupport.recommendedFromKernel(
             "Linux version 6.1.162-android14-11-gabcdef SMP PREEMPT 2026-03"
@@ -61,5 +100,157 @@ class KernelSupportTest {
     fun virtualizationOptionsDependOnKernelLine() {
         assertEquals(listOf("off", "on"), KernelSupport.virtualizationSupportOptions("6.12"))
         assertEquals(listOf("off", "678", "123", "345"), KernelSupport.virtualizationSupportOptions("6.1"))
+    }
+
+    @Test
+    fun normalizeOnePlusConfigUsesOnePlusDefaultsAndDisablesMtkProxy() {
+        val normalized = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_ONEPLUS,
+                androidVersion = "android16",
+                kernelVersion = "6.12",
+                kernelsuVariant = KSU_VARIANT_SUKISU,
+                onePlusCpu = "mt6991",
+                onePlusDeviceManifest = "oneplus_ace5_ultra_b",
+                onePlusUseProxyOptimization = true,
+                useKpm = true,
+                useDdk = true,
+                useCustomExternalModules = true,
+                customExternalModules = listOf(CustomExternalModule("https://github.com/example/module"))
+            )
+        )
+
+        assertEquals(BUILD_TARGET_ONEPLUS, normalized.buildTarget)
+        assertEquals("android15", normalized.androidVersion)
+        assertEquals("6.6", normalized.kernelVersion)
+        assertEquals(KSU_VARIANT_SUKISU, normalized.kernelsuVariant)
+        assertEquals("mt6991", normalized.onePlusCpu)
+        assertEquals("oneplus_ace5_ultra_b", normalized.onePlusDeviceManifest)
+        assertFalse(normalized.onePlusUseProxyOptimization)
+        assertFalse(normalized.useKpm)
+        assertFalse(normalized.useDdk)
+        assertTrue(normalized.customExternalModules.isEmpty())
+    }
+
+    @Test
+    fun onePlusDeviceLabelUsesAbkProfileInsteadOfManifestSuffixRule() {
+        assertEquals(
+            "OnePlus Turbo 6V · ColorOS/OxygenOS 16 · android14/6.1 · sm7635",
+            KernelSupport.onePlusDeviceLabel("oneplus_turbo_6v")
+        )
+    }
+
+    @Test
+    fun normalizeOnePlusDisablesSusfsWhenNoUpstreamBranchExists() {
+        val normalized = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_ONEPLUS,
+                kernelsuVariant = KSU_VARIANT_SUKISU,
+                cancelSusfs = false,
+                onePlusDeviceManifest = "oneplus_10t_v"
+            )
+        )
+
+        assertEquals("android12", normalized.androidVersion)
+        assertEquals("5.10", normalized.kernelVersion)
+        assertTrue(normalized.cancelSusfs)
+    }
+
+    @Test
+    fun normalizeOnePlus15tUsesSm8850Android16Profile() {
+        val normalized = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_ONEPLUS,
+                kernelsuVariant = KSU_VARIANT_SUKISU,
+                cancelSusfs = false,
+                onePlusDeviceManifest = "oneplus_15t",
+                onePlusUseLz4kd = true
+            )
+        )
+
+        assertEquals("sm8850", normalized.onePlusCpu)
+        assertEquals("android16", normalized.androidVersion)
+        assertEquals("6.12", normalized.kernelVersion)
+        assertFalse(normalized.cancelSusfs)
+        assertFalse(normalized.onePlusUseLz4kd)
+        assertEquals(
+            "OnePlus 15T · ColorOS/OxygenOS 16 · android16/6.12 · sm8850",
+            KernelSupport.onePlusDeviceLabel(normalized.onePlusDeviceManifest)
+        )
+    }
+
+    @Test
+    fun normalizeDisablesKpmForResukisuDevAndLatest() {
+        val dev = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_RESUKISU,
+                kernelsuBranch = KSU_BRANCH_DEV,
+                useKpm = true,
+                kpmPassword = "secret"
+            )
+        )
+        val latest = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_RESUKISU,
+                kernelsuBranch = KSU_BRANCH_LATEST,
+                useKpm = true,
+                kpmPassword = "secret"
+            )
+        )
+
+        assertFalse(dev.useKpm)
+        assertEquals("", dev.kpmPassword)
+        assertFalse(latest.useKpm)
+        assertEquals("", latest.kpmPassword)
+    }
+
+    @Test
+    fun normalizeKeepsKpmForResukisuStableAndCustom() {
+        val stable = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_RESUKISU,
+                kernelsuBranch = KSU_BRANCH_STABLE,
+                useKpm = true,
+                kpmPassword = "secret"
+            )
+        )
+        val custom = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_RESUKISU,
+                kernelsuBranch = KSU_BRANCH_CUSTOM,
+                useKpm = true,
+                kpmPassword = "secret"
+            )
+        )
+
+        assertTrue(stable.useKpm)
+        assertEquals("secret", stable.kpmPassword)
+        assertTrue(custom.useKpm)
+        assertEquals("secret", custom.kpmPassword)
+    }
+
+    @Test
+    fun normalizeDisablesKpmForOfficialOnStableAndCustom() {
+        val stable = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_OFFICIAL,
+                kernelsuBranch = KSU_BRANCH_STABLE,
+                useKpm = true,
+                kpmPassword = "secret"
+            )
+        )
+        val custom = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_OFFICIAL,
+                kernelsuBranch = KSU_BRANCH_CUSTOM,
+                useKpm = true,
+                kpmPassword = "secret"
+            )
+        )
+
+        assertFalse(stable.useKpm)
+        assertEquals("", stable.kpmPassword)
+        assertFalse(custom.useKpm)
+        assertEquals("", custom.kpmPassword)
     }
 }

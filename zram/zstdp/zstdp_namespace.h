@@ -1,0 +1,13 @@
+#ifndef ABK_ZSTDP_NAMESPACE_H
+#define ABK_ZSTDP_NAMESPACE_H
+
+#define ZSTD_compressCCtx abk_zstdp_ZSTD_compressCCtx
+#define ZSTD_decompressDCtx abk_zstdp_ZSTD_decompressDCtx
+#define ZSTD_estimateCCtxSize abk_zstdp_ZSTD_estimateCCtxSize
+#define ZSTD_estimateDCtxSize abk_zstdp_ZSTD_estimateDCtxSize
+#define ZSTD_getParams abk_zstdp_ZSTD_getParams
+#define ZSTD_initStaticCCtx abk_zstdp_ZSTD_initStaticCCtx
+#define ZSTD_initStaticDCtx abk_zstdp_ZSTD_initStaticDCtx
+#define ZSTD_isError abk_zstdp_ZSTD_isError
+
+#endif

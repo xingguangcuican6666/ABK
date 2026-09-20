@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -6,6 +8,22 @@ plugins {
 val githubClientId = providers.gradleProperty("ABK_GITHUB_CLIENT_ID")
     .orElse(providers.environmentVariable("ABK_GITHUB_CLIENT_ID"))
     .orElse("Ov23li8skGo6AFPBeSTh")
+val appVersionCode = 10027
+val appVersionName = "1.2.7"
+val appUpdateMetadataUrl = providers.environmentVariable("ABK_APP_UPDATE_METADATA_URL")
+    .orElse("https://raw.githubusercontent.com/xingguangcuican6666/ABK/dev/version.json")
+val appBuildTimestamp = providers.environmentVariable("ABK_APP_BUILD_TIMESTAMP")
+    .orElse("")
+val appBuildTimestampEpochMillis = providers.environmentVariable("ABK_APP_BUILD_TIMESTAMP_EPOCH_MILLIS")
+    .map { raw -> raw.toLongOrNull()?.let { "${it}L" } ?: "0L" }
+    .orElse("0L")
+val appBuildRunId = providers.environmentVariable("ABK_APP_BUILD_RUN_ID")
+    .map { raw -> raw.toLongOrNull()?.let { "${it}L" } ?: "0L" }
+    .orElse("0L")
+val appBuildCommitSha = providers.environmentVariable("ABK_APP_BUILD_COMMIT_SHA")
+    .orElse("")
+val appBuildWorkflowName = providers.environmentVariable("ABK_APP_BUILD_WORKFLOW_NAME")
+    .orElse("")
 
 val releaseStoreFile = providers.gradleProperty("ABK_RELEASE_STORE_FILE")
     .orElse(providers.environmentVariable("ABK_RELEASE_STORE_FILE"))
@@ -22,6 +40,35 @@ val hasReleaseSigning = !releaseStoreFile.orNull.isNullOrBlank() &&
     !releaseStorePassword.orNull.isNullOrBlank() &&
     !releaseKeyAlias.orNull.isNullOrBlank() &&
     !releaseKeyPassword.orNull.isNullOrBlank()
+val libsodiumAarCoordinate = "com.goterl:lazysodium-android:5.2.0@aar"
+
+val extractLibsodium by tasks.registering {
+    val outputDir = layout.buildDirectory.dir("generated/abk-jniLibs/main/libsodium")
+    outputs.dir(outputDir)
+    doLast {
+        val jniRoot = outputDir.get().asFile
+        jniRoot.deleteRecursively()
+        jniRoot.mkdirs()
+
+        val lazysodium = configurations.detachedConfiguration(
+            dependencies.create(libsodiumAarCoordinate)
+        ).singleFile
+        ZipFile(lazysodium).use { zip ->
+            val entries = zip.entries()
+            while (entries.hasMoreElements()) {
+                val entry = entries.nextElement()
+                if (entry.name.startsWith("jni/") && entry.name.endsWith("/libsodium.so")) {
+                    val relative = entry.name.removePrefix("jni/")
+                    val target = jniRoot.resolve(relative)
+                    target.parentFile?.mkdirs()
+                    zip.getInputStream(entry).use { input ->
+                        target.outputStream().use { output -> input.copyTo(output) }
+                    }
+                }
+            }
+        }
+    }
+}
 
 android {
     namespace = "com.abk.kernel"
@@ -31,14 +78,23 @@ android {
         applicationId = "com.abk.kernel"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10010
-        versionName = "1.1.0"
+        versionCode = 10027
+        versionName = "1.2.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        buildConfigField("long", "APP_VERSION_CODE", "${appVersionCode}L")
+        buildConfigField("String", "APP_VERSION_NAME", "\"$appVersionName\"")
+        buildConfigField("String", "APP_UPDATE_METADATA_URL", "\"${appUpdateMetadataUrl.get()}\"")
+        buildConfigField("String", "APP_BUILD_TIMESTAMP", "\"${appBuildTimestamp.get()}\"")
+        buildConfigField("long", "APP_BUILD_TIMESTAMP_EPOCH_MILLIS", appBuildTimestampEpochMillis.get())
+        buildConfigField("long", "APP_BUILD_RUN_ID", appBuildRunId.get())
+        buildConfigField("String", "APP_BUILD_COMMIT_SHA", "\"${appBuildCommitSha.get()}\"")
+        buildConfigField("String", "APP_BUILD_WORKFLOW_NAME", "\"${appBuildWorkflowName.get()}\"")
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"${githubClientId.get()}\"")
         buildConfigField("String", "SOURCE_REPO_OWNER", "\"xingguangcuican6666\"")
         buildConfigField("String", "SOURCE_REPO_NAME", "\"ABK\"")
+        buildConfigField("String", "SOURCE_REPO_DEFAULT_BRANCH", "\"dev\"")
         buildConfigField("String", "UPSTREAM_REPO_URL", "\"https://github.com/zzh20188/GKI_KernelSU_SUSFS\"")
         buildConfigField("String", "TOP_LEVEL_REPO_URL", "\"https://github.com/WildKernels/GKI_KernelSU_SUSFS\"")
 
@@ -100,9 +156,18 @@ android {
     }
 }
 
+tasks.named("preBuild").configure {
+    dependsOn(extractLibsodium)
+}
+
+tasks.matching { it.name.startsWith("configureCMake") || it.name.startsWith("buildCMake") }.configureEach {
+    dependsOn(extractLibsodium)
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
@@ -121,6 +186,7 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.gson)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.nanohttpd)
 
     // Root
     implementation(libs.libsu.core)
@@ -135,7 +201,14 @@ dependencies {
     // Preferences
     implementation(libs.datastore.preferences)
 
+    // Blur / glass
+    implementation(libs.miuix.blur)
+
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

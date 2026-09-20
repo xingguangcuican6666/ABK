@@ -1,0 +1,902 @@
+package com.abk.kernel.viewmodel
+
+import android.app.Application
+import androidx.annotation.StringRes
+import com.abk.kernel.R
+import com.abk.kernel.data.model.*
+import com.abk.kernel.data.repository.GitHubRepository
+import com.abk.kernel.data.repository.PreferencesRepository
+import com.abk.kernel.data.repository.Result
+import com.abk.kernel.utils.LocaleHelper
+import com.abk.kernel.utils.AbkKsuNative
+import com.abk.kernel.utils.RootUtils
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import java.lang.reflect.Type
+import java.util.UUID
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private const val OFFICIAL_RUNTIME_MODULE_REPOSITORY_ID = "official-runtime-module-repository"
+private const val OFFICIAL_RUNTIME_MODULE_REPOSITORY_URL =
+    "https://raw.githubusercontent.com/Magisk-Modules-Alt-Repo/json-v2/refs/heads/main/json/modules.json"
+
+private data class RuntimeQuadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+
+private val runtimeModuleHttpClient = okhttp3.OkHttpClient.Builder()
+    .connectTimeout(20, TimeUnit.SECONDS)
+    .readTimeout(30, TimeUnit.SECONDS)
+    .writeTimeout(20, TimeUnit.SECONDS)
+    .callTimeout(30, TimeUnit.SECONDS)
+    .build()
+
+internal data class RuntimeModuleUpdateTarget(
+    val module: AbkRuntimeModule,
+    val updateInfo: RuntimeModuleUpdateInfo,
+)
+
+internal data class RuntimeModuleUpdateInfo(
+    val version: String,
+    val versionCode: Long,
+    val zipUrl: String,
+    val changelog: String,
+    val sha256: String? = null,
+    val signature: String? = null,
+)
+
+internal fun isSecureRuntimeModuleUrl(url: String): Boolean =
+    url.trim().startsWith("https://", ignoreCase = true)
+
+private suspend fun fetchRuntimeModuleResponse(url: String): String? = withContext(Dispatchers.IO) {
+    val cleanUrl = url.trim()
+    if (cleanUrl.isBlank() || !isSecureRuntimeModuleUrl(cleanUrl)) return@withContext null
+    runCatching {
+        val request = okhttp3.Request.Builder().url(cleanUrl).build()
+        runtimeModuleHttpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return@withContext null
+            response.body?.string().orEmpty()
+        }
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+}
+
+internal suspend fun fetchRuntimeModuleText(url: String): String? =
+    fetchRuntimeModuleResponse(url)?.trim()?.takeIf { it.isNotBlank() }
+
+internal suspend fun resolveRuntimeModuleChangelog(changelog: String): String {
+    val value = changelog.trim()
+    if (value.isBlank()) return ""
+    if (!isSecureRuntimeModuleUrl(value)) return value
+    return fetchRuntimeModuleText(value) ?: ""
+}
+
+internal suspend fun findRuntimeModuleUpdateTarget(
+    module: AbkRuntimeModule,
+): RuntimeModuleUpdateTarget? {
+    if (module.id.isBlank() || module.remove || module.update || !module.enabled || module.readonly || module.normalizedType() != "standard") {
+        return null
+    }
+    val updateJson = module.updateJson.trim()
+    if (updateJson.isBlank()) return null
+    val updateInfo = fetchRuntimeModuleUpdateInfo(updateJson) ?: return null
+    if (!isRuntimeModuleVersionNewer(
+            localVersion = module.version,
+            localVersionCode = module.versionCode,
+            remoteVersion = updateInfo.version,
+            remoteVersionCode = updateInfo.versionCode,
+        )
+    ) {
+        return null
+    }
+    return RuntimeModuleUpdateTarget(module, updateInfo)
+}
+
+internal suspend fun fetchRuntimeModuleUpdateInfo(updateJson: String): RuntimeModuleUpdateInfo? {
+    if (!isSecureRuntimeModuleUrl(updateJson)) return null
+    val result = fetchRuntimeModuleResponse(updateJson).orEmpty()
+    if (result.isBlank()) return null
+    val json = runCatching { com.google.gson.JsonParser.parseString(result).asJsonObject }.getOrNull() ?: return null
+    val version = json.get("version")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim().orEmpty()
+    val versionCode = json.get("versionCode")?.takeIf { it.isJsonPrimitive }?.let { runCatching { it.asLong }.getOrNull() } ?: 0L
+    val zipUrl = json.get("zipUrl")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim().orEmpty()
+    val changelog = json.get("changelog")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim().orEmpty()
+    val sha256 = (json.get("sha256") ?: json.get("sha_256"))?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim()?.takeIf { it.isNotBlank() }
+    val signature = json.get("signature")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim()?.takeIf { it.isNotBlank() }
+    if (zipUrl.isBlank() || version.isBlank() || !isSecureRuntimeModuleUrl(zipUrl)) return null
+    return RuntimeModuleUpdateInfo(version = version, versionCode = versionCode, zipUrl = zipUrl, changelog = changelog, sha256 = sha256, signature = signature)
+}
+
+internal fun isRuntimeModuleVersionNewer(
+    localVersion: String,
+    localVersionCode: Long,
+    remoteVersion: String,
+    remoteVersionCode: Long,
+): Boolean {
+    if (localVersionCode > 0L && remoteVersionCode > 0L) {
+        return remoteVersionCode > localVersionCode
+    }
+    val local = parseRuntimeVersion(localVersion) ?: return false
+    val remote = parseRuntimeVersion(remoteVersion) ?: return false
+    return compareRuntimeVersionParts(remote, local) > 0
+}
+
+internal fun parseRuntimeVersion(value: String): List<Long>? {
+    val clean = value.trim().removePrefix("v").removePrefix("V")
+    if (clean.isBlank()) return null
+    val parts = Regex("""\d+""").findAll(clean)
+        .mapNotNull { it.value.toLongOrNull() }
+        .toList()
+    return parts.takeIf { it.isNotEmpty() }
+}
+
+internal fun compareRuntimeVersionParts(left: List<Long>, right: List<Long>): Int {
+    val size = maxOf(left.size, right.size)
+    for (index in 0 until size) {
+        val comparison = (left.getOrNull(index) ?: 0L).compareTo(right.getOrNull(index) ?: 0L)
+        if (comparison != 0) return comparison
+    }
+    return 0
+}
+
+class RuntimeCoordinator(
+    private val scope: CoroutineScope,
+    private val app: Application,
+    private val github: GitHubRepository,
+    private val prefs: PreferencesRepository,
+    private val gson: Gson,
+    private val ksuModuleListType: Type,
+    private val readState: () -> MainUiState,
+    private val updateState: ((MainUiState) -> MainUiState) -> Unit,
+    private val resolveManagerAccess: (Boolean) -> RootUtils.ManagerAccessInfo,
+    private val managerAccessErrorMessage: (RootUtils.ManagerAccessInfo, Boolean) -> String,
+    private val str: (Int, Array<out Any>) -> String,
+) {
+    private fun text(@StringRes resId: Int, vararg args: Any): String =
+        if (args.isEmpty()) str(resId, emptyArray()) else str(resId, args)
+
+    private fun localizedRuntimeModuleRepoTitle(): String =
+        when (LocaleHelper.getLanguage(app)) {
+            LocaleHelper.LANG_ZH -> "普通模块仓库"
+            LocaleHelper.LANG_RU -> "Репозиторий обычных модулей"
+            else -> "Standard Module Repo"
+        }
+
+    fun onRuntimeRepositoriesJsonChanged(json: String?) {
+        val repositories = parseRuntimeModuleRepositories(json)
+        updateState { it.copy(runtimeModuleRepositories = repositories) }
+        refreshStaleRuntimeModuleRepositories(repositories)
+    }
+
+    fun setRuntimeNavigationEnabled(enabled: Boolean) {
+        updateState { it.copy(runtimeNavigationEnabled = enabled) }
+        scope.launch { prefs.setRuntimeNavigationEnabled(enabled) }
+        if (enabled) refreshAbkRuntimeStatus()
+    }
+    fun refreshAbkRuntimeStatus() {
+        scope.launch {
+            updateState { it.copy(abkRuntimeLoading = true, abkRuntimeError = null) }
+            val rootGranted = readState().rootGranted
+            val (access, runtimeStatus, runtimeError) = withContext(Dispatchers.IO) {
+                val managerAccess = resolveManagerAccess(rootGranted)
+                if (!managerAccess.hasNativeManagerPermission) {
+                    val snapshot = if (rootGranted) RootUtils.readManagerRuntimeSnapshot() else null
+                    val compatStatus = snapshot
+                        ?.takeIf { it.manager.active }
+                        ?.let {
+                            mergeRuntimeStatus(
+                                gson,
+                                ksuModuleListType,
+                                manager = it.manager,
+                                controlJson = it.controlStatusJson,
+                                ksuModulesJson = it.ksuModulesJson,
+                            )
+                        }
+                    return@withContext Triple(
+                        managerAccess,
+                        compatStatus,
+                        managerAccessErrorMessage(managerAccess, rootGranted)
+                    )
+                }
+                val snapshot = RootUtils.readManagerRuntimeSnapshot()
+                if (!snapshot.manager.active) {
+                    Triple(
+                        managerAccess,
+                        null as AbkRuntimeStatus?,
+                        snapshot.manager.diagnostics.firstOrNull()
+                    )
+                } else {
+                    Triple(
+                        managerAccess,
+                        mergeRuntimeStatus(
+                            gson,
+                            ksuModuleListType,
+                            manager = snapshot.manager,
+                            controlJson = snapshot.controlStatusJson,
+                            ksuModulesJson = snapshot.ksuModulesJson,
+                        ),
+                        null as String?
+                    )
+                }
+            }
+            updateState {
+                if (runtimeStatus != null) {
+                    it.copy(
+                        managerAccessState = access.toUiState(),
+                        managerAccessError = if (access.hasNativeManagerPermission) access.diagnostic else runtimeError,
+                        hasNativeManagerPermission = access.hasNativeManagerPermission,
+                        abkRuntimeStatus = runtimeStatus.copy(
+                            modules = sortRuntimeModulesForDisplay(runtimeStatus.modules)
+                        ),
+                        abkRuntimeLoading = false,
+                        abkRuntimeError = if (access.hasNativeManagerPermission) null else runtimeError
+                    )
+                } else {
+                    it.copy(
+                        managerAccessState = access.toUiState(),
+                        managerAccessError = runtimeError,
+                        hasNativeManagerPermission = access.hasNativeManagerPermission,
+                        abkRuntimeStatus = null,
+                        abkRuntimeLoading = false,
+                        abkRuntimeError = runtimeError ?: text(R.string.runtime_manager_inactive)
+                    )
+                }
+            }
+        }
+    }
+
+    fun refreshRootGrantApps(force: Boolean = false) {
+        val current = readState()
+        val currentBackend = current.abkRuntimeStatus?.runtimeBackend?.backend
+        if (!force && current.rootGrantLoading) return
+        if (
+            !force &&
+            current.rootGrantApps.isNotEmpty() &&
+            current.rootGrantRuntimeBackend == currentBackend &&
+            current.rootGrantError == null
+        ) {
+            return
+        }
+
+        scope.launch {
+            val backendAtRequest = readState().abkRuntimeStatus?.runtimeBackend?.backend
+            val rootGranted = readState().rootGranted
+            updateState {
+                it.copy(rootGrantLoading = true, rootGrantError = null)
+            }
+            val (access, active, apps, diagnostic) = withContext(Dispatchers.IO) {
+                val managerAccess = resolveManagerAccess(rootGranted)
+                if (!managerAccess.hasNativeManagerPermission) {
+                    return@withContext RuntimeQuadruple(
+                        managerAccess,
+                        false,
+                        emptyList<RootGrantApp>(),
+                        managerAccessErrorMessage(managerAccess, rootGranted)
+                    )
+                }
+                val rootGrantApps = if (managerAccess.hasNativeManagerPermission) {
+                    RootUtils.listRootGrantApps(app)
+                } else {
+                    emptyList()
+                }
+                RuntimeQuadruple(managerAccess, true, rootGrantApps, null as String?)
+            }
+            updateState {
+                if (!active) {
+                    it.copy(
+                        managerAccessState = access.toUiState(),
+                        managerAccessError = diagnostic,
+                        hasNativeManagerPermission = access.hasNativeManagerPermission,
+                        rootGrantApps = emptyList(),
+                        rootGrantRuntimeBackend = backendAtRequest,
+                        rootGrantLoading = false,
+                        rootGrantError = diagnostic ?: text(R.string.runtime_manager_inactive)
+                    )
+                } else {
+                    it.copy(
+                        managerAccessState = access.toUiState(),
+                        managerAccessError = null,
+                        hasNativeManagerPermission = access.hasNativeManagerPermission,
+                        rootGrantApps = apps,
+                        rootGrantRuntimeBackend = backendAtRequest,
+                        rootGrantLoading = false,
+                        rootGrantError = null
+                    )
+                }
+            }
+        }
+    }
+
+    fun openRootGrantProfile(packageName: String) {
+        val cleanPackage = packageName.trim()
+        if (cleanPackage.isBlank() || readState().rootGrantDetailLoading) return
+        val baseApp = readState().rootGrantApps.firstOrNull { it.packageName == cleanPackage } ?: return
+
+        scope.launch {
+            updateState {
+                it.copy(
+                    rootGrantDetailApp = null,
+                    rootGrantDetailLoading = true,
+                    rootGrantDetailWarning = null,
+                    rootGrantError = null
+                )
+            }
+            val rootGranted = readState().rootGranted
+            val result = withContext(Dispatchers.IO) {
+                val access = resolveManagerAccess(rootGranted)
+                if (!access.hasNativeManagerPermission) {
+                    return@withContext Triple(
+                        null as RootGrantApp?,
+                        managerAccessErrorMessage(access, rootGranted),
+                        null as String?
+                    )
+                }
+
+                val recoveryRecord = RootGrantProfileRecoveryRecord(
+                    packageName = cleanPackage,
+                    uid = baseApp.uid,
+                    label = baseApp.label.ifBlank { cleanPackage }
+                )
+                val fallbackProfile = baseApp.profile.copy(
+                    name = cleanPackage,
+                    currentUid = baseApp.uid,
+                )
+                val pendingRecovery = prefs.pendingRootGrantProfileRecovery.first()
+                val blockedPackages = prefs.rootGrantProfileReadBlockedPackages.first()
+                if (pendingRecovery?.packageName == cleanPackage || cleanPackage in blockedPackages) {
+                    return@withContext Triple(
+                        baseApp.copy(
+                            profile = fallbackProfile,
+                            profileLoaded = false
+                        ),
+                        null as String?,
+                        text(R.string.root_auth_profile_read_disabled_message)
+                    )
+                }
+                val loadedProfile = runCatching {
+                    prefs.savePendingRootGrantProfileRecovery(recoveryRecord)
+                    val profile = AbkKsuNative.readProfile(cleanPackage, baseApp.uid)
+                    prefs.clearPendingRootGrantProfileRecovery()
+                    profile
+                }.getOrElse {
+                    runCatching { prefs.clearPendingRootGrantProfileRecovery() }
+                    null
+                }
+                Triple(
+                    baseApp.copy(
+                        profile = (loadedProfile ?: fallbackProfile).copy(
+                            name = cleanPackage,
+                            currentUid = baseApp.uid
+                        ),
+                        profileLoaded = loadedProfile != null
+                    ),
+                    null as String?,
+                    null as String?
+                )
+            }
+            updateState { state ->
+                if (result.first != null) {
+                    state.copy(
+                        rootGrantDetailApp = result.first,
+                        rootGrantDetailLoading = false,
+                        rootGrantDetailWarning = result.third,
+                        rootGrantError = null
+                    )
+                } else {
+                    state.copy(
+                        rootGrantDetailApp = null,
+                        rootGrantDetailLoading = false,
+                        rootGrantDetailWarning = null,
+                        rootGrantError = result.second ?: text(R.string.runtime_manager_inactive)
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearRootGrantDetail() {
+        updateState {
+            it.copy(
+                rootGrantDetailApp = null,
+                rootGrantDetailLoading = false,
+                rootGrantDetailWarning = null
+            )
+        }
+    }
+
+    fun handlePendingRootGrantProfileRecovery() {
+        scope.launch {
+            val record = prefs.pendingRootGrantProfileRecovery.first() ?: return@launch
+            val rootGranted = readState().rootGranted
+            val outcome = withContext(Dispatchers.IO) {
+                prefs.addRootGrantProfileReadBlockedPackage(record.packageName)
+                val access = resolveManagerAccess(rootGranted)
+                if (!access.hasNativeManagerPermission) {
+                    return@withContext false
+                }
+                val reset = RootUtils.setRootGrantProfile(
+                    RootGrantProfile(
+                        name = record.packageName,
+                        currentUid = record.uid
+                    )
+                )
+                if (reset) {
+                    prefs.clearPendingRootGrantProfileRecovery()
+                }
+                reset
+            }
+            val label = record.label.ifBlank { record.packageName }
+            updateState {
+                it.copy(
+                    rootGrantRecoveryNotice = RootGrantRecoveryNotice(
+                        title = text(R.string.root_auth_recovery_title),
+                        message = text(
+                            if (outcome) {
+                                R.string.root_auth_recovery_reset_message
+                            } else {
+                                R.string.root_auth_recovery_reset_failed_message
+                            },
+                            label
+                        )
+                    )
+                )
+            }
+            if (outcome && readState().rootGrantApps.isNotEmpty()) {
+                refreshRootGrantApps(force = true)
+            }
+        }
+    }
+
+    fun dismissRootGrantRecoveryNotice() {
+        updateState { it.copy(rootGrantRecoveryNotice = null) }
+    }
+
+    fun setRootGrantAllowed(packageName: String, allowed: Boolean) {
+        val app = readState().rootGrantApps.firstOrNull { it.packageName == packageName } ?: return
+        val updatedProfile = app.profile.copy(
+            allowSu = allowed,
+            rootUseDefault = true,
+            nonRootUseDefault = true,
+            name = app.packageName,
+            currentUid = app.uid
+        )
+        saveRootGrantProfile(updatedProfile)
+    }
+
+    fun saveRootGrantProfile(profile: RootGrantProfile) {
+        val cleanPackage = profile.name.trim()
+        if (cleanPackage.isBlank() || readState().rootGrantSavingPackage != null) return
+
+        scope.launch {
+            updateState {
+                it.copy(rootGrantSavingPackage = cleanPackage, rootGrantError = null)
+            }
+            val rootGranted = readState().rootGranted
+            val result = withContext(Dispatchers.IO) {
+                val access = resolveManagerAccess(rootGranted)
+                if (!access.hasNativeManagerPermission) {
+                    false to managerAccessErrorMessage(access, rootGranted)
+                } else {
+                    RootUtils.setRootGrantProfile(profile.copy(name = cleanPackage)) to null
+                }
+            }
+            updateState { state ->
+                if (result.first) {
+                    val savedProfile = profile.copy(name = cleanPackage)
+                    state.applySavedRootGrantProfile(cleanPackage, savedProfile).copy(
+                        rootGrantSavingPackage = null,
+                        rootGrantError = null
+                    )
+                } else {
+                    state.copy(
+                        rootGrantSavingPackage = null,
+                        rootGrantError = result.second ?: text(R.string.vm_save_failed)
+                    )
+                }
+            }
+        }
+    }
+
+
+    fun setAbkRuntimeModuleEnabled(moduleId: String, enabled: Boolean) {
+        val cleanId = moduleId.trim()
+        if (cleanId.isBlank() || readState().abkRuntimeModuleActionId != null) return
+
+        scope.launch {
+            val hasRoot = readState().rootGranted || withContext(Dispatchers.IO) {
+                RootUtils.refreshRootState()
+            }
+            if (!hasRoot) {
+                updateState { it.copy(abkRuntimeError = text(R.string.settings_operation_incomplete)) }
+                return@launch
+            }
+            val module = readState().abkRuntimeStatus?.modules?.firstOrNull { it.id == cleanId }
+            if (module?.update == true) {
+                updateState { it.copy(abkRuntimeError = text(R.string.runtime_operation_incomplete_retry)) }
+                return@launch
+            }
+            updateState {
+                it.copy(
+                    rootGranted = true,
+                    abkRuntimeModuleActionId = cleanId,
+                    abkRuntimeError = null
+                )
+            }
+            val result = withContext(Dispatchers.IO) {
+                when {
+                    module?.isAbkMetaMount() == true -> RootUtils.setAbkMetaMountEnabled(enabled)
+                    module?.preferredControlBackend() == RuntimeModuleControlBackend.ABK_CONTROL -> {
+                        val command = if (enabled) "enable $cleanId" else "disable $cleanId"
+                        val controlResult = RootUtils.writeAbkControlCommand(command)
+                        if (controlResult.success) {
+                            controlResult
+                        } else if (module.isKsuBacked()) {
+                            RootUtils.setKsuModuleEnabled(cleanId, enabled)
+                        } else {
+                            controlResult
+                        }
+                    }
+                    module?.preferredControlBackend() == RuntimeModuleControlBackend.KSU -> {
+                        RootUtils.setKsuModuleEnabled(cleanId, enabled)
+                    }
+                    else -> RootUtils.writeAbkControlCommand(
+                        if (enabled) "enable $cleanId" else "disable $cleanId"
+                    )
+                }
+            }
+            if (!result.success) {
+                updateState {
+                    it.copy(
+                        abkRuntimeModuleActionId = null,
+                        abkRuntimeError = text(R.string.settings_operation_incomplete)
+                    )
+                }
+            } else {
+                updateState {
+                    it.applyRuntimeModuleEnabled(cleanId, enabled).copy(
+                        abkRuntimeModuleActionId = null
+                    )
+                }
+            }
+        }
+    }
+
+    fun setAbkRuntimeModulePendingUninstall(moduleId: String, pending: Boolean) {
+        val cleanId = moduleId.trim()
+        if (cleanId.isBlank() || readState().abkRuntimeModuleActionId != null) return
+
+        scope.launch {
+            val hasRoot = readState().rootGranted || withContext(Dispatchers.IO) {
+                RootUtils.refreshRootState()
+            }
+            if (!hasRoot) {
+                updateState { it.copy(abkRuntimeError = text(R.string.settings_operation_incomplete)) }
+                return@launch
+            }
+            val module = readState().abkRuntimeStatus?.modules?.firstOrNull { it.id == cleanId }
+            if (module?.isKsuBacked() != true) {
+                updateState { it.copy(abkRuntimeError = text(R.string.vm_runtime_module_uninstall_unsupported)) }
+                return@launch
+            }
+            updateState {
+                it.copy(
+                    rootGranted = true,
+                    abkRuntimeModuleActionId = cleanId,
+                    abkRuntimeError = null
+                )
+            }
+            val result = withContext(Dispatchers.IO) {
+                RootUtils.setKsuModulePendingUninstall(cleanId, pending)
+            }
+            if (!result.success) {
+                updateState {
+                    it.copy(
+                        abkRuntimeModuleActionId = null,
+                        abkRuntimeError = text(R.string.settings_operation_incomplete)
+                    )
+                }
+            } else {
+                updateState {
+                    it.applyRuntimeModulePendingUninstall(cleanId, pending).copy(
+                        abkRuntimeModuleActionId = null
+                    )
+                }
+            }
+        }
+    }
+
+    fun runRuntimeModuleAction(moduleId: String) {
+        val cleanId = moduleId.trim()
+        val module = readState().abkRuntimeStatus?.modules?.firstOrNull { it.id == cleanId } ?: return
+        if (cleanId.isBlank() || (!module.actionSupported && !module.hasActionScript) || readState().abkRuntimeModuleActionId != null) return
+        scope.launch(Dispatchers.IO) {
+            updateState {
+                it.copy(
+                    abkRuntimeModuleActionId = cleanId,
+                    abkRuntimeModuleActionTitle = "${module.displayNameForRuntime()} Action",
+                    abkRuntimeModuleActionOutput = emptyList(),
+                    abkRuntimeError = null
+                )
+            }
+            val result = when (module.preferredActionBackend()) {
+                RuntimeModuleActionBackend.ABK_ACTION_SCRIPT -> {
+                    RootUtils.runModuleActionScript(
+                        module.moduleDir.ifBlank { "/data/adb/modules/$cleanId" }
+                    ) { line ->
+                        updateState { state ->
+                            state.copy(abkRuntimeModuleActionOutput = state.abkRuntimeModuleActionOutput + line)
+                        }
+                    }
+                }
+                RuntimeModuleActionBackend.KSU_ACTION -> {
+                    RootUtils.runKsuModuleAction(cleanId) { line ->
+                        updateState { state ->
+                            state.copy(abkRuntimeModuleActionOutput = state.abkRuntimeModuleActionOutput + line)
+                        }
+                    }
+                }
+                RuntimeModuleActionBackend.NONE -> {
+                    RootUtils.runModuleActionScript(
+                        module.moduleDir.ifBlank { "/data/adb/modules/$cleanId" }
+                    ) { line ->
+                        updateState { state ->
+                            state.copy(abkRuntimeModuleActionOutput = state.abkRuntimeModuleActionOutput + line)
+                        }
+                    }
+                }
+            }
+            updateState { state ->
+                val output = state.abkRuntimeModuleActionOutput.ifEmpty { result.output }
+                state.copy(
+                    abkRuntimeModuleActionId = null,
+                    abkRuntimeModuleActionOutput = output,
+                    abkRuntimeError = if (result.success) null else text(R.string.settings_operation_incomplete)
+                )
+            }
+        }
+    }
+
+    fun dismissRuntimeModuleActionOutput() {
+        updateState {
+            it.copy(
+                abkRuntimeModuleActionTitle = null,
+                abkRuntimeModuleActionOutput = emptyList()
+            )
+        }
+    }
+    fun addRuntimeModuleRepository(url: String) {
+        val cleanUrl = normalizeModuleCatalogUrl(url)
+        if (cleanUrl.isBlank()) {
+            updateState { it.copy(error = text(R.string.vm_module_repo_url_empty)) }
+            return
+        }
+
+        val current = readState().runtimeModuleRepositories
+        val existing = current.firstOrNull { it.url.equals(cleanUrl, ignoreCase = true) }
+        if (existing != null) {
+            refreshRuntimeModuleRepository(existing.id)
+            return
+        }
+
+        val repository = RuntimeModuleRepository(
+            id = UUID.randomUUID().toString(),
+            url = cleanUrl,
+            name = cleanUrl.moduleCatalogFallbackName(localizedRuntimeModuleRepoTitle())
+        )
+        saveRuntimeModuleRepositories(current + repository)
+        refreshRuntimeModuleRepository(repository.id)
+    }
+
+    fun deleteRuntimeModuleRepository(id: String) {
+        saveRuntimeModuleRepositories(readState().runtimeModuleRepositories.filterNot { it.id == id })
+    }
+
+    fun refreshRuntimeModuleRepository(id: String) {
+        val repository = readState().runtimeModuleRepositories.firstOrNull { it.id == id } ?: return
+        scope.launch {
+            updateState {
+                it.copy(refreshingRuntimeModuleRepositoryIds = it.refreshingRuntimeModuleRepositoryIds + id)
+            }
+            when (val result = github.fetchRuntimeModuleCatalog(repository.url)) {
+                is Result.Success -> {
+                    val data = result.data
+                    val updated = repository.copy(
+                        indexJsonUrl = data.indexUrl,
+                        name = data.name,
+                        modules = data.modules,
+                        lastUpdated = System.currentTimeMillis(),
+                        error = null,
+                        skippedCount = data.skippedCount
+                    )
+                    saveRuntimeModuleRepositories(
+                        readState().runtimeModuleRepositories.map {
+                            if (it.id == id) updated else it
+                        }
+                    )
+                }
+                is Result.Error -> {
+                    val updated = repository.copy(error = result.message)
+                    saveRuntimeModuleRepositories(
+                        readState().runtimeModuleRepositories.map {
+                            if (it.id == id) updated else it
+                        }
+                    )
+                }
+                Result.Loading -> Unit
+            }
+            updateState {
+                it.copy(refreshingRuntimeModuleRepositoryIds = it.refreshingRuntimeModuleRepositoryIds - id)
+            }
+        }
+    }
+
+    fun refreshAllRuntimeModuleRepositories() {
+        readState().runtimeModuleRepositories.forEach { repository ->
+            refreshRuntimeModuleRepository(repository.id)
+        }
+    }
+
+    fun refreshStaleRuntimeModuleRepositories(repositories: List<RuntimeModuleRepository>) {
+        repositories
+            .filter { it.lastUpdated <= 0L && it.error == null }
+            .forEach { repository -> refreshRuntimeModuleRepository(repository.id) }
+    }
+    fun saveRuntimeModuleRepositories(repositories: List<RuntimeModuleRepository>) {
+        val sanitized = sanitizeRuntimeModuleRepositories(repositories)
+        updateState { it.copy(runtimeModuleRepositories = sanitized) }
+        scope.launch { prefs.saveRuntimeModuleRepositoriesJson(gson.toJson(sanitized)) }
+    }
+    fun parseRuntimeModuleRepositories(json: String?): List<RuntimeModuleRepository> {
+        if (json.isNullOrBlank()) return defaultRuntimeModuleRepositories()
+        return runCatching<List<RuntimeModuleRepository>> {
+            val type = object : TypeToken<List<RuntimeModuleRepository>>() {}.type
+            sanitizeRuntimeModuleRepositories(
+                gson.fromJson<List<RuntimeModuleRepository>>(json, type).orEmpty()
+            )
+        }.getOrDefault(defaultRuntimeModuleRepositories())
+    }
+
+    fun sanitizeRuntimeModuleRepositories(
+        repositories: List<RuntimeModuleRepository>
+    ): List<RuntimeModuleRepository> {
+        return repositories
+            .mapNotNull { repository ->
+                val url = normalizeModuleCatalogUrl(repository.url)
+                if (url.isBlank()) return@mapNotNull null
+                val modules = repository.modules
+                    .mapNotNull(::sanitizeRuntimeModuleCatalogItem)
+                    .distinctBy { it.id.trim().lowercase().ifBlank { it.name.trim().lowercase() } }
+                    .sortedBy { it.name.lowercase() }
+                repository.copy(
+                    id = repository.id.ifBlank { UUID.randomUUID().toString() },
+                    url = url,
+                    indexJsonUrl = repository.indexJsonUrl.trim(),
+                    name = repository.name.trim().ifBlank { url.moduleCatalogFallbackName(localizedRuntimeModuleRepoTitle()) },
+                    modules = modules,
+                    lastUpdated = repository.lastUpdated.takeIf { it > 0L } ?: 0L,
+                    error = repository.error?.takeIf { it.isNotBlank() },
+                    skippedCount = repository.skippedCount.coerceAtLeast(0)
+                )
+            }
+            .distinctBy { it.url.lowercase() }
+            .sortedWith(compareByDescending<RuntimeModuleRepository> {
+                if (it.url == OFFICIAL_RUNTIME_MODULE_REPOSITORY_URL) 1 else 0
+            }
+                .thenBy { it.name.lowercase() })
+    }
+
+    fun sanitizeRuntimeModuleCatalogItem(item: RuntimeModuleCatalogItem): RuntimeModuleCatalogItem? {
+        val name = item.name.trim()
+        val zipUrl = item.zipUrl.trim()
+        if (name.isBlank() || zipUrl.isBlank()) return null
+        return item.copy(
+            id = item.id.trim().ifBlank { name.lowercase().replace(' ', '_') },
+            name = name,
+            version = item.version.trim(),
+            author = item.author.trim(),
+            description = item.description.trim(),
+            zipUrl = zipUrl,
+            changelog = item.changelog.trim(),
+            support = item.support.trim(),
+            donate = item.donate.trim(),
+            website = item.website.trim(),
+            cover = item.cover.trim(),
+            icon = item.icon.trim()
+        )
+    }
+
+    fun defaultRuntimeModuleRepositories(): List<RuntimeModuleRepository> = listOf(
+        RuntimeModuleRepository(
+            id = OFFICIAL_RUNTIME_MODULE_REPOSITORY_ID,
+            url = OFFICIAL_RUNTIME_MODULE_REPOSITORY_URL,
+            name = localizedRuntimeModuleRepoTitle()
+        )
+    )
+
+    private fun AbkRuntimeModule.displayNameForRuntime(): String =
+        name.ifBlank { id.ifBlank { text(R.string.vm_runtime_module_default_name) } }
+}
+
+private operator fun <A, B, C, D> RuntimeQuadruple<A, B, C, D>.component1() = first
+private operator fun <A, B, C, D> RuntimeQuadruple<A, B, C, D>.component2() = second
+private operator fun <A, B, C, D> RuntimeQuadruple<A, B, C, D>.component3() = third
+private operator fun <A, B, C, D> RuntimeQuadruple<A, B, C, D>.component4() = fourth
+
+internal fun MainUiState.applySavedRootGrantProfile(
+    packageName: String,
+    savedProfile: RootGrantProfile
+): MainUiState {
+    val cleanPackage = packageName.trim()
+    if (cleanPackage.isBlank()) return this
+    val detailMatches = rootGrantDetailApp?.packageName == cleanPackage
+    return copy(
+        rootGrantApps = rootGrantApps.map { app ->
+            if (app.packageName != cleanPackage) {
+                app
+            } else {
+                val profileLoaded = app.profileLoaded || detailMatches
+                val profile = if (profileLoaded) {
+                    savedProfile.copy(
+                        name = cleanPackage,
+                        currentUid = app.uid
+                    )
+                } else {
+                    app.profile.copy(
+                        name = cleanPackage,
+                        currentUid = app.uid,
+                        allowSu = savedProfile.allowSu
+                    )
+                }
+                app.copy(
+                    profile = profile,
+                    profileLoaded = profileLoaded
+                )
+            }
+        },
+        rootGrantDetailApp = rootGrantDetailApp?.let { app ->
+            if (app.packageName == cleanPackage) {
+                app.copy(
+                    profile = savedProfile.copy(
+                        name = cleanPackage,
+                        currentUid = app.uid
+                    ),
+                    profileLoaded = true
+                )
+            } else {
+                app
+            }
+        }
+    )
+}
+
+internal fun MainUiState.applyRuntimeModuleEnabled(
+    moduleId: String,
+    enabled: Boolean
+): MainUiState = applyRuntimeModulePatch(moduleId) { module ->
+    module.copy(enabled = enabled)
+}
+
+internal fun MainUiState.applyRuntimeModulePendingUninstall(
+    moduleId: String,
+    pending: Boolean
+): MainUiState = applyRuntimeModulePatch(moduleId) { module ->
+    module.copy(remove = pending)
+}
+
+private inline fun MainUiState.applyRuntimeModulePatch(
+    moduleId: String,
+    transform: (AbkRuntimeModule) -> AbkRuntimeModule
+): MainUiState {
+    val cleanId = moduleId.trim()
+    val status = abkRuntimeStatus ?: return this
+    if (cleanId.isBlank()) return this
+    return copy(
+        abkRuntimeStatus = status.copy(
+            modules = status.modules.map { module ->
+                if (module.id == cleanId) transform(module) else module
+            }
+        )
+    )
+}

@@ -1,0 +1,163 @@
+name: OnePlus 内核构建-自定义
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      cpu:
+        description: "OnePlus/Oplus CPU 分支"
+        required: true
+        type: choice
+        options:
+          - sm8850
+          - sm8750
+          - sm8735
+          - mt6991
+          - sm8650
+          - mt6989
+          - sm8635
+          - sm8550
+          - sm8450
+          - sm8475
+          - sm7675
+          - sm7635
+          - sm7550
+          - sm6375
+        default: sm8650
+      device_manifest:
+        description: "ABK 机型配置（值为上游 XML 名称，构建摘要会明确显示系统版本）"
+        required: true
+        type: choice
+        options:
+          - oneplus_15
+          - oneplus_15t
+          - oneplus_13_b
+          - oneplus_13s_b
+          - oneplus_13t_b
+          - oneplus_ace5_pro_b
+          - oneplus_ace_6
+          - oneplus_pad_2_pro_b
+          - oneplus_pad_3_b
+          - oneplus_ace5_ultra_b
+          - oneplus_turbo_6
+          - oneplus_12_b
+          - oneplus_ace3_pro_b
+          - oneplus_ace5_b
+          - oneplus_13r_b
+          - oneplus_pad2_b
+          - oneplus_pad_pro_b
+          - oneplus_ace5_race_b
+          - oneplus_nord_5_b
+          - oneplus_11_b
+          - oneplus_12r_b
+          - oneplus_ace2_pro_b
+          - oneplus_ace3_b
+          - oneplus_open_b
+          - oneplus_10t_v
+          - oneplus_11r_b
+          - oneplus_ace2_b
+          - oneplus_ace_pro_v
+          - oneplus_10_pro_b
+          - oneplus_ace_3v_b
+          - oneplus_turbo_6v
+          - oneplus_nord_4_b
+          - oneplus_nord_ce4_lite_5g
+          - oneplus_nord_ce4_b
+        default: oneplus_12_b
+      android_version:
+        description: "内核 Android KMI 版本"
+        required: true
+        type: choice
+        options:
+          - android16
+          - android15
+          - android14
+          - android13
+          - android12
+        default: android14
+      kernel_version:
+        description: "内核版本"
+        required: true
+        type: choice
+        options:
+          - "6.12"
+          - "6.6"
+          - "6.1"
+          - "5.15"
+          - "5.10"
+        default: "6.1"
+      ksu_variant:
+        description: "KernelSU 变体"
+        required: true
+        type: choice
+        options:
+          - Official
+          - SukiSU
+          - ReSukiSU
+          - None
+        default: SukiSU
+      enable_susfs:
+        description: "启用 SUSFS（android14/6.1、android15/6.6、android16/6.12）"
+        required: false
+        type: boolean
+        default: false
+      use_kpm:
+        description: "启用 KPM（仅 SukiSU/ReSukiSU）"
+        required: false
+        type: boolean
+        default: false
+      use_lz4kd:
+        description: "启用 lz4kd"
+        required: false
+        type: boolean
+        default: false
+      use_bbg:
+        description: "启用 BBG 基带防护"
+        required: false
+        type: boolean
+        default: true
+      use_bbr:
+        description: "启用 BBR"
+        required: false
+        type: boolean
+        default: false
+      use_proxy_optimization:
+        description: "启用代理相关网络优化（MTK 请关闭）"
+        required: false
+        type: boolean
+        default: true
+      use_unicode_bypass:
+        description: "启用 Unicode 零宽绕过修复"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  get-manager:
+    name: 上传管理器和 SUSFS 模块
+    if: ${{ inputs.ksu_variant != 'None' }}
+    uses: ./.github/workflows/get-manager.yml
+    secrets: inherit
+    with:
+      kernelsu_variant: ${{ inputs.ksu_variant }}
+
+  build-oneplus-kernel:
+    name: "${{ inputs.device_manifest }}-${{ inputs.kernel_version }}-${{ inputs.ksu_variant }}"
+    uses: ./.github/workflows/oneplus-build.yml
+    secrets: inherit
+    with:
+      cpu: ${{ inputs.cpu }}
+      device_manifest: ${{ inputs.device_manifest }}
+      android_version: ${{ inputs.android_version }}
+      kernel_version: ${{ inputs.kernel_version }}
+      ksu_variant: ${{ inputs.ksu_variant }}
+      enable_susfs: ${{ inputs.enable_susfs }}
+      use_kpm: ${{ inputs.use_kpm }}
+      use_lz4kd: ${{ inputs.use_lz4kd }}
+      use_bbg: ${{ inputs.use_bbg }}
+      use_bbr: ${{ inputs.use_bbr }}
+      use_proxy_optimization: ${{ inputs.use_proxy_optimization }}
+      use_unicode_bypass: ${{ inputs.use_unicode_bypass }}

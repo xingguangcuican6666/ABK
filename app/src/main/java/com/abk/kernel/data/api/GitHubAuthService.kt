@@ -11,7 +11,7 @@ interface GitHubAuthService {
     @FormUrlEncoded
     suspend fun requestDeviceCode(
         @Field("client_id") clientId: String,
-        @Field("scope") scope: String = "repo workflow"
+        @Field("scope") scope: String = "repo workflow write:packages"
     ): Response<DeviceCodeResponse>
 
     @POST("login/oauth/access_token")

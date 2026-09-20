@@ -40,7 +40,6 @@ on:
           - SukiSU
           - ReSukiSU
           - Official
-          #- Next
         default: ReSukiSU
       kernelsu_branch:
         description: "KSU 分支"
@@ -48,7 +47,8 @@ on:
         options:
           - Stable(标准)
           - Dev(开发)
-        default: Stable(标准)
+          - Latest(最新)
+        default: Latest(最新)
 
       # ==================== 可选配置 ====================
       version:
@@ -109,11 +109,11 @@ on:
 
       # ==================== ZRAM 扩展选项 ====================
       zram_full_algo:
-        description: "启用 ZRAM 完整算法支持（LZO/LZ4/LZ4HC/LZ4K/LZ4KD/DEFLATE/842/ZSTD，默认 lzo-rle）"
+        description: "启用 ZRAM 完整算法支持（6.12 自动跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS）"
         type: boolean
         default: false
       zram_extra_algos:
-        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；仅在未启用完整算法时生效）"
+        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；6.12 会忽略 lz4k/lz4kd/lz4k_oplus）"
         type: string
         default: ""
         required: false
@@ -124,6 +124,16 @@ on:
         type: string
         default: ""
         required: false
+      custom_external_modules:
+        description: "自定义外部模块（兼容旧 repo;stage，也支持 module:repo;stage 与 set:repo#child;stage，用 | 分隔）"
+        type: string
+        default: ""
+        required: false
+      custom_kernel_options:
+        description: "自定义内核选项（每行一条 Kconfig/defconfig 片段）"
+        required: false
+        type: string
+        default: ""
 
       # ==================== 构建版本选择 ====================
       build_a12_5_10:
@@ -159,6 +169,7 @@ jobs:
     secrets: inherit
     with:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
+      kernelsu_branch: ${{ inputs.kernelsu_branch }}
 
   # ==================== Android 12 - 5.10 构建 ====================
   build-a12-5-10:
@@ -182,6 +193,8 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
+      custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       called_from_main: true
 
   # ==================== Android 13 - 5.15 构建 ====================
@@ -206,6 +219,8 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
+      custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       called_from_main: true
 
   # ==================== Android 14 - 6.1 构建 ====================
@@ -230,6 +245,8 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
+      custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       called_from_main: true
 
   # ==================== Android 15 - 6.6 构建 ====================
@@ -254,6 +271,8 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
+      custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       called_from_main: true
 
   # ==================== Android 16 - 6.12 构建 ====================
@@ -278,6 +297,8 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
+      custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       called_from_main: true
 
   # ==================== 收集补丁冲突文件 ====================
@@ -349,7 +370,6 @@ jobs:
         run: |
           # KSU 显示名称
           case "${{ inputs.kernelsu_variant }}" in
-            "Next")      KSU_NAME="KernelSU-Next" ;;
             "Official")  KSU_NAME="KernelSU" ;;
             "SukiSU")    KSU_NAME="SukiSU" ;;
             "ReSukiSU")  KSU_NAME="ReSukiSU" ;;
@@ -426,7 +446,6 @@ jobs:
           case "${{ inputs.kernelsu_variant }}" in
             "Official") BRANCH="main" ;;
             "SukiSU"|"ReSukiSU") BRANCH="main" ;;
-            "Next") BRANCH="dev" ;;
             *) echo "错误: 未知变体" >&2; exit 1 ;;
           esac
           echo "KSU_BRANCH=$BRANCH" >> $GITHUB_ENV
@@ -437,7 +456,6 @@ jobs:
         run: |
           case "${{ inputs.kernelsu_variant }}" in
             "Official") REPO_URL="https://github.com/tiann/KernelSU.git"; REPO_URL2="tiann/KernelSU" ;;
-            "Next") REPO_URL="https://github.com/KernelSU-Next/KernelSU-Next.git"; REPO_URL2="KernelSU-Next/KernelSU-Next" ;;
             "SukiSU") REPO_URL="https://github.com/SukiSU-Ultra/SukiSU-Ultra.git"; REPO_URL2="SukiSU-Ultra/SukiSU-Ultra" ;;
             "ReSukiSU") REPO_URL="https://github.com/ReSukiSU/ReSukiSU.git"; REPO_URL2="ReSukiSU/ReSukiSU" ;;
           esac
@@ -448,7 +466,7 @@ jobs:
           fi
 
           OFFICIAL_STABLE_REF="3f388ef137c78e1ca0c92c0ada3b8717cdcc4302"
-          SUKISU_STABLE_REF="a992f224f5ea5a69b56ba20e925379c9a226f2b2"
+          SUKISU_STABLE_REF="c5af9eadac43b1f0b9751471be78e6eef681554b"
           RESUKISU_STABLE_REF="3d790eaaabe9e7e33d938bbf836e0f247121e79e"
 
           OFFICIAL_DEV_REF="$OFFICIAL_STABLE_REF"
@@ -460,13 +478,11 @@ jobs:
               OFFICIAL_REF="$OFFICIAL_STABLE_REF"
               SUKISU_REF="$SUKISU_STABLE_REF"
               RESUKISU_REF="$RESUKISU_STABLE_REF"
-              NEXT_REF="main"
               ;;
             "Dev(开发)")
               OFFICIAL_REF="$OFFICIAL_DEV_REF"
               SUKISU_REF="$SUKISU_DEV_REF"
               RESUKISU_REF="$RESUKISU_DEV_REF"
-              NEXT_REF="dev"
               ;;
             *) echo "错误: 未知 KSU 分支 $branch_input" >&2; exit 1 ;;
           esac
@@ -475,7 +491,6 @@ jobs:
             "Official") KSU_REF="$OFFICIAL_REF"; KSU_URL="https://github.com/$REPO_URL2/commit/$KSU_REF" ;;
             "SukiSU") KSU_REF="$SUKISU_REF"; KSU_URL="https://github.com/$REPO_URL2/commit/$KSU_REF" ;;
             "ReSukiSU") KSU_REF="$RESUKISU_REF"; KSU_URL="https://github.com/$REPO_URL2/commit/$KSU_REF" ;;
-            "Next") KSU_REF="$NEXT_REF"; KSU_URL="https://github.com/$REPO_URL2/tree/$KSU_REF" ;;
             *) echo "错误: 未知变体" >&2; exit 1 ;;
           esac
 
@@ -583,8 +598,7 @@ jobs:
 
           | 文件类型 | 用途 |
           |:---|:---|
-          | \`*_kernel-*.zip\` | AnyKernel3 内核刷入包 |
-          | \`*.img\` | boot、vendor_boot 等镜像文件 |
+          | \`*.bundle.zip\` | 已签名的 AnyKernel3 / boot 镜像刷入包 |
           | \`*.apk\` | KernelSU 管理器 |
           | \`susfs-*.zip\` | SUSFS 配套模块 |
           ---
@@ -678,34 +692,64 @@ jobs:
             --notes-file release_body.md \
             $PRERELEASE_FLAG
 
+      - name: 准备 Release 合规包
+        run: |
+          set -euo pipefail
+          mkdir -p release-bundles
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path("downloaded-artifacts")
+          manager_assets = []
+          kernel_assets = []
+
+          for file in sorted(root.rglob("*")):
+              if not file.is_file():
+                  continue
+              rel = file.relative_to(root)
+              rel_posix = rel.as_posix()
+              top = rel.parts[0] if rel.parts else ""
+              if "-Rejects/" in rel_posix:
+                  continue
+
+              if file.suffix.lower() == ".apk" or top.startswith("susfs-"):
+                  manager_assets.append(str(file))
+                  continue
+
+              if "_kernel-" in top and file.name.endswith(".bundle.zip"):
+                  kernel_assets.append(str(file))
+
+          Path("release-manager-module-bundles.txt").write_text(
+              "".join(f"{path}\n" for path in manager_assets),
+              encoding="utf-8"
+          )
+          Path("release-kernel-bundles.txt").write_text(
+              "".join(f"{path}\n" for path in kernel_assets),
+              encoding="utf-8"
+          )
+          PY
+
       # ==================== 上传管理器和模块 ====================
       - name: 上传管理器和 SUSFS 模块
         continue-on-error: true
         run: |
-          echo "准备上传 APK 与 SUSFS 模块..."
-          apk_count=$(find ./downloaded-artifacts -type f -name "*.apk" | wc -l || true)
-          sus_count=$(find ./downloaded-artifacts -type f -path "./downloaded-artifacts/susfs-*/*" | wc -l || true)
-          echo "APK files: ${apk_count}"
-          echo "SUSFS files: ${sus_count}"
-          find ./downloaded-artifacts -type f -name "*.apk" -print0 | \
-          while IFS= read -r -d '' f; do
+          echo "准备上传 APK 与 SUSFS 模块合规包..."
+          bundle_count=$(wc -l < release-manager-module-bundles.txt | tr -d '[:space:]')
+          echo "Bundle files: ${bundle_count}"
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
             gh release upload "$NEW_TAG" "$f" || true
-          done
-          find ./downloaded-artifacts -type f -path "./downloaded-artifacts/susfs-*/*" -print0 | \
-          while IFS= read -r -d '' f; do
-            gh release upload "$NEW_TAG" "$f" || true
-          done
+          done < release-manager-module-bundles.txt
 
       # ==================== 上传内核产物 ====================
       - name: 上传内核产物
         run: |
-          for file in ./downloaded-artifacts/*_kernel-*/*; do
-            [ -d "$file" ] && continue
-            # 跳过 -Rejects 目录中的文件（已在 collect-rejects 中汇总处理）
-            [[ "$file" == *-Rejects/* ]] && continue
+          while IFS= read -r file; do
+            [ -f "$file" ] || continue
             echo "上传 $file..."
             gh release upload "$NEW_TAG" "$file"
-          done
+          done < release-kernel-bundles.txt
 
       # ==================== 构建摘要 ====================
       - name: 构建摘要

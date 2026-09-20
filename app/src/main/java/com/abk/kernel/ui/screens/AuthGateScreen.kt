@@ -8,8 +8,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -18,7 +20,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -27,46 +32,208 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.abk.kernel.R
 import com.abk.kernel.ui.components.ExpressiveHeroCard
+import com.abk.kernel.ui.components.ShimmerLinearProgress
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
-import com.abk.kernel.ui.theme.uiSurfaceColor
+import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
 import com.abk.kernel.viewmodel.AuthStep
 import com.abk.kernel.viewmodel.MainViewModel
+import kotlin.math.pow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+private const val OOBE_SKIP_LOADING_DELAY_MS = 320L
+private const val OOBE_SKIP_EXIT_DELAY_MS = 280L
+private const val OOBE_SKIP_BACK_VISUAL_EXPONENT = 1.8f
+private const val OOBE_SKIP_BACK_SCALE_DELTA = 0.09f
+private val OOBE_SKIP_MAX_CORNER = 32.dp
 
 @Composable
-fun AuthGateScreen(vm: MainViewModel) {
+fun OobeScreen(vm: MainViewModel) {
     val state by vm.uiState.collectAsState()
+    val scope = rememberCoroutineScope()
+    var skipInFlight by remember { mutableStateOf(false) }
+    var skipExitStarted by remember { mutableStateOf(false) }
+    val motionScheme = MaterialTheme.motionScheme
+    val animatedSkipExitProgress by animateFloatAsState(
+        targetValue = if (skipExitStarted) 1f else 0f,
+        animationSpec = motionScheme.fastSpatialSpec(),
+        label = "oobe-skip-exit-progress"
+    )
+    val visualSkipExitProgress = animatedSkipExitProgress
+        .coerceIn(0f, 1f)
+        .pow(OOBE_SKIP_BACK_VISUAL_EXPONENT)
+    val density = LocalDensity.current
 
-    LaunchedEffect(Unit) {
-        vm.checkRoot()
+    fun requestSkip() {
+        if (skipInFlight) return
+        skipInFlight = true
+        scope.launch {
+            delay(OOBE_SKIP_LOADING_DELAY_MS)
+            skipExitStarted = true
+            delay(OOBE_SKIP_EXIT_DELAY_MS)
+            vm.skipOobe()
+        }
     }
 
-    when (state.authStep) {
-        AuthStep.CHECK_ROOT -> RootCheckScreen(
-            isLoading = state.isLoading,
-            onRequestRoot = { vm.requestRoot() }
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
+        val exitWidthPx = with(density) { maxWidth.toPx() }
+        val exitCorner = with(density) {
+            (OOBE_SKIP_MAX_CORNER.toPx() * visualSkipExitProgress).toDp()
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = exitWidthPx * animatedSkipExitProgress
+                    scaleX = 1f - OOBE_SKIP_BACK_SCALE_DELTA * visualSkipExitProgress
+                    scaleY = 1f - OOBE_SKIP_BACK_SCALE_DELTA * visualSkipExitProgress
+                    alpha = 1f - 0.08f * visualSkipExitProgress
+                    shape = RoundedCornerShape(exitCorner)
+                    clip = visualSkipExitProgress > 0.01f
+                }
+        ) {
+            when (state.authStep) {
+                AuthStep.INTRO -> OobeIntroScreen(
+                    loggedIn = state.isLoggedIn,
+                    skipping = skipInFlight,
+                    onContinue = {
+                        if (!skipInFlight) {
+                            if (state.isLoggedIn) {
+                                vm.openBuildOobe()
+                            } else {
+                                vm.continueOobeToLogin()
+                            }
+                        }
+                    },
+                    onSkip = ::requestSkip
+                )
+                AuthStep.LOGIN -> LoginScreen(
+                    isLoading = state.isLoading,
+                    userCode = state.userCode,
+                    verificationUri = state.verificationUri,
+                    isPolling = state.isPollingToken,
+                    error = state.error,
+                    onLogin = { if (!skipInFlight) vm.startDeviceFlow() },
+                    onSkip = ::requestSkip,
+                    skipInFlight = skipInFlight,
+                    onClearError = { vm.clearError() }
+                )
+                AuthStep.FORK_CHECK -> ForkCheckScreen(
+                    isLoading = state.isLoading,
+                    hasFork = state.forkRepo != null,
+                    behindBy = state.behindBy,
+                    showSyncDialog = false,
+                    error = state.error,
+                    onFork = { if (!skipInFlight) vm.forkRepo() },
+                    onSync = { if (!skipInFlight) vm.syncFork() },
+                    onSkip = ::requestSkip,
+                    showSkipAction = true,
+                    skipInFlight = skipInFlight,
+                    onClearError = { vm.clearError() }
+                )
+            }
+        }
+
+        if (skipInFlight) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        LoadingIndicator(Modifier.size(28.dp))
+                        Text(
+                            text = stringResource(R.string.loading),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OobeIntroScreen(
+    loggedIn: Boolean,
+    skipping: Boolean,
+    onContinue: () -> Unit,
+    onSkip: () -> Unit
+) {
+    AuthShell {
+        ExpressiveHeroCard(
+            title = stringResource(R.string.oobe_title),
+            subtitle = stringResource(R.string.oobe_desc),
+            icon = Icons.Default.RocketLaunch,
+            badge = {
+                ExpressiveStatusChip(
+                    label = stringResource(R.string.oobe_first_launch),
+                    icon = Icons.Default.AutoAwesome,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         )
-        AuthStep.LOGIN -> LoginScreen(
-            isLoading = state.isLoading,
-            userCode = state.userCode,
-            verificationUri = state.verificationUri,
-            isPolling = state.isPollingToken,
-            error = state.error,
-            onLogin = { vm.startDeviceFlow() },
-            onClearError = { vm.clearError() }
-        )
-        AuthStep.FORK_CHECK -> ForkCheckScreen(
-            isLoading = state.isLoading,
-            hasFork = state.forkRepo != null,
-            behindBy = state.behindBy,
-            showSyncDialog = state.showSyncDialog,
-            error = state.error,
-            onFork = { vm.forkRepo() },
-            onSync = { vm.syncFork() },
-            onSkip = { vm.dismissSyncDialog() },
-            onClearError = { vm.clearError() }
-        )
-        AuthStep.READY -> { /* handled by parent */ }
+        ExpressiveSectionCard(
+            title = stringResource(R.string.oobe_build_title),
+            subtitle = stringResource(R.string.oobe_build_desc),
+            icon = Icons.Default.Code
+        ) {
+            Text(
+                stringResource(R.string.oobe_build_detail),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        ExpressiveSectionCard(
+            title = stringResource(R.string.oobe_flash_title),
+            subtitle = stringResource(R.string.oobe_flash_desc),
+            icon = Icons.Default.CloudDownload
+        ) {
+            Text(
+                stringResource(R.string.oobe_flash_detail),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Button(
+            onClick = onContinue,
+            enabled = !skipping,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+        ) {
+            Icon(if (loggedIn) Icons.Default.ForkRight else Icons.Default.Code, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (loggedIn) {
+                    stringResource(R.string.oobe_continue_setup)
+                } else {
+                    stringResource(R.string.login_github)
+                }
+            )
+        }
+        TextButton(onClick = onSkip, enabled = !skipping) {
+            Text(stringResource(R.string.oobe_skip_for_now))
+        }
     }
 }
 
@@ -81,19 +248,19 @@ private fun RootCheckScreen(isLoading: Boolean, onRequestRoot: () -> Unit) {
             icon = Icons.Default.AdminPanelSettings,
             badge = {
                 ExpressiveStatusChip(
-                    label = "Root 权限必需",
+                    label = stringResource(R.string.root_required_badge),
                     icon = Icons.Default.Lock,
                     color = MaterialTheme.colorScheme.tertiary
                 )
             }
         )
         ExpressiveSectionCard(
-            title = "ABK 将在本机确认能力",
-            subtitle = "只在需要刷写、安装模块和检测 Root 相关能力时调用 Root。内核版本识别不依赖 Root。",
+            title = stringResource(R.string.root_local_capability_title),
+            subtitle = stringResource(R.string.root_local_capability_desc),
             icon = Icons.Default.Security
         ) {
             Text(
-                "授权后会自动进入 GitHub 登录和 fork 检查流程。",
+                stringResource(R.string.root_after_auth_flow),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -124,6 +291,8 @@ private fun LoginScreen(
     isPolling: Boolean,
     error: String?,
     onLogin: () -> Unit,
+    onSkip: () -> Unit,
+    skipInFlight: Boolean,
     onClearError: () -> Unit
 ) {
     val context = LocalContext.current
@@ -133,9 +302,9 @@ private fun LoginScreen(
         AlertDialog(
             onDismissRequest = { showConsentDialog = false },
             icon = { Icon(Icons.Default.VerifiedUser, null) },
-            title = { Text("授权 GitHub 访问") },
+            title = { Text(stringResource(R.string.github_auth_title)) },
             text = {
-                Text("ABK 将请求 repo 与 workflow 权限，用于检查/同步您的 fork，并触发内核构建工作流。")
+                Text(stringResource(R.string.github_auth_desc))
             },
             confirmButton = {
                 Button(onClick = {
@@ -160,7 +329,11 @@ private fun LoginScreen(
             contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
             badge = {
                 ExpressiveStatusChip(
-                    label = if (isPolling) "等待 GitHub 确认" else "需要 GitHub 授权",
+                    label = if (isPolling) {
+                        stringResource(R.string.github_waiting_confirm)
+                    } else {
+                        stringResource(R.string.github_auth_required)
+                    },
                     icon = if (isPolling) Icons.Default.Sync else Icons.Default.VerifiedUser,
                     color = if (isPolling) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary
                 )
@@ -185,7 +358,7 @@ private fun LoginScreen(
         if (userCode == null) {
             Button(
                 onClick = { showConsentDialog = true },
-                enabled = !isLoading,
+                enabled = !isLoading && !skipInFlight,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
                 if (isLoading) {
@@ -197,28 +370,34 @@ private fun LoginScreen(
                 }
             }
         }
+
+        TextButton(onClick = onSkip, enabled = !skipInFlight) {
+            Text(stringResource(R.string.oobe_skip_for_now))
+        }
     }
 }
 
 @Composable
 private fun AuthShell(content: @Composable ColumnScope.() -> Unit) {
-    Scaffold(containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surface)) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(uiSurfaceColor(MaterialTheme.colorScheme.surface))
-                .padding(padding),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
+    CompositionLocalProvider(LocalUiSurfaceAlpha provides 1f) {
+        Scaffold(containerColor = MaterialTheme.colorScheme.surface) { padding ->
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 24.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-                content = content
-            )
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 24.dp)
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    content = content
+                )
+            }
         }
     }
 }
@@ -314,6 +493,8 @@ private fun ForkCheckScreen(
     onFork: () -> Unit,
     onSync: () -> Unit,
     onSkip: () -> Unit,
+    showSkipAction: Boolean = false,
+    skipInFlight: Boolean = false,
     onClearError: () -> Unit
 ) {
     if (showSyncDialog) {
@@ -322,7 +503,7 @@ private fun ForkCheckScreen(
             icon = { Icon(Icons.Default.Sync, null) },
             title = { Text(stringResource(R.string.sync_title)) },
             text = {
-                Text("${stringResource(R.string.sync_desc)}\n\n落后 $behindBy 个提交。")
+                Text("${stringResource(R.string.sync_desc)}\n\n${stringResource(R.string.sync_behind_commits, behindBy)}")
             },
             confirmButton = {
                 Button(onClick = onSync) { Text(stringResource(R.string.sync_action)) }
@@ -336,8 +517,8 @@ private fun ForkCheckScreen(
     AuthShell {
         if (isLoading) {
             ExpressiveHeroCard(
-                title = "正在检查 Fork",
-                subtitle = "ABK 正在确认你的仓库、工作流和上游同步状态。",
+                title = stringResource(R.string.fork_checking_title),
+                subtitle = stringResource(R.string.fork_checking_desc),
                 icon = Icons.Default.Sync,
                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                 contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -349,7 +530,10 @@ private fun ForkCheckScreen(
                     )
                 }
             ) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                ShimmerLinearProgress(
+                    progress = { null },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         } else if (!hasFork) {
             ExpressiveHeroCard(
@@ -358,7 +542,7 @@ private fun ForkCheckScreen(
                 icon = Icons.Default.ForkRight,
                 badge = {
                     ExpressiveStatusChip(
-                        label = "将创建你的构建仓库",
+                        label = stringResource(R.string.fork_create_badge),
                         icon = Icons.Default.CallSplit,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -366,6 +550,7 @@ private fun ForkCheckScreen(
             )
             Button(
                 onClick = onFork,
+                enabled = !skipInFlight,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
                 Icon(Icons.Default.ForkRight, null)
@@ -374,14 +559,22 @@ private fun ForkCheckScreen(
             }
         } else {
             ExpressiveHeroCard(
-                title = "仓库已准备",
-                subtitle = if (behindBy > 0) "你的 fork 落后上游 $behindBy 个提交，建议同步后再构建。" else "Fork、权限和工作流状态已通过检查。",
+                title = stringResource(R.string.fork_ready_title),
+                subtitle = if (behindBy > 0) {
+                    stringResource(R.string.fork_ready_behind, behindBy)
+                } else {
+                    stringResource(R.string.fork_ready_ok)
+                },
                 icon = Icons.Default.CheckCircle,
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                 badge = {
                     ExpressiveStatusChip(
-                        label = if (behindBy > 0) "建议同步" else "可以进入主界面",
+                        label = if (behindBy > 0) {
+                            stringResource(R.string.fork_sync_recommended)
+                        } else {
+                            stringResource(R.string.fork_enter_main)
+                        },
                         icon = if (behindBy > 0) Icons.Default.Warning else Icons.Default.Verified,
                         color = if (behindBy > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
                     )
@@ -390,6 +583,11 @@ private fun ForkCheckScreen(
         }
         if (error != null) {
             ErrorCard(error = error, onClearError = onClearError)
+        }
+        if (showSkipAction) {
+            TextButton(onClick = onSkip, enabled = !skipInFlight) {
+                Text(stringResource(R.string.oobe_skip_for_now))
+            }
         }
     }
 }
@@ -409,7 +607,11 @@ private fun ErrorCard(error: String, onClearError: () -> Unit) {
                 modifier = Modifier.weight(1f)
             )
             IconButton(onClick = onClearError) {
-                Icon(Icons.Default.Close, contentDescription = "关闭错误提示", tint = MaterialTheme.colorScheme.error)
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = stringResource(R.string.close_error),
+                    tint = MaterialTheme.colorScheme.error
+                )
             }
         }
     }

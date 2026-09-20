@@ -2,6 +2,7 @@ package com.abk.kernel.ui.webui
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -17,7 +18,9 @@ import android.widget.Toast
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.abk.kernel.R
 import com.abk.kernel.data.repository.PreferencesRepository
+import com.abk.kernel.utils.LocaleHelper
 import com.abk.kernel.utils.RootUtils
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -29,6 +32,10 @@ import kotlin.concurrent.thread
 class ModuleWebUiActivity : Activity() {
 
     private lateinit var webView: WebView
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.applyLocale(newBase))
+    }
     private val moduleId: String by lazy {
         intent.getStringExtra(EXTRA_MODULE_ID).orEmpty().trim()
     }
@@ -42,18 +49,29 @@ class ModuleWebUiActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (moduleId.isBlank()) {
-            Toast.makeText(this, "模块不可用", Toast.LENGTH_SHORT).show()
+        if (!RootUtils.isSafeModuleIdForPath(moduleId)) {
+            Toast.makeText(this, getString(R.string.runtime_module_unavailable), Toast.LENGTH_SHORT).show()
             finish()
             return
         }
 
         enterImmersiveMode()
         title = moduleName
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+        thread(name = "abk-webui-init") {
             val debugEnabled = runCatching {
-                runBlocking { PreferencesRepository(this@ModuleWebUiActivity).webViewDebugEnabled.first() }
+                runBlocking {
+                    PreferencesRepository(applicationContext).webViewDebugEnabled.first()
+                }
             }.getOrDefault(false)
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                setupWebView(debugEnabled)
+            }
+        }
+    }
+
+    private fun setupWebView(debugEnabled: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             WebView.setWebContentsDebuggingEnabled(debugEnabled)
         }
         webView = WebView(this).apply {
@@ -69,7 +87,7 @@ class ModuleWebUiActivity : Activity() {
             addJavascriptInterface(ModuleWebBridge(this@ModuleWebUiActivity, this, moduleId, moduleDir), "ksu")
         }
         setContentView(webView)
-        webView.loadUrl(WEB_ORIGIN)
+        loadModuleWebPage()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -82,6 +100,24 @@ class ModuleWebUiActivity : Activity() {
             webView.destroy()
         }
         super.onDestroy()
+    }
+
+    private fun loadModuleWebPage() {
+        thread(name = "abk-webui-load") {
+            val indexHtml = RootUtils.readModuleWebResource(moduleId, "index.html")
+                ?: RootUtils.readModuleWebResource(moduleId, "index.htm")
+            if (indexHtml == null) {
+                webView.post {
+                    Toast.makeText(this, getString(R.string.runtime_module_unavailable), Toast.LENGTH_SHORT).show()
+                    finish()
+                }
+                return@thread
+            }
+            val html = indexHtml.toString(Charsets.UTF_8)
+            webView.post {
+                webView.loadDataWithBaseURL(WEB_ORIGIN, html, "text/html", "utf-8", WEB_ORIGIN)
+            }
+        }
     }
 
     private fun enterImmersiveMode() {
