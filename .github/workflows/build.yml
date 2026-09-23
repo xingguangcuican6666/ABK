@@ -35,6 +35,10 @@ on:
         required: false
         type: string
         default: ""
+      kernel_version_override:
+        required: false
+        type: string
+        default: ""
       source_kernel_version:
         required: false
         type: string
@@ -1075,6 +1079,7 @@ jobs:
           SOURCE_FULL_KERNEL_VERSION: ${{ inputs.source_full_kernel_version }}
           SOURCE_ANDROID_VERSION: ${{ inputs.source_android_version }}
           SOURCE_PATCH_LEVEL: ${{ inputs.os_patch_level }}
+          KERNEL_VERSION_OVERRIDE: ${{ inputs.kernel_version_override }}
         run: |
           set -euo pipefail
           git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1.git gcc
@@ -1155,6 +1160,7 @@ jobs:
               --os-patch-level "$SOURCE_PATCH_LEVEL" \
               --defconfigs "$SOURCE_DEFCONFIGS" \
               --device-label "$SOURCE_DEVICE_LABEL" \
+              --kernel-version-override "$KERNEL_VERSION_OVERRIDE" \
               --github-output "$GITHUB_OUTPUT"
 
             python3 "$GITHUB_WORKSPACE/.github/scripts/custom-source.py" merge-defconfigs \

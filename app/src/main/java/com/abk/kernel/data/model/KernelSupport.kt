@@ -290,9 +290,10 @@ object KernelSupport {
         val normalizedKsuBranch = normalizeKsuBranch(
             if (isOnePlus || ksuVariant == KSU_VARIANT_NONE) KSU_BRANCH_STABLE else config.kernelsuBranch
         )
-        val onePlusKpmSupported = ksuVariant in setOf(KSU_VARIANT_SUKISU, KSU_VARIANT_RESUKISU)
+        val onePlusIsMtk = onePlusCpu.startsWith("mt")
+        val onePlusKpmSupported = !onePlusIsMtk && ksuVariant in setOf(KSU_VARIANT_SUKISU, KSU_VARIANT_RESUKISU)
         val gkiKpmSupported = isKpmSupported(BUILD_TARGET_GKI, ksuVariant, normalizedKsuBranch)
-        val onePlusProxyAllowed = !onePlusCpu.startsWith("mt")
+        val onePlusProxyAllowed = !onePlusIsMtk
         val onePlusSusfsEnabled = onePlusSusfsSupported(line.androidVersion, line.kernelVersion)
         val onePlusLz4kdEnabled = onePlusLz4kdSupported(line.kernelVersion)
         return config.copy(
@@ -304,6 +305,7 @@ object KernelSupport {
                 ?: SOURCE_ACCESS_PUBLIC,
             sourceDefconfigs = config.sourceDefconfigs.orEmpty().map(String::trim).filter(String::isNotBlank),
             sourceDeviceLabel = config.sourceDeviceLabel.trim(),
+            sourceKernelVersionOverride = if (isCustomSource) config.sourceKernelVersionOverride.trim() else "",
             androidVersion = line.androidVersion,
             kernelVersion = line.kernelVersion,
             subLevel = subLevel,
@@ -427,6 +429,10 @@ object KernelSupport {
             ) {
                 return "defconfig 路径无效: $entry"
             }
+        }
+        val kernelOverride = config.sourceKernelVersionOverride.trim()
+        if (kernelOverride.isNotBlank() && !Regex("""^\d+\.\d+(\.\d+)?$""").matches(kernelOverride)) {
+            return "内核版本格式无效，应为 X.Y 或 X.Y.Z"
         }
         return null
     }

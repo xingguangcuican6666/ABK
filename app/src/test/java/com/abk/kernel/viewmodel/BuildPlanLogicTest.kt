@@ -169,6 +169,12 @@ class BuildPlanLogicTest {
         assertEquals("gki_defconfig\nvendor/peridot_GKI.config", inputs["defconfigs"])
         assertEquals("None", inputs["kernelsu_variant"])
         assertEquals(false, inputs.keys.any { it.contains("token", ignoreCase = true) || it.contains("credential", ignoreCase = true) })
+        // os_patch_level 与 kernel_version_override 合并进 version_overrides（JSON），规避 dispatch 25 输入上限
+        assertEquals(false, inputs.containsKey("os_patch_level"))
+        assertEquals(false, inputs.containsKey("kernel_version_override"))
+        val overrides = com.google.gson.Gson().fromJson(inputs["version_overrides"], Map::class.java)
+        assertEquals("2025-09", overrides["os_patch_level"])
+        assertEquals("", overrides["kernel_version_override"])
     }
 
     @Test

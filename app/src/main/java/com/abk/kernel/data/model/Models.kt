@@ -622,6 +622,8 @@ data class KernelBuildConfig(
     val sourceAccessMode: String = SOURCE_ACCESS_PUBLIC,
     val sourceDefconfigs: List<String> = listOf("gki_defconfig"),
     val sourceDeviceLabel: String = "",
+    // LOS 构建内核版本覆盖（空=服务端从 Makefile 自动检测）；填 X.Y 或 X.Y.Z 覆盖编译 profile
+    val sourceKernelVersionOverride: String = "",
     val androidVersion: String = "android12",
     val kernelVersion: String = "5.10",
     val subLevel: String = "66",

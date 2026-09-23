@@ -1,7 +1,6 @@
 package com.abk.kernel.utils
 
 import com.abk.kernel.data.model.GitHubSecretPublicKey
-import org.json.JSONObject
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.PrivateKey
@@ -93,18 +92,63 @@ object ForkSigningManager {
         if (trimmed.isBlank()) return null
         if (trimmed.contains("-----BEGIN")) return trimmed
         if (trimmed.startsWith("{")) {
-            val json = runCatching { JSONObject(trimmed) }.getOrNull() ?: return null
             val extracted = sequenceOf(
                 "publicKeyBase64",
                 "public_key_base64",
                 "publicKey",
                 "public_key"
             ).mapNotNull { key ->
-                json.optString(key).trim().takeIf { it.isNotBlank() }
+                extractJsonStringField(trimmed, key)?.trim()?.takeIf { it.isNotBlank() }
             }.firstOrNull()
             if (!extracted.isNullOrBlank()) return extracted
         }
         return trimmed
+    }
+
+    // Minimal, dependency-free extraction of a top-level JSON string field. Avoids
+    // org.json (which is stubbed on the JVM unit-test classpath) while preserving the
+    // stored-key formats we accept: {"publicKeyBase64":"..."} and its snake/camel aliases.
+    private fun extractJsonStringField(json: String, key: String): String? {
+        val pattern = Regex("\"${Regex.escape(key)}\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"")
+        val raw = pattern.find(json)?.groupValues?.get(1) ?: return null
+        return unescapeJsonString(raw)
+    }
+
+    private fun unescapeJsonString(value: String): String {
+        if (!value.contains('\\')) return value
+        val sb = StringBuilder(value.length)
+        var i = 0
+        while (i < value.length) {
+            val c = value[i]
+            if (c == '\\' && i + 1 < value.length) {
+                when (val next = value[i + 1]) {
+                    '"' -> sb.append('"')
+                    '\\' -> sb.append('\\')
+                    '/' -> sb.append('/')
+                    'n' -> sb.append('\n')
+                    'r' -> sb.append('\r')
+                    't' -> sb.append('\t')
+                    'b' -> sb.append('\b')
+                    'f' -> sb.append('')
+                    'u' -> {
+                        val hex = if (i + 6 <= value.length) value.substring(i + 2, i + 6) else null
+                        val code = hex?.toIntOrNull(16)
+                        if (code != null) {
+                            sb.append(code.toChar())
+                            i += 6
+                            continue
+                        }
+                        sb.append(next)
+                    }
+                    else -> sb.append(next)
+                }
+                i += 2
+            } else {
+                sb.append(c)
+                i++
+            }
+        }
+        return sb.toString()
     }
 
     private fun decodePemBlock(

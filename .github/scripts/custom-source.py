@@ -21,8 +21,40 @@ SUPPORTED_KERNELS = {
     (6, 6): "android15",
     (6, 12): "android16",
 }
+# 受支持的 GKI 编译 profile，按版本升序排列。任意内核线都会被映射到其中之一：
+# 低于最低线（5.10）套用最低线，高于/等于最高线（6.12）套用最高线，
+# 中间版本 floor 到不超过它的最近一条线。映射后的 (major, patchlevel) 决定
+# AOSP manifest 分支与 build.yml 中所有按 kernel_version 分叉的编译方式/工作流。
+SUPPORTED_PROFILE_LINES = sorted(SUPPORTED_KERNELS)
 MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 FULL_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
+# 内核版本 override：X.Y 或 X.Y.Z（缺 sublevel 时回落 Makefile）。
+KERNEL_VERSION_OVERRIDE_PATTERN = re.compile(r"^(\d+)\.(\d+)(?:\.(\d+))?$")
+
+
+def resolve_build_profile(major: int, patchlevel: int) -> tuple[tuple[int, int], str]:
+    """将任意内核线映射到最近的受支持 GKI 编译 profile。
+
+    返回 ((profile_major, profile_patchlevel), android_version)。
+    - 低于最低受支持线：套用最低线（5.10 / android12）。
+    - 高于或等于最高受支持线：套用最高线（6.12 / android16），覆盖未来更高版本。
+    - 位于两线之间：floor 到不超过该版本的最近一条受支持线。
+    """
+    lowest = SUPPORTED_PROFILE_LINES[0]
+    highest = SUPPORTED_PROFILE_LINES[-1]
+    version = (major, patchlevel)
+    if version <= lowest:
+        profile = lowest
+    elif version >= highest:
+        profile = highest
+    else:
+        profile = lowest
+        for line in SUPPORTED_PROFILE_LINES:
+            if line <= version:
+                profile = line
+            else:
+                break
+    return profile, SUPPORTED_KERNELS[profile]
 
 
 class CustomSourceError(ValueError):
@@ -89,7 +121,28 @@ def parse_defconfigs(raw: str) -> list[str]:
     return entries
 
 
-def validate_tree(root: Path, defconfigs: list[str]) -> dict[str, object]:
+def parse_kernel_version_override(value: str) -> tuple[int, int, int | None]:
+    """解析用户提供的内核版本 override。
+
+    接受 X.Y 或 X.Y.Z；返回 (major, patchlevel, sublevel_or_None)。
+    格式非法抛 CustomSourceError。
+    """
+    match = KERNEL_VERSION_OVERRIDE_PATTERN.match(value.strip())
+    if not match:
+        raise CustomSourceError(
+            f"invalid kernel version override '{value}'; expected X.Y or X.Y.Z"
+        )
+    major = int(match.group(1))
+    patchlevel = int(match.group(2))
+    sublevel = int(match.group(3)) if match.group(3) is not None else None
+    return major, patchlevel, sublevel
+
+
+def validate_tree(
+    root: Path,
+    defconfigs: list[str],
+    kernel_version_override: str | None = None,
+) -> dict[str, object]:
     root = root.resolve()
     required = [
         root / "Makefile",
@@ -134,15 +187,21 @@ def validate_tree(root: Path, defconfigs: list[str]) -> dict[str, object]:
         if not resolved.is_file():
             raise CustomSourceError(f"defconfig is not a regular file: {entry}")
 
-    major, patchlevel, sublevel = parse_makefile_version(root / "Makefile")
-    android = SUPPORTED_KERNELS.get((major, patchlevel))
-    if android is None:
-        raise CustomSourceError(
-            f"unsupported kernel line {major}.{patchlevel}; supported lines are 5.10, 5.15, 6.1, 6.6, 6.12"
-        )
+    make_major, make_patchlevel, make_sublevel = parse_makefile_version(root / "Makefile")
+    override = (kernel_version_override or "").strip()
+    if override:
+        # 用户 override：major/patchlevel 用 override；sublevel 用 override 第三段，
+        # 缺省则回落 Makefile 检测值。覆盖仅改编译 profile，源码本身不变。
+        major, patchlevel, ov_sublevel = parse_kernel_version_override(override)
+        sublevel = ov_sublevel if ov_sublevel is not None else make_sublevel
+    else:
+        major, patchlevel, sublevel = make_major, make_patchlevel, make_sublevel
+    (profile_major, profile_patchlevel), android = resolve_build_profile(major, patchlevel)
+    # kernel_version / android_version 反映映射后的编译 profile（决定 AOSP manifest
+    # 分支与编译方式）；full_kernel_version 保留（override 后的）真实版本，仅用于产物命名与展示。
     return {
         "android_version": android,
-        "kernel_version": f"{major}.{patchlevel}",
+        "kernel_version": f"{profile_major}.{profile_patchlevel}",
         "sub_level": str(sublevel),
         "full_kernel_version": f"{major}.{patchlevel}.{sublevel}",
         "build_backend": "legacy" if legacy else "kleaf",
@@ -170,7 +229,8 @@ def inspect_command(args: argparse.Namespace) -> int:
         raise CustomSourceError("resolved commit must be a full 40-character SHA")
 
     defconfigs = parse_defconfigs(args.defconfigs)
-    details = validate_tree(Path(args.source_dir), defconfigs)
+    override = getattr(args, "kernel_version_override", "") or ""
+    details = validate_tree(Path(args.source_dir), defconfigs, kernel_version_override=override)
     result: dict[str, object] = {
         **details,
         "source_url": url,
@@ -245,6 +305,7 @@ def build_parser() -> argparse.ArgumentParser:
     inspect_parser.add_argument("--os-patch-level", required=True)
     inspect_parser.add_argument("--defconfigs", required=True)
     inspect_parser.add_argument("--device-label", default="")
+    inspect_parser.add_argument("--kernel-version-override", default="")
     inspect_parser.add_argument("--github-output")
     inspect_parser.set_defaults(func=inspect_command)
 

@@ -31,11 +31,11 @@ on:
         required: false
         type: string
         default: ""
-      os_patch_level:
-        description: "AOSP 工具链/manifest 补丁月份（YYYY-MM）"
+      version_overrides:
+        description: "版本元数据覆盖（JSON）：os_patch_level=AOSP manifest 补丁月份 YYYY-MM（必填）；kernel_version_override=内核版本 X.Y/X.Y.Z（留空=从源码 Makefile 自动检测）"
         required: true
         type: string
-        default: "2025-09"
+        default: '{"os_patch_level":"2025-09","kernel_version_override":""}'
       kernelsu_variant:
         description: "KernelSU 变体"
         required: true
@@ -159,7 +159,8 @@ jobs:
           SOURCE_PRIVATE: ${{ inputs.source_private }}
           SOURCE_DEFCONFIGS: ${{ inputs.defconfigs }}
           SOURCE_DEVICE_LABEL: ${{ inputs.device_label }}
-          OS_PATCH_LEVEL: ${{ inputs.os_patch_level }}
+          KERNEL_VERSION_OVERRIDE: ${{ fromJSON(inputs.version_overrides).kernel_version_override }}
+          OS_PATCH_LEVEL: ${{ fromJSON(inputs.version_overrides).os_patch_level }}
         run: |
           set -euo pipefail
 
@@ -224,6 +225,7 @@ jobs:
             --os-patch-level "$OS_PATCH_LEVEL" \
             --defconfigs "$SOURCE_DEFCONFIGS" \
             --device-label "$SOURCE_DEVICE_LABEL" \
+            --kernel-version-override "$KERNEL_VERSION_OVERRIDE" \
             --github-output "$GITHUB_OUTPUT"
 
           android_version="$(grep '^android_version=' "$GITHUB_OUTPUT" | tail -n1 | cut -d= -f2-)"
@@ -249,13 +251,14 @@ jobs:
       source_commit: ${{ needs.preflight.outputs.source_commit }}
       source_defconfigs: ${{ inputs.defconfigs }}
       source_device_label: ${{ inputs.device_label }}
+      kernel_version_override: ${{ fromJSON(inputs.version_overrides).kernel_version_override }}
       source_kernel_version: ${{ needs.preflight.outputs.kernel_version }}
       source_full_kernel_version: ${{ needs.preflight.outputs.full_kernel_version }}
       source_android_version: ${{ needs.preflight.outputs.android_version }}
       android_version: ${{ needs.preflight.outputs.android_version }}
       kernel_version: ${{ needs.preflight.outputs.kernel_version }}
       sub_level: ${{ needs.preflight.outputs.sub_level }}
-      os_patch_level: ${{ inputs.os_patch_level }}
+      os_patch_level: ${{ fromJSON(inputs.version_overrides).os_patch_level }}
       revision: ""
       ksu_variant: ${{ inputs.kernelsu_variant }}
       ksu_branch: ${{ inputs.kernelsu_branch }}

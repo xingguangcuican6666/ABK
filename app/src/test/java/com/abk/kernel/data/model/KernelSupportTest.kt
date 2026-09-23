@@ -253,4 +253,47 @@ class KernelSupportTest {
         assertFalse(custom.useKpm)
         assertEquals("", custom.kpmPassword)
     }
+
+    @Test
+    fun customSourceValidationAcceptsBlankAndWellFormedKernelOverride() {
+        val base = KernelBuildConfig(
+            buildTarget = BUILD_TARGET_CUSTOM_SOURCE,
+            sourceUrl = "https://github.com/LineageOS/android_kernel_google_gs201.git",
+            sourceRef = "lineage-21",
+            sourceDefconfigs = listOf("gki_defconfig"),
+            osPatchLevel = "2025-09",
+            kernelsuVariant = KSU_VARIANT_NONE,
+        )
+        // 空 override 合法（走服务端自动检测）
+        assertEquals(null, KernelSupport.validateCustomSource(base))
+        // X.Y 与 X.Y.Z 合法
+        assertEquals(null, KernelSupport.validateCustomSource(base.copy(sourceKernelVersionOverride = "5.10")))
+        assertEquals(null, KernelSupport.validateCustomSource(base.copy(sourceKernelVersionOverride = "6.13.42")))
+        // 非法格式被拒
+        assertTrue(KernelSupport.validateCustomSource(base.copy(sourceKernelVersionOverride = "abc")) != null)
+        assertTrue(KernelSupport.validateCustomSource(base.copy(sourceKernelVersionOverride = "5")) != null)
+        assertTrue(KernelSupport.validateCustomSource(base.copy(sourceKernelVersionOverride = "5.10.1.2")) != null)
+    }
+
+    @Test
+    fun normalizeClearsKernelOverrideForNonCustomSourceTargets() {
+        val gki = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_GKI,
+                sourceKernelVersionOverride = "5.10.177",
+            )
+        )
+        assertEquals("", gki.sourceKernelVersionOverride)
+
+        val custom = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_CUSTOM_SOURCE,
+                sourceUrl = "https://github.com/example/kernel.git",
+                sourceRef = "lineage-21",
+                sourceKernelVersionOverride = "  6.6.50  ",
+                kernelsuVariant = KSU_VARIANT_NONE,
+            )
+        )
+        assertEquals("6.6.50", custom.sourceKernelVersionOverride)
+    }
 }

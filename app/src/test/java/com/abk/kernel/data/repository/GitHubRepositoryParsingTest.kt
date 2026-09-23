@@ -247,4 +247,42 @@ class GitHubRepositoryParsingTest {
             )
         )
     }
+
+    @Test
+    fun parsesKernelVersionFromMakefileHeader() {
+        val makefile = """
+            # SPDX-License-Identifier: GPL-2.0
+            VERSION = 5
+            PATCHLEVEL = 10
+            SUBLEVEL = 177
+            EXTRAVERSION =
+            NAME = Dare mighty things
+        """.trimIndent()
+        val detected = repository.parseMakefileKernelVersion(makefile)
+        assertEquals(DetectedKernelVersion(5, 10, 177), detected)
+        assertEquals("5.10.177", detected?.toVersionString())
+    }
+
+    @Test
+    fun ignoresExtraversionAndCommentsAndToleratesWhitespace() {
+        val makefile = """
+            VERSION = 6
+            # a comment line
+            PATCHLEVEL   =   12
+            EXTRAVERSION = -rc3
+            SUBLEVEL=38
+        """.trimIndent()
+        assertEquals(DetectedKernelVersion(6, 12, 38), repository.parseMakefileKernelVersion(makefile))
+    }
+
+    @Test
+    fun returnsNullWhenVersionFieldsMissing() {
+        val makefile = """
+            VERSION = 5
+            PATCHLEVEL = 15
+            NAME = No sublevel here
+        """.trimIndent()
+        assertNull(repository.parseMakefileKernelVersion(makefile))
+        assertNull(repository.parseMakefileKernelVersion(""))
+    }
 }

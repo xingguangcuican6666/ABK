@@ -1429,6 +1429,11 @@
     <string name="build_source_public">公开 HTTPS Git</string>
     <string name="build_source_private">GitHub 私有仓库</string>
     <string name="build_source_patch_month">工具链 / manifest 月份</string>
+    <string name="build_source_kernel_version">内核版本（留空自动检测）</string>
+    <string name="build_source_kernel_version_hint">从源码 Makefile 推断，可手动覆盖，如 5.10.177；仅改编译 profile，源码不变</string>
+    <string name="build_source_detecting">正在检测内核版本…</string>
+    <string name="build_source_detect_failed">自动检测失败，请手动填写内核版本与补丁月份</string>
+    <string name="build_source_detect_non_github">仅 github.com 源码支持自动检测，请手动填写</string>
     <string name="build_source_device_label">设备名称或代号（可选）</string>
     <string name="build_source_defconfigs">有序 defconfig 列表</string>
     <string name="build_source_defconfig_base_hint">相对于 arch/arm64/configs；后一项覆盖前一项</string>

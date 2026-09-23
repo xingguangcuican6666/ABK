@@ -218,6 +218,8 @@ data class MainUiState(
     val artifactSigningOperationInFlight: Boolean = false,
     val customSourceSecretConfigured: Boolean = false,
     val customSourceSecretOperationInFlight: Boolean = false,
+    val customSourceDetecting: Boolean = false,
+    val customSourceDetectError: String? = null,
     val appUpdateStability: String = APP_UPDATE_STABILITY_STABLE,
     val appUpdateLine: String = APP_UPDATE_LINE_NORMAL,
     val appUpdateChecking: Boolean = false,
@@ -1951,6 +1953,47 @@ class MainViewModel @JvmOverloads constructor(
                 }
             } finally {
                 _uiState.update { it.copy(customSourceSecretOperationInFlight = false) }
+            }
+        }
+    }
+
+    /**
+     * 从 LOS 源码仓库根 Makefile 推断内核版本，成功后预填内核版本 override 与安全补丁月份。
+     * 失败不阻断（用户仍可手填），仅在 customSourceDetectError 记录原因。
+     */
+    fun detectCustomSourceVersion() {
+        val config = _uiState.value.buildConfig
+        if (config.buildTarget != BUILD_TARGET_CUSTOM_SOURCE) return
+        if (config.sourceUrl.isBlank() || config.sourceRef.isBlank()) return
+        if (_uiState.value.customSourceDetecting) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(customSourceDetecting = true, customSourceDetectError = null) }
+            try {
+                when (val result = github.fetchSourceMakefileVersion(config.sourceUrl, config.sourceRef)) {
+                    is Result.Success -> {
+                        val detected = result.data
+                        // 用检测到的完整版本推断一个默认安全补丁月份供用户参考/编辑。
+                        val recommended = KernelSupport.recommendedFromKernel(detected.toVersionString())
+                        val current = _uiState.value.buildConfig
+                        updateBuildConfig(
+                            current.copy(
+                                sourceKernelVersionOverride = detected.toVersionString(),
+                                osPatchLevel = recommended.osPatchLevel
+                            )
+                        )
+                    }
+                    is Result.Error -> {
+                        val message = if (result.message == "NON_GITHUB") {
+                            text(R.string.build_source_detect_non_github)
+                        } else {
+                            text(R.string.build_source_detect_failed)
+                        }
+                        _uiState.update { it.copy(customSourceDetectError = message) }
+                    }
+                    Result.Loading -> Unit
+                }
+            } finally {
+                _uiState.update { it.copy(customSourceDetecting = false) }
             }
         }
     }
@@ -6131,6 +6174,32 @@ private data class ParsedCustomKernelOptionLine(
     val skipped: Boolean
 )
 
+// Unescapes backslash escapes (\" and \\) in a RAW kconfig assignment value so that
+// e.g. CONFIG_LOCALVERSION=\"-abk\" is stored as "-abk" rather than the escaped form.
+private fun unescapeRawKernelOptionValue(value: String): String {
+    if (!value.contains('\\')) return value
+    val sb = StringBuilder(value.length)
+    var i = 0
+    while (i < value.length) {
+        val c = value[i]
+        if (c == '\\' && i + 1 < value.length) {
+            when (val next = value[i + 1]) {
+                '"' -> sb.append('"')
+                '\\' -> sb.append('\\')
+                else -> {
+                    sb.append(c)
+                    sb.append(next)
+                }
+            }
+            i += 2
+        } else {
+            sb.append(c)
+            i++
+        }
+    }
+    return sb.toString()
+}
+
 private fun parseCustomKernelOptionLine(line: String): ParsedCustomKernelOptionLine {
     val clean = line.trim().replace("\r", "")
     if (clean.isBlank()) return ParsedCustomKernelOptionLine(option = null, skipped = true)
@@ -6161,7 +6230,7 @@ private fun parseCustomKernelOptionLine(line: String): ParsedCustomKernelOptionL
             option = CustomKernelOption(
                 symbol = symbol,
                 mode = mode,
-                rawValue = if (mode == CustomKernelOptionMode.RAW) value else ""
+                rawValue = if (mode == CustomKernelOptionMode.RAW) unescapeRawKernelOptionValue(value) else ""
             ),
             skipped = false
         )
@@ -6529,9 +6598,10 @@ internal fun isPrebuiltGkiReleaseCandidate(release: GitHubReleaseSummary): Boole
 internal fun isPrebuiltGkiCandidate(asset: PrebuiltGkiAsset): Boolean {
     val lower = asset.name.lowercase()
     val type = DownloadUtils.classifyArtifact(asset.name)
-    if (!lower.endsWith(".bundle.zip")) return false
-    return type in setOf(ArtifactType.KERNEL_PACKAGE, ArtifactType.KERNEL_IMG, ArtifactType.ANYKERNEL3) ||
-        listOf("gki", "kernel", "boot", "anykernel", "ak3").any { lower.contains(it) }
+    if (type in setOf(ArtifactType.KERNEL_PACKAGE, ArtifactType.KERNEL_IMG, ArtifactType.ANYKERNEL3)) return true
+    if (type in setOf(ArtifactType.ABK_MANAGER, ArtifactType.KSU_MANAGER)) return false
+    if (lower.endsWith(".apk")) return false
+    return listOf("gki", "kernel", "boot", "anykernel", "ak3").any { lower.contains(it) }
 }
 
 internal fun prebuiltGkiComparator(
@@ -6582,7 +6652,7 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
             "source_private" to (config.sourceAccessMode == SOURCE_ACCESS_GITHUB_PRIVATE).toString(),
             "defconfigs" to config.sourceDefconfigs.joinToString("\n"),
             "device_label" to config.sourceDeviceLabel,
-            "os_patch_level" to config.osPatchLevel,
+            "version_overrides" to buildVersionOverridesJson(config.osPatchLevel, config.sourceKernelVersionOverride),
             "kernelsu_variant" to config.kernelsuVariant,
             "kernelsu_branch" to config.kernelsuBranch,
             "custom_ref" to if (config.kernelsuBranch == KSU_BRANCH_CUSTOM) config.customRef else "",
@@ -6681,6 +6751,17 @@ private fun List<CustomExternalModule>?.toWorkflowInput(): String = this.orEmpty
         }
     }
     .joinToString("|")
+
+// kernel-source.yml 的 workflow_dispatch inputs 有 25 个上限；把 os_patch_level 与
+// kernel_version_override 两个"版本元数据覆盖"合并成一个 JSON input 以腾出槽位。
+// 工作流侧用 fromJSON(inputs.version_overrides).<key> 取回。
+private fun buildVersionOverridesJson(osPatchLevel: String, kernelVersionOverride: String): String =
+    Gson().toJson(
+        mapOf(
+            "os_patch_level" to osPatchLevel,
+            "kernel_version_override" to kernelVersionOverride,
+        )
+    )
 
 private const val KERNEL_WORKFLOW_FILE = "kernel-custom.yml"
 private const val CUSTOM_SOURCE_WORKFLOW_FILE = "kernel-source.yml"

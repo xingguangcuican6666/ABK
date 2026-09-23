@@ -36,6 +36,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -1448,12 +1449,22 @@ fun BuildScreen(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
+                    var sourceRefFocused by remember { mutableStateOf(false) }
                     OutlinedTextField(
                         value = config.sourceRef,
                         onValueChange = { vm.updateBuildConfig(config.copy(sourceRef = it)) },
                         label = { Text(stringResource(R.string.build_source_ref)) },
                         placeholder = { Text("lineage-23.2 或 40 位 commit SHA") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { focusState ->
+                                val wasFocused = sourceRefFocused
+                                sourceRefFocused = focusState.isFocused
+                                // 失焦时自动从源码 Makefile 检测内核版本
+                                if (wasFocused && !focusState.isFocused) {
+                                    vm.detectCustomSourceVersion()
+                                }
+                            },
                         singleLine = true
                     )
                     val publicSourceLabel = stringResource(R.string.build_source_public)
@@ -1470,6 +1481,39 @@ fun BuildScreen(
                             }
                         },
                         onSelect = { vm.updateBuildConfig(config.copy(sourceAccessMode = it)) }
+                    )
+                    OutlinedTextField(
+                        value = config.sourceKernelVersionOverride,
+                        onValueChange = {
+                            vm.updateBuildConfig(config.copy(sourceKernelVersionOverride = it))
+                        },
+                        label = { Text(stringResource(R.string.build_source_kernel_version)) },
+                        placeholder = { Text("5.10.177") },
+                        supportingText = {
+                            when {
+                                state.customSourceDetecting ->
+                                    Text(stringResource(R.string.build_source_detecting))
+                                state.customSourceDetectError != null ->
+                                    Text(
+                                        state.customSourceDetectError!!,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                else ->
+                                    Text(stringResource(R.string.build_source_kernel_version_hint))
+                            }
+                        },
+                        trailingIcon = if (state.customSourceDetecting) {
+                            {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
                     OutlinedTextField(
                         value = config.osPatchLevel,

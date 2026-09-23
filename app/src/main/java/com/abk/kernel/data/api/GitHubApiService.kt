@@ -18,6 +18,16 @@ interface GitHubApiService {
         @Path("repo") repo: String
     ): Response<GitHubRepo>
 
+    // 拉取任意仓库单个文件原始内容（用于从 LOS 源码 Makefile 推断内核版本）
+    @GET("repos/{owner}/{repo}/contents/{path}")
+    suspend fun getFileRaw(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path(value = "path", encoded = true) path: String,
+        @Query("ref") ref: String,
+        @Header("Accept") accept: String = "application/vnd.github.raw"
+    ): Response<ResponseBody>
+
     @GET("repos/{owner}/{repo}/actions/secrets/public-key")
     suspend fun getRepositorySecretPublicKey(
         @Path("owner") owner: String,
