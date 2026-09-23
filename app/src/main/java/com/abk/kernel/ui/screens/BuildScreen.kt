@@ -1519,7 +1519,7 @@ fun BuildScreen(
                         value = config.osPatchLevel,
                         onValueChange = { vm.updateBuildConfig(config.copy(osPatchLevel = it)) },
                         label = { Text(stringResource(R.string.build_source_patch_month)) },
-                        placeholder = { Text("2025-09") },
+                        placeholder = { Text(stringResource(R.string.build_source_patch_month_placeholder)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )

@@ -26,7 +26,7 @@ SUPPORTED_KERNELS = {
 # 中间版本 floor 到不超过它的最近一条线。映射后的 (major, patchlevel) 决定
 # AOSP manifest 分支与 build.yml 中所有按 kernel_version 分叉的编译方式/工作流。
 SUPPORTED_PROFILE_LINES = sorted(SUPPORTED_KERNELS)
-MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+MONTH_PATTERN = re.compile(r"^(?:\d{4}-(0[1-9]|1[0-2])|lts)$")
 FULL_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
 # 内核版本 override：X.Y 或 X.Y.Z（缺 sublevel 时回落 Makefile）。
 KERNEL_VERSION_OVERRIDE_PATTERN = re.compile(r"^(\d+)\.(\d+)(?:\.(\d+))?$")
@@ -222,7 +222,7 @@ def inspect_command(args: argparse.Namespace) -> int:
     private = args.access == "github_private"
     url = normalize_source_url(args.source_url, private=private)
     if not MONTH_PATTERN.fullmatch(args.os_patch_level):
-        raise CustomSourceError("os patch level must use YYYY-MM")
+        raise CustomSourceError("os patch level must use YYYY-MM or lts")
     if not args.source_ref.strip() or any(ord(char) < 0x20 for char in args.source_ref):
         raise CustomSourceError("source ref is required")
     if not FULL_SHA_PATTERN.fullmatch(args.resolved_commit):

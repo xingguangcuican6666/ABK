@@ -32,7 +32,7 @@ on:
         type: string
         default: ""
       version_overrides:
-        description: "版本元数据覆盖（JSON）：os_patch_level=AOSP manifest 补丁月份 YYYY-MM（必填）；kernel_version_override=内核版本 X.Y/X.Y.Z（留空=从源码 Makefile 自动检测）"
+        description: "版本元数据覆盖（JSON）：os_patch_level=AOSP manifest 补丁月份 YYYY-MM，或 lts 跟随对应 LTS 分支（必填）；kernel_version_override=内核版本 X.Y/X.Y.Z（留空=从源码 Makefile 自动检测）"
         required: true
         type: string
         default: '{"os_patch_level":"2025-09","kernel_version_override":""}'
