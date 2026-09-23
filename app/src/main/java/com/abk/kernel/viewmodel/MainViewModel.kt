@@ -6174,6 +6174,32 @@ private data class ParsedCustomKernelOptionLine(
     val skipped: Boolean
 )
 
+// Unescapes backslash escapes (\" and \\) in a RAW kconfig assignment value so that
+// e.g. CONFIG_LOCALVERSION=\"-abk\" is stored as "-abk" rather than the escaped form.
+private fun unescapeRawKernelOptionValue(value: String): String {
+    if (!value.contains('\\')) return value
+    val sb = StringBuilder(value.length)
+    var i = 0
+    while (i < value.length) {
+        val c = value[i]
+        if (c == '\\' && i + 1 < value.length) {
+            when (val next = value[i + 1]) {
+                '"' -> sb.append('"')
+                '\\' -> sb.append('\\')
+                else -> {
+                    sb.append(c)
+                    sb.append(next)
+                }
+            }
+            i += 2
+        } else {
+            sb.append(c)
+            i++
+        }
+    }
+    return sb.toString()
+}
+
 private fun parseCustomKernelOptionLine(line: String): ParsedCustomKernelOptionLine {
     val clean = line.trim().replace("\r", "")
     if (clean.isBlank()) return ParsedCustomKernelOptionLine(option = null, skipped = true)
@@ -6204,7 +6230,7 @@ private fun parseCustomKernelOptionLine(line: String): ParsedCustomKernelOptionL
             option = CustomKernelOption(
                 symbol = symbol,
                 mode = mode,
-                rawValue = if (mode == CustomKernelOptionMode.RAW) value else ""
+                rawValue = if (mode == CustomKernelOptionMode.RAW) unescapeRawKernelOptionValue(value) else ""
             ),
             skipped = false
         )
@@ -6572,9 +6598,10 @@ internal fun isPrebuiltGkiReleaseCandidate(release: GitHubReleaseSummary): Boole
 internal fun isPrebuiltGkiCandidate(asset: PrebuiltGkiAsset): Boolean {
     val lower = asset.name.lowercase()
     val type = DownloadUtils.classifyArtifact(asset.name)
-    if (!lower.endsWith(".bundle.zip")) return false
-    return type in setOf(ArtifactType.KERNEL_PACKAGE, ArtifactType.KERNEL_IMG, ArtifactType.ANYKERNEL3) ||
-        listOf("gki", "kernel", "boot", "anykernel", "ak3").any { lower.contains(it) }
+    if (type in setOf(ArtifactType.KERNEL_PACKAGE, ArtifactType.KERNEL_IMG, ArtifactType.ANYKERNEL3)) return true
+    if (type in setOf(ArtifactType.ABK_MANAGER, ArtifactType.KSU_MANAGER)) return false
+    if (lower.endsWith(".apk")) return false
+    return listOf("gki", "kernel", "boot", "anykernel", "ak3").any { lower.contains(it) }
 }
 
 internal fun prebuiltGkiComparator(
