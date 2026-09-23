@@ -552,7 +552,7 @@ jobs:
           "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose "$signed_apk"
 
       - name: Prepare version metadata
-        if: ${{ github.repository == 'xingguangcuican6666/ABK' && github.event_name != 'pull_request' && startsWith(github.ref, 'refs/heads/') }}
+        if: ${{ github.repository == 'xingguangcuican6666/ABK' && github.event_name != 'pull_request' && github.ref_name == 'dev' }}
         id: version
         run: |
           set -euo pipefail
@@ -578,8 +578,8 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore(app): update unstable version metadata"
-          title: "chore(app): update unstable version metadata"
+          commit-message: "chore(app): update unstable metadata (normal)"
+          title: "chore(app): update unstable metadata (normal)"
           body: |
             Automated update of unstable version metadata.
 
@@ -591,8 +591,8 @@ jobs:
             Run ID: ${{ github.run_id }}
             Commit: ${{ github.sha }}
 
-          branch: bot/update-version-json
-          base: ${{ github.ref_name }}
+          branch: bot/version-json-normal
+          base: dev
           delete-branch: true
 
           add-paths: |
