@@ -40,7 +40,7 @@ The repository provides GitHub Actions kernel build workflows. The Android app h
 
 - Android 12 / 13 / 14 / 15 / 16 GKI build workflows, plus OnePlus/Oplus device build workflows.
 - KernelSU Official, KernelSU Next, SukiSU, and ReSukiSU variants.
-- Optional SUSFS, ZRAM, BBG, KPM, Re-Kernel, lz4kd, BBR, proxy optimization, Unicode bypass, and OnePlus 8E support.
+- Optional SUSFS, ZRAM, BBG, KPM, Re-Kernel, lz4kd, BBRv3 (with fq/fq_codel qdiscs), proxy optimization, Unicode bypass, and OnePlus 8E support.
 - Artifact handling for AnyKernel3 packages, kernel images, KernelSU managers, and SUSFS modules.
 
 Actual compatibility depends on the device, kernel version, upstream branch state, and current patch compatibility.
