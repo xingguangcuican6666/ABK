@@ -355,6 +355,8 @@
     <string name="build_external_module_default">Внешний модуль</string>
     <string name="build_stage_none">Этап не выбран</string>
     <string name="build_source_list">Источник %1$s</string>
+    <string name="build_source_patch_month_placeholder">2025-09 или lts</string>
+    <string name="build_source_patch_month_invalid">Месяц патча должен быть в формате YYYY-MM или lts</string>
     <string name="build_section_kernel_desc">Выберите Android, KMI и дату патча безопасности для текущей системы; если не уверены, используйте рекомендацию устройства.</string>
     <string name="build_section_ksu_desc">Выберите схему прав ядра и соответствующую ветку.</string>
     <string name="build_section_features_desc">Включайте только нужные возможности — чем меньше изменений, тем проще отлаживать.</string>

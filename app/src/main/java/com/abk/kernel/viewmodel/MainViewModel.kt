@@ -6758,7 +6758,7 @@ private fun List<CustomExternalModule>?.toWorkflowInput(): String = this.orEmpty
 private fun buildVersionOverridesJson(osPatchLevel: String, kernelVersionOverride: String): String =
     Gson().toJson(
         mapOf(
-            "os_patch_level" to osPatchLevel,
+            "os_patch_level" to osPatchLevel.trim().lowercase(),
             "kernel_version_override" to kernelVersionOverride,
         )
     )

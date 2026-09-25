@@ -355,6 +355,8 @@
     <string name="build_external_module_default">External module</string>
     <string name="build_stage_none">No stage selected</string>
     <string name="build_source_list">Source %1$s</string>
+    <string name="build_source_patch_month_placeholder">2025-09 or lts</string>
+    <string name="build_source_patch_month_invalid">Patch month must be YYYY-MM or lts</string>
     <string name="build_section_kernel_desc">Match the Android version, KMI, and security patch date to the current system; use the device recommendation when unsure.</string>
     <string name="build_section_ksu_desc">Choose the kernel permission solution and matching branch.</string>
     <string name="build_section_features_desc">Enable only the module capabilities you need to keep debugging simpler.</string>

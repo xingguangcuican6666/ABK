@@ -1,5 +1,8 @@
 package com.abk.kernel.data.model
 
+import com.abk.kernel.tr
+import com.abk.kernel.R
+
 import java.net.URI
 import kotlin.math.abs
 
@@ -416,8 +419,8 @@ object KernelSupport {
         ) {
             return "源码 ref 格式无效"
         }
-        if (!Regex("^\\d{4}-(0[1-9]|1[0-2])$").matches(config.osPatchLevel.trim())) {
-            return "补丁月份必须使用 YYYY-MM"
+        if (!Regex("^(?:\\d{4}-(0[1-9]|1[0-2])|lts)$", RegexOption.IGNORE_CASE).matches(config.osPatchLevel.trim())) {
+            return tr(R.string.build_source_patch_month_invalid)
         }
         val configs = config.sourceDefconfigs.map(String::trim).filter(String::isNotBlank)
         if (configs.isEmpty() || "gki_defconfig" !in configs) {

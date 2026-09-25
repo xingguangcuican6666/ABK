@@ -1429,6 +1429,8 @@
     <string name="build_source_public">公开 HTTPS Git</string>
     <string name="build_source_private">GitHub 私有仓库</string>
     <string name="build_source_patch_month">工具链 / manifest 月份</string>
+    <string name="build_source_patch_month_placeholder">2025-09 或 lts</string>
+    <string name="build_source_patch_month_invalid">补丁月份必须使用 YYYY-MM 或 lts</string>
     <string name="build_source_kernel_version">内核版本（留空自动检测）</string>
     <string name="build_source_kernel_version_hint">从源码 Makefile 推断，可手动覆盖，如 5.10.177；仅改编译 profile，源码不变</string>
     <string name="build_source_detecting">正在检测内核版本…</string>
