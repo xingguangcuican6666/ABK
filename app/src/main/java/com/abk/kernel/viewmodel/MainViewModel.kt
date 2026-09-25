@@ -76,7 +76,7 @@ import java.util.zip.GZIPOutputStream
 
 // ── UI State ─────────────────────────────────────────────────────────────────
 
-enum class AuthStep { INTRO, LOGIN, FORK_CHECK }
+enum class AuthStep { INTRO, LOGIN, FORK_CHECK, FINISH }
 
 enum class WorkflowStepI18nRefreshReason {
     SYNC_GATE,
@@ -960,6 +960,15 @@ class MainViewModel @JvmOverloads constructor(
     fun continueOobeToLogin() = authOobe.continueOobeToLogin()
 
     fun skipOobe() = authOobe.skipOobe()
+
+    /** Repository-ready → move to the OOBE finish summary (no persistence yet). */
+    fun advanceOobeToFinish() = authOobe.advanceOobeToFinish()
+
+    /** Finish screen "开始使用 ABK" → persist completion and close the overlay. */
+    fun finishOobe() = authOobe.finishOobe()
+
+    /** Step back one OOBE screen (top-bar back button / hardware back). */
+    fun oobeBack() = authOobe.oobeBack()
 
     // ── GitHub Auth (Device Flow) ─────────────────────────────────────────
 
