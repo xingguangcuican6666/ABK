@@ -350,7 +350,7 @@ fun ModuleRepositoryScreen(
 
         BlurScreenScaffold(
             blurConfig = state.blurConfig,
-            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
+            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
             topBar = {
                 ExpressiveTopBar(
                     title = runtimeRepoTitleLabel(context),
@@ -818,7 +818,7 @@ private fun BuildModuleRepositoryScreenContent(
 
         BlurScreenScaffold(
             blurConfig = state.blurConfig,
-            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
+            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
             topBar = {
                 ExpressiveTopBar(
                     title = buildRepoTitleLabel(context),
