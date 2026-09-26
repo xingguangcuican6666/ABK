@@ -121,7 +121,27 @@ fun OobeScreen(vm: MainViewModel) {
                 }
         ) {
             val onBack = { if (!skipInFlight) vm.oobeBack() }
-            when (state.authStep) {
+            // Step-to-step transition mirrors the prototype's FadeInRight/FadeOutLeft:
+            // advancing slides the new step in from the right, going back reverses it.
+            AnimatedContent(
+                targetState = state.authStep,
+                transitionSpec = {
+                    val dir = if (targetState.stepIndex() > initialState.stepIndex()) 1 else -1
+                    (
+                        fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
+                            slideInHorizontally(
+                                animationSpec = motionScheme.defaultSpatialSpec()
+                            ) { width -> dir * width / 4 }
+                        ) togetherWith (
+                        fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
+                            slideOutHorizontally(
+                                animationSpec = motionScheme.fastSpatialSpec()
+                            ) { width -> -dir * width / 6 }
+                        )
+                },
+                label = "oobe-step"
+            ) { step ->
+            when (step) {
                 AuthStep.INTRO -> OobeWelcomeScreen(
                     skipping = skipInFlight,
                     onStart = {
@@ -164,6 +184,7 @@ fun OobeScreen(vm: MainViewModel) {
                     onBack = onBack,
                     onFinish = { if (!skipInFlight) vm.finishOobe() }
                 )
+            }
             }
         }
 
