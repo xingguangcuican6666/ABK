@@ -168,7 +168,7 @@ fun RuntimeHomeScreen(
 
         BlurScreenScaffold(
             blurConfig = state.blurConfig,
-            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
+            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
             topBar = {
                 ExpressiveTopBar(
                     title = "AnyBase Kernel",
@@ -519,7 +519,7 @@ fun InstalledModulesScreen(
     Box(Modifier.fillMaxSize()) {
         BlurScreenScaffold(
             blurConfig = state.blurConfig,
-            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
+            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
             topBar = {
                 ExpressiveTopBar(
                     title = stringResource(R.string.runtime_installed_modules_title),

@@ -628,7 +628,7 @@ private fun AbkMainScaffold(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)))
+            .background(appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)))
     ) {
         if (isTabletLayout) {
             val railHideDistancePx = with(density) { AbkTabletRailWidth.toPx() }
@@ -652,7 +652,11 @@ private fun AbkMainScaffold(
                     containerColor = if (blurActive) {
                         Color.Transparent
                     } else {
-                        uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+                        // Solid-color mode: darken the rail slightly vs. the body (surfaceContainer)
+                        // so it reads as a distinct surface in both light and dark themes.
+                        uiSurfaceColor(
+                            androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.surfaceContainer, Color.Black, 0.05f)
+                        )
                     }
                 ) {
                     visibleTabs.forEach { tab ->
@@ -704,7 +708,11 @@ private fun AbkMainScaffold(
                 containerColor = if (blurActive) {
                     Color.Transparent
                 } else {
-                    uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+                    // Solid-color mode: darken the bottom bar slightly vs. the body (surfaceContainer)
+                    // so it reads as a distinct surface in both light and dark themes.
+                    uiSurfaceColor(
+                        androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.surfaceContainer, Color.Black, 0.05f)
+                    )
                 },
                 tonalElevation = 0.dp
             ) {
