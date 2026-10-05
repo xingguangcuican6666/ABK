@@ -85,13 +85,12 @@ fun AppBackgroundHost(
                     backgroundSize = coordinates.size
                 }
             }
-            // While a wallpaper is configured, wait on a slightly lighter neutral than
-            // surface: on a cold start the decode lands a frame or two later, and pure
-            // black behind translucent frosted surfaces reads as a black flash (this
-            // mirrors ReSukiSU's use of surfaceContainer as the pre-load color).
-            .background(
-                if (hasBackground) colorScheme.surfaceContainer else colorScheme.surface
-            )
+            // surfaceContainer in both modes: with a wallpaper it avoids the black
+            // flash while the decode lands a frame or two late (mirrors ReSukiSU's
+            // pre-load color); in solid-color mode it keeps the app base aligned with
+            // the frosted top bar's tint (also surfaceContainer) so the body never
+            // reads darker than the bar.
+            .background(colorScheme.surfaceContainer)
     ) {
         if (backgroundPainter != null) {
             Image(

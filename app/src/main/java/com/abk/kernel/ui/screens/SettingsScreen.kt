@@ -332,7 +332,7 @@ fun SettingsScreen(
             .offset(y = -childPageTopInset)
         BlurScreenScaffold(
             blurConfig = state.blurConfig,
-            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
+            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
             topBar = {
                 ExpressiveTopBar(
                     title = stringResource(R.string.settings_title),

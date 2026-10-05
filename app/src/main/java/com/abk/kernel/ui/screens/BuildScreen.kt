@@ -1206,7 +1206,7 @@ fun BuildScreen(
         val needsLogin = !state.isLoggedIn
         BlurScreenScaffold(
             blurConfig = state.blurConfig,
-            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
+            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
             topBar = {
                 ExpressiveTopBar(
                     title = stringResource(R.string.build_title),
@@ -1288,7 +1288,7 @@ fun BuildScreen(
             .offset(y = -childPageTopInset)
         BlurScreenScaffold(
             blurConfig = state.blurConfig,
-            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
+            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
             topBar = {
                 ExpressiveTopBar(
                     title = stringResource(R.string.build_title),

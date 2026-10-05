@@ -103,8 +103,43 @@ class AuthOobeCoordinator(
     }
 
     fun completeIfRequested(closeOobeWhenReady: Boolean) {
-        if (closeOobeWhenReady) {
+        if (!closeOobeWhenReady) return
+        // Redesigned OOBE: a ready fork no longer auto-closes the flow. The user
+        // reviews the ready repository state and taps "继续" to reach the finish
+        // summary, which finalizes via finishOobe(). Only finalize here when the
+        // overlay is not actually visible (defensive; background completion path).
+        if (!readState().showOobe) {
             completeOobe()
+        }
+    }
+
+    /** Repository step is ready → advance to the finish summary screen. */
+    fun advanceOobeToFinish() {
+        updateState { it.copy(authStep = AuthStep.FINISH, error = null) }
+    }
+
+    /** Finish screen confirmed → persist completion and close the overlay. */
+    fun finishOobe() = completeOobe()
+
+    /** Step back one screen. INTRO is the first step and has no previous screen. */
+    fun oobeBack() {
+        val step = readState().authStep
+        updateState {
+            when (step) {
+                AuthStep.LOGIN -> it.copy(
+                    authStep = AuthStep.INTRO,
+                    deviceCode = null,
+                    userCode = null,
+                    verificationUri = null,
+                    isPollingToken = false,
+                    error = null,
+                )
+                // Already signed in by FORK_CHECK, so returning to LOGIN would be a
+                // dead end; fall back to INTRO whose "继续配置" re-enters the check.
+                AuthStep.FORK_CHECK -> it.copy(authStep = AuthStep.INTRO, error = null)
+                AuthStep.FINISH -> it.copy(authStep = AuthStep.FORK_CHECK, error = null)
+                AuthStep.INTRO -> it
+            }
         }
     }
 
