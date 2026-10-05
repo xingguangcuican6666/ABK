@@ -215,6 +215,13 @@ class DesktopKernelSupport {
     String kernelVersion,
     String subLevel,
   ) {
+    // An LTS build is addressed as sub_level=X plus os_patch_level=lts, which is
+    // what build.yml and the CLI validate. 'X' is offered by subLevelOptions()
+    // above, so it must resolve to 'lts' here -- otherwise the fallback in
+    // BuildFormState.normalized() picks a numeric month and the dispatched
+    // combination is rejected. Mirrors the Android app's
+    // KernelSupport.patchLevels(), which returns listOf("lts") for subLevel "X".
+    if (subLevel == 'X') return const <String>['lts'];
     final line = lineFor(androidVersion, kernelVersion);
     final values =
         entries
