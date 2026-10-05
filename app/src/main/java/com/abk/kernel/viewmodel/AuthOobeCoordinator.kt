@@ -47,6 +47,10 @@ class AuthOobeCoordinator(
             it.copy(
                 showOobe = true,
                 authStep = nextStep,
+                deviceCode = null,
+                userCode = null,
+                verificationUri = null,
+                isPollingToken = false,
                 error = null,
             )
         }
@@ -131,6 +135,9 @@ class AuthOobeCoordinator(
                                 updateState {
                                     it.copy(
                                         isPollingToken = false,
+                                        deviceCode = null,
+                                        userCode = null,
+                                        verificationUri = null,
                                         error = text(
                                             R.string.vm_auth_failed,
                                             arrayOf(tokenResp.error.orEmpty()),
@@ -138,7 +145,15 @@ class AuthOobeCoordinator(
                                     )
                                 }
                             }
-                            else -> updateState { it.copy(isPollingToken = false, error = tokenResp.error) }
+                            else -> updateState {
+                                it.copy(
+                                    isPollingToken = false,
+                                    deviceCode = null,
+                                    userCode = null,
+                                    verificationUri = null,
+                                    error = tokenResp.error,
+                                )
+                            }
                         }
                     }
                     is Result.Error -> delay(intervalSeconds * 1000)
