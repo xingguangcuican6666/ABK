@@ -115,6 +115,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showKernelRunnerSettings by remember { mutableStateOf(false) }
     var exportingDiagnostics by remember { mutableStateOf(false) }
     var showThemeSettings by rememberSaveable { mutableStateOf(false) }
     var showAppProfileTemplates by rememberSaveable { mutableStateOf(false) }
@@ -323,6 +324,15 @@ fun SettingsScreen(
         )
     }
 
+    if (showKernelRunnerSettings) {
+        KernelRunnerSettingsDialog(
+            state = state.kernelRunnerSettings,
+            onRefresh = vm::refreshKernelRunnerSettings,
+            onSave = vm::saveKernelRunnerSettings,
+            onDismiss = { showKernelRunnerSettings = false }
+        )
+    }
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val childPageTopInset = outerPadding.calculateTopPadding()
         val childPageBottomInset = outerPadding.calculateBottomPadding()
@@ -348,6 +358,7 @@ fun SettingsScreen(
                 vm = vm,
                 scrollBehavior = scrollBehavior,
                 onLogout = { showLogoutDialog = true },
+                onOpenKernelRunnerSettings = { showKernelRunnerSettings = true },
                 onOpenThemeSettings = ::openThemeSettings,
                 onOpenAppProfileTemplates = ::openAppProfileTemplates,
                 onOpenManagerTools = ::openManagerTools,
@@ -775,6 +786,7 @@ private fun SettingsMainContent(
     vm: MainViewModel,
     scrollBehavior: TopAppBarScrollBehavior,
     onLogout: () -> Unit,
+    onOpenKernelRunnerSettings: () -> Unit,
     onOpenThemeSettings: () -> Unit,
     onOpenAppProfileTemplates: () -> Unit,
     onOpenManagerTools: () -> Unit,
@@ -844,6 +856,13 @@ private fun SettingsMainContent(
                     )
                 },
                 onClick = { vm.openLoginOobe() }
+            )
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_kernel_runner_title),
+                subtitle = stringResource(R.string.settings_kernel_runner_desc),
+                leadingIcon = Icons.Default.Computer,
+                onClick = onOpenKernelRunnerSettings,
+                trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
             )
         }
 

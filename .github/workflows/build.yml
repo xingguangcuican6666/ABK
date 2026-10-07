@@ -175,7 +175,7 @@ on:
 jobs:
   build-kernel:
     name: "${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}-${{ inputs.ksu_variant }}"
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.KERNEL_SELF_HOSTED == 'false' && 'ubuntu-latest' || (startsWith(vars.KERNEL_RUNNER, '[') && fromJSON(vars.KERNEL_RUNNER) || vars.KERNEL_RUNNER || 'ubuntu-latest') }}
     timeout-minutes: 60
 
     env:
@@ -638,6 +638,13 @@ jobs:
           apt_update_retry
           sudo apt-get install -y ccache python3 git curl build-essential libssl-dev bison flex libelf-dev dwarves
 
+      - name: 配置自托管下载缓存
+        env:
+          ABK_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          KERNEL_LOCAL_CACHE: ${{ vars.KERNEL_LOCAL_CACHE || 'auto' }}
+          KERNEL_LOCAL_CACHE_DIR: ${{ vars.KERNEL_LOCAL_CACHE_DIR }}
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" configure
+
       - name: 配置 ccache
         run: |
           mkdir -p ~/.cache/bazel
@@ -647,6 +654,7 @@ jobs:
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
 
       - name: 恢复 ccache 缓存
+        if: env.ABK_LOCAL_CACHE_ENABLED != 'true'
         uses: actions/cache@v5
         with:
           path: ~/.ccache
@@ -655,6 +663,7 @@ jobs:
             ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-
 
       - name: 缓存工具链
+        if: env.ABK_LOCAL_CACHE_ENABLED != 'true'
         id: cache-toolchain
         uses: actions/cache@v5
         with:
@@ -675,7 +684,8 @@ jobs:
             local attempt
             for attempt in 1 2 3; do
               rm -rf "$target_dir"
-              if git clone "$repo_url" -b "$BRANCH" --depth 1 "$target_dir"; then
+              if python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+                "$repo_url" "$target_dir" --ref "$BRANCH" --depth 1; then
                 return 0
               fi
               echo "::warning::工具链克隆失败: $repo_url (attempt ${attempt}/3)"
@@ -706,10 +716,12 @@ jobs:
             local repo_url="$1"
             local branch="$2"
             local target_dir="$3"
+            local depth="${4:-1}"
             local attempt
             rm -rf "$target_dir"
             for attempt in 1 2 3; do
-              if git clone "$repo_url" -b "$branch" --depth 1 "$target_dir"; then
+              if python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+                "$repo_url" "$target_dir" --ref "$branch" --depth "$depth"; then
                 return 0
               fi
               echo "::warning::git clone 失败: $repo_url@$branch (attempt $attempt)"
@@ -721,12 +733,23 @@ jobs:
           }
 
           echo "克隆 AnyKernel3..."
-          git clone https://github.com/WildKernels/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+            https://github.com/WildKernels/AnyKernel3.git AnyKernel3 --ref "$ANYKERNEL_BRANCH"
           rm -rf AnyKernel3/.git
 
           if [ "${{ inputs.enable_susfs }}" == "true" ]; then
             echo "克隆 SUSFS (分支: $SUSFS_BRANCH)..."
-            retry_git_clone https://gitlab.com/simonpunk/susfs4ksu.git "$SUSFS_BRANCH" susfs4ksu
+            SUSFS_DEPTH=1
+            CONFIG_FILE="config/config"
+            if [ "$ABK_LOCAL_CACHE_ENABLED" = "true" ] && [ -f "$CONFIG_FILE" ] && grep -q '^custom=true$' "$CONFIG_FILE"; then
+              CUSTOM_COMMIT="$(sed -n "s/^${SUSFS_BRANCH}=//p" "$CONFIG_FILE" | head -n1)"
+              # Resolve abbreviated commits from branch history, not remote ref names.
+              # Cache the full history once so later pinned builds can reuse it.
+              if [ -n "$CUSTOM_COMMIT" ]; then
+                SUSFS_DEPTH=0
+              fi
+            fi
+            retry_git_clone https://gitlab.com/simonpunk/susfs4ksu.git "$SUSFS_BRANCH" susfs4ksu "$SUSFS_DEPTH"
 
             CONFIG_FILE="config/config"
             if [ -f "$CONFIG_FILE" ]; then
@@ -738,9 +761,11 @@ jobs:
                   cd susfs4ksu
                   # 浅克隆 (--depth 1) 只含分支 HEAD，历史里较旧的固定提交不在其中，
                   # 直接 checkout 会因 "reference is not a tree" 失败，先补全历史。
-                  git fetch --unshallow origin "$SUSFS_BRANCH" 2>/dev/null \
-                    || git fetch --depth=1000 origin "$SUSFS_BRANCH" 2>/dev/null \
-                    || true
+                  if ! git cat-file -e "${CUSTOM_COMMIT}^{commit}" 2>/dev/null; then
+                    git fetch --unshallow origin "$SUSFS_BRANCH" 2>/dev/null \
+                      || git fetch --depth=1000 origin "$SUSFS_BRANCH" 2>/dev/null \
+                      || true
+                  fi
                   git checkout "$CUSTOM_COMMIT"
                   cd ..
                 fi
@@ -756,10 +781,13 @@ jobs:
           fi
 
           echo "准备补丁资源..."
-          git clone https://github.com/WildKernels/kernel_patches.git
-          git clone https://github.com/ShirkNeko/SukiSU_patch.git
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+            https://github.com/WildKernels/kernel_patches.git kernel_patches
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+            https://github.com/ShirkNeko/SukiSU_patch.git SukiSU_patch
           echo "使用当前仓库补丁目录: $ZZH_PATCHES"
-          git clone https://github.com/Numbersf/Action-Build.git --depth=1
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+            https://github.com/Numbersf/Action-Build.git Action-Build --depth 1
 
       - name: 克隆自定义外部模块
         if: inputs.custom_external_modules != ''
@@ -1081,52 +1109,60 @@ jobs:
           KERNEL_VERSION_OVERRIDE: ${{ inputs.kernel_version_override }}
         run: |
           set -euo pipefail
-          git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1.git gcc
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+            https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1.git gcc
 
           FORMATTED_BRANCH="${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.os_patch_level }}"
           echo "初始化 repo，分支: common-${FORMATTED_BRANCH}"
 
-          $REPO init --depth=1 -u https://android.googlesource.com/kernel/manifest -b common-${FORMATTED_BRANCH} --repo-rev=v2.16
+          if [ "$ABK_LOCAL_CACHE_ENABLED" = "true" ]; then
+            python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" sync-repo \
+              --repo "$REPO" --manifest-url https://android.googlesource.com/kernel/manifest \
+              --branch "common-${FORMATTED_BRANCH}" --destination "$KERNEL_ROOT" \
+              --kernel-branch "$FORMATTED_BRANCH"
+          else
+            $REPO init --depth=1 -u https://android.googlesource.com/kernel/manifest -b common-${FORMATTED_BRANCH} --repo-rev=v2.16
 
-          retry_git_ls_remote() {
-            local repo_url="$1"
-            local ref="$2"
-            local attempt
-            local output
-            for attempt in 1 2 3; do
-              if output=$(git ls-remote "$repo_url" "$ref"); then
-                printf '%s\n' "$output"
-                return 0
-              fi
-              echo "::warning::git ls-remote 失败: $repo_url $ref (attempt ${attempt}/3)" >&2
-              sleep "$((attempt * 5))"
-            done
-            echo "::error::git ls-remote 连续失败: $repo_url $ref" >&2
-            return 1
-          }
+            retry_git_ls_remote() {
+              local repo_url="$1"
+              local ref="$2"
+              local attempt
+              local output
+              for attempt in 1 2 3; do
+                if output=$(git ls-remote "$repo_url" "$ref"); then
+                  printf '%s\n' "$output"
+                  return 0
+                fi
+                echo "::warning::git ls-remote 失败: $repo_url $ref (attempt ${attempt}/3)" >&2
+                sleep "$((attempt * 5))"
+              done
+              echo "::error::git ls-remote 连续失败: $repo_url $ref" >&2
+              return 1
+            }
 
-          REMOTE_BRANCH=$(retry_git_ls_remote https://android.googlesource.com/kernel/common "$FORMATTED_BRANCH")
-          DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
+            REMOTE_BRANCH=$(retry_git_ls_remote https://android.googlesource.com/kernel/common "$FORMATTED_BRANCH")
+            DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
 
-          if grep -q deprecated <<< $REMOTE_BRANCH; then
-            echo "检测到已弃用的分支: $FORMATTED_BRANCH"
-            sed -i "s/\"${FORMATTED_BRANCH}\"/\"deprecated\/${FORMATTED_BRANCH}\"/g" $DEFAULT_MANIFEST_PATH
+            if grep -q deprecated <<< $REMOTE_BRANCH; then
+              echo "检测到已弃用的分支: $FORMATTED_BRANCH"
+              sed -i "s/\"${FORMATTED_BRANCH}\"/\"deprecated\/${FORMATTED_BRANCH}\"/g" $DEFAULT_MANIFEST_PATH
+            fi
+
+            repo_sync_retry() {
+              local attempt
+              for attempt in 1 2 3; do
+                if $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast; then
+                  return 0
+                fi
+                echo "::warning::GKI repo sync failed (attempt ${attempt}/3); retrying"
+                sleep "$((attempt * 5))"
+              done
+              echo "::error::GKI repo sync failed after 3 attempts"
+              return 1
+            }
+            repo_sync_retry
+            echo "REMOTE_BRANCH=$REMOTE_BRANCH" >> $GITHUB_ENV
           fi
-
-          repo_sync_retry() {
-            local attempt
-            for attempt in 1 2 3; do
-              if $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast; then
-                return 0
-              fi
-              echo "::warning::GKI repo sync failed (attempt ${attempt}/3); retrying"
-              sleep "$((attempt * 5))"
-            done
-            echo "::error::GKI repo sync failed after 3 attempts"
-            return 1
-          }
-          repo_sync_retry
-          echo "REMOTE_BRANCH=$REMOTE_BRANCH" >> $GITHUB_ENV
 
           if [ "$SOURCE_MODE" = "custom_git" ]; then
             access_header=""
@@ -6536,7 +6572,9 @@ jobs:
               if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
                 LTO_FLAG="--lto=none"
               fi
-              tools/bazel build --disk_cache=/home/runner/.cache/bazel --config=fast $LTO_FLAG $FRAG_FLAG //common:kernel_aarch64_dist || exit 1
+              BAZEL_DISK_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/bazel-disk"
+              mkdir -p "$BAZEL_DISK_CACHE"
+              tools/bazel build --disk_cache="$BAZEL_DISK_CACHE" --config=fast $LTO_FLAG $FRAG_FLAG //common:kernel_aarch64_dist || exit 1
               strings ./bazel-bin/common/kernel_aarch64/Image | grep 'Linux version'
             fi
 

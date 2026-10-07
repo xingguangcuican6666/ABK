@@ -1352,4 +1352,26 @@
     <string name="gh_root_must_be_object">Root node must be a JSON object</string>
     <string name="gh_missing_module_name">Missing ABK_MODULE_NAME</string>
     <string name="gh_catalog_fallback_name">Module repository</string>
+
+    <!-- Kernel runner repository settings -->
+    <string name="settings_kernel_runner_title">Kernel build environment</string>
+    <string name="settings_kernel_runner_desc">Choose GitHub-hosted or self-hosted runners for GKI and OnePlus/Oplus</string>
+    <string name="settings_kernel_runner_requires_fork">Sign in to GitHub and prepare your own fork before configuring build runners.</string>
+    <string name="settings_kernel_runner_scope">Saved to Actions repository variables in %1$s</string>
+    <string name="settings_kernel_runner_applies_next">This setting is shared by the repository and applies to future builds. Queued and running jobs stay where they are. Tap Save to apply changes.</string>
+    <string name="settings_kernel_runner_gki">GKI / custom source</string>
+    <string name="settings_kernel_runner_oneplus">OnePlus / Oplus</string>
+    <string name="settings_kernel_runner_self_hosted">Use a self-hosted runner</string>
+    <string name="settings_kernel_runner_self_hosted_desc">Use the build machine matching the labels below</string>
+    <string name="settings_kernel_runner_github_hosted_desc">Use GitHub-hosted ubuntu-latest</string>
+    <string name="settings_kernel_runner_labels">Self-hosted runner labels</string>
+    <string name="settings_kernel_runner_labels_example">[\"self-hosted\",\"linux\",\"x64\",\"kernel-builder\"]</string>
+    <string name="settings_kernel_runner_labels_hint">Enter one label or a JSON array of labels. Labels are kept when self-hosting is disabled.</string>
+    <string name="settings_kernel_runner_labels_required">Enter runner labels before enabling self-hosting.</string>
+    <string name="settings_kernel_runner_unsupported">The default branch of this fork does not support runner variables yet. Sync workflows that include this feature, then refresh.</string>
+    <string name="settings_kernel_runner_offline">The runner must be registered for this repository, online, and match every label. Otherwise builds stay queued; there is no automatic fallback to GitHub-hosted runners.</string>
+    <string name="settings_kernel_runner_unsaved">Unsaved changes</string>
+    <string name="settings_kernel_runner_saved">Saved to GitHub</string>
+    <string name="settings_kernel_runner_saving">Saving…</string>
+    <string name="settings_kernel_runner_request_failed">The GitHub repository variables request did not complete. Refresh and try again.</string>
 </resources>

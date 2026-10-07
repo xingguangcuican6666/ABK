@@ -1279,4 +1279,26 @@
     <string name="gh_root_must_be_object">Корневой узел должен быть JSON-объектом</string>
     <string name="gh_missing_module_name">Отсутствует ABK_MODULE_NAME</string>
     <string name="gh_catalog_fallback_name">Репозиторий модулей</string>
+
+    <!-- Kernel runner repository settings -->
+    <string name="settings_kernel_runner_title">Среда сборки ядра</string>
+    <string name="settings_kernel_runner_desc">Выбор runner GitHub или собственного для GKI и OnePlus/Oplus</string>
+    <string name="settings_kernel_runner_requires_fork">Войдите в GitHub и подготовьте собственный форк для настройки среды сборки.</string>
+    <string name="settings_kernel_runner_scope">Сохранение в переменные Actions репозитория %1$s</string>
+    <string name="settings_kernel_runner_applies_next">Настройка общая для репозитория и применяется к будущим сборкам. Задания в очереди и выполняющиеся задания не перемещаются. Нажмите «Сохранить», чтобы применить изменения.</string>
+    <string name="settings_kernel_runner_gki">GKI / свой исходный код</string>
+    <string name="settings_kernel_runner_oneplus">OnePlus / Oplus</string>
+    <string name="settings_kernel_runner_self_hosted">Использовать собственный runner</string>
+    <string name="settings_kernel_runner_self_hosted_desc">Использовать машину, соответствующую меткам ниже</string>
+    <string name="settings_kernel_runner_github_hosted_desc">Использовать ubuntu-latest на GitHub</string>
+    <string name="settings_kernel_runner_labels">Метки собственного runner</string>
+    <string name="settings_kernel_runner_labels_example">[\"self-hosted\",\"linux\",\"x64\",\"kernel-builder\"]</string>
+    <string name="settings_kernel_runner_labels_hint">Укажите одну метку или JSON-массив меток. Метки сохраняются после отключения собственного runner.</string>
+    <string name="settings_kernel_runner_labels_required">Перед включением собственного runner укажите его метки.</string>
+    <string name="settings_kernel_runner_unsupported">Основная ветка форка ещё не поддерживает переменные runner. Синхронизируйте рабочие процессы с этой функцией и обновите данные.</string>
+    <string name="settings_kernel_runner_offline">Runner должен быть зарегистрирован для этого репозитория, находиться в сети и соответствовать всем меткам. Иначе сборки останутся в очереди; автоматического перехода на GitHub нет.</string>
+    <string name="settings_kernel_runner_unsaved">Есть несохранённые изменения</string>
+    <string name="settings_kernel_runner_saved">Сохранено в GitHub</string>
+    <string name="settings_kernel_runner_saving">Сохранение…</string>
+    <string name="settings_kernel_runner_request_failed">Не удалось завершить запрос переменных GitHub. Обновите данные и повторите попытку.</string>
 </resources>

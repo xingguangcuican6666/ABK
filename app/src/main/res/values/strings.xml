@@ -1489,4 +1489,26 @@
     <string name="flash_custom_source_old_client_warning">旧版客户端可能不会展示源码来源或功能降级信息。</string>
     <string name="flash_custom_source_review_before_flash">刷入前请确认源码来源与功能降级状态：</string>
     <string name="root_patch_bundle_verification_failed">签名 bundle 验证失败：%1$s</string>
+
+    <!-- Kernel runner repository settings -->
+    <string name="settings_kernel_runner_title">内核构建环境</string>
+    <string name="settings_kernel_runner_desc">为 GKI 和 OnePlus/Oplus 切换 GitHub 托管或自托管</string>
+    <string name="settings_kernel_runner_requires_fork">请先登录 GitHub 并准备自己的 Fork，之后才能配置构建环境。</string>
+    <string name="settings_kernel_runner_scope">保存位置：%1$s 的 Actions 仓库变量</string>
+    <string name="settings_kernel_runner_applies_next">此设置由仓库共享，对后续构建生效；不会迁移已排队或正在运行的任务。修改后请点击保存。</string>
+    <string name="settings_kernel_runner_gki">GKI / 自定义源码</string>
+    <string name="settings_kernel_runner_oneplus">OnePlus / Oplus</string>
+    <string name="settings_kernel_runner_self_hosted">使用自托管 runner</string>
+    <string name="settings_kernel_runner_self_hosted_desc">使用下方标签指定的构建机器</string>
+    <string name="settings_kernel_runner_github_hosted_desc">使用 GitHub 托管的 ubuntu-latest</string>
+    <string name="settings_kernel_runner_labels">自托管 runner 标签</string>
+    <string name="settings_kernel_runner_labels_example">[\"self-hosted\",\"linux\",\"x64\",\"kernel-builder\"]</string>
+    <string name="settings_kernel_runner_labels_hint">支持单个标签或 JSON 标签数组。关闭自托管后仍保留标签。</string>
+    <string name="settings_kernel_runner_labels_required">开启自托管前，请填写 runner 标签。</string>
+    <string name="settings_kernel_runner_unsupported">此 Fork 的默认分支尚不支持构建环境变量。请先同步包含此功能的工作流，再刷新。</string>
+    <string name="settings_kernel_runner_offline">runner 需要已注册到此仓库、在线且匹配全部标签；否则构建会排队，不会自动切换到 GitHub 托管。</string>
+    <string name="settings_kernel_runner_unsaved">有未保存的修改</string>
+    <string name="settings_kernel_runner_saved">已保存到 GitHub</string>
+    <string name="settings_kernel_runner_saving">正在保存…</string>
+    <string name="settings_kernel_runner_request_failed">未能完成 GitHub 仓库变量请求，请刷新后重试。</string>
 </resources>
