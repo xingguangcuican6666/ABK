@@ -443,6 +443,7 @@ jobs:
           exit 1
 
       - name: 清理磁盘空间
+        if: runner.environment == 'github-hosted'
         uses: endersonmenezes/free-disk-space@v3
         with:
           remove_android: true
@@ -612,6 +613,10 @@ jobs:
       - name: 安装编译依赖
         run: |
           disable_broken_chrome_source() {
+            if [ "${{ runner.environment }}" != "github-hosted" ]; then
+              echo "保留自托管 Runner 的 Chrome APT 源"
+              return 0
+            fi
             local source
             while IFS= read -r source; do
               echo "::warning::禁用与构建无关的 Chrome APT 源: $source"
@@ -1129,24 +1134,7 @@ jobs:
           echo "REMOTE_BRANCH=$REMOTE_BRANCH" >> $GITHUB_ENV
 
           if [ "$SOURCE_MODE" = "custom_git" ]; then
-            access_header=""
-            if [ "$SOURCE_PRIVATE" = "true" ]; then
-              if [ -z "${ABK_CUSTOM_SOURCE_GITHUB_TOKEN:-}" ]; then
-                echo "::error::缺少 ABK_CUSTOM_SOURCE_GITHUB_TOKEN，无法访问私有源码仓。"
-                exit 1
-              fi
-              access_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$ABK_CUSTOM_SOURCE_GITHUB_TOKEN" | base64 -w0)"
-              git config --global http.https://github.com/.extraheader "$access_header"
-            fi
-
-            rm -rf common
-            git init common
-            git -C common remote add origin "$SOURCE_REPO"
-            if [ -n "$access_header" ]; then
-              git -C common config http.https://github.com/.extraheader "$access_header"
-            fi
-            git -C common fetch --depth=1 origin "$SOURCE_COMMIT"
-            git -C common checkout --detach "$SOURCE_COMMIT"
+            bash "$GITHUB_WORKSPACE/.github/scripts/checkout-custom-source.sh"
             git -C common config user.name "ABK Custom Source"
             git -C common config user.email "abk-custom-source@localhost"
 
@@ -3154,8 +3142,10 @@ jobs:
           ABK_FEATURE_END: "false"
           ABK_FEATURE_FAILURE_MESSAGE: "Virtualization patch download failed"
         run: |
-          git clone --depth 1 https://github.com/ravindu644/Droidspaces-OSS.git /tmp/virtualization-support-patches
-          echo "VIRTUALIZATION_SUPPORT_PATCHES=/tmp/virtualization-support-patches/Documentation/resources/kernel-patches/GKI" >> $GITHUB_ENV
+          patches_dir="$RUNNER_TEMP/virtualization-support-patches"
+          rm -rf "$patches_dir"
+          git clone --depth 1 https://github.com/ravindu644/Droidspaces-OSS.git "$patches_dir"
+          echo "VIRTUALIZATION_SUPPORT_PATCHES=$patches_dir/Documentation/resources/kernel-patches/GKI" >> $GITHUB_ENV
 
       - name: 集成虚拟化支持
         if: inputs.virtualization_support != 'off'
@@ -6536,7 +6526,9 @@ jobs:
               if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
                 LTO_FLAG="--lto=none"
               fi
-              tools/bazel build --disk_cache=/home/runner/.cache/bazel --config=fast $LTO_FLAG $FRAG_FLAG //common:kernel_aarch64_dist || exit 1
+              BAZEL_DISK_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/bazel-disk"
+              mkdir -p "$BAZEL_DISK_CACHE"
+              tools/bazel build --disk_cache="$BAZEL_DISK_CACHE" --config=fast $LTO_FLAG $FRAG_FLAG //common:kernel_aarch64_dist || exit 1
               strings ./bazel-bin/common/kernel_aarch64/Image | grep 'Linux version'
             fi
 

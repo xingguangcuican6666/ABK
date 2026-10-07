@@ -1,6 +1,13 @@
 import importlib.util
+import json
+import os
 import re
+import shlex
+import shutil
+import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -188,6 +195,110 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
         self.assertNotIn("EXPORT_SYMBOL", block)
         self.assertNotIn("拒绝启用 CONFIG_NTSYNC", block)
         self.assertIn("ensure_defconfig_value CONFIG_NTSYNC y", block)
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and all(shutil.which(tool) for tool in ("bash", "diff", "grep", "sed", "strings")),
+        "Linux kernel build command requires GNU/Linux tools",
+    )
+    def test_bazel_disk_cache_uses_runner_environment_and_survives_retries(self):
+        step = re.search(
+            r"(?ms)^      - name: 编译内核\n(?P<body>.*?)(?=^      - name: |\Z)",
+            self.workflow,
+        )
+        self.assertIsNotNone(step, "kernel build step not found")
+        command = re.search(r"(?ms)^          command: \|\n(?P<body>.*)\Z", step.group("body"))
+        self.assertIsNotNone(command, "retry action command not found")
+        build_script = textwrap.dedent(command.group("body"))
+        inputs = {"android_version": "android15", "kernel_version": "6.6", "sub_level": "77", "ksu_variant": "SukiSU"}
+        for name, value in inputs.items():
+            build_script = build_script.replace("${{ inputs." + name + " }}", value)
+        self.assertNotIn("${{", build_script, "build fixture contains unresolved workflow inputs")
+
+        for use_xdg in (False, True):
+            with self.subTest(xdg_cache_home=use_xdg), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                home = root / "runner home with spaces"
+                home.mkdir()
+                cache_base = root / "xdg cache with spaces" if use_xdg else home / ".cache"
+                disk_cache = cache_base / "bazel-disk"
+                kernel = root / "kernel tree with spaces"
+                config = kernel / "common/arch/arm64/configs/gki_defconfig"
+                config.parent.mkdir(parents=True)
+                original_config = "CONFIG_64BIT=y\n"
+                Path(str(config) + ".orig").write_text(original_config, encoding="utf-8")
+                (kernel / "common/build.config.gki.aarch64").write_text(
+                    "BUILD_SYSTEM_DLKM=1\nMODULES_ORDER=android/gki_aarch64_modules\nKMI_SYMBOL_LIST_STRICT_MODE=1\n",
+                    encoding="utf-8",
+                )
+                tools = kernel / "tools"
+                tools.mkdir()
+                argv_log = root / "bazel argv.jsonl"
+                stub = root / "bazel stub.py"
+                stub.write_text(textwrap.dedent("""\
+                    import json
+                    import os
+                    import sys
+                    from pathlib import Path
+
+                    args = sys.argv[1:]
+                    with open(os.environ["BAZEL_ARGV_LOG"], "a", encoding="utf-8") as log:
+                        log.write(json.dumps(args) + "\\n")
+                    caches = [arg.split("=", 1)[1] for arg in args if arg.startswith("--disk_cache=")]
+                    if caches != [os.environ["EXPECTED_BAZEL_CACHE"]]:
+                        raise SystemExit("disk cache must belong to the runner environment")
+                    if not Path(caches[0]).is_dir():
+                        raise SystemExit("disk cache must exist before starting Bazel")
+                    # A real write checks permissions, instead of trusting os.access.
+                    (Path(caches[0]) / "bazel-write-check").write_text("writable", encoding="utf-8")
+                    image = Path("bazel-bin/common/kernel_aarch64/Image")
+                    image.parent.mkdir(parents=True, exist_ok=True)
+                    image.write_bytes(b"Linux version 6.6.77-test\\n")
+                    """), encoding="utf-8")
+                bazel = tools / "bazel"
+                bazel.write_text(
+                    f"#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(stub))} \"$@\"\n",
+                    encoding="utf-8",
+                )
+                bazel.chmod(0o755)
+                script = root / "build.sh"
+                script.write_text(build_script, encoding="utf-8", newline="\n")
+                env = dict(os.environ)
+                for name in ("BASH_ENV", "ENV", "XDG_CACHE_HOME"):
+                    env.pop(name, None)
+                env.update(
+                    HOME=str(home), KERNEL_ROOT=str(kernel), DEFCONFIG=str(config),
+                    KSU_LATEST_COMMIT_DATE="fixture", SUSFS_LATEST_COMMIT_DATE="fixture",
+                    BAZEL_ARGV_LOG=str(argv_log), EXPECTED_BAZEL_CACHE=str(disk_cache),
+                )
+                if use_xdg:
+                    env["XDG_CACHE_HOME"] = str(cache_base)
+                expected_args = [
+                    "build", f"--disk_cache={disk_cache}", "--config=fast", "--lto=thin",
+                    "--defconfig_fragment=//common:arch/arm64/configs/ksu.fragment",
+                    "//common:kernel_aarch64_dist",
+                ]
+                for attempt in range(2):
+                    config.write_text(original_config + "CONFIG_KSU=y\n", encoding="utf-8")
+                    result = subprocess.run(
+                        [shutil.which("bash"), str(script)], env=env,
+                        capture_output=True, text=True, encoding="utf-8",
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    calls = [json.loads(line) for line in argv_log.read_text(encoding="utf-8").splitlines()]
+                    self.assertEqual(calls, [expected_args] * (attempt + 1))
+                    self.assertEqual(config.read_text(encoding="utf-8"), original_config)
+                    self.assertEqual(
+                        (kernel / "common/arch/arm64/configs/ksu.fragment").read_text(encoding="utf-8"),
+                        "CONFIG_KSU=y\n",
+                    )
+                    self.assertEqual((disk_cache / "bazel-write-check").read_text(encoding="utf-8"), "writable")
+                    sentinel = disk_cache / "retained-cache-entry"
+                    if attempt == 0:
+                        sentinel.write_text("reuse this entry", encoding="utf-8")
+                    else:
+                        self.assertEqual(sentinel.read_text(encoding="utf-8"), "reuse this entry")
+                if use_xdg:
+                    self.assertFalse((home / ".cache/bazel-disk").exists())
 
     def _step_run_block(self, name):
         match = re.search(

@@ -1,5 +1,15 @@
 # Self-hosted runner setup
 
+## Kernel workflow safety / 内核工作流安全处理
+
+GKI 的磁盘空间清理与 OnePlus/Oplus 的构建空间扩展仅在 GitHub 托管 runner 上执行；自托管机器保留已有工具链、SDK、磁盘布局和 swap。两种工作流在自托管环境中都不会自动删除 Chrome APT 源。虚拟化补丁使用 `$RUNNER_TEMP` 下的独立目录，每次拉取前清理该目录，避免连续构建因旧 checkout 失败。依赖安装仍需要原有的 sudo 权限。
+
+私有自定义源码的认证仅在拉取子进程中生效，不写入全局或源码仓库 Git 配置；拉取失败后也不会新增持久凭据。旧工作流已经留下的配置不会被自动删除。
+
+GKI disk cleanup and OnePlus/Oplus build-space expansion run only on GitHub-hosted runners, preserving installed toolchains, SDKs, disk layouts and swap on self-hosted machines. Both workflows also preserve self-hosted Chrome APT sources. Virtualization patches use a fresh checkout under `$RUNNER_TEMP` on each build. Existing dependency installation still requires sudo. Private custom-source authentication is scoped to the checkout process rather than saved in global or repository Git configuration, including on failure; older persistent settings are not automatically removed.
+
+## APK runner setup / APK 运行环境
+
 ABK 管理器（APK）的两个工作流——`build-abk-app.yml` 和 `build-abk-app-dev.yml`——通过仓库变量 `APP_RUNNER` 选择运行环境。未设置或为空时使用 GitHub 托管的 `ubuntu-latest`；设置后，该值会直接作为 `runs-on`（例如 `self-hosted` 或自定义标签 `abk-builder`）。Fork 默认无需任何配置即可正常工作。
 
 The two ABK manager (APK) workflows — `build-abk-app.yml` and `build-abk-app-dev.yml` — pick their runner via the repository variable `APP_RUNNER`. When unset or empty, both run on the GitHub-hosted `ubuntu-latest`; when set, the value is passed straight through to `runs-on` (e.g. `self-hosted` or a custom label like `abk-builder`). A fresh fork works out of the box with no configuration.
