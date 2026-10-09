@@ -14,6 +14,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.lang.reflect.Type
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -25,6 +26,120 @@ private const val OFFICIAL_RUNTIME_MODULE_REPOSITORY_URL =
     "https://raw.githubusercontent.com/Magisk-Modules-Alt-Repo/json-v2/refs/heads/main/json/modules.json"
 
 private data class RuntimeQuadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+
+private val runtimeModuleHttpClient = okhttp3.OkHttpClient.Builder()
+    .connectTimeout(20, TimeUnit.SECONDS)
+    .readTimeout(30, TimeUnit.SECONDS)
+    .writeTimeout(20, TimeUnit.SECONDS)
+    .callTimeout(30, TimeUnit.SECONDS)
+    .build()
+
+internal data class RuntimeModuleUpdateTarget(
+    val module: AbkRuntimeModule,
+    val updateInfo: RuntimeModuleUpdateInfo,
+)
+
+internal data class RuntimeModuleUpdateInfo(
+    val version: String,
+    val versionCode: Long,
+    val zipUrl: String,
+    val changelog: String,
+    val sha256: String? = null,
+    val signature: String? = null,
+)
+
+internal fun isSecureRuntimeModuleUrl(url: String): Boolean =
+    url.trim().startsWith("https://", ignoreCase = true)
+
+private suspend fun fetchRuntimeModuleResponse(url: String): String? = withContext(Dispatchers.IO) {
+    val cleanUrl = url.trim()
+    if (cleanUrl.isBlank() || !isSecureRuntimeModuleUrl(cleanUrl)) return@withContext null
+    runCatching {
+        val request = okhttp3.Request.Builder().url(cleanUrl).build()
+        runtimeModuleHttpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return@withContext null
+            response.body?.string().orEmpty()
+        }
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+}
+
+internal suspend fun fetchRuntimeModuleText(url: String): String? =
+    fetchRuntimeModuleResponse(url)?.trim()?.takeIf { it.isNotBlank() }
+
+internal suspend fun resolveRuntimeModuleChangelog(changelog: String): String {
+    val value = changelog.trim()
+    if (value.isBlank()) return ""
+    if (!isSecureRuntimeModuleUrl(value)) return value
+    return fetchRuntimeModuleText(value) ?: ""
+}
+
+internal suspend fun findRuntimeModuleUpdateTarget(
+    module: AbkRuntimeModule,
+): RuntimeModuleUpdateTarget? {
+    if (module.id.isBlank() || module.remove || module.update || !module.enabled || module.readonly || module.normalizedType() != "standard") {
+        return null
+    }
+    val updateJson = module.updateJson.trim()
+    if (updateJson.isBlank()) return null
+    val updateInfo = fetchRuntimeModuleUpdateInfo(updateJson) ?: return null
+    if (!isRuntimeModuleVersionNewer(
+            localVersion = module.version,
+            localVersionCode = module.versionCode,
+            remoteVersion = updateInfo.version,
+            remoteVersionCode = updateInfo.versionCode,
+        )
+    ) {
+        return null
+    }
+    return RuntimeModuleUpdateTarget(module, updateInfo)
+}
+
+internal suspend fun fetchRuntimeModuleUpdateInfo(updateJson: String): RuntimeModuleUpdateInfo? {
+    if (!isSecureRuntimeModuleUrl(updateJson)) return null
+    val result = fetchRuntimeModuleResponse(updateJson).orEmpty()
+    if (result.isBlank()) return null
+    val json = runCatching { com.google.gson.JsonParser.parseString(result).asJsonObject }.getOrNull() ?: return null
+    val version = json.get("version")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim().orEmpty()
+    val versionCode = json.get("versionCode")?.takeIf { it.isJsonPrimitive }?.let { runCatching { it.asLong }.getOrNull() } ?: 0L
+    val zipUrl = json.get("zipUrl")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim().orEmpty()
+    val changelog = json.get("changelog")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim().orEmpty()
+    val sha256 = (json.get("sha256") ?: json.get("sha_256"))?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim()?.takeIf { it.isNotBlank() }
+    val signature = json.get("signature")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim()?.takeIf { it.isNotBlank() }
+    if (zipUrl.isBlank() || version.isBlank() || !isSecureRuntimeModuleUrl(zipUrl)) return null
+    return RuntimeModuleUpdateInfo(version = version, versionCode = versionCode, zipUrl = zipUrl, changelog = changelog, sha256 = sha256, signature = signature)
+}
+
+internal fun isRuntimeModuleVersionNewer(
+    localVersion: String,
+    localVersionCode: Long,
+    remoteVersion: String,
+    remoteVersionCode: Long,
+): Boolean {
+    if (localVersionCode > 0L && remoteVersionCode > 0L) {
+        return remoteVersionCode > localVersionCode
+    }
+    val local = parseRuntimeVersion(localVersion) ?: return false
+    val remote = parseRuntimeVersion(remoteVersion) ?: return false
+    return compareRuntimeVersionParts(remote, local) > 0
+}
+
+internal fun parseRuntimeVersion(value: String): List<Long>? {
+    val clean = value.trim().removePrefix("v").removePrefix("V")
+    if (clean.isBlank()) return null
+    val parts = Regex("""\d+""").findAll(clean)
+        .mapNotNull { it.value.toLongOrNull() }
+        .toList()
+    return parts.takeIf { it.isNotEmpty() }
+}
+
+internal fun compareRuntimeVersionParts(left: List<Long>, right: List<Long>): Int {
+    val size = maxOf(left.size, right.size)
+    for (index in 0 until size) {
+        val comparison = (left.getOrNull(index) ?: 0L).compareTo(right.getOrNull(index) ?: 0L)
+        if (comparison != 0) return comparison
+    }
+    return 0
+}
 
 class RuntimeCoordinator(
     private val scope: CoroutineScope,
@@ -398,6 +513,10 @@ class RuntimeCoordinator(
                 return@launch
             }
             val module = readState().abkRuntimeStatus?.modules?.firstOrNull { it.id == cleanId }
+            if (module?.update == true) {
+                updateState { it.copy(abkRuntimeError = text(R.string.runtime_operation_incomplete_retry)) }
+                return@launch
+            }
             updateState {
                 it.copy(
                     rootGranted = true,

@@ -1,36 +1,36 @@
 {
   "stable": {
     "normal": {
-      "versionName": "1.2.5",
+      "versionName": "1.2.7",
       "versionCode": 10025,
-      "downloadUrl": "https://github.com/xingguangcuican6666/ABK/releases/download/app_v1.2.5/abk-app-abk-apks.zip"
+      "downloadUrl": "https://github.com/xingguangcuican6666/ABK/releases/download/app_v1.2.7/abk-app-abk-apks.zip"
     },
     "dev": {
-      "versionName": "1.2.5-dev",
+      "versionName": "1.2.7-dev",
       "versionCode": 10025,
-      "downloadUrl": "https://github.com/xingguangcuican6666/ABK/releases/download/app_v1.2.5/abk-app-dev-abk-apks.zip"
+      "downloadUrl": "https://github.com/xingguangcuican6666/ABK/releases/download/app_v1.2.7/abk-app-dev-abk-apks.zip"
     }
   },
   "unstable": {
     "normal": {
-      "versionName": "1.2.5",
-      "versionCode": 10025,
+      "versionName": "1.2.7",
+      "versionCode": 10027,
       "downloadUrl": "https://nightly.link/xingguangcuican6666/ABK/workflows/build-abk-app/dev/abk-apks.zip",
-      "publishedAt": "2026-07-12T09:42:36Z",
-      "buildTimestampEpochMillis": 1783849356000,
+      "publishedAt": "2026-09-23T12:40:40Z",
+      "buildTimestampEpochMillis": 1790167240000,
       "sourceWorkflow": "Build ABK App",
-      "commitSha": "aacad2311b5eb980b9e87a8c68c269dee38375f5",
-      "runId": 29187923913
+      "commitSha": "2125cc68590850fc90754b73ee3193314c2ad377",
+      "runId": 35861973595
     },
     "dev": {
-      "versionName": "1.2.5",
-      "versionCode": 10025,
+      "versionName": "1.2.7",
+      "versionCode": 10027,
       "downloadUrl": "https://nightly.link/xingguangcuican6666/ABK/workflows/build-abk-app-dev/dev/abk-apks.zip",
-      "publishedAt": "2026-07-12T09:42:38Z",
-      "buildTimestampEpochMillis": 1783849358000,
+      "publishedAt": "2026-09-23T12:43:26Z",
+      "buildTimestampEpochMillis": 1790167406000,
       "sourceWorkflow": "Build ABK App Dev",
-      "commitSha": "aacad2311b5eb980b9e87a8c68c269dee38375f5",
-      "runId": 29187923931
+      "commitSha": "2125cc68590850fc90754b73ee3193314c2ad377",
+      "runId": 35861973551
     }
   }
 }

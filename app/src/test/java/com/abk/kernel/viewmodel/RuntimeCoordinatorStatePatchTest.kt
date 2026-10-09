@@ -2,15 +2,43 @@ package com.abk.kernel.viewmodel
 
 import com.abk.kernel.data.model.AbkRuntimeModule
 import com.abk.kernel.data.model.AbkRuntimeStatus
-import com.abk.kernel.data.model.MainUiState
 import com.abk.kernel.data.model.RootGrantApp
+import com.abk.kernel.viewmodel.MainUiState
 import com.abk.kernel.data.model.RootGrantProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
 
 class RuntimeCoordinatorStatePatchTest {
+
+    @Test
+    fun `parse runtime version extracts numeric tokens from mixed strings`() {
+        assertEquals(listOf(1L, 2L, 3L, 4L), parseRuntimeVersion("v1.2.3-4"))
+        assertEquals(listOf(1L, 2L, 3L), parseRuntimeVersion("1.2.3-beta"))
+        assertNull(parseRuntimeVersion("beta"))
+    }
+
+    @Test
+    fun `runtime module version comparison falls back to numeric tokens`() {
+        assertTrue(isRuntimeModuleVersionNewer("1.2.3-beta", 0L, "1.2.4", 0L))
+        assertTrue(isRuntimeModuleVersionNewer("1.2.3", 0L, "v1.2.3-4", 0L))
+        assertFalse(isRuntimeModuleVersionNewer("1.2.4", 0L, "1.2.3-beta", 0L))
+    }
+
+    @Test
+    fun `runtime module update info requires secure https urls`() {
+        assertFalse(isSecureRuntimeModuleUrl("http://example.com/update.json"))
+        assertTrue(isSecureRuntimeModuleUrl("https://example.com/update.json"))
+        assertTrue(isSecureRuntimeModuleUrl("HTTPS://example.com/update.json"))
+    }
+
+    @Test
+    fun `runtime module changelog keeps non secure urls as plain text`() = runBlocking<Unit> {
+        assertEquals("http://example.com/changelog.md", resolveRuntimeModuleChangelog("http://example.com/changelog.md"))
+    }
 
     @Test
     fun `saving loaded root profile updates detail and preserves list order`() {
@@ -37,7 +65,8 @@ class RuntimeCoordinatorStatePatchTest {
         )
         val updated = MainUiState(
             rootGrantApps = listOf(allowedApp, deniedApp),
-            rootGrantDetailApp = deniedApp.copy(profileLoaded = true)
+            rootGrantDetailApp = deniedApp.copy(profileLoaded = true),
+            downloadDirectory = "/tmp"
         ).applySavedRootGrantProfile(
             packageName = "com.example.alpha",
             savedProfile = RootGrantProfile(
@@ -75,7 +104,10 @@ class RuntimeCoordinatorStatePatchTest {
             profileLoaded = false
         )
 
-        val updated = MainUiState(rootGrantApps = listOf(app)).applySavedRootGrantProfile(
+        val updated = MainUiState(
+            rootGrantApps = listOf(app),
+            downloadDirectory = "/tmp"
+        ).applySavedRootGrantProfile(
             packageName = "com.example.app",
             savedProfile = RootGrantProfile(
                 name = "com.example.app",
@@ -100,7 +132,8 @@ class RuntimeCoordinatorStatePatchTest {
                     runtimeModule(id = "b", name = "Beta", enabled = true),
                     runtimeModule(id = "c", name = "Gamma", enabled = true)
                 )
-            )
+            ),
+            downloadDirectory = "/tmp"
         ).applyRuntimeModuleEnabled("c", false)
 
         assertEquals(listOf("a", "b", "c"), updated.abkRuntimeStatus?.modules?.map { it.id })
@@ -115,7 +148,8 @@ class RuntimeCoordinatorStatePatchTest {
                     runtimeModule(id = "a", name = "Alpha", remove = false),
                     runtimeModule(id = "b", name = "Beta", remove = false)
                 )
-            )
+            ),
+            downloadDirectory = "/tmp"
         ).applyRuntimeModulePendingUninstall("b", true)
 
         assertEquals(listOf("a", "b"), updated.abkRuntimeStatus?.modules?.map { it.id })
@@ -135,7 +169,7 @@ class RuntimeCoordinatorStatePatchTest {
         )
 
         assertEquals(
-            listOf("builtin-enabled", "standard-disabled", "standard-enabled", "kpm-module"),
+            listOf("builtin-enabled", "standard-enabled", "standard-disabled", "kpm-module"),
             sorted.map { it.id }
         )
     }

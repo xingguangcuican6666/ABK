@@ -11,7 +11,9 @@ object DownloadDirectoryUtils {
     private const val EXTERNAL_STORAGE_DOCUMENTS_AUTHORITY = "com.android.externalstorage.documents"
 
     fun defaultDirectoryPath(): String {
-        val publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val publicDownloads = runCatching {
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        }.getOrNull() ?: File("/storage/emulated/0/Download")
         return File(publicDownloads, APP_DOWNLOAD_FOLDER).absolutePath
     }
 

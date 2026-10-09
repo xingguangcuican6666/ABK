@@ -8,14 +8,34 @@ on:
   push:
     paths:
       - "cli/**"
+      - "LICENSE"
       - ".github/workflows/build-abk-cli.yml"
+      - ".github/workflows/kernel-a12-5-10.yml"
+      - ".github/workflows/kernel-a13-5-15.yml"
+      - ".github/workflows/kernel-a14-6-1.yml"
+      - ".github/workflows/kernel-a15-6-6.yml"
+      - ".github/workflows/kernel-a16-6-12.yml"
+      - ".github/workflows/kernel-custom.yml"
+      - ".github/workflows/kernel-full-feature-matrix.yml"
+      - ".github/workflows/all-managers-full-feature-matrix.yml"
+      - ".github/workflows/oneplus-custom.yml"
   pull_request:
     paths:
       - "cli/**"
+      - "LICENSE"
       - ".github/workflows/build-abk-cli.yml"
+      - ".github/workflows/kernel-a12-5-10.yml"
+      - ".github/workflows/kernel-a13-5-15.yml"
+      - ".github/workflows/kernel-a14-6-1.yml"
+      - ".github/workflows/kernel-a15-6-6.yml"
+      - ".github/workflows/kernel-a16-6-12.yml"
+      - ".github/workflows/kernel-custom.yml"
+      - ".github/workflows/kernel-full-feature-matrix.yml"
+      - ".github/workflows/all-managers-full-feature-matrix.yml"
+      - ".github/workflows/oneplus-custom.yml"
 
 concurrency:
-  group: build-abk-cli-${{ github.event.pull_request.number || github.ref }}
+  group: build-abk-cli-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -155,6 +175,21 @@ jobs:
           if (-not $?) { Write-Warning "cryptography unavailable, using pycryptodome instead" }
           python -m pip install pyinstaller certifi
 
+      - name: Run CLI regression tests
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s cli/tests -v
+
+      - name: Run CLI regression tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:PYTHONDONTWRITEBYTECODE = "1"
+          python -m unittest discover -s cli/tests -v
+          if (-not $?) { exit 1 }
+
       - name: Build native one-dir bundle
         if: ${{ matrix.target_id == 'linux-arm64' || matrix.target_id == 'linux-x64' || matrix.target_id == 'macos-arm64' || matrix.target_id == 'macos-x64' }}
         shell: bash
@@ -198,6 +233,9 @@ jobs:
       - name: Prepare Linux cross-packaging runtime
         if: ${{ matrix.target_id == 'linux-armhf' || matrix.target_id == 'linux-x86' }}
         shell: bash
+        env:
+          CROSS_PLATFORM: ${{ matrix.target_id == 'linux-armhf' && 'linux/arm/v7' || 'linux/386' }}
+          CROSS_BINFMT: ${{ matrix.target_id == 'linux-armhf' && 'arm' || '386' }}
         run: |
           set -euo pipefail
 
@@ -213,7 +251,23 @@ jobs:
             exit 1
           fi
 
-          sudo docker run --privileged --rm tonistiigi/binfmt --install arm,386
+          # x86_64 Linux normally executes i386 containers natively, and some
+          # arm64 runners provide arm32 EL0 support. Install only the emulator
+          # that is actually needed when native execution is unavailable.
+          docker pull --platform "$CROSS_PLATFORM" python:3.12-bookworm
+          if docker run --rm \
+            --platform "$CROSS_PLATFORM" \
+            --entrypoint /bin/true \
+            python:3.12-bookworm; then
+            echo "Native $CROSS_PLATFORM container execution is available."
+          else
+            echo "Native $CROSS_PLATFORM execution unavailable; enabling $CROSS_BINFMT emulation."
+            sudo docker run --privileged --rm tonistiigi/binfmt --install "$CROSS_BINFMT"
+            docker run --rm \
+              --platform "$CROSS_PLATFORM" \
+              --entrypoint /bin/true \
+              python:3.12-bookworm
+          fi
 
       - name: Build linux-armhf bundle in container
         if: ${{ matrix.target_id == 'linux-armhf' }}
@@ -221,9 +275,19 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf build dist
+          pip_cache="$HOME/.cache/pip"
+          runner_uid="$(id -u)"
+          runner_gid="$(id -g)"
+          mkdir -p "$pip_cache"
+          sudo chown -R 0:0 "$pip_cache"
+          restore_pip_cache_owner() {
+            sudo chown -R "$runner_uid:$runner_gid" "$pip_cache"
+          }
+          trap restore_pip_cache_owner EXIT
           docker run --rm \
             --platform linux/arm/v7 \
             -v "$PWD:/work" \
+            -v "$pip_cache:/root/.cache/pip" \
             -w /work \
             python:3.12-bookworm \
             bash -lc '
@@ -232,30 +296,25 @@ jobs:
               apt-get install -y build-essential zlib1g-dev
               python -m pip install --upgrade pip
               python -m pip install pyinstaller certifi pycryptodome pynacl
-              python -m pip install cryptography 2>/dev/null || echo "::warning::cryptography unavailable, using pycryptodome"
+              PYTHONPATH=cli python -c "import abk; assert abk._CRYPTO_BACKEND == \"pycryptodome\""
+              PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s cli/tests -v
               pyinstaller \
                 --noconfirm \
                 --clean \
                 --onedir \
                 --name abk \
-                --hidden-import cryptography \
-                --hidden-import cryptography.hazmat.primitives \
-                --hidden-import cryptography.hazmat.primitives.asymmetric \
-                --hidden-import cryptography.hazmat.primitives.asymmetric.padding \
-                --hidden-import cryptography.hazmat.primitives.hashes \
-                --hidden-import cryptography.hazmat.backends.openssl \
                 --hidden-import certifi \
                 --collect-all certifi \
                 --hidden-import nacl \
                 --hidden-import nacl.bindings \
-                --hidden-import Cryptodome \
-                --hidden-import Cryptodome.PublicKey \
-                --hidden-import Cryptodome.Signature \
-                --hidden-import Cryptodome.Hash \
+                --hidden-import Crypto \
+                --hidden-import Crypto.PublicKey \
+                --hidden-import Crypto.Signature \
+                --hidden-import Crypto.Hash \
                 --add-data "cli/i18n:i18n" \
                 cli/abk.py
             '
-          sudo chown -R "$(id -u):$(id -g)" build dist
+          sudo chown -R "$runner_uid:$runner_gid" build dist
 
       - name: Build linux-x86 bundle in container
         if: ${{ matrix.target_id == 'linux-x86' }}
@@ -263,9 +322,19 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf build dist
+          pip_cache="$HOME/.cache/pip"
+          runner_uid="$(id -u)"
+          runner_gid="$(id -g)"
+          mkdir -p "$pip_cache"
+          sudo chown -R 0:0 "$pip_cache"
+          restore_pip_cache_owner() {
+            sudo chown -R "$runner_uid:$runner_gid" "$pip_cache"
+          }
+          trap restore_pip_cache_owner EXIT
           docker run --rm \
             --platform linux/386 \
             -v "$PWD:/work" \
+            -v "$pip_cache:/root/.cache/pip" \
             -w /work \
             python:3.12-bookworm \
             bash -lc '
@@ -274,30 +343,25 @@ jobs:
               apt-get install -y build-essential zlib1g-dev
               python -m pip install --upgrade pip
               python -m pip install pyinstaller certifi pycryptodome pynacl
-              python -m pip install cryptography 2>/dev/null || echo "::warning::cryptography unavailable, using pycryptodome"
+              PYTHONPATH=cli python -c "import abk; assert abk._CRYPTO_BACKEND == \"pycryptodome\""
+              PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s cli/tests -v
               pyinstaller \
                 --noconfirm \
                 --clean \
                 --onedir \
                 --name abk \
-                --hidden-import cryptography \
-                --hidden-import cryptography.hazmat.primitives \
-                --hidden-import cryptography.hazmat.primitives.asymmetric \
-                --hidden-import cryptography.hazmat.primitives.asymmetric.padding \
-                --hidden-import cryptography.hazmat.primitives.hashes \
-                --hidden-import cryptography.hazmat.backends.openssl \
                 --hidden-import certifi \
                 --collect-all certifi \
                 --hidden-import nacl \
                 --hidden-import nacl.bindings \
-                --hidden-import Cryptodome \
-                --hidden-import Cryptodome.PublicKey \
-                --hidden-import Cryptodome.Signature \
-                --hidden-import Cryptodome.Hash \
+                --hidden-import Crypto \
+                --hidden-import Crypto.PublicKey \
+                --hidden-import Crypto.Signature \
+                --hidden-import Crypto.Hash \
                 --add-data "cli/i18n:i18n" \
                 cli/abk.py
             '
-          sudo chown -R "$(id -u):$(id -g)" build dist
+          sudo chown -R "$runner_uid:$runner_gid" build dist
 
       - name: Add bundled README
         if: runner.os != 'Windows'
@@ -315,7 +379,7 @@ jobs:
           Environment:
             Set GITHUB_TOKEN before triggering builds that require authentication.
           EOF
-          curl https://raw.githubusercontent.com/xingguangcuican6666/ABK/refs/heads/dev/LICENSE --output dist/abk/LICENSE
+          cp LICENSE dist/abk/LICENSE
 
       - name: Add bundled README
         if: runner.os == 'Windows'
@@ -333,7 +397,7 @@ jobs:
             Set GITHUB_TOKEN before triggering builds that require authentication.
           "@ | Set-Content -Path dist/abk/README.txt
           
-          curl https://raw.githubusercontent.com/xingguangcuican6666/ABK/refs/heads/dev/LICENSE --output dist/abk/LICENSE
+          Copy-Item -LiteralPath "LICENSE" -Destination "dist/abk/LICENSE" -Force
 
       - name: Verify bundle contents
         if: runner.os != 'Windows'
@@ -342,6 +406,7 @@ jobs:
           set -euo pipefail
           test -f "dist/abk/${{ matrix.binary_name }}"
           test -f "dist/abk/README.txt"
+          test -f "dist/abk/LICENSE"
           test -f "dist/abk/_internal/i18n/zh-cn.json"
           test -f "dist/abk/_internal/i18n/en-us.json"
 
@@ -351,6 +416,7 @@ jobs:
         run: |
           if (!(Test-Path "dist/abk/${{ matrix.binary_name }}")) { throw "Missing binary" }
           if (!(Test-Path "dist/abk/README.txt")) { throw "Missing README" }
+          if (!(Test-Path "dist/abk/LICENSE")) { throw "Missing LICENSE" }
           if (!(Test-Path "dist/abk/_internal/i18n/zh-cn.json")) { throw "Missing zh-cn.json" }
           if (!(Test-Path "dist/abk/_internal/i18n/en-us.json")) { throw "Missing en-us.json" }
 
@@ -360,6 +426,8 @@ jobs:
         run: |
           set -euo pipefail
           ./dist/abk/abk --help > /dev/null
+          ./dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
+          ./dist/abk/abk --json build --dry-run --matrix a14 --ksu Official | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
 
       - name: Smoke test linux-armhf
         if: ${{ matrix.target_id == 'linux-armhf' }}
@@ -367,6 +435,8 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --help > /dev/null
+          docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
+          docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json build --dry-run --matrix a14 --ksu Official | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
 
       - name: Smoke test linux-x86
         if: ${{ matrix.target_id == 'linux-x86' }}
@@ -374,12 +444,26 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --help > /dev/null
+          docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
+          docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json build --dry-run --matrix a14 --ksu Official | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
 
       - name: Smoke test Windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           .\dist\abk\abk.exe --lang en-us --help | Out-Null
+          $selfTest = & .\dist\abk\abk.exe --json self-test
+          if ($LASTEXITCODE -ne 0) { throw "Frozen CLI self-test failed" }
+          $result = $selfTest | ConvertFrom-Json
+          if ($result.schemaVersion -ne 1 -or $result.ok -ne $true -or $result.command -ne "self-test" -or -not $result.cryptoBackend -or $result.pynacl -ne $true -or $result.caBundle -ne $true -or $result.tlsContext -ne $true) {
+            throw "Unexpected frozen CLI self-test result"
+          }
+          $dryRun = & .\dist\abk\abk.exe --json build --dry-run --matrix a14 --ksu Official
+          if ($LASTEXITCODE -ne 0) { throw "Frozen CLI UTF-8 dry-run failed" }
+          $plan = $dryRun | ConvertFrom-Json
+          if ($plan.schemaVersion -ne 1 -or $plan.ok -ne $true -or $plan.dispatches[0].workflowName -ne "内核构建 - Android 14 (6.1)") {
+            throw "Unexpected frozen CLI UTF-8 dry-run result"
+          }
 
       - name: Package artifact
         if: runner.os != 'Windows'

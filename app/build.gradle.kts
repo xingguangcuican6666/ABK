@@ -10,8 +10,8 @@ plugins {
 val githubClientId = providers.gradleProperty("ABK_GITHUB_CLIENT_ID")
     .orElse(providers.environmentVariable("ABK_GITHUB_CLIENT_ID"))
     .orElse("Ov23li8skGo6AFPBeSTh")
-val appVersionCode = 10025
-val appVersionName = "1.2.5"
+val appVersionCode = 10027
+val appVersionName = "1.2.7"
 val appUpdateMetadataUrl = providers.environmentVariable("ABK_APP_UPDATE_METADATA_URL")
     .orElse("https://raw.githubusercontent.com/xingguangcuican6666/ABK/dev/version.json")
 val appBuildTimestamp = providers.environmentVariable("ABK_APP_BUILD_TIMESTAMP")
@@ -80,8 +80,8 @@ android {
         applicationId = "com.abk.kernel"
         minSdk = 33
         targetSdk = 35
-        versionCode = 10025
-        versionName = "1.2.5"
+        versionCode = 10027
+        versionName = "1.2.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -191,6 +191,7 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.gson)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.nanohttpd)
 
     // Root
     implementation(libs.libsu.core)
@@ -205,11 +206,15 @@ dependencies {
     // Preferences
     implementation(libs.datastore.preferences)
 
+    // Blur / glass
+    implementation(libs.miuix.blur)
+
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("io.mockk:mockk:1.13.14")
     testImplementation(libs.androidx.test.core)
+    testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

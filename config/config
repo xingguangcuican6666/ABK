@@ -13,15 +13,24 @@
 # ================================================================
 
 # 是否启用自定义提交 (true/false)
+# 2026-09-30: KSU Stable/Dev 已钉到上游最新 commit (见 .github/scripts/resolve-ksu-ref.sh)，
+# SUSFS 需与之同代才能干净应用 10_enable_susfs_for_ksu.patch，故改用各分支最新 SUSFS
+# (custom=false)。下方 6-22 提交保留为可快速回退的 6 月绿色基线：回退时把 custom 改回 true。
 custom=false
 
 # ==================== SUSFS 各分支的 commit hash ====================
 # 仅当 custom=true 时生效
-gki-android12-5.10=
-gki-android13-5.15=
-gki-android14-6.1=
-gki-android15-6.6=
-gki-android16-6.12=
+# 下列提交为 2026-06-22 (最后一次全矩阵成功编译 2026-06-29 所用) 的 SUSFS 基线，
+# 用于把 SUSFS 钉回可编译版本，规避其后上游 KernelSU/SUSFS API 漂移导致的补丁 reject。
+gki-android12-5.10=4003ecf2d01c
+gki-android13-5.15=65ea8683c794
+gki-android14-6.1=52eaf3b8fa50
+gki-android15-6.6=a8c720c42ca4
+gki-android16-6.12=72bdce7ce2de
+
+# ==================== 官方版 KernelSU 的版本 ====================
+# 官方版 KernelSU 的钉版不在这里，而在 .github/scripts/resolve-ksu-ref.sh 里按
+# 发布层 (Stable/Dev/Latest) 解析，避免与其 tier 机制产生第二套冲突的 pin。
 
 # ==================== SukiSU 的 commit hash ====================
 # 仅当 custom=true 且使用 SukiSU 变体时生效

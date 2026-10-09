@@ -32,7 +32,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,12 +50,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.abk.kernel.R
 import com.abk.kernel.data.repository.PreferencesRepository
+import com.abk.kernel.ui.blur.BlurConfig
+import com.abk.kernel.ui.blur.BlurScreenScaffold
 import com.abk.kernel.ui.components.AbkCenteredLoadingTransition
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AppBackgroundHost
@@ -91,6 +93,21 @@ class AbkExtensionManagerActivity : ComponentActivity() {
             val customBackgroundUri by prefs.customBackgroundUri.collectAsState(initial = null)
             val backgroundImageEnabled by prefs.backgroundImageEnabled.collectAsState(initial = false)
             val uiSurfaceAlpha by prefs.uiSurfaceAlpha.collectAsState(initial = 1f)
+            val blurEnabled by prefs.blurEnabled.collectAsState(initial = true)
+            val blurBackgroundExpEnabled by prefs.blurBackgroundExpEnabled.collectAsState(initial = false)
+            val blurConfig = remember(
+                customBackgroundUri,
+                backgroundImageEnabled,
+                blurEnabled,
+                blurBackgroundExpEnabled
+            ) {
+                BlurConfig(
+                    blurEnabled = blurEnabled,
+                    backgroundExpEnabled = blurBackgroundExpEnabled,
+                    backgroundUri = customBackgroundUri,
+                    backgroundImageEnabled = backgroundImageEnabled,
+                )
+            }
 
             AbkTheme(
                 themeMode = themeMode,
@@ -101,13 +118,18 @@ class AbkExtensionManagerActivity : ComponentActivity() {
                 AppBackgroundHost(
                     backgroundUri = customBackgroundUri,
                     backgroundEnabled = backgroundImageEnabled,
-                    uiSurfaceAlpha = uiSurfaceAlpha
+                    uiSurfaceAlpha = uiSurfaceAlpha,
+                    blurBackgroundEnabled = blurConfig.wantsBackgroundPainter,
                 ) {
                     AbkExtensionManagerScreen(
                         focusExtensionId = focusExtensionId,
                         bootstrapMode = bootstrapMode,
                     onBack = ::finish,
                     onExternalFlowLaunched = ::finish,
+                    blurEnabled = blurEnabled,
+                    blurBackgroundExpEnabled = blurBackgroundExpEnabled,
+                    backgroundUri = customBackgroundUri,
+                    backgroundImageEnabled = backgroundImageEnabled,
                 )
             }
         }
@@ -122,6 +144,10 @@ fun AbkExtensionManagerScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     containerColor: Color = Color.Transparent,
+    blurEnabled: Boolean = false,
+    blurBackgroundExpEnabled: Boolean = false,
+    backgroundUri: String? = null,
+    backgroundImageEnabled: Boolean = false,
     onExternalFlowLaunched: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -269,7 +295,13 @@ fun AbkExtensionManagerScreen(
         return
     }
 
-    Scaffold(
+    BlurScreenScaffold(
+        blurConfig = BlurConfig(
+            blurEnabled = blurEnabled,
+            backgroundExpEnabled = blurBackgroundExpEnabled,
+            backgroundUri = backgroundUri,
+            backgroundImageEnabled = backgroundImageEnabled,
+        ),
         modifier = modifier,
         containerColor = containerColor,
         topBar = {
@@ -293,6 +325,7 @@ fun AbkExtensionManagerScreen(
                         }
                     }
                 },
+                enableBlur = blurEnabled,
                 actions = {
                     IconButton(onClick = ::requestRefresh) {
                         Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
@@ -300,21 +333,24 @@ fun AbkExtensionManagerScreen(
                 }
             )
         }
-    ) { padding ->
+    ) { topBarHeight ->
         if (loading) {
             AbkCenteredLoadingTransition(
                 text = stringResource(R.string.loading),
-                modifier = Modifier.padding(padding)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = topBarHeight + 16.dp)
             )
-            return@Scaffold
+            return@BlurScreenScaffold
         }
 
         if (extensions.isEmpty()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = AbkScreenHorizontalPadding, vertical = 16.dp),
+                    .padding(top = topBarHeight + 16.dp)
+                    .padding(horizontal = AbkScreenHorizontalPadding)
+                    .padding(bottom = 16.dp),
                 verticalArrangement = Arrangement.Top
             ) {
                 ExpressiveSectionCard(
@@ -324,16 +360,14 @@ fun AbkExtensionManagerScreen(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {}
             }
-            return@Scaffold
+            return@BlurScreenScaffold
         }
 
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = AbkScreenHorizontalPadding,
-                top = 16.dp,
+                top = topBarHeight + 16.dp,
                 end = AbkScreenHorizontalPadding,
                 bottom = 80.dp
             ),

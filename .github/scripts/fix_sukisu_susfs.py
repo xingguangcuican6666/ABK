@@ -67,6 +67,13 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
             die("missing sucompat stat prototype")
         text = text.replace(old, new, 1)
 
+    if modern_stat:
+        text = text.replace(
+            "long ksu_handle_execveat_sucompat(const char __user **filename_user, int orig_nr, struct pt_regs *regs);",
+            "long ksu_handle_execveat_sucompat_tracepoint(const char __user **filename_user, int orig_nr, struct pt_regs *regs);",
+            1,
+        )
+
     if modern_stat and "int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv," not in text:
         marker = "long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr, struct pt_regs *regs);"
         if marker not in text:
@@ -113,6 +120,16 @@ def patch_sucompat_c(path, changed_files):
     )
 
     modern_layout = "long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)" in text
+
+    # The modern builtin source already has a tracepoint handler with the
+    # three-argument name.  SUSFS direct hooks use the five-argument name;
+    # retaining both definitions causes a conflicting-types build failure.
+    if modern_layout and "long ksu_handle_execveat_sucompat(const char __user **filename_user" in text:
+        text = text.replace(
+            "long ksu_handle_execveat_sucompat(const char __user **filename_user, int orig_nr, struct pt_regs *regs)",
+            "long ksu_handle_execveat_sucompat_tracepoint(const char __user **filename_user, int orig_nr, struct pt_regs *regs)",
+            1,
+        )
 
     if not modern_layout and "int ksu_handle_execveat_sucompat" not in text:
         marker = "\nint ksu_handle_faccessat("
@@ -1136,6 +1153,9 @@ def verify(ksu_dir):
         "int ksu_handle_execveat",
         "int ksu_handle_stat(int *dfd, struct filename **filename",
     )
+    if sucompat_text.count("int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,") > 1:
+        die(f"{sucompat_c} contains duplicate direct execveat sucompat definitions")
+
     if not all(marker in sucompat_text for marker in modern_sucompat_markers) and not all(
         marker in sucompat_text for marker in legacy_sucompat_markers
     ):
@@ -1168,6 +1188,15 @@ def main():
 
     patch_sucompat_header(ksu_dir / "feature/sucompat.h", changed_files)
     patch_sucompat_c(ksu_dir / "feature/sucompat.c", changed_files)
+    bridge = ksu_dir / "hook/syscall_event_bridge.c"
+    if bridge.exists():
+        original = bridge.read_text()
+        bridge_text = original.replace(
+            "ksu_handle_execveat_sucompat(filename_user, orig_nr, (struct pt_regs *)regs)",
+            "ksu_handle_execveat_sucompat_tracepoint(filename_user, orig_nr, (struct pt_regs *)regs)",
+            1,
+        )
+        write_if_changed(bridge, bridge_text, original, changed_files)
     patch_symbol_resolver(ksu_dir / "infra/symbol_resolver.c", changed_files)
     patch_lsm_hook(ksu_dir / "hook/lsm_hook.c", changed_files)
     patch_syscall_bridge(ksu_dir / "hook/syscall_event_bridge.c", changed_files)

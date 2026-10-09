@@ -71,6 +71,7 @@ import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material.icons.filled.Inventory2
@@ -106,7 +107,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -172,6 +172,7 @@ import com.abk.kernel.utils.BuildProgressUtils
 import com.abk.kernel.data.model.BuildQueueItemStatus
 import com.abk.kernel.data.model.BuildStatus
 import com.abk.kernel.data.model.DownloadedArtifact
+import com.google.gson.Gson
 import com.abk.kernel.data.model.KernelBuildConfig
 import com.abk.kernel.data.model.KernelSupport
 import com.abk.kernel.data.model.PREBUILT_GKI_RUN_ID
@@ -181,6 +182,8 @@ import com.abk.kernel.data.model.WorkflowJob
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.WorkflowStep
 import com.abk.kernel.data.model.isActive
+import com.abk.kernel.data.model.isKernelBuild
+import com.abk.kernel.data.model.isManagerBuild
 import com.abk.kernel.data.model.isFailedFlashRun
 import com.abk.kernel.utils.FlashFilter
 import com.abk.kernel.utils.FlashFilterKernelKind
@@ -188,6 +191,7 @@ import com.abk.kernel.utils.FlashFilterManagerKind
 import com.abk.kernel.utils.FlashFilterWorkflowState
 import com.abk.kernel.utils.FlashWorkflowFilter
 import com.abk.kernel.utils.WorkflowPrimary
+import com.abk.kernel.ui.blur.BlurScreenScaffold
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
 import com.abk.kernel.ui.components.ObserveChildPageVisibility
@@ -246,6 +250,8 @@ fun FlashScreen(
     var prebuiltParameterTarget by remember { mutableStateOf<PrebuiltGkiRelease?>(null) }
     var deleteRemoteWorkflowRun by remember { mutableStateOf(false) }
     var showFlashConfirm by remember { mutableStateOf(false) }
+    var manifestNoticeItem by remember { mutableStateOf<DownloadedArtifact?>(null) }
+    val sessionManifestNotices = remember { mutableSetOf<String>() }
     var flashSecurityPrompt by remember { mutableStateOf<DownloadUtils.FlashSecurityPrompt?>(null) }
     var allowLegacyBundleFallback by remember { mutableStateOf(false) }
     var showInstallManagerConfirm by remember { mutableStateOf(false) }
@@ -322,8 +328,14 @@ fun FlashScreen(
         buildWorkflowGroups(remoteArtifacts, workflowDownloadedArtifacts, unlinkedWorkflowTitle, recentRunById)
     }
     val allWorkflowGroups = remember(workflowGroups, state.sessionGhostFailedRuns, state.dismissedFailedRunIds, recentRunById) {
-        val activeRunIds = state.recentRuns.filter { it.isActive() }.map { it.id }.toSet()
-        val extraGroups = activeRunIds
+        val placeholderRunIds = state.recentRuns
+            .filter {
+                (it.isActive() && (it.isKernelBuild() || it.isManagerBuild())) ||
+                    it.isSuccessfulKernelFlashRun()
+            }
+            .map { it.id }
+            .toSet()
+        val extraGroups = placeholderRunIds
             .filter { id -> workflowGroups.none { it.runId == id } }
             .mapNotNull { id ->
                 val run = recentRunById[id] ?: return@mapNotNull null
@@ -333,7 +345,7 @@ fun FlashScreen(
             .filter { it !in state.dismissedFailedRunIds }
             .toSet()
         val extraGhostGroups = ghostRunIds
-            .filter { id -> workflowGroups.none { it.runId == id } && id !in activeRunIds }
+            .filter { id -> workflowGroups.none { it.runId == id } && id !in placeholderRunIds }
             .mapNotNull { id ->
                 val run = recentRunById[id] ?: return@mapNotNull null
                 emptyWorkflowGroupFor(run, unlinkedWorkflowTitle)
@@ -348,8 +360,10 @@ fun FlashScreen(
                     return@filter false
                 }
                 val isActive = run?.isActive() == true
+                val isActiveFlashRun = isActive &&
+                    (run?.isKernelBuild() == true || run?.isManagerBuild() == true)
                 val isSessionGhost = group.runId in state.sessionGhostFailedRuns
-                isActive || isSessionGhost || group.shouldAppearInWorkflowList(run)
+                isActiveFlashRun || isSessionGhost || group.shouldAppearInWorkflowList(run)
             }
             .sortedForWorkflowDisplay(recentRunById)
     }
@@ -542,7 +556,11 @@ fun FlashScreen(
 
     LaunchedEffect(state.isLoggedIn, state.forkRepo?.fullName) {
         if (state.isLoggedIn && state.forkRepo != null) {
-            vm.loadRecentRuns(showRefreshIndicator = false, lightweight = true)
+            vm.loadRecentRuns(
+                showRefreshIndicator = false,
+                lightweight = true,
+                includeCompletedArtifacts = true,
+            )
         }
     }
 
@@ -804,7 +822,85 @@ fun FlashScreen(
             artifact = item,
             signingVerificationEnabled = state.artifactSigningVerificationEnabled,
         )
-        if (flashSecurityPrompt == null) showFlashConfirm = true
+        if (flashSecurityPrompt == null) {
+            showFlashConfirm = true
+        }
+    }
+
+    LaunchedEffect(state.downloadedArtifacts, flashDetailRouteActive, selectedRunId, allWorkflowGroups) {
+        // Manifest notices belong to a specific downloaded artifact. Do not
+        // interrupt the flash list as soon as the tab opens; wait until the
+        // user explicitly opens that workflow's detail page.
+        val candidates = manifestNoticeCandidates(flashDetailRouteActive, selectedRunId, allWorkflowGroups)
+        if (candidates.isEmpty()) {
+            manifestNoticeItem = null
+            return@LaunchedEffect
+        }
+        for (item in candidates) {
+            val file = File(item.filePath)
+            if (!file.isFile) continue
+            val key = withContext(Dispatchers.IO) { DownloadUtils.fileSha256Hex(file) }
+            if (sessionManifestNotices.add(key)) {
+                manifestNoticeItem = item
+                break
+            }
+        }
+    }
+
+    manifestNoticeItem?.let { item ->
+        val source = item.manifestKernelSource?.let { runCatching { Gson().fromJson(it, com.abk.kernel.utils.KernelSourceManifest::class.java) }.getOrNull() }
+        val feature = item.manifestFeatureStatus?.let { runCatching { Gson().fromJson(it, com.abk.kernel.utils.FeatureStatusManifest::class.java) }.getOrNull() }
+        AlertDialog(
+            onDismissRequest = { manifestNoticeItem = null },
+            icon = { Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
+            title = { Text(stringResource(R.string.flash_custom_source_notice_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    source?.url?.let { Text(stringResource(R.string.flash_custom_source_url, it)) }
+                    if (source?.access == "github_private") {
+                        Text(
+                            stringResource(R.string.flash_custom_source_private_warning),
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    source?.requestedRef?.let { Text(stringResource(R.string.flash_custom_source_ref, it)) }
+                    source?.resolvedCommit?.let { Text(stringResource(R.string.flash_custom_source_commit, it)) }
+                    source?.kernelVersion?.let { kernel ->
+                        Text(stringResource(R.string.flash_custom_source_kernel, source.androidVersion.orEmpty(), kernel))
+                    }
+                    source?.toolchainPatchLevel?.let {
+                        Text(stringResource(R.string.flash_custom_source_toolchain, it))
+                    }
+                    source?.deviceLabel?.takeIf { it.isNotBlank() }?.let {
+                        Text(stringResource(R.string.flash_custom_source_device, it))
+                    }
+                    source?.defconfigs?.takeIf { it.isNotEmpty() }?.let { defconfigs ->
+                        Text(stringResource(R.string.flash_custom_source_defconfigs, defconfigs.joinToString(" -> ")))
+                    }
+                    feature?.requested?.takeIf { it.isNotEmpty() }?.let {
+                        Text(stringResource(R.string.flash_custom_source_requested, formatManifestFeatureMap(it)))
+                    }
+                    feature?.effective?.takeIf { it.isNotEmpty() }?.let {
+                        Text(stringResource(R.string.flash_custom_source_effective, formatManifestFeatureMap(it)))
+                    }
+                    feature?.skipped?.takeIf { it.isNotEmpty() }?.let { skippedFeatures ->
+                        Text(stringResource(R.string.flash_custom_source_skipped_title), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
+                        skippedFeatures.forEach { skipped ->
+                            Text("• ${skipped.id}: ${skipped.message}", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    Text(
+                        stringResource(R.string.flash_custom_source_old_client_warning),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { manifestNoticeItem = null }) { Text(stringResource(R.string.confirm)) }
+            }
+        )
     }
 
     if (showFlashConfirm) {
@@ -817,6 +913,38 @@ fun FlashScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(stringResource(R.string.flash_confirm_msg))
+                    if (item.manifestClientNotice != null) {
+                        val source = item.manifestKernelSource?.let { runCatching { Gson().fromJson(it, com.abk.kernel.utils.KernelSourceManifest::class.java) }.getOrNull() }
+                        val feature = item.manifestFeatureStatus?.let { runCatching { Gson().fromJson(it, com.abk.kernel.utils.FeatureStatusManifest::class.java) }.getOrNull() }
+                        Text(stringResource(R.string.flash_custom_source_review_before_flash), fontWeight = FontWeight.SemiBold)
+                        source?.url?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                        if (source?.access == "github_private") {
+                            Text(
+                                stringResource(R.string.flash_custom_source_private_warning),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        source?.requestedRef?.let { Text(stringResource(R.string.flash_custom_source_ref, it), style = MaterialTheme.typography.bodySmall) }
+                        source?.resolvedCommit?.let { Text(stringResource(R.string.flash_custom_source_commit, it), style = MaterialTheme.typography.bodySmall) }
+                        source?.deviceLabel?.takeIf { it.isNotBlank() }?.let {
+                            Text(stringResource(R.string.flash_custom_source_device, it), style = MaterialTheme.typography.bodySmall)
+                        }
+                        feature?.requested?.takeIf { it.isNotEmpty() }?.let {
+                            Text(stringResource(R.string.flash_custom_source_requested, formatManifestFeatureMap(it)), style = MaterialTheme.typography.bodySmall)
+                        }
+                        feature?.effective?.takeIf { it.isNotEmpty() }?.let {
+                            Text(stringResource(R.string.flash_custom_source_effective, formatManifestFeatureMap(it)), style = MaterialTheme.typography.bodySmall)
+                        }
+                        feature?.skipped.orEmpty().forEach { skipped ->
+                            Text("! ${skipped.id}: ${skipped.message}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Text(
+                            stringResource(R.string.flash_custom_source_old_client_warning),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     if (item.type == ArtifactType.ANYKERNEL3 && supportsAnyKernelInactiveSlot) {
                         Text(
                             text = stringResource(R.string.root_patch_ak3_slot_title),
@@ -1120,24 +1248,25 @@ fun FlashScreen(
         )
         val showPrebuiltReleaseRefreshLoading =
             prebuiltReleaseRefreshPresentation.showLoading && state.prebuiltGkiReleases.isNotEmpty()
-        Scaffold(
+        BlurScreenScaffold(
+            blurConfig = state.blurConfig,
             containerColor = Color.Transparent,
             topBar = {
                 ExpressiveTopBar(
                     title = if (rootGranted) stringResource(R.string.flash_title) else stringResource(R.string.flash_files_title),
-                    scrollBehavior = scrollBehavior
+                    scrollBehavior = scrollBehavior,
+                    enableBlur = state.blurEnabled
                 )
             }
-        ) { padding ->
+        ) { topBarHeight ->
             LazyColumn(
                 state = listScrollState,
                 modifier = Modifier
-                    .padding(padding)
                     .fillMaxSize()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .padding(horizontal = AbkScreenHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 96.dp + outerPadding.calculateBottomPadding())
+                contentPadding = PaddingValues(top = topBarHeight + 16.dp, bottom = 96.dp + outerPadding.calculateBottomPadding())
             ) {
                 item {
                     FlashHero(
@@ -1825,3 +1954,8 @@ fun FlashScreen(
         }
     }
 }
+
+private fun formatManifestFeatureMap(values: Map<String, Any?>): String =
+    values.entries
+        .sortedBy { it.key }
+        .joinToString(", ") { (key, value) -> "$key=${value ?: "null"}" }

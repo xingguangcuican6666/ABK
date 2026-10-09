@@ -8,6 +8,31 @@ import org.junit.Test
 class KernelSupportTest {
 
     @Test
+    fun customSourceValidationAcceptsOrderedDuplicatesAndRejectsUnsafePaths() {
+        val valid = KernelBuildConfig(
+            buildTarget = BUILD_TARGET_CUSTOM_SOURCE,
+            sourceUrl = "https://github.com/LineageOS/android_kernel_xiaomi_sm8635.git",
+            sourceRef = "lineage-23.2",
+            sourceDefconfigs = listOf("vendor/base.config", "gki_defconfig", "vendor/base.config"),
+            osPatchLevel = "2025-09",
+            kernelsuVariant = KSU_VARIANT_NONE,
+        )
+        assertEquals(null, KernelSupport.validateCustomSource(valid))
+        assertTrue(
+            KernelSupport.validateCustomSource(
+                valid.copy(sourceDefconfigs = listOf("gki_defconfig", "../secret"))
+            ) != null
+        )
+        assertTrue(
+            KernelSupport.validateCustomSource(
+                valid.copy(sourceUrl = "https://user:pass@github.com/example/kernel.git")
+            ) != null
+        )
+        assertTrue(KernelSupport.validateCustomSource(valid.copy(sourceRef = "refs/heads/../main")) != null)
+        assertTrue(KernelSupport.validateCustomSource(valid.copy(sourceRef = "lineage\n23.2")) != null)
+    }
+
+    @Test
     fun normalizeCoercesInvalidValuesAndDisablesKsuOnlyFeaturesForNoneVariant() {
         val normalized = KernelSupport.normalize(
             KernelBuildConfig(
@@ -132,6 +157,29 @@ class KernelSupportTest {
     }
 
     @Test
+    fun normalizeOnePlus15tUsesSm8850Android16Profile() {
+        val normalized = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_ONEPLUS,
+                kernelsuVariant = KSU_VARIANT_SUKISU,
+                cancelSusfs = false,
+                onePlusDeviceManifest = "oneplus_15t",
+                onePlusUseLz4kd = true
+            )
+        )
+
+        assertEquals("sm8850", normalized.onePlusCpu)
+        assertEquals("android16", normalized.androidVersion)
+        assertEquals("6.12", normalized.kernelVersion)
+        assertFalse(normalized.cancelSusfs)
+        assertFalse(normalized.onePlusUseLz4kd)
+        assertEquals(
+            "OnePlus 15T · ColorOS/OxygenOS 16 · android16/6.12 · sm8850",
+            KernelSupport.onePlusDeviceLabel(normalized.onePlusDeviceManifest)
+        )
+    }
+
+    @Test
     fun normalizeDisablesKpmForResukisuDevAndLatest() {
         val dev = KernelSupport.normalize(
             KernelBuildConfig(
@@ -204,5 +252,48 @@ class KernelSupportTest {
         assertEquals("", stable.kpmPassword)
         assertFalse(custom.useKpm)
         assertEquals("", custom.kpmPassword)
+    }
+
+    @Test
+    fun customSourceValidationAcceptsBlankAndWellFormedKernelOverride() {
+        val base = KernelBuildConfig(
+            buildTarget = BUILD_TARGET_CUSTOM_SOURCE,
+            sourceUrl = "https://github.com/LineageOS/android_kernel_google_gs201.git",
+            sourceRef = "lineage-21",
+            sourceDefconfigs = listOf("gki_defconfig"),
+            osPatchLevel = "2025-09",
+            kernelsuVariant = KSU_VARIANT_NONE,
+        )
+        // 空 override 合法（走服务端自动检测）
+        assertEquals(null, KernelSupport.validateCustomSource(base))
+        // X.Y 与 X.Y.Z 合法
+        assertEquals(null, KernelSupport.validateCustomSource(base.copy(sourceKernelVersionOverride = "5.10")))
+        assertEquals(null, KernelSupport.validateCustomSource(base.copy(sourceKernelVersionOverride = "6.13.42")))
+        // 非法格式被拒
+        assertTrue(KernelSupport.validateCustomSource(base.copy(sourceKernelVersionOverride = "abc")) != null)
+        assertTrue(KernelSupport.validateCustomSource(base.copy(sourceKernelVersionOverride = "5")) != null)
+        assertTrue(KernelSupport.validateCustomSource(base.copy(sourceKernelVersionOverride = "5.10.1.2")) != null)
+    }
+
+    @Test
+    fun normalizeClearsKernelOverrideForNonCustomSourceTargets() {
+        val gki = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_GKI,
+                sourceKernelVersionOverride = "5.10.177",
+            )
+        )
+        assertEquals("", gki.sourceKernelVersionOverride)
+
+        val custom = KernelSupport.normalize(
+            KernelBuildConfig(
+                buildTarget = BUILD_TARGET_CUSTOM_SOURCE,
+                sourceUrl = "https://github.com/example/kernel.git",
+                sourceRef = "lineage-21",
+                sourceKernelVersionOverride = "  6.6.50  ",
+                kernelsuVariant = KSU_VARIANT_NONE,
+            )
+        )
+        assertEquals("6.6.50", custom.sourceKernelVersionOverride)
     }
 }

@@ -58,6 +58,7 @@ runs:
             [ -f .github/workflows/build-abk-app.yml ] && sha256sum .github/workflows/build-abk-app.yml
             [ -f .github/workflows/build-abk-app-dev.yml ] && sha256sum .github/workflows/build-abk-app-dev.yml
             [ -f .github/actions/prepare-abk-app-inputs/action.yml ] && sha256sum .github/actions/prepare-abk-app-inputs/action.yml
+            [ -f .github/scripts/patch-ksud-uapi-compat.py ] && sha256sum .github/scripts/patch-ksud-uapi-compat.py
           } | sha256sum | awk '{print $1}'
         )"
 

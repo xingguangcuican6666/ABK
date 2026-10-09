@@ -3,6 +3,14 @@
 -keepattributes *Annotation*
 -keep class com.abk.kernel.data.model.** { *; }
 
+# Signed bundle manifests are deserialized reflectively by Gson. Keep the
+# concrete DTOs and their generic field signatures in minified release builds.
+-keep class com.abk.kernel.utils.SignedBundleManifest { *; }
+-keep class com.abk.kernel.utils.KernelSourceManifest { *; }
+-keep class com.abk.kernel.utils.FeatureStatusManifest { *; }
+-keep class com.abk.kernel.utils.SkippedFeatureManifest { *; }
+-keep class com.abk.kernel.utils.ClientNoticeManifest { *; }
+
 # libsu uses reflection internally.
 -keep class com.topjohnwu.superuser.** { *; }
 -dontwarn com.topjohnwu.superuser.**

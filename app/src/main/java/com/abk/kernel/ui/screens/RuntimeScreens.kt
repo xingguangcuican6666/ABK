@@ -20,15 +20,18 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FolderOpen
@@ -52,15 +55,26 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.abk.kernel.R
 import com.abk.kernel.data.model.AbkRuntimeBuildInfo
 import com.abk.kernel.data.model.AbkRuntimeModule
 import com.abk.kernel.data.model.AbkRuntimeStatus
+import com.abk.kernel.data.model.downloadFileName
+import com.abk.kernel.ui.blur.BlurScreenScaffold
+import com.abk.kernel.ui.blur.blurredCardBackground
+import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AbkInlineLoadingPill
 import com.abk.kernel.ui.components.ObserveChildPageVisibility
@@ -79,12 +93,22 @@ import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
 import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.ui.webui.ModuleWebUiActivity
+import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.RootUtils
 import com.abk.kernel.viewmodel.MainViewModel
+import com.abk.kernel.viewmodel.RuntimeModuleUpdateInfo
+import com.abk.kernel.viewmodel.RuntimeModuleUpdateTarget
+import com.abk.kernel.viewmodel.findRuntimeModuleUpdateTarget
+import com.abk.kernel.viewmodel.resolveRuntimeModuleChangelog
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val RUNTIME_MODULE_DOWNLOAD_RUN_ID = -2_000_000_001L
+private const val RUNTIME_MARKDOWN_URL_TAG = "runtime_markdown_url"
+private val RUNTIME_MARKDOWN_ORDERED_LIST_REGEX = Regex("""^\d+\.\s+""")
+private val RUNTIME_MARKDOWN_BARE_URL_REGEX = Regex("""https?://[^\s)]+""")
 
 @Composable
 fun RuntimeHomeScreen(
@@ -142,13 +166,15 @@ fun RuntimeHomeScreen(
             .fillMaxWidth()
             .height(maxHeight + childPageBottomInset)
 
-        Scaffold(
+        BlurScreenScaffold(
+            blurConfig = state.blurConfig,
             containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
             topBar = {
                 ExpressiveTopBar(
                     title = "AnyBase Kernel",
                     compactTitle = true,
                     scrollBehavior = scrollBehavior,
+                    enableBlur = state.blurEnabled,
                     actions = {
                         IconButton(onClick = {
                             refreshPresentation.beginRefresh()
@@ -162,16 +188,16 @@ fun RuntimeHomeScreen(
                     }
                 )
             }
-        ) { padding ->
+        ) { topBarHeight ->
             Column(
                 modifier = Modifier
-                    .padding(padding)
                     .fillMaxSize()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = AbkScreenHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                Spacer(Modifier.height(topBarHeight + 16.dp))
                 RuntimeStatusHeader(
                     runtimeStatus = state.abkRuntimeStatus,
                     hasNativeManagerPermission = state.hasNativeManagerPermission,
@@ -239,6 +265,9 @@ fun RuntimeHomeScreen(
                     runtimeVariant = state.abkRuntimeStatus?.manager?.variant.orEmpty(),
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled,
+                    downloadDirectory = state.downloadDirectory,
+                    blurEnabled = state.blurEnabled,
+                    blurBackgroundExpEnabled = state.blurBackgroundExpEnabled,
                     onBack = childPageBack::requestDismiss,
                     onBackEnabledChange = { managerPatchBackEnabled = it }
                 )
@@ -269,6 +298,25 @@ fun InstalledModulesScreen(
     var showAllFilesAccessPrompt by remember { mutableStateOf(false) }
     var resumeModulePickerAfterPermission by remember { mutableStateOf(false) }
     var uninstallTarget by remember { mutableStateOf<AbkRuntimeModule?>(null) }
+    var updateTarget by remember { mutableStateOf<RuntimeModuleUpdateTarget?>(null) }
+    var runtimeUpdateCandidates by remember { mutableStateOf<Map<String, RuntimeModuleUpdateTarget>>(emptyMap()) }
+    val runtimeModulesForUpdates = remember(state.abkRuntimeStatus?.modules) { state.abkRuntimeStatus?.modules.orEmpty() }
+    LaunchedEffect(runtimeModulesForUpdates) {
+        val targets = withContext(Dispatchers.IO) {
+            val targetsMap = mutableMapOf<String, RuntimeModuleUpdateTarget>()
+            for (module in runtimeModulesForUpdates) {
+                findRuntimeModuleUpdateTarget(module)?.let { target ->
+                    targetsMap[module.id] = target
+                }
+            }
+            targetsMap
+        }
+        runtimeUpdateCandidates = targets
+        if (updateTarget?.let { it.module.id !in targets } == true) {
+            updateTarget = null
+        }
+    }
+    val runtimeUpdates = runtimeUpdateCandidates
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val modules = remember(state.abkRuntimeStatus?.modules, query) {
         state.abkRuntimeStatus?.modules.orEmpty()
@@ -335,6 +383,78 @@ fun InstalledModulesScreen(
         }
     }
 
+    fun installModuleUpdate(target: RuntimeModuleUpdateTarget) {
+        if (installRunning) return
+        installDialogVisible = true
+        installRunning = true
+        installSuccess = null
+        installLog = listOf(
+            "module update",
+            "name: ${target.module.displayName()}",
+            "version: ${target.updateInfo.version.ifBlank { "unknown" }}",
+            "source: ${target.updateInfo.zipUrl}",
+            ""
+        )
+        scope.launch {
+            val downloadDirectoryPath = state.downloadDirectory
+            val downloadResult = withContext(Dispatchers.IO) {
+                DownloadUtils.downloadRuntimeModuleAsset(
+                    context = context,
+                    token = null,
+                    url = target.updateInfo.zipUrl,
+                    name = target.module.downloadFileName(),
+                    sizeBytes = 0L,
+                    runId = RUNTIME_MODULE_DOWNLOAD_RUN_ID,
+                    runTitle = target.module.displayName(),
+                    downloadDirectoryPath = downloadDirectoryPath,
+                    downloadThreadCount = state.downloadThreadCount
+                )
+            }
+            val downloadedFile = downloadResult.artifacts.firstOrNull()?.filePath?.let(::File)
+            if (downloadedFile == null || !downloadedFile.exists()) {
+                installRunning = false
+                installSuccess = false
+                installLog = installLog + listOf(
+                    "",
+                    downloadResult.errorMessage ?: context.getString(R.string.runtime_module_download_failed),
+                    context.getString(R.string.runtime_wait_root_shell)
+                )
+                return@launch
+            }
+            installLog = installLog + "file: ${downloadedFile.absolutePath}"
+            val expectedSha256 = target.updateInfo.sha256
+            if (!expectedSha256.isNullOrBlank()) {
+                val actual = withContext(Dispatchers.IO) { DownloadUtils.fileSha256Hex(downloadedFile) }
+                if (!actual.equals(expectedSha256.trim(), ignoreCase = true)) {
+                    installRunning = false
+                    installSuccess = false
+                    installLog = installLog + listOf(
+                        "",
+                        context.getString(R.string.runtime_module_checksum_mismatch)
+                    )
+                    return@launch
+                }
+            }
+            val result = withContext(Dispatchers.IO) {
+                if (!RootUtils.refreshRootState()) {
+                    RootUtils.ShellResult(false, listOf(context.getString(R.string.runtime_manager_inactive)))
+                } else {
+                    RootUtils.installModule(downloadedFile.absolutePath) { line ->
+                        scope.launch(Dispatchers.Main.immediate) {
+                            installLog = installLog + line
+                        }
+                    }
+                }
+            }
+            installRunning = false
+            installSuccess = result.success
+            if (result.success) {
+                runtimeUpdateCandidates = runtimeUpdateCandidates - target.module.id
+                vm.refreshAbkRuntimeStatus()
+            }
+        }
+    }
+
     val modulePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -396,45 +516,36 @@ fun InstalledModulesScreen(
         if (state.runtimeNavigationEnabled && state.rootGranted) vm.refreshAbkRuntimeStatus()
     }
 
-    Scaffold(
-        containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
-        topBar = {
-            ExpressiveTopBar(
-                title = stringResource(R.string.runtime_installed_modules_title),
-                scrollBehavior = scrollBehavior,
-                actions = {
-                    IconButton(onClick = {
-                        refreshPresentation.beginRefresh()
-                        vm.refreshAbkRuntimeStatus()
-                    }) {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.runtime_refresh_installed_modules))
+    Box(Modifier.fillMaxSize()) {
+        BlurScreenScaffold(
+            blurConfig = state.blurConfig,
+            containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
+            topBar = {
+                ExpressiveTopBar(
+                    title = stringResource(R.string.runtime_installed_modules_title),
+                    scrollBehavior = scrollBehavior,
+                    enableBlur = state.blurEnabled,
+                    actions = {
+                        IconButton(onClick = {
+                            refreshPresentation.beginRefresh()
+                            vm.refreshAbkRuntimeStatus()
+                        }) {
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.runtime_refresh_installed_modules))
+                        }
                     }
-                }
-            )
-        },
-        floatingActionButton = {
-            SmallFloatingActionButton(
-                onClick = {
-                    launchModulePickerWithPermissionCheck()
-                },
-                modifier = Modifier.padding(bottom = outerPadding.calculateBottomPadding()),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            ) {
-                Icon(Icons.Default.UploadFile, contentDescription = stringResource(R.string.runtime_install_module))
+                )
             }
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = AbkScreenHorizontalPadding),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            RuntimeModuleSearchField(query, onValueChange = { query = it })
+        ) { topBarHeight ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = AbkScreenHorizontalPadding),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Spacer(Modifier.height(topBarHeight + 16.dp))
+                RuntimeModuleSearchField(query, onValueChange = { query = it })
 
             when {
                 showInitialLoading -> {
@@ -500,8 +611,10 @@ fun InstalledModulesScreen(
                                         grouped.modules.forEach { module ->
                                             InstalledRuntimeModuleCard(
                                                 module = module,
+                                                updateCandidate = runtimeUpdates[module.id],
                                                 actionInFlight = state.abkRuntimeModuleActionId == module.id,
                                                 onSetEnabled = { enabled -> vm.setAbkRuntimeModuleEnabled(module.id, enabled) },
+                                                onRequestUpdate = { candidate -> updateTarget = candidate },
                                                 onRequestUninstall = { uninstallTarget = module },
                                                 onRunAction = { vm.runRuntimeModuleAction(module.id) },
                                                 onOpenWebUi = {
@@ -522,6 +635,20 @@ fun InstalledModulesScreen(
             }
 
             Spacer(Modifier.height(80.dp + outerPadding.calculateBottomPadding()))
+        }
+        }
+        SmallFloatingActionButton(
+            onClick = {
+                launchModulePickerWithPermissionCheck()
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .navigationBarsPadding()
+                .padding(end = 16.dp, bottom = 16.dp + outerPadding.calculateBottomPadding()),
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        ) {
+            Icon(Icons.Default.UploadFile, contentDescription = stringResource(R.string.runtime_install_module))
         }
     }
 
@@ -575,6 +702,19 @@ fun InstalledModulesScreen(
                     pendingInstallUri = null
                     installModuleFromUri(uri)
                 }
+            }
+        )
+    }
+
+    updateTarget?.let { target ->
+        val currentDownloadDirectory = state.downloadDirectory
+        RuntimeModuleUpdateConfirmDialog(
+            target = target,
+            downloadDirectoryPath = currentDownloadDirectory,
+            onDismiss = { updateTarget = null },
+            onConfirm = {
+                updateTarget = null
+                installModuleUpdate(target)
             }
         )
     }
@@ -809,11 +949,14 @@ private fun RuntimeErrorCard(
     message: String,
     onRefresh: () -> Unit
 ) {
+    val shape = RoundedCornerShape(8.dp)
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape,
         colors = CardDefaults.elevatedCardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.errorContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.errorContainer)
         )
     ) {
         Column(
@@ -848,18 +991,23 @@ private fun RuntimeModuleSearchField(value: String, onValueChange: (String) -> U
 @Composable
 private fun InstalledRuntimeModuleCard(
     module: AbkRuntimeModule,
+    updateCandidate: RuntimeModuleUpdateTarget?,
     actionInFlight: Boolean,
     onSetEnabled: (Boolean) -> Unit,
+    onRequestUpdate: (RuntimeModuleUpdateTarget) -> Unit,
     onRequestUninstall: () -> Unit,
     onRunAction: () -> Unit,
     onOpenWebUi: () -> Unit
 ) {
     val canUninstall = module.canUninstallRuntimeModule()
+    val shape = RoundedCornerShape(8.dp)
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
@@ -903,7 +1051,7 @@ private fun InstalledRuntimeModuleCard(
                 if (module.controllable && !module.readonly) {
                     ExpressiveSwitch(
                         checked = module.enabled,
-                        enabled = !actionInFlight,
+                        enabled = !actionInFlight && !module.update,
                         onCheckedChange = onSetEnabled
                     )
                 }
@@ -924,11 +1072,13 @@ private fun InstalledRuntimeModuleCard(
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 RuntimeModuleChip(module.id.ifBlank { module.repoName() })
+                if (module.metamodule) RuntimeModuleChip("META", secondary = false)
                 RuntimeModuleChip(runtimeModuleTypeLabel(module), secondary = true)
                 if (module.stage.isNotBlank()) RuntimeModuleChip(module.stage, secondary = true)
                 if (module.source.isNotBlank()) RuntimeModuleChip(runtimeModuleSourceLabel(module.source), secondary = true)
                 RuntimeModuleChip(if (module.enabled) stringResource(R.string.runtime_enabled) else stringResource(R.string.runtime_disabled), secondary = !module.enabled)
                 if (module.update) RuntimeModuleChip(stringResource(R.string.runtime_pending_update), secondary = true)
+                if (updateCandidate != null) RuntimeModuleChip(stringResource(R.string.runtime_update_available), secondary = false)
                 if (module.remove) RuntimeModuleChip(stringResource(R.string.runtime_pending_remove), secondary = true)
                 if (module.hasWebUi) RuntimeModuleChip("WebUI", secondary = true)
                 if (module.actionSupported || module.hasActionScript) RuntimeModuleChip("Action", secondary = true)
@@ -952,12 +1102,23 @@ private fun InstalledRuntimeModuleCard(
                 )
             }
 
-            if (module.hasWebUi || module.actionSupported || canUninstall || actionInFlight) {
+            if (module.hasWebUi || module.actionSupported || updateCandidate != null || canUninstall || actionInFlight) {
                 Row(
                     modifier = Modifier.align(Alignment.End),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (updateCandidate != null) {
+                        IconButton(
+                            onClick = { onRequestUpdate(updateCandidate) },
+                            enabled = !actionInFlight && !module.remove
+                        ) {
+                            Icon(
+                                Icons.Default.Download,
+                                contentDescription = stringResource(R.string.runtime_update_module)
+                            )
+                        }
+                    }
                     if (actionInFlight) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     }
@@ -978,17 +1139,23 @@ private fun InstalledRuntimeModuleCard(
                         }
                     }
                     if (canUninstall) {
-                        IconButton(
+                        FilledTonalButton(
                             onClick = onRequestUninstall,
-                            enabled = !actionInFlight
+                            enabled = !actionInFlight,
+                            modifier = Modifier.defaultMinSize(minWidth = 52.dp, minHeight = 32.dp),
+                            contentPadding = ButtonDefaults.TextButtonContentPadding
                         ) {
                             Icon(
                                 if (module.remove) Icons.Default.RestartAlt else Icons.Default.Delete,
-                                contentDescription = if (module.remove) stringResource(R.string.runtime_reboot) else stringResource(R.string.root_auth_umount_modules),
+                                contentDescription = stringResource(
+                                    if (module.remove) R.string.runtime_reboot
+                                    else R.string.runtime_uninstall
+                                ),
+                                modifier = Modifier.size(20.dp),
                                 tint = if (module.remove) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
-                                    MaterialTheme.colorScheme.error
+                                    MaterialTheme.colorScheme.onSecondaryContainer
                                 }
                             )
                         }
@@ -1081,6 +1248,305 @@ private fun RuntimeModuleInstallConfirmDialog(
     )
 }
 
+@Composable
+private fun RuntimeModuleUpdateConfirmDialog(
+    target: RuntimeModuleUpdateTarget,
+    downloadDirectoryPath: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val module = target.module
+    val updateInfo = target.updateInfo
+    val changelogScroll = rememberScrollState()
+    var changelogText by remember(updateInfo.changelog) { mutableStateOf(updateInfo.changelog) }
+
+    val context = LocalContext.current
+
+    LaunchedEffect(updateInfo.changelog) {
+        changelogText = try {
+            if (updateInfo.changelog.isBlank()) {
+                ""
+            } else {
+                resolveRuntimeModuleChangelog(updateInfo.changelog)
+            }
+        } catch (_: Exception) {
+            context.getString(R.string.runtime_update_changelog_unavailable)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Download, contentDescription = stringResource(R.string.runtime_update_module)) },
+        title = { Text(stringResource(R.string.runtime_update_module)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = module.displayName(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = stringResource(
+                        R.string.runtime_update_version_change,
+                        module.version.ifBlank { "unknown" },
+                        updateInfo.version.ifBlank { "unknown" }
+                    ),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                RuntimeModuleUpdateChangelog(
+                    changelog = changelogText,
+                    scrollState = changelogScroll
+                )
+                Text(
+                    text = stringResource(R.string.runtime_confirm_update_module_desc, downloadDirectoryPath),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.runtime_update_module))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        }
+    )
+}
+
+@Composable
+private fun RuntimeModuleUpdateChangelog(
+    changelog: String,
+    scrollState: ScrollState
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val uriHandler = LocalUriHandler.current
+    val annotatedChangelog = remember(changelog, colorScheme.primary, colorScheme.surfaceVariant) {
+        buildRuntimeMarkdownAnnotatedString(
+            markdown = changelog.ifBlank { "-" },
+            linkColor = colorScheme.primary,
+            codeBackground = colorScheme.surfaceVariant,
+        )
+    }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 180.dp, max = 360.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainerHighest),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(scrollState)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.runtime_update_changelog),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            ClickableText(
+                text = annotatedChangelog,
+                style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface),
+                onClick = { offset ->
+                    annotatedChangelog
+                        .getStringAnnotations(RUNTIME_MARKDOWN_URL_TAG, offset, offset)
+                        .firstOrNull()
+                        ?.let { annotation -> uriHandler.openUri(annotation.item) }
+                }
+            )
+        }
+    }
+}
+
+private fun buildRuntimeMarkdownAnnotatedString(
+    markdown: String,
+    linkColor: Color,
+    codeBackground: Color,
+): AnnotatedString {
+    val builder = AnnotatedString.Builder()
+    val lines = markdown.replace("\r\n", "\n").replace('\r', '\n').lines()
+    var inCodeBlock = false
+
+    lines.forEachIndexed { index, rawLine ->
+        val trimmed = rawLine.trimStart()
+        if (trimmed.startsWith("```")) {
+            inCodeBlock = !inCodeBlock
+            if (index != lines.lastIndex) builder.append('\n')
+            return@forEachIndexed
+        }
+
+        val lineStart = builder.length
+        if (inCodeBlock) {
+            builder.append(rawLine.ifBlank { " " })
+            if (builder.length > lineStart) {
+                builder.addStyle(
+                    SpanStyle(
+                        fontFamily = FontFamily.Monospace,
+                        background = codeBackground,
+                    ),
+                    lineStart,
+                    builder.length,
+                )
+            }
+        } else {
+            val headingLevel = trimmed.takeWhile { it == '#' }.length
+            when {
+                headingLevel in 1..6 && trimmed.getOrNull(headingLevel) == ' ' -> {
+                    appendRuntimeMarkdownInline(builder, trimmed.drop(headingLevel + 1), linkColor, codeBackground)
+                    if (builder.length > lineStart) {
+                        builder.addStyle(
+                            SpanStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = when (headingLevel) {
+                                    1 -> 20.sp
+                                    2 -> 18.sp
+                                    3 -> 16.sp
+                                    else -> 14.sp
+                                },
+                            ),
+                            lineStart,
+                            builder.length,
+                        )
+                    }
+                }
+                trimmed.startsWith(">") -> {
+                    appendRuntimeMarkdownInline(builder, trimmed.removePrefix("> ").removePrefix(">"), linkColor, codeBackground)
+                    if (builder.length > lineStart) {
+                        builder.addStyle(
+                            SpanStyle(
+                                fontStyle = FontStyle.Italic,
+                                color = Color.Gray,
+                            ),
+                            lineStart,
+                            builder.length,
+                        )
+                    }
+                }
+                trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("+ ") -> {
+                    builder.append("• ")
+                    appendRuntimeMarkdownInline(builder, trimmed.drop(2), linkColor, codeBackground)
+                }
+                RUNTIME_MARKDOWN_ORDERED_LIST_REGEX.containsMatchIn(trimmed) -> {
+                    appendRuntimeMarkdownInline(builder, trimmed, linkColor, codeBackground)
+                }
+                else -> {
+                    appendRuntimeMarkdownInline(builder, rawLine, linkColor, codeBackground)
+                }
+            }
+        }
+
+        if (index != lines.lastIndex) builder.append('\n')
+    }
+
+    return builder.toAnnotatedString()
+}
+
+private fun appendRuntimeMarkdownInline(
+    builder: AnnotatedString.Builder,
+    text: String,
+    linkColor: Color,
+    codeBackground: Color,
+) {
+    var index = 0
+    while (index < text.length) {
+        val markdownLink = runtimeMarkdownLinkAt(text, index)
+        if (markdownLink != null) {
+            builder.pushStringAnnotation(RUNTIME_MARKDOWN_URL_TAG, markdownLink.second)
+            builder.pushStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))
+            builder.append(markdownLink.first)
+            builder.pop()
+            builder.pop()
+            index = markdownLink.third
+            continue
+        }
+
+        val bareUrl = RUNTIME_MARKDOWN_BARE_URL_REGEX.find(text, index)
+        if (bareUrl != null && bareUrl.range.first == index) {
+            val url = bareUrl.value
+            builder.pushStringAnnotation(RUNTIME_MARKDOWN_URL_TAG, url)
+            builder.pushStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))
+            builder.append(url)
+            builder.pop()
+            builder.pop()
+            index = bareUrl.range.last + 1
+            continue
+        }
+
+        val bold = runtimeMarkdownDelimitedSegment(text, index, "**")
+        if (bold != null) {
+            builder.pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
+            builder.append(bold.first)
+            builder.pop()
+            index = bold.second
+            continue
+        }
+
+        val code = runtimeMarkdownDelimitedSegment(text, index, "`")
+        if (code != null) {
+            builder.pushStyle(
+                SpanStyle(
+                    fontFamily = FontFamily.Monospace,
+                    background = codeBackground,
+                )
+            )
+            builder.append(code.first)
+            builder.pop()
+            index = code.second
+            continue
+        }
+
+        val italicStar = runtimeMarkdownDelimitedSegment(text, index, "*")
+        if (italicStar != null) {
+            builder.pushStyle(SpanStyle(fontStyle = FontStyle.Italic))
+            builder.append(italicStar.first)
+            builder.pop()
+            index = italicStar.second
+            continue
+        }
+
+        val italicUnderline = runtimeMarkdownDelimitedSegment(text, index, "_")
+        if (italicUnderline != null) {
+            builder.pushStyle(SpanStyle(fontStyle = FontStyle.Italic))
+            builder.append(italicUnderline.first)
+            builder.pop()
+            index = italicUnderline.second
+            continue
+        }
+
+        builder.append(text[index])
+        index += 1
+    }
+}
+
+private fun runtimeMarkdownLinkAt(text: String, index: Int): Triple<String, String, Int>? {
+    if (text.getOrNull(index) != '[') return null
+    val labelEnd = text.indexOf(']', startIndex = index + 1)
+    if (labelEnd <= index + 1 || text.getOrNull(labelEnd + 1) != '(') return null
+    val urlEnd = text.indexOf(')', startIndex = labelEnd + 2)
+    if (urlEnd <= labelEnd + 2) return null
+    val label = text.substring(index + 1, labelEnd)
+    val url = text.substring(labelEnd + 2, urlEnd)
+    if (!url.startsWith("https://") && !url.startsWith("http://")) return null
+    return Triple(label, url, urlEnd + 1)
+}
+
+private fun runtimeMarkdownDelimitedSegment(
+    text: String,
+    index: Int,
+    delimiter: String,
+): Pair<String, Int>? {
+    if (!text.startsWith(delimiter, startIndex = index)) return null
+    val end = text.indexOf(delimiter, startIndex = index + delimiter.length)
+    if (end <= index + delimiter.length) return null
+    return text.substring(index + delimiter.length, end) to (end + delimiter.length)
+}
 @Composable
 private fun RuntimeModuleUninstallConfirmDialog(
     module: AbkRuntimeModule,

@@ -11,6 +11,7 @@ on:
       - "gradle/**"
       - ".github/workflows/build-abk-app.yml"
       - ".github/actions/prepare-abk-app-inputs/**"
+      - ".github/scripts/patch-ksud-uapi-compat.py"
   pull_request:
     paths:
       - "app/**"
@@ -20,6 +21,7 @@ on:
       - "gradle/**"
       - ".github/workflows/build-abk-app.yml"
       - ".github/actions/prepare-abk-app-inputs/**"
+      - ".github/scripts/patch-ksud-uapi-compat.py"
 
 jobs:
   build:
@@ -28,6 +30,7 @@ jobs:
     permissions:
       contents: write
       actions: read
+      pull-requests: write
     env:
       HAS_RELEASE_SIGNING: ${{ secrets.ABK_RELEASE_KEYSTORE_BASE64 != '' && secrets.ABK_RELEASE_STORE_PASSWORD != '' && secrets.ABK_RELEASE_KEY_ALIAS != '' && secrets.ABK_RELEASE_KEY_PASSWORD != '' }}
       SUKISU_ULTRA_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
@@ -61,6 +64,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Install Android SDK packages
         run: sdkmanager --channel=3 "platforms;android-37.0" "build-tools;37.0.0" "cmake;3.22.1" "ndk;28.2.13676358"
@@ -137,6 +142,8 @@ jobs:
           rm -rf "$source_dir" "$target_dir" "$jni_target_dir"
           git clone --depth 1 --branch "$SUKISU_ULTRA_REF" "$SUKISU_ULTRA_REPO" "$source_dir"
           commit="$(git -C "$source_dir" rev-parse HEAD)"
+          python3 .github/scripts/patch-ksud-uapi-compat.py "$source_dir"
+          grep -q "ABK legacy uapi=0 compatibility" "$source_dir/userspace/ksud/src/ksucalls.rs"
           mkdir -p "$target_dir" "$jni_target_dir"
 
           setup_rust_build() {
@@ -237,6 +244,7 @@ jobs:
             echo "ref=$SUKISU_ULTRA_REF"
             echo "commit=$commit"
             echo "abis=$SUKISU_KSUD_ABIS"
+            echo "patches=legacy_uapi_zero_compat"
             echo "built_by=.github/workflows/build-abk-app.yml"
           } > "$target_dir/source.properties"
 
@@ -310,6 +318,7 @@ jobs:
             echo "- ABIs: $SUKISU_KSUD_ABIS"
             echo "- Embedded ksuinit: aarch64-unknown-linux-musl, x86_64-unknown-linux-musl"
             echo "- magiskboot: removed upstream (ksud uses bootimg crate)"
+            echo "- Patch: allow legacy kernel uapi=0 for bundled ksud"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cache LKM assets
@@ -542,39 +551,54 @@ jobs:
           fi
           "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose "$signed_apk"
 
-      - name: Commit version.json
-        if: ${{ github.repository == 'xingguangcuican6666/ABK' && github.event_name != 'pull_request' && startsWith(github.ref, 'refs/heads/') }}
+      - name: Prepare version metadata
+        if: ${{ github.repository == 'xingguangcuican6666/ABK' && github.event_name != 'pull_request' && github.ref_name == 'dev' }}
+        id: version
         run: |
           set -euo pipefail
-          branch="${GITHUB_REF_NAME}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          for attempt in 1 2 3 4 5; do
-            git restore --staged --worktree version.json app/build.gradle.kts app/src/main/res/values/strings.xml 2>/dev/null || true
-            git fetch origin "${branch}"
-            git checkout "${branch}"
-            git pull --rebase origin "${branch}"
-            python .github/scripts/update-version-json.py \
-              --channel normal \
-              --workflow-name "${GITHUB_WORKFLOW}" \
-              --run-id "${GITHUB_RUN_ID}" \
-              --commit-sha "${GITHUB_SHA}" \
-              --published-at "${ABK_APP_BUILD_TIMESTAMP}" \
-              --build-timestamp-epoch-millis "${ABK_APP_BUILD_TIMESTAMP_EPOCH_MILLIS}"
-            if git diff --quiet -- version.json; then
-              echo "version.json unchanged"
-              exit 0
-            fi
-            git add version.json
-            git commit -m "chore(app): update unstable version metadata"
-            if git push origin HEAD:${branch}; then
-              exit 0
-            fi
-            git reset --hard "origin/${branch}"
-            sleep $((attempt * 3))
-          done
-          echo "::error::Failed to push version.json after retries."
-          exit 1
+
+          git restore --staged --worktree version.json app/build.gradle.kts app/src/main/res/values/strings.xml 2>/dev/null || true
+
+          python .github/scripts/update-version-json.py \
+            --channel normal \
+            --workflow-name "${GITHUB_WORKFLOW}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --commit-sha "${GITHUB_SHA}" \
+            --published-at "${ABK_APP_BUILD_TIMESTAMP}" \
+            --build-timestamp-epoch-millis "${ABK_APP_BUILD_TIMESTAMP_EPOCH_MILLIS}"
+
+          if git diff --quiet -- version.json app/build.gradle.kts app/src/main/res/values/strings.xml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create version update PR
+        if: ${{ steps.version.outputs.changed == 'true' }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(app): update unstable metadata (normal)"
+          title: "chore(app): update unstable metadata (normal)"
+          body: |
+            Automated update of unstable version metadata.
+
+            Changes:
+            - Updated version metadata
+            - Updated build information
+
+            Workflow: ${{ github.workflow }}
+            Run ID: ${{ github.run_id }}
+            Commit: ${{ github.sha }}
+
+          branch: bot/version-json-normal
+          base: dev
+          delete-branch: true
+
+          add-paths: |
+            version.json
+            app/build.gradle.kts
+            app/src/main/res/values/strings.xml
 
       - name: Upload APKs
         uses: actions/upload-artifact@v6
