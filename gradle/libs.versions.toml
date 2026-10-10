@@ -24,6 +24,7 @@ robolectric = "4.14.1"
 coroutines = "1.10.2"
 androidxTestCore = "1.6.1"
 miuix = "0.9.2"
+kyantBackdrop = "2.0.0"
 androidxNavigation3 = "1.1.2"
 lifecycleViewmodelNav3 = "2.10.0"
 nanohttpd = "2.3.1"
@@ -70,6 +71,7 @@ miuix-preference = { group = "top.yukonga.miuix.kmp", name = "miuix-preference-a
 miuix-blur = { group = "top.yukonga.miuix.kmp", name = "miuix-blur-android", version.ref = "miuix" }
 miuix-icons = { group = "top.yukonga.miuix.kmp", name = "miuix-icons-android", version.ref = "miuix" }
 miuix-navigation3-ui = { module = "top.yukonga.miuix.kmp:miuix-navigation3-ui-android", version.ref = "miuix" }
+kyant-backdrop = { module = "io.github.kyant0:backdrop", version.ref = "kyantBackdrop" }
 nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
 
 [plugins]

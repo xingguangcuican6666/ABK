@@ -36,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.abk.kernel.R
 import com.abk.kernel.data.model.ArtifactType
 import com.abk.kernel.data.model.DownloadedArtifact
@@ -234,10 +235,16 @@ fun FlashPrebuiltDetailScreenMiuix(
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = if (assets.isEmpty()) {
-                                stringResource(R.string.flash_asset_load_later)
+                            text = stringResource(R.string.flash_no_matching_assets),
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = if (filter.onlyMatches) {
+                                stringResource(R.string.flash_no_matching_assets_filtered)
                             } else {
-                                stringResource(R.string.flash_no_matching_assets)
+                                stringResource(R.string.flash_no_recognized_prebuilt_assets)
                             },
                             style = MiuixTheme.textStyles.body2,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary
@@ -387,12 +394,17 @@ private fun MiuixPrebuiltReleaseInfoCard(
                     style = MiuixTheme.textStyles.body2,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
-                Spacer(Modifier.weight(1f))
-                MiuixTagChip(
-                    label = stringResource(R.string.flash_asset_count, assetCount),
-                    primary = false
-                )
             }
+            // Asset count on its own line, smaller than the previous inline chip.
+            Text(
+                text = stringResource(R.string.flash_asset_count, assetCount),
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                fontSize = 10.sp,
+                maxLines = 1,
+                modifier = Modifier.padding(start = 32.dp)
+            )
+            Spacer(Modifier.height(15.dp))
             Button(
                 onClick = onParameterClick,
                 modifier = Modifier.fillMaxWidth(),
@@ -524,7 +536,7 @@ private fun MiuixPrebuiltAssetCard(
     Card {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             // ── Header ───────────────────────────────────────────
             Row(
@@ -549,6 +561,7 @@ private fun MiuixPrebuiltAssetCard(
                         text = asset.name,
                         style = MiuixTheme.textStyles.main,
                         color = MiuixTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         fontWeight = FontWeight.SemiBold
@@ -557,6 +570,7 @@ private fun MiuixPrebuiltAssetCard(
                         text = "${DownloadUtils.formatSize(asset.sizeBytes)} · ${asset.releaseTag}",
                         style = MiuixTheme.textStyles.body2,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )

@@ -1,4 +1,6 @@
-// Adapted from compose-miuix-ui example (IosLiquidGlassNavigationBar) — Apache 2.0.
+// Frosted-glass floating bottom bar rendered with Kyant0 Backdrop.
+// Layout and drag animation adapted from Kyant0/AndroidLiquidGlass catalog LiquidBottomTabs
+// — https://github.com/Kyant0/AndroidLiquidGlass (Apache 2.0).
 
 package com.abk.kernel.miuix.component
 
@@ -40,6 +42,7 @@ import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -52,98 +55,37 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.util.lerp
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.launch
-import com.abk.kernel.ui.component.liquid.InnerShadow
-import com.abk.kernel.ui.component.liquid.innerShadow
-import com.abk.kernel.ui.component.liquid.lens
-import com.abk.kernel.ui.component.liquid.rememberCombinedBackdrop
-import com.abk.kernel.ui.component.liquid.vibrancy
 import com.abk.kernel.miuix.animation.DampedDragAnimation
 import com.abk.kernel.miuix.animation.InteractiveHighlight
 import com.abk.kernel.miuix.theme.isMiuixDarkTheme
-import top.yukonga.miuix.kmp.blur.Backdrop
-import top.yukonga.miuix.kmp.blur.blur
-import top.yukonga.miuix.kmp.blur.drawBackdrop
-import top.yukonga.miuix.kmp.blur.highlight.BloomStroke
-import top.yukonga.miuix.kmp.blur.highlight.Highlight
-import top.yukonga.miuix.kmp.blur.highlight.LightPosition
-import top.yukonga.miuix.kmp.blur.highlight.LightSource
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.blur.sensor.rememberDeviceTilt
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.colorControls
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.cos
 import kotlin.math.sign
-import kotlin.math.sin
-import kotlin.math.sqrt
 
+/** Scale applied to a tab's content while the bar is pressed. */
 val LocalFloatingBottomBarTabScale = staticCompositionLocalOf { { 1f } }
 
-private val iosIndicatorSpecular: Highlight = Highlight(
-    width = 1.dp,
-    alpha = 1f,
-    style = BloomStroke(
-        color = Color.White.copy(alpha = 0.12f),
-        innerBlurRadius = 2.0.dp,
-        primaryLight = LightSource(
-            position = LightPosition(0.5f, -0.3f, -0.05f),
-            color = Color.White,
-            intensity = 1f,
-        ),
-        secondaryLight = LightSource(
-            position = LightPosition(0.5f, 0.8f, -0.5f),
-            color = Color.White,
-            intensity = 0.4f,
-        ),
-        dualPeak = true,
-    ),
-)
+/**
+ * Gaussian blur radius for the frosted bar surface. Kept close to the shared
+ * `AbkBlurRadius` (25f) used by the top bars so both frosted surfaces read alike.
+ */
+private val FrostedBlurRadius = 24.dp
 
-// Mirrors miuix-blur HighlightStyle's LIGHT_REF — keep in sync.
-private const val LIGHT_REF_X = 0.5f
-private const val LIGHT_REF_Y = 0.7f
-private const val GRAVITY_DIR_THRESHOLD_SQ = 0.01f // |g_xy| > 0.1, ≈ 6° tilt
-
-/** Tracks gravity for a `dualPeak` highlight's primary light, with an extra UV-clockwise offset on top. */
-@Composable
-private fun rememberGravityRotatedHighlight(
-    base: Highlight,
-    extraDegrees: Float = 0f,
-): Highlight {
-    val baseStyle = base.style as BloomStroke
-    val tilt by rememberDeviceTilt()
-    val rotatedPrimary = remember(tilt, baseStyle.primaryLight, extraDegrees) {
-        val basePrimary = baseStyle.primaryLight
-        val gx = tilt.gravityX
-        val gy = tilt.gravityY
-        val gMagSq = gx * gx + gy * gy
-        val (lx0, ly0) = if (gMagSq > GRAVITY_DIR_THRESHOLD_SQ) {
-            val invMag = 1f / sqrt(gMagSq)
-            (gx * invMag) to (gy * invMag)
-        } else {
-            0f to -1f
-        }
-        val rad = extraDegrees * PI / 180.0
-        val c = cos(rad).toFloat()
-        val s = sin(rad).toFloat()
-        val lx = c * lx0 - s * ly0
-        val ly = s * lx0 + c * ly0
-        basePrimary.copy(
-            position = LightPosition(
-                x = LIGHT_REF_X + lx,
-                y = LIGHT_REF_Y + ly,
-                z = basePrimary.position.z,
-            ),
-        )
-    }
-    return remember(base, rotatedPrimary) {
-        base.copy(style = baseStyle.copy(primaryLight = rotatedPrimary))
-    }
-}
+/** Hairline specular edge. Hoisted so recomposition doesn't allocate a new provider. */
+private val PlainHighlightProvider: () -> Highlight? = { Highlight.Plain }
 
 @Composable
 fun RowScope.FloatingBottomBarItem(
@@ -174,6 +116,25 @@ fun RowScope.FloatingBottomBarItem(
     )
 }
 
+/**
+ * Floating pill-shaped bottom bar with a frosted-glass surface.
+ *
+ * When blur is on, three layers stack up (matching the upstream Kyant0 catalog structure):
+ * 1. the frosted surface holding the tab content, exporting its own glass output as a backdrop;
+ * 2. an invisible accent-tinted copy of the tabs, exported as a second backdrop;
+ * 3. the selection indicator — a translucent glass pill sampling both, so the frosted surface
+ *    shows through it and the tab underneath appears in the accent colour.
+ *
+ * @param selectedIndex Currently selected tab index, read lazily so selection changes don't
+ * recompose the whole bar.
+ * @param onSelected Invoked after the indicator finishes animating to a new index.
+ * @param backdrop The Kyant0 [Backdrop] captured from the content behind the bar.
+ * @param tabsCount Number of tabs; drives indicator width and the drag value range.
+ * @param isBlurEnabled Whether to draw the frosted surface at all. When false the bar falls back
+ * to an opaque container with a flat accent indicator.
+ * @param isLiquidGlassEnabled Whether to apply the saturation boost, specular edge and the
+ * indicator's refraction on top of the blur.
+ */
 @Composable
 fun FloatingBottomBar(
     modifier: Modifier = Modifier,
@@ -189,9 +150,22 @@ fun FloatingBottomBar(
     val pillShape = remember { CircleShape }
     val accentColor = MiuixTheme.colorScheme.primary
     val surfaceContainer = MiuixTheme.colorScheme.surfaceContainer
-    val containerColor = if (isBlurEnabled) surfaceContainer.copy(0.4f) else surfaceContainer
+    // A heavier tint than the refractive design used: the strong blur behind it would
+    // otherwise leave white icons hard to read.
+    val containerColor = if (isBlurEnabled) {
+        surfaceContainer.copy(alpha = if (isInDark) 0.62f else 0.55f)
+    } else {
+        surfaceContainer
+    }
 
+    // Captures the accent-tinted copy of the tabs so the glass indicator can pull the selected
+    // tab's icon and label out of it in the accent colour.
     val tabsBackdrop = rememberLayerBackdrop()
+    // The frosted surface exports its own output here. Sampling that instead of re-blurring
+    // the wallpaper is what keeps the indicator translucent without a glass-on-glass loop.
+    val surfaceBackdrop = rememberLayerBackdrop()
+    val indicatorBackdrop = rememberCombinedBackdrop(surfaceBackdrop, tabsBackdrop)
+
     val density = LocalDensity.current
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
     val animationScope = rememberCoroutineScope()
@@ -288,10 +262,9 @@ fun FloatingBottomBar(
         )
     }
 
-    val baseHighlight = rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = -45f)
-    val pillHighlight = rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = 90f)
-
-    val combinedBackdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop)
+    val tabScale = remember(dampedDragAnimation) {
+        { lerp(1f, 1.2f, dampedDragAnimation.pressProgress) }
+    }
 
     Box(
         modifier = modifier.width(IntrinsicSize.Min),
@@ -323,23 +296,36 @@ fun FloatingBottomBar(
                         Modifier.drawBackdrop(
                             backdrop = backdrop,
                             shape = { pillShape },
+                            // Effect order is fixed by the library: color filter -> blur -> lens.
+                            // No lens on the surface: the design calls for a plain gaussian frost,
+                            // not refracted edges.
                             effects = {
-                                if (isLiquidGlassEnabled) vibrancy()
-                                blur(4.dp.toPx(), 4.dp.toPx())
                                 if (isLiquidGlassEnabled) {
-                                    lens(
-                                        refractionHeight = 24.dp.toPx(),
-                                        refractionAmount = 24.dp.toPx(),
+                                    colorControls(
+                                        brightness = if (isInDark) 0f else 0.1f,
+                                        saturation = 1.5f,
                                     )
                                 }
+                                // Decal makes the library reserve padding so the pill's rim
+                                // samples real content instead of smearing edge pixels.
+                                blur(
+                                    FrostedBlurRadius.toPx(),
+                                    edgeTreatment = TileMode.Decal,
+                                )
                             },
-                            highlight = { baseHighlight.copy(alpha = 0.75f) },
+                            highlight = if (isLiquidGlassEnabled) PlainHighlightProvider else null,
+                            shadow = null,
                             layerBlock = {
                                 val width = size.width.coerceAtLeast(1f)
                                 val s = lerp(1f, 1f + 16.dp.toPx() / width, dampedDragAnimation.pressProgress)
                                 scaleX = s
                                 scaleY = s
                             },
+                            // Publishes the finished frost (without the tab content) for the
+                            // indicator to sample. Using exportedBackdrop rather than a
+                            // layerBackdrop modifier avoids the glass-on-glass render loop that
+                            // crashes the RenderThread.
+                            exportedBackdrop = surfaceBackdrop,
                             onDrawSurface = {
                                 drawRect(containerColor)
                                 drawRect(Color.White.copy(alpha = 0.03f))
@@ -362,121 +348,106 @@ fun FloatingBottomBar(
                 .height(64.dp)
                 .padding(4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            content = content
-        )
+        ) {
+            // Remembered so the static CompositionLocal value stays stable; the lambda reads
+            // pressProgress lazily inside the item's graphicsLayer instead.
+            CompositionLocalProvider(LocalFloatingBottomBarTabScale provides tabScale) {
+                content()
+            }
+        }
 
         if (isBlurEnabled) {
-            CompositionLocalProvider(
-                LocalFloatingBottomBarTabScale provides {
-                    lerp(1f, 1.2f, dampedDragAnimation.pressProgress)
-                }
+            // Invisible accent-tinted duplicate of the tabs, captured as a backdrop. The
+            // indicator samples it so whichever tab it covers shows up in the accent colour,
+            // continuously through a drag.
+            Row(
+                Modifier
+                    .clearAndSetSemantics {}
+                    .alpha(0f)
+                    .layerBackdrop(tabsBackdrop)
+                    .graphicsLayer { translationX = panelOffset }
+                    .height(56.dp)
+                    .padding(horizontal = 4.dp)
+                    .graphicsLayer(colorFilter = ColorFilter.tint(accentColor)),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    Modifier
-                        .clearAndSetSemantics {}
-                        .alpha(0f)
-                        .layerBackdrop(tabsBackdrop)
-                        .graphicsLayer { translationX = panelOffset }
-                        .drawBackdrop(
-                            backdrop = backdrop,
-                            shape = { pillShape },
-                            effects = {
-                                if (isLiquidGlassEnabled) vibrancy()
-                                blur(4.dp.toPx(), 4.dp.toPx())
-                                if (isLiquidGlassEnabled) {
-                                    lens(
-                                        refractionHeight = 24.dp.toPx(),
-                                        refractionAmount = 24.dp.toPx(),
-                                    )
-                                }
-                            },
-                            onDrawSurface = {
-                                drawRect(containerColor)
-                                drawRect(Color.White.copy(alpha = 0.03f))
-                            },
-                        )
-                        .then(interactiveHighlight.modifier)
-                        .height(56.dp)
-                        .padding(horizontal = 4.dp)
-                        .graphicsLayer(colorFilter = ColorFilter.tint(accentColor)),
-                    verticalAlignment = Alignment.CenterVertically,
-                    content = content
-                )
+                CompositionLocalProvider(LocalFloatingBottomBarTabScale provides tabScale) {
+                    content()
+                }
             }
         }
 
         if (tabWidthPx > 0f) {
             val tabWidthDp = with(density) { tabWidthPx.toDp() }
-            if (isBlurEnabled) {
-                Box(
-                    Modifier
-                        .padding(horizontal = 4.dp)
-                        .graphicsLayer {
-                            val progressOffset = dampedDragAnimation.value * tabWidthPx
-                            translationX = if (isLtr) progressOffset + panelOffset else -progressOffset + panelOffset
-                        }
-                        .then(interactiveHighlight.gestureModifier)
-                        .then(dampedDragAnimation.modifier)
-                        .drawBackdrop(
-                            backdrop = combinedBackdrop,
-                            shape = { pillShape },
-                            effects = {
-                                if (isLiquidGlassEnabled) {
+            Box(
+                Modifier
+                    .padding(horizontal = 4.dp)
+                    .graphicsLayer {
+                        val progressOffset = dampedDragAnimation.value * tabWidthPx
+                        translationX = if (isLtr) progressOffset + panelOffset else -progressOffset + panelOffset
+                    }
+                    .then(interactiveHighlight.gestureModifier)
+                    .then(dampedDragAnimation.modifier)
+                    .then(
+                        if (isBlurEnabled) {
+                            // Translucent glass pill: it refracts the frosted surface and the
+                            // accent-tinted tabs beneath it rather than painting a flat colour.
+                            Modifier.drawBackdrop(
+                                backdrop = indicatorBackdrop,
+                                shape = { pillShape },
+                                effects = {
+                                    if (isLiquidGlassEnabled) {
+                                        val progress = dampedDragAnimation.pressProgress
+                                        lens(
+                                            10.dp.toPx() * progress,
+                                            14.dp.toPx() * progress,
+                                            depthEffect = true,
+                                            chromaticAberration = true,
+                                        )
+                                    }
+                                },
+                                highlight = {
+                                    if (isLiquidGlassEnabled) {
+                                        Highlight.Plain.copy(alpha = dampedDragAnimation.pressProgress)
+                                    } else {
+                                        null
+                                    }
+                                },
+                                shadow = null,
+                                innerShadow = {
                                     val progress = dampedDragAnimation.pressProgress
-                                    lens(
-                                        refractionHeight = 10.dp.toPx() * progress,
-                                        refractionAmount = 14.dp.toPx() * progress,
-                                        depthEffect = true,
-                                        chromaticAberration = 0.5f,
+                                    InnerShadow(radius = 8.dp * progress, alpha = progress)
+                                },
+                                layerBlock = {
+                                    scaleX = dampedDragAnimation.scaleX
+                                    scaleY = dampedDragAnimation.scaleY
+                                    val velocity = dampedDragAnimation.velocity / 10f
+                                    scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
+                                    scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
+                                },
+                                onDrawSurface = {
+                                    // Only a neutral scrim. The accent tone comes from the
+                                    // tinted-tabs backdrop showing through the glass, so the
+                                    // pill stays translucent instead of being a flat fill.
+                                    val progress = dampedDragAnimation.pressProgress
+                                    drawRect(
+                                        color = if (isInDark) {
+                                            Color.White.copy(alpha = 0.1f)
+                                        } else {
+                                            Color.Black.copy(alpha = 0.1f)
+                                        },
+                                        alpha = 1f - progress,
                                     )
-                                }
-                            },
-                            highlight = { pillHighlight.copy(alpha = dampedDragAnimation.pressProgress) },
-                            layerBlock = {
-                                scaleX = dampedDragAnimation.scaleX
-                                scaleY = dampedDragAnimation.scaleY
-                                val velocity = dampedDragAnimation.velocity / 10f
-                                scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
-                                scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
-                            },
-                            onDrawSurface = {
-                                val progress = dampedDragAnimation.pressProgress
-                                drawRect(
-                                    color = if (!isInDark) Color.Black.copy(alpha = 0.1f) else Color.White.copy(alpha = 0.1f),
-                                    alpha = 1f - progress,
-                                )
-                                drawRect(Color.Black.copy(alpha = 0.03f * progress))
-                            },
-                        )
-                        .then(
-                            if (isLiquidGlassEnabled) {
-                                Modifier.innerShadow(shape = pillShape) {
-                                    InnerShadow(
-                                        radius = 8.dp * dampedDragAnimation.pressProgress,
-                                        color = Color.Black.copy(alpha = 0.15f),
-                                        alpha = dampedDragAnimation.pressProgress,
-                                    )
-                                }
-                            } else Modifier
-                        )
-                        .height(56.dp)
-                        .width(tabWidthDp)
-                )
-            } else {
-                Box(
-                    Modifier
-                        .padding(horizontal = 4.dp)
-                        .graphicsLayer {
-                            val progressOffset = dampedDragAnimation.value * tabWidthPx
-                            translationX = if (isLtr) progressOffset + panelOffset else -progressOffset + panelOffset
+                                    drawRect(Color.Black.copy(alpha = 0.03f * progress))
+                                },
+                            )
+                        } else {
+                            Modifier.background(accentColor.copy(alpha = 0.15f), pillShape)
                         }
-                        .then(dampedDragAnimation.modifier)
-                        .clip(pillShape)
-                        .background(accentColor.copy(alpha = 0.15f), pillShape)
-                        .height(56.dp)
-                        .width(tabWidthDp)
-                )
-            }
+                    )
+                    .height(56.dp)
+                    .width(tabWidthDp)
+            )
         }
     }
 }

@@ -63,6 +63,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -112,7 +113,6 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -220,6 +220,80 @@ private fun MiuixModuleInitialLoading() {
     }
 }
 
+/**
+ * Compact variant of [MiuixModuleInitialLoading] for the case where a stale list is
+ * still on screen: the rows stay visible and this only marks them as being rebuilt.
+ * MIUIX counterpart of the M3 `AbkInlineLoadingPill`.
+ */
+@Composable
+private fun MiuixModuleInlineLoading() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(16.dp),
+            progress = null,
+            size = 16.dp,
+            strokeWidth = 2.dp
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = stringResource(R.string.module_repo_building_list),
+            style = MiuixTheme.textStyles.body2,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+        )
+    }
+}
+
+/**
+ * Compact icon-only action button for module cards. Mirrors the M3
+ * `CompactModuleActionButton` form: a small rounded pill with an icon and no
+ * label text, keeping the redundant Miuix text labels off the card.
+ *
+ * When [highlight] is true the button uses the theme primary (highlight) color
+ * instead of the muted secondary container, e.g. the "add to build" action.
+ */
+@Composable
+private fun MiuixCompactModuleActionButton(
+    icon: ImageVector,
+    contentDescription: String,
+    enabled: Boolean = true,
+    highlight: Boolean = false,
+    onClick: () -> Unit
+) {
+    val colors = MiuixTheme.colorScheme
+    val backgroundColor = if (highlight) {
+        colors.primary.copy(alpha = if (enabled) 1f else 0.44f)
+    } else {
+        colors.secondaryContainer.copy(alpha = if (enabled) 0.82f else 0.44f)
+    }
+    val contentTint = if (highlight) {
+        colors.onPrimary.copy(alpha = if (enabled) 1f else 0.7f)
+    } else {
+        if (enabled) colors.onSecondaryContainer else colors.onSurfaceVariantSummary
+    }
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(width = 42.dp, height = 36.dp),
+        enabled = enabled,
+        backgroundColor = backgroundColor,
+        cornerRadius = 18.dp,
+        minHeight = 36.dp,
+        minWidth = 42.dp
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = contentTint,
+            modifier = Modifier.size(19.dp)
+        )
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // BUILD_ABK screen
 // ─────────────────────────────────────────────────────────────────────────────
@@ -255,9 +329,10 @@ private fun BuildModuleRepositoryScreenMiuix(
             value = ModuleListComputation(items = emptyList(), loading = false)
             return@produceState
         }
-        // Keep previous items visible while recomputing to avoid UI flicker
+        // Keep previous items visible while recomputing to avoid UI flicker, but stay
+        // marked as loading so the UI can show the list is stale.
         val previousItems = value.items
-        value = ModuleListComputation(items = previousItems, loading = false)
+        value = ModuleListComputation(items = previousItems, loading = true)
         val merged = withContext(Dispatchers.Default) {
             mergeBuildPageCatalogModules(state.buildModuleRepositories)
         }
@@ -576,10 +651,11 @@ private fun BuildModuleRepositoryScreenMiuix(
                 Column(
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    val showInitialLoading = listComputing || (
-                        state.refreshingBuildModuleRepositoryIds.isNotEmpty() &&
-                            mergedModules.isEmpty() && query.isBlank()
-                        )
+                    // Only take over the whole list when there is nothing stale left to
+                    // show; a recompute over existing rows surfaces as the inline row.
+                    val refreshingRepos = state.refreshingBuildModuleRepositoryIds.isNotEmpty()
+                    val showInitialLoading = mergedModules.isEmpty() &&
+                        (listComputing || (refreshingRepos && query.isBlank()))
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
@@ -595,6 +671,11 @@ private fun BuildModuleRepositoryScreenMiuix(
                         ),
                         overscrollEffect = null
                     ) {
+                        if ((refreshingRepos || listComputing) && !showInitialLoading) {
+                            item(key = "refreshing") {
+                                MiuixModuleInlineLoading()
+                            }
+                        }
                         if (showInitialLoading) {
                             item(key = "initial-loading") {
                                 MiuixModuleInitialLoading()
@@ -811,67 +892,35 @@ private fun BuildModuleCardMiuix(
                 }
             }
 
-            Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                HorizontalDivider()
-            }
-
-            // Action buttons
+            // Action buttons (compact, matching the M3 form)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Button(
+                MiuixCompactModuleActionButton(
+                    icon = Icons.Default.OpenInBrowser,
+                    contentDescription = context.getString(R.string.module_repo_open_repo),
                     onClick = {
                         vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
                         onOpen()
+                    }
+                )
+                Spacer(Modifier.width(6.dp))
+                MiuixCompactModuleActionButton(
+                    icon = if (allStagesAdded) Icons.Default.CheckCircle else Icons.Default.Add,
+                    contentDescription = if (allStagesAdded) {
+                        context.getString(R.string.module_repo_joined)
+                    } else {
+                        context.getString(R.string.module_repo_add_to_build)
                     },
-                    colors = ButtonDefaults.buttonColors(),
-                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                    minWidth = 0.dp,
-                    minHeight = 0.dp
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.OpenInBrowser,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = stringResource(R.string.module_repo_open_repo),
-                        fontSize = 12.sp
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-                Button(
+                    enabled = !allStagesAdded,
+                    highlight = true,
                     onClick = {
                         vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
                         if (!allStagesAdded) onAdd()
-                    },
-                    colors = if (allStagesAdded) {
-                        ButtonDefaults.buttonColors()
-                    } else {
-                        ButtonDefaults.buttonColorsPrimary()
-                    },
-                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                    minWidth = 0.dp,
-                    minHeight = 0.dp
-                ) {
-                    Icon(
-                        imageVector = if (allStagesAdded) Icons.Default.CheckCircle else Icons.Default.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = if (allStagesAdded) {
-                            stringResource(R.string.module_repo_joined)
-                        } else {
-                            stringResource(R.string.module_repo_add_to_build)
-                        },
-                        fontSize = 12.sp
-                    )
-                }
+                    }
+                )
             }
         }
     }
@@ -1158,9 +1207,10 @@ private fun RuntimeModuleRepositoryScreenMiuix(
             value = ModuleListComputation(items = emptyList(), loading = false)
             return@produceState
         }
-        // Keep previous items visible while recomputing to avoid UI flicker
+        // Keep previous items visible while recomputing to avoid UI flicker, but stay
+        // marked as loading so the UI can show the list is stale.
         val previousItems = value.items
-        value = ModuleListComputation(items = previousItems, loading = false)
+        value = ModuleListComputation(items = previousItems, loading = true)
         val merged = withContext(Dispatchers.Default) {
             mergeRuntimeCatalogModules(state.runtimeModuleRepositories)
         }
@@ -1225,7 +1275,8 @@ private fun RuntimeModuleRepositoryScreenMiuix(
                     runTitle = module.sources.firstOrNull().orEmpty().ifBlank {
                         runtimeRepoUnknownSourceLabel(context)
                     },
-                    downloadDirectoryPath = state.downloadDirectory
+                    downloadDirectoryPath = state.downloadDirectory,
+                    downloadThreadCount = state.downloadThreadCount
                 )
             }
             val downloadedFile = downloadResult.artifacts.firstOrNull()?.filePath?.let(::File)
@@ -1449,10 +1500,11 @@ private fun RuntimeModuleRepositoryScreenMiuix(
                 Column(
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    val showInitialLoading = listComputing || (
-                        state.refreshingRuntimeModuleRepositoryIds.isNotEmpty() &&
-                            mergedModules.isEmpty() && query.isBlank()
-                        )
+                    // Only take over the whole list when there is nothing stale left to
+                    // show; a recompute over existing rows surfaces as the inline row.
+                    val refreshingRepos = state.refreshingRuntimeModuleRepositoryIds.isNotEmpty()
+                    val showInitialLoading = mergedModules.isEmpty() &&
+                        (listComputing || (refreshingRepos && query.isBlank()))
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
@@ -1468,6 +1520,11 @@ private fun RuntimeModuleRepositoryScreenMiuix(
                         ),
                         overscrollEffect = null
                     ) {
+                        if ((refreshingRepos || listComputing) && !showInitialLoading) {
+                            item(key = "refreshing") {
+                                MiuixModuleInlineLoading()
+                            }
+                        }
                         if (showInitialLoading) {
                             item(key = "initial-loading") {
                                 MiuixModuleInitialLoading()
@@ -1672,52 +1729,25 @@ private fun RuntimeModuleCardMiuix(
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
-
-            // Action buttons
+            // Action buttons (compact, matching the M3 form)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Button(
-                    onClick = onOpen,
-                    colors = ButtonDefaults.buttonColors(),
-                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                    minWidth = 0.dp,
-                    minHeight = 0.dp
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.OpenInBrowser,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = stringResource(R.string.module_repo_open_repo),
-                        fontSize = 12.sp
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick = onInstall,
+                MiuixCompactModuleActionButton(
+                    icon = Icons.Default.OpenInBrowser,
+                    contentDescription = context.getString(R.string.module_repo_open_repo),
+                    onClick = onOpen
+                )
+                Spacer(Modifier.width(6.dp))
+                MiuixCompactModuleActionButton(
+                    icon = Icons.Default.UploadFile,
+                    contentDescription = context.getString(R.string.runtime_install_module),
                     enabled = module.zipUrl.isNotBlank(),
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                    minWidth = 0.dp,
-                    minHeight = 0.dp
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.UploadFile,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = stringResource(R.string.runtime_install_module),
-                        fontSize = 12.sp
-                    )
-                }
+                    highlight = true,
+                    onClick = onInstall
+                )
             }
         }
     }

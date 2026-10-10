@@ -40,9 +40,10 @@ fun AbkMiuixTheme(
         }
     }
 
-    // 0 or null => use the ABK green seed; otherwise use the user-picked ARGB value.
+    // 0 or null => no seed, so Monet modes fall back to the real system wallpaper
+    // palette; otherwise generate the scheme from the user-picked ARGB value.
     val seedArgb = customThemeColorArgb?.takeIf { it != 0 }
-    val keyColor = seedArgb?.let { Color(it) } ?: Color(0xFF3DDC84)
+    val keyColor = seedArgb?.let { Color(it) }
 
     val paletteStyle = remember(colorStyleName) {
         runCatching { ThemePaletteStyle.valueOf(colorStyleName) }

@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.abk.kernel.R
 import com.abk.kernel.data.model.BuildParameterSummary
@@ -41,6 +42,9 @@ import com.abk.kernel.ui.screens.flash.releaseDateLabel
 import com.abk.kernel.ui.screens.flash.WorkflowArtifactGroup
 import com.abk.kernel.miuix.ui.screens.flash.common.FlashTerminalBgShape
 import com.abk.kernel.miuix.ui.screens.flash.common.MiuixConfirmDialog
+import com.abk.kernel.utils.FeatureStatusManifest
+import com.abk.kernel.utils.KernelSourceManifest
+import com.google.gson.Gson
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
@@ -609,5 +613,159 @@ private fun MiuixParameterRow(label: String, rawValue: String) {
             color = MiuixTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. Custom-source manifest notice dialog (deferred until the detail page opens)
+// ─────────────────────────────────────────────────────────────────────────────
+
+private fun formatManifestFeatureMap(values: Map<String, Any?>): String =
+    values.entries
+        .sortedBy { it.key }
+        .joinToString(", ") { (key, value) -> "$key=${value ?: "null"}" }
+
+@Composable
+internal fun MiuixManifestSourceInfo(
+    item: DownloadedArtifact,
+    showKernelDetails: Boolean = true
+) {
+    val source = item.manifestKernelSource
+        ?.let { runCatching { Gson().fromJson(it, KernelSourceManifest::class.java) }.getOrNull() }
+    val feature = item.manifestFeatureStatus
+        ?.let { runCatching { Gson().fromJson(it, FeatureStatusManifest::class.java) }.getOrNull() }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        source?.url?.let {
+            Text(
+                text = stringResource(R.string.flash_custom_source_url, it),
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+        }
+        if (source?.access == "github_private") {
+            Text(
+                text = stringResource(R.string.flash_custom_source_private_warning),
+                style = MiuixTheme.textStyles.body2,
+                fontWeight = FontWeight.SemiBold,
+                color = MiuixTheme.colorScheme.error
+            )
+        }
+        source?.requestedRef?.let {
+            Text(
+                text = stringResource(R.string.flash_custom_source_ref, it),
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+        }
+        source?.resolvedCommit?.let {
+            Text(
+                text = stringResource(R.string.flash_custom_source_commit, it),
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+        }
+        if (showKernelDetails) {
+            source?.kernelVersion?.let { kernel ->
+                Text(
+                    text = stringResource(R.string.flash_custom_source_kernel, source?.androidVersion.orEmpty(), kernel),
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+            }
+            source?.toolchainPatchLevel?.let {
+                Text(
+                    text = stringResource(R.string.flash_custom_source_toolchain, it),
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+            }
+            source?.defconfigs?.takeIf { it.isNotEmpty() }?.let { defconfigs ->
+                Text(
+                    text = stringResource(R.string.flash_custom_source_defconfigs, defconfigs.joinToString(" -> ")),
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+            }
+        }
+        source?.deviceLabel?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                text = stringResource(R.string.flash_custom_source_device, it),
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+        }
+        feature?.requested?.takeIf { it.isNotEmpty() }?.let {
+            Text(
+                text = stringResource(R.string.flash_custom_source_requested, formatManifestFeatureMap(it)),
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+        }
+        feature?.effective?.takeIf { it.isNotEmpty() }?.let {
+            Text(
+                text = stringResource(R.string.flash_custom_source_effective, formatManifestFeatureMap(it)),
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onSurface
+            )
+        }
+        feature?.skipped?.takeIf { it.isNotEmpty() }?.let { skippedFeatures ->
+            Text(
+                text = stringResource(R.string.flash_custom_source_skipped_title),
+                style = MiuixTheme.textStyles.body2,
+                fontWeight = FontWeight.SemiBold,
+                color = MiuixTheme.colorScheme.error
+            )
+            skippedFeatures.forEach { skipped ->
+                Text(
+                    text = "• ${skipped.id}: ${skipped.message}",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun MiuixManifestNoticeDialog(
+    item: DownloadedArtifact,
+    onDismiss: () -> Unit
+) {
+    WindowDialog(
+        show = true,
+        title = stringResource(R.string.flash_custom_source_notice_title),
+        onDismissRequest = onDismiss
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 520.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MiuixManifestSourceInfo(item, showKernelDetails = true)
+                    Text(
+                        text = stringResource(R.string.flash_custom_source_old_client_warning),
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TextButton(
+                    modifier = Modifier.weight(1f),
+                    text = stringResource(R.string.confirm),
+                    colors = ButtonDefaults.textButtonColorsPrimary(),
+                    onClick = onDismiss
+                )
+            }
+        }
     }
 }

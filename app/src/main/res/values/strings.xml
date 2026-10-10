@@ -1,4 +1,4 @@
-﻿<resources>
+<resources>
     <string name="app_name">AnyBase Kernel</string>
     <string name="app_full_name">AnyBase Kernel</string>
 
@@ -733,6 +733,9 @@
     <string name="settings_ui_style">UI 风格</string>
     <string name="settings_ui_style_miuix_subtitle">使用小米 HyperOS 设计语言</string>
     <string name="settings_blur">模糊</string>
+    <string name="settings_blur_desc">为界面启用毛玻璃模糊效果</string>
+    <string name="settings_blur_background">将自定义背景渲染到模糊</string>
+    <string name="settings_blur_background_desc">开启后，顶栏、底栏、卡片和磁贴会模糊自定义背景图片</string>
     <string name="settings_floating_bottom_bar">悬浮底栏</string>
     <string name="settings_visual_effects">视觉效果</string>
     <string name="settings_blur_summary">启用顶栏和底栏的模糊效果</string>
@@ -741,9 +744,6 @@
     <string name="settings_liquid_glass_summary">启用悬浮底栏的液态玻璃效果</string>
     <string name="settings_predictive_back_gesture">预测性返回手势</string>
     <string name="settings_predictive_back_summary">启用对预测性返回手势的支持</string>
-    <string name="settings_blur_desc">为界面启用毛玻璃模糊效果</string>
-    <string name="settings_blur_background">将自定义背景渲染到模糊</string>
-    <string name="settings_blur_background_desc">开启后，顶栏、底栏、卡片和磁贴会模糊自定义背景图片</string>
     <string name="settings_current_color">当前</string>
     <string name="settings_color_green">绿</string>
     <string name="settings_color_blue">蓝</string>
@@ -912,6 +912,7 @@
     <string name="runtime_pending_update">待更新</string>
     <string name="runtime_update_available">发现更新</string>
     <string name="runtime_update_module">更新模块</string>
+    <string name="module_update">更新</string>
     <string name="runtime_update_version_change">版本：%1$s → %2$s</string>
     <string name="runtime_update_source">来源：%1$s</string>
     <string name="runtime_update_changelog">更新日志</string>

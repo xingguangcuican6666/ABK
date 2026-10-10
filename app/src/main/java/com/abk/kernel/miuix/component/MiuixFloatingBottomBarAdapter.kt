@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import top.yukonga.miuix.kmp.blur.Backdrop
+import com.kyant.backdrop.Backdrop
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 data class FloatingTabItem(
@@ -56,6 +56,8 @@ fun MiuixFloatingBottomBar(
                 onClick = item.onClick,
                 modifier = Modifier.defaultMinSize(minWidth = 64.dp)
             ) {
+                // Always onSurface: the glass indicator lifts the selected tab out of the
+                // accent-tinted duplicate layer, so the colour switch happens in the shader.
                 Icon(
                     imageVector = item.icon,
                     contentDescription = item.label,

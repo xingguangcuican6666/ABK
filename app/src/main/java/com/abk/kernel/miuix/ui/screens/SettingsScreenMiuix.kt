@@ -1,4 +1,4 @@
-﻿package com.abk.kernel.miuix.ui.screens
+package com.abk.kernel.miuix.ui.screens
 
 import android.app.Activity
 import android.content.Context
@@ -39,6 +39,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.verticalScroll
@@ -82,6 +84,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import com.abk.kernel.ui.blur.LocalBlurState
 import com.abk.kernel.ui.blur.blurEffect
 import com.abk.kernel.ui.blur.rememberBlurBackdrop
+import com.abk.kernel.miuix.viewmodel.MiuixSettingsViewModel
+import com.abk.kernel.ui.screens.launchAppUpdateInstaller
 import com.abk.kernel.utils.DownloadDirectoryUtils
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.LocaleHelper
@@ -110,11 +114,13 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
+import top.yukonga.miuix.kmp.preference.SliderPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import kotlin.math.roundToInt
 
 /**
  * MIUIX-styled settings screen for ABK.
@@ -132,11 +138,13 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 @Composable
 fun SettingsScreenMiuix(
     vm: MainViewModel,
+    miuixVm: MiuixSettingsViewModel,
     outerPadding: PaddingValues = PaddingValues(0.dp),
     onLogout: () -> Unit = {},
     onOpenInstalledModules: () -> Unit = {},
 ) {
     val state by vm.uiState.collectAsState()
+    val miuixState by miuixVm.state.collectAsState()
     val scrollBehavior = MiuixScrollBehavior()
     val iconTint = MiuixTheme.colorScheme.onSurfaceSecondary
     val navigator = LocalNavigator.current
@@ -150,11 +158,13 @@ fun SettingsScreenMiuix(
     // Refresh manager settings on first composition (mirrors MD3 LaunchedEffect).
     LaunchedEffect(Unit) {
         vm.refreshManagerSettings(force = true)
+        vm.refreshSusfsState(force = true)
     }
 
     // Auto-install pending app update APK (mirrors MD3 LaunchedEffect).
     LaunchedEffect(state.appUpdatePendingInstallPath) {
         val apkPath = state.appUpdatePendingInstallPath ?: return@LaunchedEffect
+        launchAppUpdateInstaller(context, apkPath)
         vm.consumeAppUpdatePendingInstallPath()
     }
 
@@ -355,25 +365,20 @@ fun SettingsScreenMiuix(
                             onClick = forkUrl?.let { url -> { openUrl(context, url) } }
                         )
                     } ?: run {
-                        // Not logged in
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AccountCircle,
-                                contentDescription = null,
-                                modifier = Modifier.size(42.dp),
-                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                            )
-                            top.yukonga.miuix.kmp.basic.Text(
-                                text = stringResource(R.string.settings_not_logged_in),
-                                style = MiuixTheme.textStyles.main,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
+                        // Not logged in: the whole row re-enters the OOBE login flow
+                        ArrowPreference(
+                            title = stringResource(R.string.settings_not_logged_in),
+                            summary = stringResource(R.string.settings_login_hint),
+                            startAction = {
+                                Icon(
+                                    imageVector = Icons.Default.AccountCircle,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(42.dp),
+                                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                )
+                            },
+                            onClick = { vm.openLoginOobe() }
+                        )
                     }
                 }
 
@@ -436,6 +441,22 @@ fun SettingsScreenMiuix(
                         value = state.downloadMirrorBaseUrl,
                         onValueChange = { vm.setDownloadMirrorBaseUrl(it) },
                         leadingIcon = { Icon(Icons.Default.Link, contentDescription = null, tint = iconTint) }
+                    )
+                    // Download thread count — drag updates a local draft, release persists it
+                    var threadCountDraft by remember(state.downloadThreadCount) {
+                        mutableStateOf(state.downloadThreadCount.toFloat())
+                    }
+                    val threadCount = threadCountDraft.roundToInt()
+                    SliderPreference(
+                        value = threadCountDraft,
+                        onValueChange = { threadCountDraft = it },
+                        title = stringResource(R.string.settings_download_threads),
+                        summary = stringResource(R.string.settings_download_threads_desc, threadCount),
+                        startAction = { Icon(Icons.Default.Speed, contentDescription = null, tint = iconTint) },
+                        valueText = threadCount.toString(),
+                        valueRange = 1f..64f,
+                        steps = 62,
+                        onValueChangeFinished = { vm.setDownloadThreadCount(threadCountDraft.roundToInt()) }
                     )
                     // Clear artifacts
                     val hasArtifacts = state.downloadedArtifacts.isNotEmpty()
@@ -627,6 +648,10 @@ fun SettingsScreenMiuix(
                                                     "app_profile_templates" -> navigator.push(Route.AppProfileTemplates)
                                                     "manager_tools" -> navigator.push(Route.ManagerTools)
                                                     "kpm" -> onOpenInstalledModules()
+                                                    "susfs_control" -> {
+                                                        vm.refreshSusfsState(force = true)
+                                                        navigator.push(Route.SusfsControl)
+                                                    }
                                                 }
                                             }
                                         } else null
@@ -669,8 +694,35 @@ fun SettingsScreenMiuix(
                     }
                 }
 
+                val susfsAvailable = state.susfsRuntimeStatus?.available == true
+                if (susfsAvailable) {
+                    SectionTitle(stringResource(R.string.susfs_title))
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        val runtime = state.susfsRuntimeStatus!!
+                        ArrowPreference(
+                            title = stringResource(R.string.susfs_title),
+                            summary = stringResource(
+                                R.string.settings_susfs_control_summary,
+                                runtime.kernelVersion,
+                                runtime.bundledBinaryVersion
+                            ),
+                            startAction = {
+                                Icon(
+                                    imageVector = Icons.Default.Extension,
+                                    contentDescription = null,
+                                    tint = iconTint
+                                )
+                            },
+                            onClick = {
+                                vm.refreshSusfsState(force = true)
+                                navigator.push(Route.SusfsControl)
+                            }
+                        )
+                    }
+                }
+
                 // ═══════════════════════════════════════════════════════════
-                // 5. NOTIFICATION
+                // 6. NOTIFICATION
                 // ═══════════════════════════════════════════════════════════
                 SectionTitle(stringResource(R.string.settings_notification))
                 Card(modifier = Modifier.fillMaxWidth()) {
@@ -719,7 +771,7 @@ fun SettingsScreenMiuix(
                 Card(modifier = Modifier.fillMaxWidth()) {
                     ArrowPreference(
                         title = stringResource(R.string.settings_color_appearance),
-                        summary = "${themeModeLabel(state.themeMode)} · ${dynamicColorLabel(state.dynamicColorEnabled)}",
+                        summary = "${themeModeLabel(state.themeMode)} · ${dynamicColorLabel(miuixState.miuixDynamicColorEnabled)}",
                         startAction = { Icon(Icons.Default.Palette, contentDescription = null, tint = iconTint) },
                         onClick = { navigator.push(Route.ThemeSettings) }
                     )
@@ -743,11 +795,33 @@ fun SettingsScreenMiuix(
                 // ═══════════════════════════════════════════════════════════
                 SectionTitle(stringResource(R.string.settings_about))
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    ArrowPreference(
-                        title = stringResource(R.string.app_full_name),
-                        summary = "${stringResource(R.string.app_full_name)} v${BuildConfig.VERSION_NAME}",
-                        startAction = { Icon(Icons.Default.Info, contentDescription = null, tint = iconTint) }
-                    )
+                    // Non-clickable version row: title + summary + info icon, but no chevron
+                    // (matches the M3 `ExpressiveListItem` without `trailingContent`).
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = iconTint)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            MiuixText(
+                                text = stringResource(R.string.app_full_name),
+                                color = MiuixTheme.colorScheme.onSurface,
+                                style = MiuixTheme.textStyles.body1
+                            )
+                            MiuixText(
+                                text = "${stringResource(R.string.app_full_name)} v${BuildConfig.VERSION_NAME}",
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                style = MiuixTheme.textStyles.body2
+                            )
+                        }
+                    }
                     ArrowPreference(
                         title = stringResource(R.string.settings_about),
                         summary = stringResource(R.string.settings_about_desc),
@@ -1051,6 +1125,7 @@ private fun managerSettingIcon(id: String) = when (id) {
     "app_profile_templates" -> Icons.Default.Apps
     "manager_tools" -> Icons.Default.Build
     "kpm" -> Icons.Default.Extension
+    "susfs_control" -> Icons.Default.Extension
     "su_compat" -> Icons.Default.RemoveModerator
     "kernel_umount" -> Icons.Default.RemoveCircle
     "adb_root" -> Icons.Default.Adb
@@ -1100,6 +1175,9 @@ private fun SecuritySettingsGroupMiuix(
     var showDisableConfirm1 by remember { mutableStateOf(false) }
     var showDisableConfirm2 by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
+    var showCustomSourceSecretDialog by remember { mutableStateOf(false) }
+    var showDeleteCustomSourceSecretConfirm by remember { mutableStateOf(false) }
+    var customSourcePat by remember { mutableStateOf("") }
     var importPublicKeyText by remember { mutableStateOf("") }
     var importPrivateKeyText by remember { mutableStateOf("") }
     var importError by remember { mutableStateOf<String?>(null) }
@@ -1121,6 +1199,10 @@ private fun SecuritySettingsGroupMiuix(
             }
             importError = null
         }
+    }
+
+    LaunchedEffect(canManageKeys) {
+        if (canManageKeys) vm.refreshCustomSourceSecretStatus()
     }
 
     SectionTitle(stringResource(R.string.settings_security))
@@ -1169,6 +1251,29 @@ private fun SecuritySettingsGroupMiuix(
             enabled = !state.artifactSigningOperationInFlight && state.artifactSigningVerificationEnabled && canManageKeys,
             onClick = { showResetConfirm = true }
         )
+        ArrowPreference(
+            title = stringResource(R.string.settings_custom_source_secret_title),
+            summary = when {
+                !canManageKeys -> stringResource(R.string.settings_security_requires_fork)
+                state.customSourceSecretConfigured -> stringResource(R.string.settings_custom_source_secret_configured)
+                else -> stringResource(R.string.settings_custom_source_secret_missing)
+            },
+            startAction = { Icon(Icons.Default.Password, contentDescription = null, tint = iconTint) },
+            enabled = canManageKeys && !state.customSourceSecretOperationInFlight,
+            onClick = {
+                customSourcePat = ""
+                showCustomSourceSecretDialog = true
+            }
+        )
+        if (state.customSourceSecretConfigured) {
+            ArrowPreference(
+                title = stringResource(R.string.settings_custom_source_secret_delete),
+                summary = stringResource(R.string.settings_custom_source_secret_delete_desc),
+                startAction = { Icon(Icons.Default.Delete, contentDescription = null, tint = iconTint) },
+                enabled = canManageKeys && !state.customSourceSecretOperationInFlight,
+                onClick = { showDeleteCustomSourceSecretConfirm = true }
+            )
+        }
         if (state.artifactSigningOperationInFlight) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -1181,6 +1286,123 @@ private fun SecuritySettingsGroupMiuix(
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                     style = MiuixTheme.textStyles.body2
                 )
+            }
+        }
+        if (state.customSourceSecretOperationInFlight) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                MiuixText(
+                    text = stringResource(R.string.settings_custom_source_secret_operation),
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    style = MiuixTheme.textStyles.body2
+                )
+            }
+        }
+    }
+
+    if (showCustomSourceSecretDialog) {
+        WindowDialog(
+            show = true,
+            title = stringResource(R.string.settings_custom_source_secret_dialog_title),
+            onDismissRequest = {
+                if (!state.customSourceSecretOperationInFlight) showCustomSourceSecretDialog = false
+            }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                MiuixText(
+                    text = stringResource(R.string.settings_custom_source_secret_dialog_desc),
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    style = MiuixTheme.textStyles.body2
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MiuixTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                        .padding(12.dp)
+                ) {
+                    BasicTextField(
+                        value = customSourcePat,
+                        onValueChange = { customSourcePat = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MiuixTheme.textStyles.body1.copy(color = MiuixTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
+                        enabled = !state.customSourceSecretOperationInFlight,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done
+                        )
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    MiuixTextButton(
+                        modifier = Modifier.weight(1f),
+                        text = stringResource(android.R.string.cancel),
+                        onClick = { showCustomSourceSecretDialog = false },
+                        enabled = !state.customSourceSecretOperationInFlight
+                    )
+                    Spacer(Modifier.width(20.dp))
+                    MiuixTextButton(
+                        modifier = Modifier.weight(1f),
+                        text = stringResource(R.string.save),
+                        enabled = customSourcePat.isNotBlank() && !state.customSourceSecretOperationInFlight,
+                        colors = if (customSourcePat.isNotBlank() && !state.customSourceSecretOperationInFlight) {
+                            ButtonDefaults.textButtonColorsPrimary()
+                        } else {
+                            ButtonDefaults.textButtonColors()
+                        },
+                        onClick = {
+                            vm.updateCustomSourceSecret(customSourcePat)
+                            customSourcePat = ""
+                            showCustomSourceSecretDialog = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showDeleteCustomSourceSecretConfirm) {
+        WindowDialog(
+            show = true,
+            title = stringResource(R.string.settings_custom_source_secret_delete),
+            onDismissRequest = { showDeleteCustomSourceSecretConfirm = false }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                MiuixText(
+                    text = stringResource(R.string.settings_custom_source_secret_delete_confirm),
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    style = MiuixTheme.textStyles.body2
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    MiuixTextButton(
+                        modifier = Modifier.weight(1f),
+                        text = stringResource(android.R.string.cancel),
+                        onClick = { showDeleteCustomSourceSecretConfirm = false }
+                    )
+                    Spacer(Modifier.width(20.dp))
+                    MiuixTextButton(
+                        modifier = Modifier.weight(1f),
+                        text = stringResource(R.string.delete),
+                        colors = ButtonDefaults.textButtonColors(
+                            textColor = MiuixTheme.colorScheme.error
+                        ),
+                        onClick = {
+                            vm.deleteCustomSourceSecret()
+                            showDeleteCustomSourceSecretConfirm = false
+                        }
+                    )
+                }
             }
         }
     }

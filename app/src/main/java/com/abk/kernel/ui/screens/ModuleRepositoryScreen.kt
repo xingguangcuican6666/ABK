@@ -185,9 +185,10 @@ fun ModuleRepositoryScreen(
             value = ModuleListComputation(items = emptyList(), loading = false)
             return@produceState
         }
-        // Keep previous items visible while recomputing to avoid UI flicker
+        // Keep previous items visible while recomputing to avoid UI flicker, but stay
+        // marked as loading so the UI can show the list is stale.
         val previousItems = value.items
-        value = ModuleListComputation(items = previousItems, loading = false)
+        value = ModuleListComputation(items = previousItems, loading = true)
         val merged = withContext(Dispatchers.Default) {
             mergeRuntimeCatalogModules(state.runtimeModuleRepositories)
         }
@@ -497,9 +498,10 @@ private fun BuildModuleRepositoryScreenContent(
             value = ModuleListComputation(items = emptyList(), loading = false)
             return@produceState
         }
-        // Keep previous items visible while recomputing to avoid UI flicker
+        // Keep previous items visible while recomputing to avoid UI flicker, but stay
+        // marked as loading so the UI can show the list is stale.
         val previousItems = value.items
-        value = ModuleListComputation(items = previousItems, loading = false)
+        value = ModuleListComputation(items = previousItems, loading = true)
         val merged = withContext(Dispatchers.Default) {
             mergeBuildPageCatalogModules(state.buildModuleRepositories)
         }
@@ -959,7 +961,10 @@ private fun RuntimeModuleRepositoryListContent(
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
     bottomPadding: Dp
 ) {
-    val showInitialLoading = computing || (refreshing && totalModules == 0 && searchQuery.isBlank())
+    // Only take over the whole list when there is nothing stale left to show; an
+    // ongoing recompute over existing items surfaces as the inline pill below.
+    val showInitialLoading = totalModules == 0 &&
+        (computing || (refreshing && searchQuery.isBlank()))
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -975,7 +980,7 @@ private fun RuntimeModuleRepositoryListContent(
             )
         }
 
-        if (refreshing && !showInitialLoading) {
+        if ((refreshing || computing) && !showInitialLoading) {
             item(key = "refreshing") {
                 AbkInlineLoadingPill(
                     text = stringResource(R.string.module_repo_building_list),
@@ -1758,7 +1763,10 @@ private fun BuildModuleRepositoryListContent(
     bottomPadding: Dp
 ) {
     val context = LocalContext.current
-    val showInitialLoading = computing || (refreshing && totalModules == 0 && searchQuery.isBlank())
+    // Only take over the whole list when there is nothing stale left to show; an
+    // ongoing recompute over existing items surfaces as the inline pill below.
+    val showInitialLoading = totalModules == 0 &&
+        (computing || (refreshing && searchQuery.isBlank()))
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -1774,7 +1782,7 @@ private fun BuildModuleRepositoryListContent(
             )
         }
 
-        if (refreshing && !showInitialLoading) {
+        if ((refreshing || computing) && !showInitialLoading) {
             item(key = "refreshing") {
                 AbkInlineLoadingPill(
                     text = stringResource(R.string.module_repo_building_list),

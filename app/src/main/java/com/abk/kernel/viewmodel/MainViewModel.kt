@@ -1,4 +1,4 @@
-﻿package com.abk.kernel.viewmodel
+package com.abk.kernel.viewmodel
 
 import android.app.Application
 import androidx.annotation.VisibleForTesting
@@ -990,6 +990,9 @@ class MainViewModel @JvmOverloads constructor(
 
     fun openLoginOobe() = authOobe.openLoginOobe()
 
+fun continueOobeFromIntro() = authOobe.continueOobeFromIntro()
+
+    fun completeOobeWithUiStyle(style: String) = authOobe.completeOobeWithUiStyle(style)
     fun continueOobeToLogin() = authOobe.continueOobeToLogin()
 
     fun skipOobe() = authOobe.skipOobe()

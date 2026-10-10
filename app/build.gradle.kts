@@ -94,7 +94,7 @@ android {
         buildConfigField("String", "APP_BUILD_COMMIT_SHA", "\"${appBuildCommitSha.get()}\"")
         buildConfigField("String", "APP_BUILD_WORKFLOW_NAME", "\"${appBuildWorkflowName.get()}\"")
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"${githubClientId.get()}\"")
-        buildConfigField("String", "SOURCE_REPO_OWNER", "\"fanziyun\"")
+        buildConfigField("String", "SOURCE_REPO_OWNER", "\"xingguangcuican6666\"")
         buildConfigField("String", "SOURCE_REPO_NAME", "\"ABK\"")
         buildConfigField("String", "SOURCE_REPO_DEFAULT_BRANCH", "\"dev\"")
         buildConfigField("String", "UPSTREAM_REPO_URL", "\"https://github.com/zzh20188/GKI_KernelSU_SUSFS\"")
@@ -208,6 +208,7 @@ dependencies {
 
     // Blur / glass
     implementation(libs.miuix.blur)
+    implementation(libs.kyant.backdrop)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
@@ -224,7 +225,6 @@ dependencies {
     implementation(libs.miuix.core)
     implementation(libs.miuix.icons)
     implementation(libs.miuix.preference)
-    implementation(libs.miuix.blur)
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
     implementation(libs.miuix.navigation3.ui)

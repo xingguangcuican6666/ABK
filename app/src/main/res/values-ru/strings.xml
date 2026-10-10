@@ -1,4 +1,4 @@
-﻿<resources>
+<resources>
     <string name="app_name">AnyBase Kernel</string>
     <string name="app_full_name">AnyBase Kernel</string>
 
@@ -703,6 +703,9 @@
     <string name="settings_ui_style">Стиль интерфейса</string>
     <string name="settings_ui_style_miuix_subtitle">Использовать язык дизайна Xiaomi HyperOS</string>
     <string name="settings_blur">Размытие</string>
+    <string name="settings_blur_desc">Включить эффекты матового стекла</string>
+    <string name="settings_blur_background">Рендерить пользовательский фон в размытие</string>
+    <string name="settings_blur_background_desc">При включении верхняя и нижняя панели, карточки и плитки размывают изображение пользовательского фона</string>
     <string name="settings_floating_bottom_bar">Плавающая нижняя панель</string>
     <string name="settings_visual_effects">Визуальные эффекты</string>
     <string name="settings_blur_summary">Включить размытие верхней и нижней панели</string>
@@ -711,9 +714,6 @@
     <string name="settings_liquid_glass_summary">Включить эффект жидкого стекла на плавающей панели</string>
     <string name="settings_predictive_back_gesture">Прогнозируемый жест назад</string>
     <string name="settings_predictive_back_summary">Включить поддержку прогнозируемого жеста назад</string>
-    <string name="settings_blur_desc">Включить эффекты матового стекла</string>
-    <string name="settings_blur_background">Рендерить пользовательский фон в размытие</string>
-    <string name="settings_blur_background_desc">При включении верхняя и нижняя панели, карточки и плитки размывают изображение пользовательского фона</string>
     <string name="settings_current_color">Текущий</string>
     <string name="settings_color_green">Зелёный</string>
     <string name="settings_color_blue">Синий</string>
@@ -862,6 +862,7 @@
     <string name="runtime_pending_update">Ожидает обновления</string>
     <string name="runtime_update_available">Доступно обновление</string>
     <string name="runtime_update_module">Обновить модуль</string>
+    <string name="module_update">Обновить</string>
     <string name="runtime_update_version_change">Версия: %1$s → %2$s</string>
     <string name="runtime_update_source">Источник: %1$s</string>
     <string name="runtime_update_changelog">Журнал изменений</string>

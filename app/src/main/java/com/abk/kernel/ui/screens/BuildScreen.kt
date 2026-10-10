@@ -150,8 +150,8 @@ fun BuildScreen(
         }
     }
     val ksuBranchOptions = remember { KernelSupport.ksuBranchOptions() }
-    val virtualizationSupportOptions = remember(config.kernelVersion) {
-        KernelSupport.virtualizationSupportOptions(config.kernelVersion)
+    val virtualizationSupportOptions = remember {
+        KernelSupport.virtualizationSupportOptions()
     }
     val subLevelOptions = remember(config.androidVersion, config.kernelVersion) {
         KernelSupport.subLevelOptions(config.androidVersion, config.kernelVersion)
@@ -1859,7 +1859,7 @@ fun BuildScreen(
                     SwitchRow(stringResource(R.string.build_zram_full_algo), config.zramFullAlgo) {
                         vm.updateBuildConfig(config.copy(zramFullAlgo = it))
                     }
-                    AnimatedVisibility(config.zramFullAlgo) {
+                    AnimatedVisibility(!config.zramFullAlgo) {
                         OutlinedTextField(
                             value = config.zramExtraAlgos,
                             onValueChange = { vm.updateBuildConfig(config.copy(zramExtraAlgos = it)) },

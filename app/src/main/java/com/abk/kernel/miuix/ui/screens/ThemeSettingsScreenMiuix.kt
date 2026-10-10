@@ -241,7 +241,11 @@ fun ThemeSettingsScreenMiuix(
                     checked = state.miuixFloatingBottomBarEnabled,
                     onCheckedChange = { vm.setMiuixFloatingBottomBarEnabled(it) }
                 )
-                AnimatedVisibility(visible = state.miuixFloatingBottomBarEnabled) {
+                // The liquid-glass extras (saturation boost + specular edge) sit on top of the
+                // frosted blur, so the toggle is only meaningful when blur is on too.
+                AnimatedVisibility(
+                    visible = state.miuixFloatingBottomBarEnabled && state.miuixBlurEnabled
+                ) {
                     SwitchPreference(
                         title = stringResource(R.string.settings_liquid_glass),
                         summary = stringResource(R.string.settings_liquid_glass_summary),

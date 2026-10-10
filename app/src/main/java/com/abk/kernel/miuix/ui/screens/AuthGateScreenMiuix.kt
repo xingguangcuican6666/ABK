@@ -15,15 +15,23 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.add
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,7 +67,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.abk.kernel.BuildConfig
 import com.abk.kernel.R
 import com.abk.kernel.data.model.GitHubRepo
 import com.abk.kernel.miuix.ui.screens.flash.common.MiuixConfirmDialog
@@ -70,16 +77,24 @@ import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.ProgressIndicatorDefaults
+import top.yukonga.miuix.kmp.basic.RadioButton
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private const val OOBE_SKIP_LOADING_DELAY_MS = 320L
 private const val OOBE_SKIP_EXIT_DELAY_MS = 280L
+
+/**
+ * Buttons that sit side by side inside a card need less horizontal padding than
+ * [ButtonDefaults.InsideMargin] (16.dp) so their icon + label still fits on one
+ * line at the narrowest supported width.
+ */
+private val COMPACT_BUTTON_MARGIN = PaddingValues(horizontal = 10.dp, vertical = 11.dp)
 
 @Composable
 fun OobeScreenMiuix(vm: MainViewModel) {
@@ -95,6 +110,24 @@ fun OobeScreenMiuix(vm: MainViewModel) {
             delay(OOBE_SKIP_EXIT_DELAY_MS)
             vm.skipOobe()
         }
+    }
+
+    /**
+     * Confirming the theme step. A style that differs from the current one makes
+     * MainActivity swap the theme wrapper, which tears down this whole tree, so the
+     * exit animation is deliberately skipped: it would spend its delay sliding the
+     * overlay off the *outgoing* theme's main UI, and that reveal is the visual
+     * residue users see before the new theme appears. Picking the current style
+     * changes no wrapper, so that keeps the normal animated exit.
+     */
+    fun confirmUiStyle(selected: String) {
+        if (skipInFlight) return
+        if (selected == state.uiStyle) {
+            requestSkip()
+            return
+        }
+        skipInFlight = true
+        vm.completeOobeWithUiStyle(selected)
     }
 
     Box(
@@ -119,10 +152,7 @@ fun OobeScreenMiuix(vm: MainViewModel) {
                 )
                 AuthStep.THEME_SELECT -> ThemeSelectScreenMiuix(
                     currentStyle = state.uiStyle,
-                    onConfirm = { selected ->
-                        vm.setUiStyle(selected)
-                        requestSkip()
-                    }
+                    onConfirm = ::confirmUiStyle
                 )
                 AuthStep.FORK_CHECK -> ForkCheckScreenMiuix(
                     isLoading = state.isLoading,
@@ -212,7 +242,7 @@ private fun LoginScreenMiuix(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
-                Modifier.padding(top = 16.dp, bottom = 46.dp, start = 16.dp, end = 16.dp),
+                Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
@@ -241,38 +271,49 @@ private fun LoginScreenMiuix(
         }
 
         if (error != null) {
-            Spacer(Modifier.height(12.dp))
             ErrorCardMiuix(error = error, onClearError = onClearError)
         }
-
-        Spacer(Modifier.height(18.dp))
 
         if (userCode == null) {
             Button(
                 onClick = { showConsentDialog = true },
                 enabled = !isLoading && !skipInFlight,
-                modifier = Modifier.fillMaxWidth().height(52.dp)
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                colors = ButtonDefaults.buttonColorsPrimary()
             ) {
-        if (isLoading) {
+                if (isLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
-                        color = MiuixTheme.colorScheme.primary
+                        color = Color.White
                     )
                 } else {
-                    Icon(Icons.Default.Code, contentDescription = null)
+                    Icon(Icons.Default.Code, contentDescription = null, tint = Color.White)
                     Spacer(Modifier.width(8.dp))
-                    Text(text = stringResource(R.string.login_github))
+                    Text(
+                        text = stringResource(R.string.login_github),
+                        style = MiuixTheme.textStyles.body1,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White
+                    )
                 }
             }
         }
 
-        TextButton(
-            text = stringResource(R.string.oobe_skip_for_now),
+        Button(
             onClick = onSkip,
             enabled = !skipInFlight,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.textButtonColorsPrimary()
-        )
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.buttonColors(
+                color = MiuixTheme.colorScheme.secondaryVariant,
+                contentColor = MiuixTheme.colorScheme.onSecondaryVariant
+            )
+        ) {
+            Text(
+                text = stringResource(R.string.oobe_skip_for_now),
+                style = MiuixTheme.textStyles.body1,
+                fontWeight = FontWeight.Medium
+            )
+        }
     }
 }
 
@@ -288,7 +329,7 @@ private fun DeviceCodeCardMiuix(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            Modifier.padding(top = 16.dp, bottom = 46.dp, start = 16.dp, end = 16.dp),
+            Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -309,22 +350,29 @@ private fun DeviceCodeCardMiuix(
             ) {
                 Text(
                     text = code,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                    style = MiuixTheme.textStyles.subtitle,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 14.dp),
+                    style = MiuixTheme.textStyles.title2,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp,
+                    letterSpacing = 4.sp,
+                    textAlign = TextAlign.Center,
                     color = MiuixTheme.colorScheme.primary
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Button(
                     onClick = {
                         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         cm.setPrimaryClip(ClipData.newPlainText("user_code", code))
                         copied = true
                     },
-                    modifier = Modifier.height(44.dp)
+                    modifier = Modifier.weight(1f),
+                    insideMargin = COMPACT_BUTTON_MARGIN
                 ) {
                     Icon(
                         if (copied) Icons.Default.CheckCircle else Icons.Default.ContentCopy,
@@ -333,7 +381,10 @@ private fun DeviceCodeCardMiuix(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = if (copied) stringResource(R.string.copied) else stringResource(R.string.copy)
+                        text = if (copied) stringResource(R.string.copied) else stringResource(R.string.copy),
+                        style = MiuixTheme.textStyles.body1,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
                     )
                 }
                 Button(
@@ -342,11 +393,17 @@ private fun DeviceCodeCardMiuix(
                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(verificationUri)))
                         }
                     },
-                    modifier = Modifier.height(44.dp)
+                    modifier = Modifier.weight(1f),
+                    insideMargin = COMPACT_BUTTON_MARGIN
                 ) {
                     Icon(Icons.Default.OpenInBrowser, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(text = stringResource(R.string.open_browser))
+                    Text(
+                        text = stringResource(R.string.open_browser),
+                        style = MiuixTheme.textStyles.body1,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
+                    )
                 }
             }
             if (isPolling) {
@@ -381,9 +438,9 @@ private fun ThemeSelectScreenMiuix(
     AuthShellMiuix {
         Card(
             modifier = Modifier.fillMaxWidth()
-    ) {
+        ) {
             Column(
-                Modifier.padding(top = 16.dp, bottom = 46.dp, start = 16.dp, end = 16.dp),
+                Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
@@ -396,89 +453,67 @@ private fun ThemeSelectScreenMiuix(
             }
         }
 
-        Spacer(Modifier.height(12.dp))
-
         Card(
             onClick = { selected = "material" },
-            modifier = Modifier.fillMaxWidth()
-    ) {
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.defaultColors(
+                color = if (selected == "material") MiuixTheme.colorScheme.primaryContainer else MiuixTheme.colorScheme.surfaceContainer,
+                contentColor = if (selected == "material") MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onSurface
+            )
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 46.dp, start = 16.dp, end = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Card(
-                    modifier = Modifier.size(24.dp),
+                RadioButton(
+                    selected = selected == "material",
                     onClick = { selected = "material" }
-                ) {
-                    if (selected == "material") {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(4.dp)
-                                .background(
-                                    color = MiuixTheme.colorScheme.primary,
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                        )
-                    }
-                }
+                )
                 Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = stringResource(R.string.oobe_theme_m3e),
-                        style = MiuixTheme.textStyles.body1,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                }
+                Text(
+                    text = stringResource(R.string.oobe_theme_m3e),
+                    style = MiuixTheme.textStyles.body1,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (selected == "material") MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onSurface
+                )
             }
         }
-
-        Spacer(Modifier.height(8.dp))
 
         Card(
             onClick = { selected = "miuix" },
-            modifier = Modifier.fillMaxWidth()
-    ) {
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.defaultColors(
+                color = if (selected == "miuix") MiuixTheme.colorScheme.primaryContainer else MiuixTheme.colorScheme.surfaceContainer,
+                contentColor = if (selected == "miuix") MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onSurface
+            )
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 46.dp, start = 16.dp, end = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Card(
-                    modifier = Modifier.size(24.dp),
+                RadioButton(
+                    selected = selected == "miuix",
                     onClick = { selected = "miuix" }
-                ) {
-                    if (selected == "miuix") {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(4.dp)
-                                .background(
-                                    color = MiuixTheme.colorScheme.primary,
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                        )
-                    }
-                }
+                )
                 Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = stringResource(R.string.oobe_theme_miuix),
-                        style = MiuixTheme.textStyles.body1,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                }
+                Text(
+                    text = stringResource(R.string.oobe_theme_miuix),
+                    style = MiuixTheme.textStyles.body1,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (selected == "miuix") MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onSurface
+                )
             }
         }
-
-        Spacer(Modifier.height(24.dp))
 
         Button(
             onClick = { onConfirm(selected) },
             modifier = Modifier.fillMaxWidth().height(52.dp)
         ) {
-            Text(text = stringResource(R.string.oobe_theme_confirm))
+            Text(
+                text = stringResource(R.string.oobe_theme_confirm),
+                style = MiuixTheme.textStyles.body1,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
@@ -564,7 +599,7 @@ private fun ForkCheckScreenMiuix(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    Modifier.padding(top = 16.dp, bottom = 46.dp, start = 16.dp, end = 16.dp),
+                    Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
@@ -598,7 +633,7 @@ private fun ForkCheckScreenMiuix(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    Modifier.padding(top = 15.dp, bottom = 35.dp, start = 16.dp, end = 16.dp),
+                    Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(
@@ -643,15 +678,16 @@ private fun ForkCheckScreenMiuix(
             Button(
                 onClick = onFork,
                 enabled = !skipInFlight,
-                modifier = Modifier.fillMaxWidth().height(52.dp).offset(y = (-3).dp),
-                colors = ButtonDefaults.buttonColors(
-                    color = MiuixTheme.colorScheme.primary,
-                    contentColor = Color.White
-                )
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                colors = ButtonDefaults.buttonColorsPrimary()
             ) {
                 Icon(Icons.Default.ForkRight, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text(text = stringResource(R.string.fork_action))
+                Text(
+                    text = stringResource(R.string.fork_action),
+                    style = MiuixTheme.textStyles.body1,
+                    fontWeight = FontWeight.Medium
+                )
             }
         } else {
             Card(
@@ -716,11 +752,8 @@ private fun ForkCheckScreenMiuix(
             Button(
                 onClick = onSkip,
                 enabled = !skipInFlight,
-                modifier = Modifier.fillMaxWidth().offset(y = (-3).dp),
-                colors = ButtonDefaults.buttonColors(
-                    color = MiuixTheme.colorScheme.secondaryVariant,
-                    contentColor = MiuixTheme.colorScheme.onSecondaryVariant
-                )
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                colors = ButtonDefaults.buttonColors()
             ) {
                 if (skipInFlight) {
                     CircularProgressIndicator(
@@ -731,7 +764,11 @@ private fun ForkCheckScreenMiuix(
                     )
                     Spacer(Modifier.width(6.dp))
                 }
-                Text(text = stringResource(R.string.oobe_skip_for_now))
+                Text(
+                    text = stringResource(R.string.oobe_skip_for_now),
+                    style = MiuixTheme.textStyles.body1,
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
     }
@@ -745,7 +782,7 @@ private fun ErrorCardMiuix(error: String, onClearError: () -> Unit) {
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(top = 14.dp, bottom = 44.dp, start = 14.dp, end = 14.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -778,8 +815,16 @@ private fun AuthShellMiuix(content: @Composable ColumnScope.() -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MiuixTheme.colorScheme.surface),
-        contentAlignment = Alignment.Center
+            .background(MiuixTheme.colorScheme.surface)
+            .windowInsetsPadding(
+                WindowInsets.systemBars.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
+                    .add(WindowInsets.displayCutout)
+            )
+            .windowInsetsPadding(
+                WindowInsets.statusBars.only(WindowInsetsSides.Top)
+                    .add(WindowInsets.displayCutout.only(WindowInsetsSides.Top))
+            ),
+        contentAlignment = Alignment.TopCenter
     ) {
         Column(
             modifier = Modifier
@@ -787,7 +832,7 @@ private fun AuthShellMiuix(content: @Composable ColumnScope.() -> Unit) {
                 .padding(horizontal = 20.dp, vertical = 24.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content
         )
     }

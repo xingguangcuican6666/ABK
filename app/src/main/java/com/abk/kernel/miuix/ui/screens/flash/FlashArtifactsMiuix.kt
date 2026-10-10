@@ -41,6 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.abk.kernel.R
 import com.abk.kernel.data.model.ActiveDownloadTask
 import com.abk.kernel.data.model.ArtifactCategory
@@ -142,18 +143,17 @@ private fun miuixWorkflowTaskLabel(task: ActiveDownloadTask): String =
 fun MiuixTagChip(
     label: String,
     primary: Boolean = true,
-    maxWidth: androidx.compose.ui.unit.Dp = 160.dp
+    maxWidth: androidx.compose.ui.unit.Dp = 160.dp,
+    large: Boolean = false
 ) {
     val bgColor = if (primary) {
         MiuixTheme.colorScheme.primary.copy(alpha = FlashChipBgAlpha)
     } else {
         MiuixTheme.colorScheme.secondary.copy(alpha = FlashChipBgAlpha)
     }
-    val contentColor = if (primary) {
-        MiuixTheme.colorScheme.primary
-    } else {
-        MiuixTheme.colorScheme.secondary
-    }
+    // Label text uses the adaptive surface content color so it stays white in
+    // dark mode and black in light mode, instead of mirroring the accent color.
+    val contentColor = MiuixTheme.colorScheme.onSurface
     Box(
         modifier = Modifier
             .widthIn(max = maxWidth)
@@ -161,13 +161,16 @@ fun MiuixTagChip(
                 color = bgColor,
                 shape = FlashTagChipShape
             )
-            .padding(horizontal = 6.dp, vertical = 2.dp)
+            .padding(
+                horizontal = if (large) 10.dp else 6.dp,
+                vertical = if (large) 5.dp else 2.dp
+            )
     ) {
         Text(
             text = label,
             style = MiuixTheme.textStyles.body2,
             color = contentColor,
-            fontSize = FlashChipFontSize,
+            fontSize = if (large) 14.sp else FlashChipFontSize,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -198,7 +201,8 @@ private fun MiuixPillChip(
             style = MiuixTheme.textStyles.body2,
             fontSize = FlashChipFontSize,
             fontWeight = FontWeight.Medium,
-            color = color,
+            // Adaptive surface content color: white in dark mode, black in light mode.
+            color = MiuixTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

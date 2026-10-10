@@ -297,8 +297,9 @@ private fun miuixOpenSourceNoticeGroups(): List<MiuixOpenSourceNoticeGroup> = li
 
 private fun miuixAndroidDependencyNotices(): List<MiuixOpenSourceNotice> = listOf(
     MiuixOpenSourceNotice("compose-miuix-ui (MIUIX) 0.9.2", "Apache-2.0", "top.yukonga.miuix.kmp", "https://github.com/compose-miuix-ui/miuix"),
+    MiuixOpenSourceNotice("Kyant0 Backdrop (AndroidLiquidGlass) 2.0.0", "Apache-2.0", "io.github.kyant0:backdrop", "https://github.com/Kyant0/AndroidLiquidGlass"),
     MiuixOpenSourceNotice("Android Gradle Plugin 9.1.1", "Apache-2.0", "com.android.application"),
-    MiuixOpenSourceNotice("Kotlin Gradle/Compose plugin 2.3.21", "Apache-2.0", "org.jetbrains.kotlin.plugin.compose"),
+    MiuixOpenSourceNotice("Kotlin Gradle/Compose plugin 2.4.0", "Apache-2.0", "org.jetbrains.kotlin.plugin.compose"),
     MiuixOpenSourceNotice("androidx.core:core-ktx 1.15.0", "Apache-2.0", "Gradle direct dependency"),
     MiuixOpenSourceNotice("androidx.lifecycle:lifecycle-runtime-ktx 2.8.7", "Apache-2.0", "Gradle direct dependency"),
     MiuixOpenSourceNotice("androidx.lifecycle:lifecycle-viewmodel-compose 2.8.7", "Apache-2.0", "Gradle direct dependency"),
@@ -308,6 +309,7 @@ private fun miuixAndroidDependencyNotices(): List<MiuixOpenSourceNotice> = listO
     MiuixOpenSourceNotice("androidx.compose:compose-bom 2026.05.00", "Apache-2.0", "Gradle direct dependency"),
     MiuixOpenSourceNotice("androidx.compose.ui:ui", "Apache-2.0", "Gradle direct dependency"),
     MiuixOpenSourceNotice("androidx.compose.ui:ui-graphics", "Apache-2.0", "Gradle direct dependency"),
+    MiuixOpenSourceNotice("androidx.compose.ui:ui-tooling-preview", "Apache-2.0", "Gradle direct dependency"),
     MiuixOpenSourceNotice("androidx.compose.material3:material3 1.5.0-alpha19", "Apache-2.0", "Gradle direct dependency"),
     MiuixOpenSourceNotice("androidx.compose.material:material-icons-extended", "Apache-2.0", "Gradle direct dependency"),
     MiuixOpenSourceNotice("com.google.android.material:material 1.12.0", "Apache-2.0", "Gradle direct dependency"),

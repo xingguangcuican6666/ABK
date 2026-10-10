@@ -1,4 +1,4 @@
-﻿package com.abk.kernel.miuix
+package com.abk.kernel.miuix
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -94,10 +94,12 @@ import com.abk.kernel.miuix.ui.screens.AboutScreenMiuix
 import com.abk.kernel.miuix.ui.screens.AppProfileTemplatesScreenMiuix
 import com.abk.kernel.miuix.ui.screens.BuildPlanLibraryScreenMiuix
 import com.abk.kernel.miuix.ui.screens.BuildQueueScreenMiuix
+import com.abk.kernel.miuix.ui.screens.BuildKernelOptionsScreenMiuix
 import com.abk.kernel.miuix.ui.screens.BuildModuleRepoSettingsScreenMiuix
 import com.abk.kernel.miuix.ui.screens.ExtensionManagerScreenMiuix
 import com.abk.kernel.miuix.ui.screens.ManagerPatchScreenMiuix
 import com.abk.kernel.miuix.ui.screens.ManagerToolsScreenMiuix
+import com.abk.kernel.miuix.ui.screens.SusfsControlScreenMiuix
 import com.abk.kernel.miuix.ui.screens.OpenSourceLicensesScreenMiuix
 import com.abk.kernel.miuix.ui.screens.RuntimeModuleRepoSettingsScreenMiuix
 import com.abk.kernel.miuix.ui.screens.SettingsScreenMiuix
@@ -120,6 +122,8 @@ import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.utils.findActivity
 import com.abk.kernel.viewmodel.MainViewModel
+import com.kyant.backdrop.backdrops.layerBackdrop as kyantLayerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop as rememberKyantLayerBackdrop
 import top.yukonga.miuix.kmp.basic.NavigationBar as MiuixNavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem as MiuixNavigationBarItem
 import top.yukonga.miuix.kmp.basic.NavigationRail as MiuixNavigationRail
@@ -128,7 +132,6 @@ import top.yukonga.miuix.kmp.basic.NavigationRailDisplayMode
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SnackbarHostState as MiuixSnackbarHostState
 import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.MiuixPopupUtils
 
@@ -211,6 +214,7 @@ private fun AbkMiuixMainScaffold(
         AbkTab.Settings -> navIsOnSubPage || settingsChildPageVisible
         AbkTab.RootAuth -> navIsOnSubPage || rootAuthDetailPageVisible
         AbkTab.RuntimeHome -> navIsOnSubPage
+        AbkTab.Status -> navIsOnSubPage
         else -> false
     }
     // Mutable state captured by closures; reassigned inside NavDisplay setup so any
@@ -326,11 +330,15 @@ private fun AbkMiuixMainScaffold(
     }
 
     val surfaceColor = MiuixTheme.colorScheme.surface
-    val floatingGlassBackdrop = rememberLayerBackdrop {
+    // Kyant0 Backdrop source for the floating bar's frosted surface. The opaque surface fill
+    // must come first: capturing only drawContent() leaves transparent pixels in the pill.
+    val floatingGlassBackdrop = rememberKyantLayerBackdrop {
         drawRect(surfaceColor)
         drawContent()
     }
-    val blurEnabledForGlass = state.miuixFloatingBottomBarEnabled && state.miuixLiquidGlassEnabled
+    // The floating bar's frost follows the blur toggle; the liquid-glass toggle only adds the
+    // saturation boost and specular edge on top of it.
+    val blurEnabledForGlass = state.miuixFloatingBottomBarEnabled && state.miuixBlurEnabled
     val blurBackdrop = rememberBlurBackdrop(state.miuixBlurEnabled, surfaceColor)
 
     // Bar slide offset (0f = visible, -1f = hidden left). Single LaunchedEffect drives it:
@@ -412,7 +420,7 @@ private fun AbkMiuixMainScaffold(
                             .fillMaxSize()
                             .then(
                                 when {
-                                    blurEnabledForGlass -> Modifier.layerBackdrop(floatingGlassBackdrop)
+                                    blurEnabledForGlass -> Modifier.kyantLayerBackdrop(floatingGlassBackdrop)
                                     blurBackdrop != null -> Modifier.layerBackdrop(blurBackdrop)
                                     else -> Modifier
                                 },
@@ -573,6 +581,7 @@ private fun AbkMiuixMainScaffold(
                                                         )
                                                         AbkTab.Settings -> com.abk.kernel.miuix.ui.screens.SettingsScreenMiuix(
                                                             vm = vm,
+                                                            miuixVm = miuixVm,
                                                             outerPadding = contentPadding,
                                                             onOpenInstalledModules = {
                                                                 if (!state.runtimeNavigationEnabled) vm.setRuntimeNavigationEnabled(true)
@@ -616,6 +625,9 @@ private fun AbkMiuixMainScaffold(
                                     entry<Route.BuildQueue> {
                                         BuildQueueScreenMiuix(vm = vm)
                                     }
+                                    entry<Route.BuildKernelOptions> {
+                                        BuildKernelOptionsScreenMiuix(vm = vm)
+                                    }
                                     entry<Route.BuildModuleRepoSettings> {
                                         BuildModuleRepoSettingsScreenMiuix(vm = vm)
                                     }
@@ -658,6 +670,16 @@ private fun AbkMiuixMainScaffold(
                                             runtimeVariant = state.abkRuntimeStatus?.manager?.variant.orEmpty(),
                                             backgroundUri = state.customBackgroundUri,
                                             backgroundImageEnabled = state.backgroundImageEnabled,
+                                            onBack = popBack,
+                                        )
+                                    }
+                                    entry<Route.SusfsControl> {
+                                        SusfsControlScreenMiuix(
+                                            state = state,
+                                            showRefreshLoading = state.susfsLoading,
+                                            onApply = { vm.applySusfsConfig(it) },
+                                            onReset = { vm.resetSusfsConfig() },
+                                            onRefresh = { vm.refreshSusfsState(force = true) },
                                             onBack = popBack,
                                         )
                                     }
@@ -761,7 +783,7 @@ private fun AbkMiuixMainScaffold(
                                     },
                                     selectedIndex = visibleTabs.indexOf(activeTab).coerceAtLeast(0),
                                     backdrop = floatingGlassBackdrop,
-                                    isBlurEnabled = state.miuixLiquidGlassEnabled,
+                                    isBlurEnabled = state.miuixBlurEnabled,
                                     isLiquidGlassEnabled = state.miuixLiquidGlassEnabled,
                                 )
                             }
@@ -804,7 +826,7 @@ private fun AbkMiuixMainScaffold(
                             .fillMaxSize()
                             .then(
                                 when {
-                                    blurEnabledForGlass -> Modifier.layerBackdrop(floatingGlassBackdrop)
+                                    blurEnabledForGlass -> Modifier.kyantLayerBackdrop(floatingGlassBackdrop)
                                     blurBackdrop != null -> Modifier.layerBackdrop(blurBackdrop)
                                     else -> Modifier
                                 },
@@ -929,6 +951,7 @@ private fun AbkMiuixMainScaffold(
                                             )
                                             AbkTab.Settings -> com.abk.kernel.miuix.ui.screens.SettingsScreenMiuix(
                                                 vm = vm,
+                                                miuixVm = miuixVm,
                                                 outerPadding = contentPadding,
                                                 onOpenInstalledModules = {
                                                     if (!state.runtimeNavigationEnabled) vm.setRuntimeNavigationEnabled(true)
@@ -969,6 +992,9 @@ private fun AbkMiuixMainScaffold(
                                 }
                                 entry<Route.BuildQueue> {
                                     BuildQueueScreenMiuix(vm = vm)
+                                }
+                                entry<Route.BuildKernelOptions> {
+                                    BuildKernelOptionsScreenMiuix(vm = vm)
                                 }
                                 entry<Route.BuildModuleRepoSettings> {
                                     BuildModuleRepoSettingsScreenMiuix(vm = vm)
@@ -1012,6 +1038,16 @@ private fun AbkMiuixMainScaffold(
                                         runtimeVariant = state.abkRuntimeStatus?.manager?.variant.orEmpty(),
                                         backgroundUri = state.customBackgroundUri,
                                         backgroundImageEnabled = state.backgroundImageEnabled,
+                                        onBack = popBack,
+                                    )
+                                }
+                                entry<Route.SusfsControl> {
+                                    SusfsControlScreenMiuix(
+                                        state = state,
+                                        showRefreshLoading = state.susfsLoading,
+                                        onApply = { vm.applySusfsConfig(it) },
+                                        onReset = { vm.resetSusfsConfig() },
+                                        onRefresh = { vm.refreshSusfsState(force = true) },
                                         onBack = popBack,
                                     )
                                 }

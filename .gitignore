@@ -1,5 +1,6 @@
 # Claude Code
 .claude/
+/CLAUDE.md
 
 # Gemini
 .gemini/
@@ -79,6 +80,7 @@ action_build_comparison.md
 
 # Gradle
 .gradle/
+.gradle-review/
 build/
 !desktop/flutter_app/lib/src/features/build/
 !desktop/flutter_app/lib/src/features/build/*.dart
@@ -97,3 +99,6 @@ captures/
 local.properties
 local.properties.*
 !local.properties.example
+
+# Local analytics/telemetry opt-out (machine-specific user id)
+analytics.settings

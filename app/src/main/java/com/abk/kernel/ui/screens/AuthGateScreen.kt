@@ -76,6 +76,25 @@ fun OobeScreen(vm: MainViewModel) {
         }
     }
 
+    /**
+     * Confirming the theme step. A style that differs from the current one makes
+     * MainActivity swap the theme wrapper, which tears down this whole tree, so the
+     * exit animation is deliberately skipped: it would spend its 280ms sliding the
+     * overlay off the *outgoing* theme's main UI, and that reveal is the visual
+     * residue users see before MIUIX appears. Handing off in a single frame leaves
+     * nothing of the old theme on screen. Picking the current style changes no
+     * wrapper, so that keeps the normal animated exit.
+     */
+    fun confirmUiStyle(selected: String) {
+        if (skipInFlight) return
+        if (selected == state.uiStyle) {
+            requestSkip()
+            return
+        }
+        skipInFlight = true
+        vm.completeOobeWithUiStyle(selected)
+    }
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -105,7 +124,7 @@ fun OobeScreen(vm: MainViewModel) {
                     onContinue = {
                         if (!skipInFlight) {
                             if (state.isLoggedIn) {
-                                vm.openBuildOobe()
+                                vm.continueOobeFromIntro()
                             } else {
                                 vm.continueOobeToLogin()
                             }
@@ -126,10 +145,7 @@ fun OobeScreen(vm: MainViewModel) {
                 )
                 AuthStep.THEME_SELECT -> ThemeSelectScreen(
                     currentStyle = state.uiStyle,
-                    onConfirm = { selected ->
-                        vm.setUiStyle(selected)
-                        requestSkip()
-                    }
+                    onConfirm = ::confirmUiStyle
                 )
                 AuthStep.FORK_CHECK -> ForkCheckScreen(
                     isLoading = state.isLoading,

@@ -60,7 +60,7 @@ The Android dependency list is derived from `gradle/libs.versions.toml` and `app
 | Dependency | License |
 | --- | --- |
 | Android Gradle Plugin 9.1.1 | Apache-2.0 |
-| Kotlin Gradle / Compose plugin 2.3.21 | Apache-2.0 |
+| Kotlin Gradle / Compose plugin 2.4.0 | Apache-2.0 |
 | AndroidX Core KTX 1.15.0 | Apache-2.0 |
 | AndroidX Lifecycle Runtime KTX 2.8.7 | Apache-2.0 |
 | AndroidX Lifecycle ViewModel Compose 2.8.7 | Apache-2.0 |
@@ -72,6 +72,7 @@ The Android dependency list is derived from `gradle/libs.versions.toml` and `app
 | AndroidX Material3 1.5.0-alpha19 | Apache-2.0 |
 | AndroidX Material Icons Extended | Apache-2.0 |
 | compose-miuix-ui (MIUIX) 0.9.2 | Apache-2.0 |
+| Kyant0 Backdrop (AndroidLiquidGlass) 2.0.0 | Apache-2.0 |
 | Google Material Components 1.12.0 | Apache-2.0 |
 | AndroidX Navigation Compose 2.8.5 | Apache-2.0 |
 | AndroidX Navigation3 Runtime 1.1.2 | Apache-2.0 |

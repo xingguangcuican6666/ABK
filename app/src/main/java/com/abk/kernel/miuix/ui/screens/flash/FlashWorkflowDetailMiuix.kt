@@ -58,6 +58,7 @@ import com.abk.kernel.ui.screens.flash.hasArtifactsInCategory
 import com.abk.kernel.ui.screens.flash.hasKernelArtifact
 import com.abk.kernel.ui.screens.flash.hasManagerArtifact
 import com.abk.kernel.ui.screens.flash.isAbkManagerFlashRun
+import com.abk.kernel.ui.screens.flash.manifestNoticeCandidates
 import com.abk.kernel.ui.screens.flash.shouldAppearInWorkflowList
 import com.abk.kernel.ui.screens.flash.shouldShowParameterDetails
 import com.abk.kernel.ui.screens.flash.sortedForWorkflowDisplay
@@ -68,6 +69,7 @@ import com.abk.kernel.utils.RootUtils
 import com.abk.kernel.utils.WorkflowPrimary
 import com.abk.kernel.viewmodel.MainViewModel
 import com.abk.kernel.miuix.ui.screens.flash.common.*
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -193,6 +195,8 @@ fun FlashWorkflowDetailScreenMiuix(
     var selectedItem by remember { mutableStateOf<DownloadedArtifact?>(null) }
     var allowLegacyBundleFallback by remember { mutableStateOf(false) }
     var showUnverifiedFlashConfirm by remember { mutableStateOf(false) }
+    var manifestNoticeItem by remember { mutableStateOf<DownloadedArtifact?>(null) }
+    val sessionManifestNotices = remember { mutableSetOf<String>() }
 
     // ── AnyKernel slot state ────────────────────────────────────────────
     var selectedAnyKernelSlotTargetName by rememberSaveable {
@@ -245,6 +249,37 @@ fun FlashWorkflowDetailScreenMiuix(
     LaunchedEffect(runId) {
         vm.loadWorkflowJobs(runId)
         vm.loadFailedRunLogExcerpt(runId)
+        // M3 re-arms the late-artifact poll when a failed run's detail opens, so a
+        // run that failed before this launch - or whose automatic poll window has
+        // already elapsed - still picks up artifacts published late. Gated on the
+        // same condition M3 uses so successful runs do not start polling.
+        if (runId in state.sessionGhostFailedRuns) {
+            vm.watchLateArtifactsForFailedRun(runId)
+        }
+    }
+
+    // Manifest notices belong to a specific downloaded artifact. Do not pop as
+    // soon as the flash tab opens; defer until the user explicitly opens this
+    // workflow's detail page (this composable is only composed on that route).
+    LaunchedEffect(allWorkflowGroups, state.downloadedArtifacts, runId) {
+        val candidates = manifestNoticeCandidates(
+            flashDetailRouteActive = true,
+            selectedRunId = runId,
+            workflowGroups = allWorkflowGroups
+        )
+        if (candidates.isEmpty()) {
+            manifestNoticeItem = null
+            return@LaunchedEffect
+        }
+        for (item in candidates) {
+            val file = File(item.filePath)
+            if (!file.isFile) continue
+            val key = withContext(Dispatchers.IO) { DownloadUtils.fileSha256Hex(file) }
+            if (sessionManifestNotices.add(key)) {
+                manifestNoticeItem = item
+                break
+            }
+        }
     }
 
     // ── Operational callbacks ───────────────────────────────────────────
@@ -612,6 +647,13 @@ fun FlashWorkflowDetailScreenMiuix(
             onDismiss = { showInstallManagerConfirm = false }
         )
     }
+
+    manifestNoticeItem?.let { item ->
+        MiuixManifestNoticeDialog(
+            item = item,
+            onDismiss = { manifestNoticeItem = null }
+        )
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -946,13 +988,6 @@ private fun MiuixFlashConfirmDialogWithSlot(
     onDismiss: () -> Unit
 ) {
     val showSlotOption = item.type == ArtifactType.ANYKERNEL3 && supportsAnyKernelInactiveSlot
-    if (!showSlotOption) {
-        MiuixFlashConfirmDialog(
-            onConfirm = onConfirm,
-            onDismiss = onDismiss
-        )
-        return
-    }
     WindowDialog(
         show = true,
         title = stringResource(R.string.flash_confirm),
@@ -969,45 +1004,61 @@ private fun MiuixFlashConfirmDialogWithSlot(
                         style = MiuixTheme.textStyles.body2,
                         color = MiuixTheme.colorScheme.onSurface
                     )
-                    Text(
-                        text = stringResource(R.string.root_patch_ak3_slot_title),
-                        style = MiuixTheme.textStyles.subtitle,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MiuixTheme.colorScheme.onSurface
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSlotTargetChange(RootUtils.Ak3SlotTarget.CURRENT) },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Checkbox(
-                            state = ToggleableState(selectedSlotTarget == RootUtils.Ak3SlotTarget.CURRENT),
-                            onClick = { onSlotTargetChange(RootUtils.Ak3SlotTarget.CURRENT) }
-                        )
+                    if (item.manifestClientNotice != null) {
                         Text(
-                            text = currentSlotLabel,
-                            style = MiuixTheme.textStyles.body1,
+                            text = stringResource(R.string.flash_custom_source_review_before_flash),
+                            style = MiuixTheme.textStyles.subtitle,
+                            fontWeight = FontWeight.SemiBold,
                             color = MiuixTheme.colorScheme.onSurface
+                        )
+                        MiuixManifestSourceInfo(item, showKernelDetails = false)
+                        Text(
+                            text = stringResource(R.string.flash_custom_source_old_client_warning),
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                         )
                     }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSlotTargetChange(RootUtils.Ak3SlotTarget.INACTIVE) },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Checkbox(
-                            state = ToggleableState(selectedSlotTarget == RootUtils.Ak3SlotTarget.INACTIVE),
-                            onClick = { onSlotTargetChange(RootUtils.Ak3SlotTarget.INACTIVE) }
-                        )
+                    if (showSlotOption) {
                         Text(
-                            text = inactiveSlotLabel,
-                            style = MiuixTheme.textStyles.body1,
+                            text = stringResource(R.string.root_patch_ak3_slot_title),
+                            style = MiuixTheme.textStyles.subtitle,
+                            fontWeight = FontWeight.SemiBold,
                             color = MiuixTheme.colorScheme.onSurface
                         )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSlotTargetChange(RootUtils.Ak3SlotTarget.CURRENT) },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Checkbox(
+                                state = ToggleableState(selectedSlotTarget == RootUtils.Ak3SlotTarget.CURRENT),
+                                onClick = { onSlotTargetChange(RootUtils.Ak3SlotTarget.CURRENT) }
+                            )
+                            Text(
+                                text = currentSlotLabel,
+                                style = MiuixTheme.textStyles.body1,
+                                color = MiuixTheme.colorScheme.onSurface
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSlotTargetChange(RootUtils.Ak3SlotTarget.INACTIVE) },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Checkbox(
+                                state = ToggleableState(selectedSlotTarget == RootUtils.Ak3SlotTarget.INACTIVE),
+                                onClick = { onSlotTargetChange(RootUtils.Ak3SlotTarget.INACTIVE) }
+                            )
+                            Text(
+                                text = inactiveSlotLabel,
+                                style = MiuixTheme.textStyles.body1,
+                                color = MiuixTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }

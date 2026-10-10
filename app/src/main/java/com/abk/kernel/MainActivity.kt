@@ -397,21 +397,27 @@ private fun SyncPromptDialogMiuix(
         title = stringResource(R.string.sync_title),
         onDismissRequest = onDismiss,
     ) {
-        Column {
-            top.yukonga.miuix.kmp.basic.Text(
-                text = "${stringResource(R.string.sync_desc)}\n\n${stringResource(R.string.sync_behind_commits, behindBy)}",
-                color = MiuixTheme.colorScheme.onSurface
-            )
-            Spacer(Modifier.height(12.dp))
+        Column(modifier = Modifier.fillMaxWidth()) {
+            top.yukonga.miuix.kmp.basic.Card(modifier = Modifier.fillMaxWidth()) {
+                top.yukonga.miuix.kmp.basic.Text(
+                    text = "${stringResource(R.string.sync_desc)}\n\n${stringResource(R.string.sync_behind_commits, behindBy)}",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+            Spacer(Modifier.height(16.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 MiuixTextButton(
+                    modifier = Modifier.weight(1f),
                     text = stringResource(R.string.skip),
                     onClick = onDismiss
                 )
                 MiuixTextButton(
+                    modifier = Modifier.weight(1f),
                     text = stringResource(R.string.sync_action),
                     onClick = onSync,
                     colors = MiuixButtonDefaults.textButtonColorsPrimary()

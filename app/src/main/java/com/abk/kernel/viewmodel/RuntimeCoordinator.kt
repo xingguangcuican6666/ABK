@@ -1,4 +1,4 @@
-﻿package com.abk.kernel.viewmodel
+package com.abk.kernel.viewmodel
 
 import android.app.Application
 import androidx.annotation.StringRes
