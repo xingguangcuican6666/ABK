@@ -48,8 +48,10 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import top.yukonga.miuix.kmp.window.WindowDialog
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.graphics.Color
-import com.abk.kernel.miuix.util.BlurredBar
-import com.abk.kernel.miuix.util.rememberBlurBackdrop
+import androidx.compose.runtime.CompositionLocalProvider
+import com.abk.kernel.ui.blur.LocalBlurState
+import com.abk.kernel.ui.blur.blurEffect
+import com.abk.kernel.ui.blur.rememberBlurBackdrop
 import com.abk.kernel.viewmodel.MainViewModel
 import com.abk.kernel.viewmodel.MainUiState
 import top.yukonga.miuix.kmp.blur.layerBackdrop
@@ -85,8 +87,9 @@ fun OpenSourceLicensesScreenMiuix(vm: MainViewModel) {
 
     Scaffold(
         topBar = {
-            BlurredBar(backdrop, surfaceColor) {
+            CompositionLocalProvider(LocalBlurState provides backdrop) {
                 TopAppBar(
+                    modifier = Modifier.blurEffect(surfaceColor.copy(0.87f)),
                     color = barColor,
                     title = stringResource(R.string.settings_open_source_licenses),
                     scrollBehavior = scrollBehavior,

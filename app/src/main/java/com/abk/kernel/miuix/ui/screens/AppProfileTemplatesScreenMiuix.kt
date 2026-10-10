@@ -33,8 +33,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.abk.kernel.R
-import com.abk.kernel.miuix.util.BlurredBar
-import com.abk.kernel.miuix.util.rememberBlurBackdrop
+import androidx.compose.runtime.CompositionLocalProvider
+import com.abk.kernel.ui.blur.LocalBlurState
+import com.abk.kernel.ui.blur.blurEffect
+import com.abk.kernel.ui.blur.rememberBlurBackdrop
 import com.abk.kernel.ui.navigation3.LocalNavigator
 import com.abk.kernel.viewmodel.MainViewModel
 import top.yukonga.miuix.kmp.basic.Button
@@ -92,8 +94,9 @@ fun AppProfileTemplatesScreenMiuix(vm: MainViewModel) {
 
     Scaffold(
         topBar = {
-            BlurredBar(backdrop, surfaceColor) {
+            CompositionLocalProvider(LocalBlurState provides backdrop) {
                 TopAppBar(
+                    modifier = Modifier.blurEffect(surfaceColor.copy(0.87f)),
                     title = stringResource(R.string.settings_app_profile_templates),
                     scrollBehavior = scrollBehavior,
                     color = barColor,

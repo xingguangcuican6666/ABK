@@ -137,8 +137,10 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import top.yukonga.miuix.kmp.window.WindowDialog
-import com.abk.kernel.miuix.util.BlurredBar
-import com.abk.kernel.miuix.util.rememberBlurBackdrop
+import androidx.compose.runtime.CompositionLocalProvider
+import com.abk.kernel.ui.blur.LocalBlurState
+import com.abk.kernel.ui.blur.blurEffect
+import com.abk.kernel.ui.blur.rememberBlurBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -627,8 +629,9 @@ fun FlashScreenMiuix(
 
 
         topBar = {
-            BlurredBar(backdrop, surfaceColor) {
+            CompositionLocalProvider(LocalBlurState provides backdrop) {
                 TopAppBar(
+                    modifier = Modifier.blurEffect(surfaceColor.copy(0.87f)),
                     color = barColor,
                     title = if (rootGranted) stringResource(R.string.flash_title)
                     else stringResource(R.string.flash_files_title),

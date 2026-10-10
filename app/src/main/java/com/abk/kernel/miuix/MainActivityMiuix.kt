@@ -108,8 +108,9 @@ import com.abk.kernel.miuix.ui.screens.flash.FlashTerminalLogScreenMiuix
 import com.abk.kernel.miuix.ui.screens.flash.FlashWorkflowDetailScreenMiuix
 import com.abk.kernel.miuix.ui.screens.runtime.ModuleActionTerminalScreenMiuix
 import com.abk.kernel.miuix.ui.screens.runtime.ModuleInstallLogScreenMiuix
-import com.abk.kernel.miuix.util.BlurredBar
-import com.abk.kernel.miuix.util.rememberBlurBackdrop
+import com.abk.kernel.ui.blur.LocalBlurState
+import com.abk.kernel.ui.blur.blurEffect
+import com.abk.kernel.ui.blur.rememberBlurBackdrop
 import com.abk.kernel.miuix.viewmodel.MiuixSettingsViewModel
 import com.abk.kernel.ui.navigation3.LocalNavigator
 import com.abk.kernel.ui.navigation3.Navigator
@@ -484,27 +485,25 @@ private fun AbkMiuixMainScaffold(
                                                     .fillMaxHeight(),
                                             ) {
                                                 key(visibleTabs) {
-                                                    BlurredBar(blurBackdrop, surfaceColor, blurActive = false) {
-                                                        MiuixNavigationRail(
-                                                            modifier = Modifier
-                                                                .fillMaxHeight()
-                                                                .fillMaxWidth(),
-                                                            color = MiuixTheme.colorScheme.surface,
-                                                            showDivider = false,
-                                                            defaultWindowInsetsPadding = false,
-                                                            minWidth = 92.dp,
-                                                            mode = NavigationRailDisplayMode.IconAndText,
-                                                        ) {
-                                                            visibleTabs.forEach { tab ->
-                                                                MiuixNavigationRailItem(
-                                                                    modifier = Modifier.fillMaxWidth(),
-                                                                    selected = activeTab == tab,
-                                                                    onClick = { if (!childPageVisible && tab in visibleTabs) selectedTab = tab },
-                                                                    enabled = !childPageVisible,
-                                                                    icon = tabIcon(tab),
-                                                                    label = tabLabel(tab),
-                                                                )
-                                                            }
+                                                    MiuixNavigationRail(
+                                                        modifier = Modifier
+                                                            .fillMaxHeight()
+                                                            .fillMaxWidth(),
+                                                        color = MiuixTheme.colorScheme.surface,
+                                                        showDivider = false,
+                                                        defaultWindowInsetsPadding = false,
+                                                        minWidth = 92.dp,
+                                                        mode = NavigationRailDisplayMode.IconAndText,
+                                                    ) {
+                                                        visibleTabs.forEach { tab ->
+                                                            MiuixNavigationRailItem(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                selected = activeTab == tab,
+                                                                onClick = { if (!childPageVisible && tab in visibleTabs) selectedTab = tab },
+                                                                enabled = !childPageVisible,
+                                                                icon = tabIcon(tab),
+                                                                label = tabLabel(tab),
+                                                            )
                                                         }
                                                     }
                                                 }
@@ -767,9 +766,12 @@ private fun AbkMiuixMainScaffold(
                                 )
                             }
                             else -> {
-                                BlurredBar(blurBackdrop, surfaceColor) {
+                                CompositionLocalProvider(LocalBlurState provides blurBackdrop) {
                                     MiuixNavigationBar(
-                                        modifier = Modifier.fillMaxWidth().height(80.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(80.dp)
+                                            .blurEffect(surfaceColor.copy(0.87f)),
                                         color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                                     ) {
                                         visibleTabs.forEach { tab ->

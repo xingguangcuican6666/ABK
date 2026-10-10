@@ -44,8 +44,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import com.abk.kernel.miuix.util.BlurredBar
-import com.abk.kernel.miuix.util.rememberBlurBackdrop
+import androidx.compose.runtime.CompositionLocalProvider
+import com.abk.kernel.ui.blur.LocalBlurState
+import com.abk.kernel.ui.blur.blurEffect
+import com.abk.kernel.ui.blur.rememberBlurBackdrop
 import com.abk.kernel.viewmodel.MainViewModel
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -84,8 +86,9 @@ fun AboutScreenMiuix(vm: MainViewModel) {
 
     Scaffold(
         topBar = {
-            BlurredBar(backdrop, surfaceColor) {
+            CompositionLocalProvider(LocalBlurState provides backdrop) {
                 TopAppBar(
+                    modifier = Modifier.blurEffect(surfaceColor.copy(0.87f)),
                     color = barColor,
                     title = stringResource(R.string.settings_about_title),
                     scrollBehavior = scrollBehavior,

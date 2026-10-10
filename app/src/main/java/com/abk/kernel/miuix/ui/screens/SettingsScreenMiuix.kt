@@ -78,8 +78,10 @@ import com.abk.kernel.data.model.ManagerSettingKind
 import com.abk.kernel.data.model.normalizeAppUpdateLine
 import com.abk.kernel.data.model.normalizeAppUpdateStability
 import com.abk.kernel.data.repository.PreferencesRepository
-import com.abk.kernel.miuix.util.BlurredBar
-import com.abk.kernel.miuix.util.rememberBlurBackdrop
+import androidx.compose.runtime.CompositionLocalProvider
+import com.abk.kernel.ui.blur.LocalBlurState
+import com.abk.kernel.ui.blur.blurEffect
+import com.abk.kernel.ui.blur.rememberBlurBackdrop
 import com.abk.kernel.utils.DownloadDirectoryUtils
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.LocaleHelper
@@ -268,8 +270,9 @@ fun SettingsScreenMiuix(
 
         Scaffold(
             topBar = {
-                BlurredBar(backdrop, surfaceColor) {
+                CompositionLocalProvider(LocalBlurState provides backdrop) {
                     TopAppBar(
+                        modifier = Modifier.blurEffect(surfaceColor.copy(0.87f)),
                         color = barColor,
                         title = stringResource(R.string.settings_title),
                         scrollBehavior = scrollBehavior

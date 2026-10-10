@@ -105,8 +105,10 @@ import com.abk.kernel.miuix.ui.screens.runtime.ModuleInstallParams
 import com.abk.kernel.miuix.ui.screens.runtime.ModuleActionTerminalParams
 import com.abk.kernel.ui.webui.ModuleWebUiActivity
 import com.abk.kernel.viewmodel.MainViewModel
-import com.abk.kernel.miuix.util.BlurredBar
-import com.abk.kernel.miuix.util.rememberBlurBackdrop
+import androidx.compose.runtime.CompositionLocalProvider
+import com.abk.kernel.ui.blur.LocalBlurState
+import com.abk.kernel.ui.blur.blurEffect
+import com.abk.kernel.ui.blur.rememberBlurBackdrop
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -258,8 +260,11 @@ fun InstalledModulesScreenMiuix(
 
     Scaffold(
         topBar = {
-            BlurredBar(backdrop, surfaceColor) {
-                searchStatus.TopAppBarAnim(backgroundColor = barColor) {
+            CompositionLocalProvider(LocalBlurState provides backdrop) {
+                searchStatus.TopAppBarAnim(
+                    modifier = Modifier.blurEffect(surfaceColor.copy(0.87f)),
+                    backgroundColor = barColor,
+                ) {
                     TopAppBar(
                         color = barColor,
                         title = stringResource(R.string.runtime_installed_modules_title),

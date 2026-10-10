@@ -75,8 +75,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.abk.kernel.R
-import com.abk.kernel.miuix.util.BlurredBar
-import com.abk.kernel.miuix.util.rememberBlurBackdrop
+import androidx.compose.runtime.CompositionLocalProvider
+import com.abk.kernel.ui.blur.LocalBlurState
+import com.abk.kernel.ui.blur.blurEffect
+import com.abk.kernel.ui.blur.rememberBlurBackdrop
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AppPageBackground
 import com.abk.kernel.ui.screens.preferredLkmKmiSelection
@@ -484,8 +486,9 @@ fun AbkRootPatchScreenMiuix(
         )
         Scaffold(
             topBar = {
-                BlurredBar(backdrop, surfaceColor) {
+                CompositionLocalProvider(LocalBlurState provides backdrop) {
                     TopAppBar(
+                        modifier = Modifier.blurEffect(surfaceColor.copy(0.87f)),
                         color = barColor,
                         title = stringResource(R.string.root_patch_title),
                         navigationIcon = {

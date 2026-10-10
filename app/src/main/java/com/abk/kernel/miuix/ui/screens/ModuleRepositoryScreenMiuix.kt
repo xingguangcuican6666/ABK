@@ -91,8 +91,10 @@ import com.abk.kernel.miuix.component.SearchBarFake
 import com.abk.kernel.miuix.component.SearchBox
 import com.abk.kernel.miuix.component.SearchPager
 import com.abk.kernel.miuix.component.SearchStatus
-import com.abk.kernel.miuix.util.BlurredBar
-import com.abk.kernel.miuix.util.rememberBlurBackdrop
+import androidx.compose.runtime.CompositionLocalProvider
+import com.abk.kernel.ui.blur.LocalBlurState
+import com.abk.kernel.ui.blur.blurEffect
+import com.abk.kernel.ui.blur.rememberBlurBackdrop
 import com.abk.kernel.ui.navigation3.LocalNavigator
 import com.abk.kernel.ui.navigation3.Route
 import com.abk.kernel.ui.screens.ModuleRepositoryMode
@@ -436,8 +438,11 @@ private fun BuildModuleRepositoryScreenMiuix(
 
     Scaffold(
         topBar = {
-            BlurredBar(backdrop, surfaceColor) {
-                searchStatus.TopAppBarAnim(backgroundColor = barColor) {
+            CompositionLocalProvider(LocalBlurState provides backdrop) {
+                searchStatus.TopAppBarAnim(
+                    modifier = Modifier.blurEffect(surfaceColor.copy(0.87f)),
+                    backgroundColor = barColor,
+                ) {
                     TopAppBar(
                         color = barColor,
                         title = buildRepoTitleLabel(context),
@@ -1311,8 +1316,11 @@ private fun RuntimeModuleRepositoryScreenMiuix(
 
     Scaffold(
         topBar = {
-            BlurredBar(backdrop, surfaceColor) {
-                searchStatus.TopAppBarAnim(backgroundColor = barColor) {
+            CompositionLocalProvider(LocalBlurState provides backdrop) {
+                searchStatus.TopAppBarAnim(
+                    modifier = Modifier.blurEffect(surfaceColor.copy(0.87f)),
+                    backgroundColor = barColor,
+                ) {
                     TopAppBar(
                         color = barColor,
                         title = runtimeRepoTitleLabel(context),
