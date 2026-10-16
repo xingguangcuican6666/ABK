@@ -240,6 +240,8 @@ App 编译由 [`Build ABK App`](.github/workflows/build-abk-app.yml) 工作流�
 
 ### Self-hosted Runner（可选）
 
+内核构建也可通过仓库变量选择 GKI 或 OnePlus/Oplus runner，GKI 自托管构建支持持久化下载缓存。默认继续使用 GitHub 托管环境；配置与缓存范围见 [内核 runner 配置](docs/kernel-runner-options.md)。
+
 App 编译工作流（`Build ABK App` / `Build ABK App (dev)`）通过仓库变量 `APP_RUNNER` 选择 runner。**未设置时默认使用 GitHub 托管的 `ubuntu-latest`**，Fork 无需任何配置即可工作。需要在自己的服务器上构建时，请参考 [`docs/self-hosted-runner.md`](docs/self-hosted-runner.md)。
 
 ## 贡献者

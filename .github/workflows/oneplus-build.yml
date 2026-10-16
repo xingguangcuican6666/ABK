@@ -54,7 +54,7 @@ on:
 jobs:
   build:
     name: "${{ inputs.device_manifest }}-${{ inputs.kernel_version }}-${{ inputs.ksu_variant }}"
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ONEPLUS_SELF_HOSTED == 'false' && 'ubuntu-latest' || (startsWith(vars.ONEPLUS_RUNNER, '[') && fromJSON(vars.ONEPLUS_RUNNER) || vars.ONEPLUS_RUNNER || 'ubuntu-latest') }}
     timeout-minutes: 120
 
     env:
