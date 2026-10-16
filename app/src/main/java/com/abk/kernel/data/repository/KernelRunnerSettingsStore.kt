@@ -145,7 +145,7 @@ internal class KernelRunnerSettingsStore(private val api: GitHubApiService) {
     private companion object {
         val strictGson = GsonBuilder().setStrictness(Strictness.STRICT).create()
         val hostedLabel = Regex("(?i)(ubuntu|windows|macos)-(latest|[0-9][a-z0-9.+-]*)")
-        val runnerExpression = Regex("""\s*runs-on:\s*\$\{\{(.*)}}\s*(?:#.*)?""")
+        val runnerExpression = Regex("""\s*runs-on:\s*\$\{\{(.*)\}\}\s*(?:#.*)?""")
 
         fun parseLabels(value: String): JsonArray {
             require(value.isNotBlank()) { "Enter self-hosted runner labels before enabling self-hosted builds." }
