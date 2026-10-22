@@ -818,7 +818,12 @@ def patch_selinux_hide(path, changed_files):
     original = path.read_text()
     text = original
 
-    text = text.replace("static struct selinux_state fake_state;", "struct selinux_state fake_state;")
+    # 旧版 SukiSU 带 fake_state，需要去掉 static 导出；新版已移除该变量，故改为可选匹配。
+    text = re.sub(
+        r"(?m)^\s*(?:static\s+)?struct\s+selinux_state\s+fake_state\s*;",
+        "struct selinux_state fake_state;",
+        text,
+    )
     text = text.replace(
         "static bool ksu_selinux_hide_running __read_mostly = false;",
         "bool ksu_selinux_hide_running __read_mostly = false;",
@@ -1134,7 +1139,6 @@ def verify(ksu_dir):
             "bool susfs_is_current_ksu_domain",
         ),
         ksu_dir / "feature/selinux_hide.c": (
-            "struct selinux_state fake_state;",
             "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)",
             "struct page *fake_status",
             "bool ksu_selinux_hide_enabled __read_mostly",
