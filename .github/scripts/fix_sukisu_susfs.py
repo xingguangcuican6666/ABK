@@ -832,6 +832,25 @@ def patch_selinux_hide(path, changed_files):
         "static bool ksu_selinux_hide_enabled __read_mostly = false;",
         "bool ksu_selinux_hide_enabled __read_mostly = false;",
     )
+    # The SUSFS GKI patch calls these helpers from security/selinux/*.c.
+    # Official KernelSU is patched by 10_enable_susfs_for_ksu.patch, but the
+    # SukiSU path does not apply that patch, so export them here.
+    text = text.replace(
+        "static ssize_t my_write_context(struct file *file, char *buf, size_t size)",
+        "ssize_t my_write_context(struct file *file, char *buf, size_t size)",
+    )
+    text = text.replace(
+        "static ssize_t my_write_access(struct file *file, char *buf, size_t size)",
+        "ssize_t my_write_access(struct file *file, char *buf, size_t size)",
+    )
+    text = text.replace(
+        "static int my_setprocattr(const char *name, void *value, size_t size);",
+        "int my_setprocattr(const char *name, void *value, size_t size);",
+    )
+    text = text.replace(
+        "static int __nocfi my_setprocattr(",
+        "int __nocfi my_setprocattr(",
+    )
     text = text.replace(
         "static DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
         "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
@@ -879,7 +898,32 @@ void initialize_fake_status(void)
         "static void security_compute_av_user_with_policy(",
         "void security_compute_av_user_with_policy(",
     )
+    if "ksu_setup_preinit_file" not in text:
+        text += r'''
 
+#ifdef CONFIG_KSU_SUSFS
+/* SukiSU has no preinit backend; satisfy the SUSFS GKI preinit hooks. */
+struct filename;
+struct user_arg_ptr;
+
+int ksu_setup_preinit_file(struct filename **filename_ptr, struct user_arg_ptr *argv_user);
+int ksu_preinit_handle_post_execveat(int *fd, struct filename **filename_ptr,
+                                     void *argv_user, void *envp_user,
+                                     int *flags, int *retval, int *preinit_fd);
+
+int ksu_setup_preinit_file(struct filename **filename_ptr, struct user_arg_ptr *argv_user)
+{
+    return -EINVAL;
+}
+
+int ksu_preinit_handle_post_execveat(int *fd, struct filename **filename_ptr,
+                                     void *argv_user, void *envp_user,
+                                     int *flags, int *retval, int *preinit_fd)
+{
+    return 0;
+}
+#endif
+'''
     write_if_changed(path, text, original, changed_files)
 
 
@@ -1146,6 +1190,12 @@ def verify(ksu_dir):
             "void initialize_fake_status(",
             "int security_context_to_sid_with_policy(",
             "int security_sid_to_context_with_policy(",
+            "ssize_t my_write_context(",
+            "ssize_t my_write_access(",
+            "int my_setprocattr(",
+            "int __nocfi my_setprocattr(",
+            "int ksu_setup_preinit_file(",
+            "int ksu_preinit_handle_post_execveat(",
         ),
         ksu_dir / "supercall/supercall.c": ("int ksu_handle_sys_reboot",),
     }
@@ -1186,6 +1236,10 @@ def verify(ksu_dir):
         "static int security_sid_to_context_with_policy(",
         "static void __nocfi security_compute_av_user_with_policy(",
         "static void security_compute_av_user_with_policy(",
+        "static ssize_t my_write_context(",
+        "static ssize_t my_write_access(",
+        "static int my_setprocattr(",
+        "static int __nocfi my_setprocattr(",
     )
     present = [marker for marker in forbidden if marker in selinux_hide]
     if present:
