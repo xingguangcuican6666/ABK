@@ -89,7 +89,11 @@ DEFAULT_REPO = f"{SOURCE_REPO_OWNER}/{SOURCE_REPO_NAME}"
 if os.name == "nt" and os.environ.get("APPDATA"):
     CONFIG_DIR = Path(os.environ["APPDATA"]) / "abk"
 else:
-    CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "abk"
+    # XDG_CONFIG_HOME set-but-empty means "unset" (XDG Base Directory spec),
+    # so fall back to ~/.config instead of resolving Path("") to the CWD.
+    CONFIG_DIR = Path(
+        os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")
+    ) / "abk"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 CLIENT_ID_FALLBACK = "Ov23li8skGo6AFPBeSTh"
 SIGNING_SECRET_NAME = "ABK_ARTIFACT_SIGNING_KEY_BASE64"
