@@ -3244,11 +3244,48 @@ jobs:
           ABK_FEATURE_ID: virtualization
           ABK_FEATURE_END: "false"
           ABK_FEATURE_FAILURE_MESSAGE: "Virtualization patch download failed"
+          ABK_DROIDSPACES_REF: ${{ vars.ABK_DROIDSPACES_REF || '' }}
+          ABK_DROIDSPACES_DEFAULT_REF: v7.1.0
         run: |
+          set -euo pipefail
+
           patches_dir="$RUNNER_TEMP/virtualization-support-patches"
           rm -rf "$patches_dir"
-          git clone --depth 1 https://github.com/ravindu644/Droidspaces-OSS.git "$patches_dir"
-          echo "VIRTUALIZATION_SUPPORT_PATCHES=$patches_dir/Documentation/resources/kernel-patches/GKI" >> $GITHUB_ENV
+
+          # 上游 Droidspaces-OSS 的 GKI kABI 补丁与配置清单按 tag 演进，跟随 HEAD 会让
+          # 上游一次文档改动在同一天改变构建产物，因此默认钉到 v7.1.0。
+          # 优先级: 环境变量 ABK_DROIDSPACES_REF > config/config 的 droidspaces= > 默认值。
+          droidspaces_ref="${ABK_DROIDSPACES_REF:-}"
+          config_file="$GITHUB_WORKSPACE/config/config"
+          if [ -z "$droidspaces_ref" ] && [ -f "$config_file" ]; then
+            droidspaces_ref="$(awk -F= '
+              /^[[:space:]]*#/ { next }
+              $1 == "droidspaces" {
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
+                print $2
+                exit
+              }' "$config_file")"
+          fi
+          droidspaces_ref="${droidspaces_ref:-$ABK_DROIDSPACES_DEFAULT_REF}"
+          echo "虚拟化补丁 ref: $droidspaces_ref"
+
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+            https://github.com/ravindu644/Droidspaces-OSS.git "$patches_dir" \
+            --ref "$droidspaces_ref" --depth 1
+
+          resolved_sha="$(git -C "$patches_dir" rev-parse HEAD)"
+          resolved_tag="$(git -C "$patches_dir" describe --tags --exact-match "$resolved_sha" 2>/dev/null || echo "$droidspaces_ref")"
+
+          gki_patches="$patches_dir/Documentation/resources/kernel-patches/GKI"
+          [ -d "$gki_patches" ] || {
+            echo "::error::虚拟化补丁目录缺失: Documentation/resources/kernel-patches/GKI (ref=$droidspaces_ref)"
+            exit 1
+          }
+
+          echo "VIRTUALIZATION_PATCHES_REF=$resolved_tag" >> $GITHUB_ENV
+          echo "VIRTUALIZATION_PATCHES_SHA=$resolved_sha" >> $GITHUB_ENV
+          echo "VIRTUALIZATION_SUPPORT_PATCHES=$gki_patches" >> $GITHUB_ENV
+          echo "已检出 Droidspaces-OSS@$resolved_tag ($resolved_sha)"
 
       - name: 集成虚拟化支持
         if: inputs.virtualization_support != 'off'
@@ -3287,15 +3324,78 @@ jobs:
           apply_sysvipc_below_612_compat() {
             local sched="include/linux/sched.h"
             [ -f "$sched" ] || fail "缺少 $sched"
-            if grep -qF 'ANDROID_KABI_USE(6, struct sysv_sem sysvsem);' "$sched"; then
+            if grep -qF "ANDROID_KABI_USE(${SLOT:0:1}, struct sysv_sem sysvsem);" "$sched"; then
               echo "SYSVIPC below-6.12 kABI fallback 已应用"
               return 0
             fi
-            perl -0pi -e 's/#ifdef CONFIG_SYSVIPC\n\tstruct sysv_sem\s+sysvsem;\n\tstruct sysv_shm\s+sysvshm;\n#endif/#ifdef CONFIG_SYSVIPC\n\t\/\/ struct sysv_sem\t\t\tsysvsem;\n\t\/\/ struct sysv_shm\t\t\tsysvshm;\n#endif/s' "$sched"
-            perl -0pi -e 's/\tANDROID_KABI_RESERVE\(6\);\n\tANDROID_KABI_RESERVE\(7\);\n\tANDROID_KABI_RESERVE\(8\);/\n#ifdef CONFIG_SYSVIPC\n\tANDROID_KABI_USE(6, struct sysv_sem sysvsem);\n\t_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(7); ANDROID_KABI_RESERVE(8), struct sysv_shm sysvshm);\n#else\n\tANDROID_KABI_RESERVE(6);\n\tANDROID_KABI_RESERVE(7);\n\tANDROID_KABI_RESERVE(8);\n#endif/s' "$sched"
+            # 上游补丁按固定上下文书写，ACK 各分支的 KABI 预留区排布不同 (例如 5.10 已占用
+            # 槽位 1/2，6.1 已占用 1/2/3)，因此 123 与 345 补丁在多数分支上会 reject。
+            # 这里按所选槽位就地改写，使三种槽位在任何分支上都可用，并在槽位已被占用时
+            # 明确报错，而不是静默产出破坏 kABI 的内核。
+            if ! ABK_SYSVIPC_SLOT="$SLOT" ABK_SYSVIPC_SCHED="$sched" python3 - \
+              > "${RUNNER_TEMP:-/tmp}/abk-sysvipc-slot.log" 2>&1 <<'PY'
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          slot = os.environ["ABK_SYSVIPC_SLOT"]
+          sched = Path(os.environ["ABK_SYSVIPC_SCHED"])
+          if not re.fullmatch(r"[1-8]{3}", slot) or len(set(slot)) != 3:
+              sys.exit(f"invalid slot: {slot}")
+          first, second, third = slot
+
+          text = sched.read_text()
+          occupied = sorted(set(re.findall(r"ANDROID_KABI_USE\((\d),", text)))
+          conflicts = sorted(set(occupied) & set(slot))
+          if conflicts:
+              sys.exit(
+                  "slot {} is already taken by ANDROID_KABI_USE({}); pick another slot "
+                  "(678 fits every current ACK line)".format(slot, ",".join(conflicts))
+              )
+
+          fields = (
+              "#ifdef CONFIG_SYSVIPC\n"
+              "\tstruct sysv_sem\t\t\tsysvsem;\n"
+              "\tstruct sysv_shm\t\t\tsysvshm;\n"
+              "#endif"
+          )
+          commented = (
+              "#ifdef CONFIG_SYSVIPC\n"
+              "\t// struct sysv_sem\t\t\tsysvsem;\n"
+              "\t// struct sysv_shm\t\t\tsysvshm;\n"
+              "#endif"
+          )
+          if fields not in text:
+              sys.exit("CONFIG_SYSVIPC fields are not in their stock shape")
+
+          reserve = (
+              "\tANDROID_KABI_RESERVE({});\n"
+              "\tANDROID_KABI_RESERVE({});\n"
+              "\tANDROID_KABI_RESERVE({});"
+          ).format(first, second, third)
+          if reserve not in text:
+              sys.exit(f"ANDROID_KABI_RESERVE({first},{second},{third}) block not found")
+          replacement = (
+              "\n#ifdef CONFIG_SYSVIPC\n"
+              "\tANDROID_KABI_USE({}, struct sysv_sem sysvsem);\n"
+              "\t_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE({}); ANDROID_KABI_RESERVE({}), "
+              "struct sysv_shm sysvshm);\n"
+              "#else\n"
+              "{}\n"
+              "#endif"
+          ).format(first, second, third, reserve)
+
+          text = text.replace(fields, commented, 1).replace(reserve, replacement, 1)
+          sched.write_text(text)
+          PY
+            then
+              cat "${RUNNER_TEMP:-/tmp}/abk-sysvipc-slot.log"
+              fail "SYSVIPC kABI fallback 注入失败 (slot=$SLOT)；该内核线的预留槽位可能已被占用，请改用 678"
+            fi
             grep -qF '// struct sysv_sem' "$sched" || fail "SYSVIPC 原字段注释失败"
-            grep -qF 'ANDROID_KABI_USE(6, struct sysv_sem sysvsem);' "$sched" || fail "SYSVIPC kABI fallback 注入失败"
-            echo "已应用 SYSVIPC below-6.12 kABI fallback"
+            grep -qF "ANDROID_KABI_USE(${SLOT:0:1}, struct sysv_sem sysvsem);" "$sched" || fail "SYSVIPC kABI fallback 注入失败"
+            echo "已应用 SYSVIPC below-6.12 kABI fallback (slot=$SLOT)"
           }
 
           apply_mqueue_510_compat() {
@@ -3335,16 +3435,15 @@ jobs:
             5.10|5.15|6.1|6.6)
               case "$SLOT" in
                 678|123|345) ;;
+                on) SLOT=678 ;;
                 *) fail "$KERNEL_VER 需要选择 678、123 或 345 槽位，当前为 $SLOT" ;;
               esac
               SLOT_NAME=$(echo "$SLOT" | sed 's/\(.\)/\1_/g; s/_$//')
               PATCH_FILE="$VIRTUALIZATION_SUPPORT_PATCHES/below-kernel-6.12/001.GKI-below-6.12-fix_sysvipc_kabi_${SLOT_NAME}.patch"
+              # 上游补丁按固定上下文书写，只有 6_7_8 在全部 ACK 分支上都能干净应用；
+              # reject 时按所选槽位就地改写，因此三种槽位都可用。
               if ! try_apply_patch "$PATCH_FILE"; then
-                if [ "$SLOT" = "678" ]; then
-                  apply_sysvipc_below_612_compat
-                else
-                  fail "SYSVIPC kABI patch 应用失败: $(basename "$PATCH_FILE")"
-                fi
+                apply_sysvipc_below_612_compat
               fi
               ;;
             *)
@@ -3393,13 +3492,20 @@ jobs:
 
           config_defined() {
             local name="${1#CONFIG_}"
-            local file
-            while IFS= read -r -d '' file; do
-              if grep -Eq "^[[:space:]]*(menuconfig|config)[[:space:]]+${name}([[:space:]]|$)" "$file"; then
-                return 0
-              fi
-            done < <(find . -type f -name 'Kconfig*' -print0)
-            return 1
+            # 一次性建立 Kconfig 符号索引后查表，避免为每个配置项重复 find 整棵内核树。
+            # 索引写在 RUNNER_TEMP 而非内核树内，custom_git 模式下不会混入特性提交。
+            if [ "${ABK_KCONFIG_INDEX_READY:-false}" != "true" ]; then
+              ABK_KCONFIG_INDEX="${RUNNER_TEMP:-/tmp}/abk-kconfig-index-${KERNEL_VER}.txt"
+              # 仅做 source 转发、不含 config 行的 Kconfig 会让 grep 返回 1，
+              # 进而被 pipefail 判为失败，故对 grep 阶段单独放行。
+              find . -type f -name 'Kconfig*' -print0 |
+                { xargs -0 grep -hE '^[[:space:]]*(menuconfig|config)[[:space:]]+[A-Za-z0-9_]+' || true; } |
+                sed -E 's/^[[:space:]]*(menuconfig|config)[[:space:]]+([A-Za-z0-9_]+).*$/\2/' |
+                sort -u > "$ABK_KCONFIG_INDEX"
+              [ -s "$ABK_KCONFIG_INDEX" ] || fail "无法建立 Kconfig 符号索引，虚拟化配置校验不可用"
+              ABK_KCONFIG_INDEX_READY=true
+            fi
+            grep -qxF "$name" "$ABK_KCONFIG_INDEX"
           }
 
           enable_required_config() {
@@ -3427,6 +3533,17 @@ jobs:
           enable_required_config CONFIG_PID_NS
           enable_required_config CONFIG_DEVTMPFS
 
+          # 上游 v7.1.0 GKI 清单新增: 容器内 Docker 的 unsafe procfs 修复
+          enable_config_if_defined CONFIG_USER_NS
+
+          # 上游 v7.1.0 GKI 清单新增: NAT66 (缺失时 NAT 容器只有 IPv4)
+          enable_config_if_defined CONFIG_IP6_NF_NAT
+          enable_config_if_defined CONFIG_IP6_NF_TARGET_MASQUERADE
+
+          # 上游 v7.1.0 GKI 清单新增: macvlan 模式。上游已在 5.15 GKI 树上验证
+          # 8423 个导出符号无一变化，驱动自包含，属 kABI 安全项。
+          enable_config_if_defined CONFIG_MACVLAN
+
           # 可选: 网络相关配置 (Docker/NAT 模式)
           enable_config_if_defined CONFIG_NETFILTER_XT_MATCH_ADDRTYPE
           enable_config_if_defined CONFIG_NETFILTER_XT_TARGET_LOG
@@ -3439,6 +3556,24 @@ jobs:
           # REJECT 目标在不同内核版本上的符号名可能不同，按实际存在的配置启用
           enable_config_if_defined CONFIG_NETFILTER_XT_TARGET_REJECT
           enable_config_if_defined CONFIG_IP_NF_TARGET_REJECT
+
+          # NixOS 容器依赖 tmpfs 的 xattr 与 POSIX ACL。主流程的「配置内核选项」步骤
+          # 也会写入这两项，这里重复写入是为了让虚拟化支持自身可独立生效 (幂等)。
+          enable_config_if_defined CONFIG_TMPFS_XATTR
+          enable_config_if_defined CONFIG_TMPFS_POSIX_ACL
+
+          # 上游 v7.1.0 明确要求 GKI 上不得开启资源限制相关项:
+          # CONFIG_CFS_BANDWIDTH 与 CONFIG_CGROUP_PIDS 会改动调度器与 cgroup 结构体大小，
+          # 在 5.15 GKI 树上改变了约四千个导出符号的校验和，且没有任何 kABI 补丁可覆盖，
+          # 原厂厂商模块会拒绝加载导致 bootloop。ABK 只产出 boot.img，无法同时重刷
+          # vendor_boot / vendor_dlkm / system_dlkm，因此这两项一律不由本步骤开启。
+          # (android16-6.12 与 android17-6.18 的 stock gki_defconfig 自带这两项，属上游基线，保持原样。)
+          [ -f "$DEFCONFIG.orig" ] || fail "缺少 defconfig 基线 $DEFCONFIG.orig，无法校验虚拟化配置是否破坏 kABI"
+          for forbidden in CONFIG_CFS_BANDWIDTH CONFIG_CGROUP_PIDS; do
+            if ! grep -qxF "${forbidden}=y" "$DEFCONFIG.orig" && grep -qxF "${forbidden}=y" "$DEFCONFIG"; then
+              fail "虚拟化支持拒绝开启 ${forbidden}: GKI 上无 kABI 补丁覆盖，会导致厂商模块拒绝加载并 bootloop"
+            fi
+          done
 
           echo "虚拟化支持集成完成"
 
@@ -4013,10 +4148,20 @@ jobs:
           kpm_kconfig_ready="${ABK_KPM_KCONFIG_READY:-false}"
           kpm_kconfig_path="${ABK_KPM_KCONFIG_PATH:-}"
 
-          cat >> "$DEFCONFIG" << 'EOF'
-          CONFIG_TMPFS_XATTR=y
-          CONFIG_TMPFS_POSIX_ACL=y
-          EOF
+          # NixOS 容器需要 tmpfs 的 xattr 与 POSIX ACL。虚拟化支持也会写入这两项，
+          # 这里保持幂等，避免 defconfig 出现重复赋值 (kconfig 会报 override 警告)。
+          ensure_global_config() {
+            local cfg="$1"
+            grep -qxF "${cfg}=y" "$DEFCONFIG" && return 0
+            if grep -qxF "# ${cfg} is not set" "$DEFCONFIG"; then
+              sed -i "s|^# ${cfg} is not set$|${cfg}=y|" "$DEFCONFIG"
+            else
+              echo "${cfg}=y" >> "$DEFCONFIG"
+            fi
+          }
+
+          ensure_global_config CONFIG_TMPFS_XATTR
+          ensure_global_config CONFIG_TMPFS_POSIX_ACL
           if [ "${{ inputs.ksu_variant }}" != "None" ] && ! feature_disabled kernelsu; then
             echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           fi
@@ -6510,6 +6655,7 @@ jobs:
           command: |
             echo "当前 KSU 最新提交日期: ${KSU_LATEST_COMMIT_DATE}"
             echo "当前 SUSFS 最新提交日期: ${SUSFS_LATEST_COMMIT_DATE}"
+            echo "当前虚拟化补丁版本: ${VIRTUALIZATION_PATCHES_REF:-未启用}"
             set -ex
             cd "$KERNEL_ROOT"
 
@@ -6752,6 +6898,7 @@ jobs:
 
             echo "当前 KSU 最新提交日期: ${KSU_LATEST_COMMIT_DATE}"
             echo "当前 SUSFS 最新提交日期: ${SUSFS_LATEST_COMMIT_DATE}"
+            echo "当前虚拟化补丁版本: ${VIRTUALIZATION_PATCHES_REF:-未启用}"
             echo "如果日期不同或相差过远则补丁失效、编译失败"
 
       - name: 应用 KPM 补丁 (SukiSU/BakaSU)

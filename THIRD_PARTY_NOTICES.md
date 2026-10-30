@@ -40,7 +40,7 @@ This document records the open source projects, embedded code, generated binarie
 | LineageOS GCC prebuilts | <https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1> | GPL-family toolchain notices |
 | Baseband Guard | <https://github.com/vc-teahouse/Baseband-guard> | Upstream repository license |
 | Re-Kernel | <https://github.com/Sakion-Team/Re-Kernel> | Upstream repository license |
-| Droidspaces-OSS | <https://github.com/ravindu644/Droidspaces-OSS> | Upstream repository license |
+| Droidspaces-OSS | <https://github.com/ravindu644/Droidspaces-OSS> | GPL-3.0 |
 | ABK_repo module catalog | <https://github.com/xingguangcuican6666/ABK_repo> | Upstream repository license |
 | AOSP kernel/common | <https://android.googlesource.com/kernel/common> | GPL-2.0 WITH Linux-syscall-note and AOSP notices |
 | AOSP kernel manifest | <https://android.googlesource.com/kernel/manifest> | AOSP project notices |
@@ -48,6 +48,18 @@ This document records the open source projects, embedded code, generated binarie
 | AOSP kernel build-tools | <https://android.googlesource.com/kernel/prebuilts/build-tools> | AOSP project notices |
 | Android GKI certified boot images | <https://dl.google.com/android/gki/> | Android image distribution terms |
 | Android command line tools | `Dockerfile.test` | Android SDK License |
+
+## Virtualization Kernel Patches
+
+The kernel build workflows apply the GKI kABI patches and the required `gki_defconfig`
+option list from `ravindu644/Droidspaces-OSS` at build time. The checkout is pinned to
+release tag `v7.1.0` through `droidspaces=` in `config/config`, and can be overridden
+per run with the `ABK_DROIDSPACES_REF` repository variable. Upstream patches modify
+`include/linux/sched.h` and, on 5.10 and older, `include/linux/sched/user.h` in the
+kernel tree; ABK falls back to equivalent in-place edits when a hunk does not apply.
+No upstream source is vendored in this repository. Upstream deliberately keeps
+`CONFIG_CFS_BANDWIDTH` and `CONFIG_CGROUP_PIDS` off on GKI because no kABI patch covers
+them, and the workflows enforce that.
 
 ## APK-Bundled SukiSU Components
 
