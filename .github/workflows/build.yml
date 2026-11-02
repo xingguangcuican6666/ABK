@@ -6802,6 +6802,35 @@ jobs:
             exit 1
           fi
 
+      - name: 修复 SUSFS 未使用的 cred 辅助函数 (ABK)
+        if: inputs.enable_susfs && inputs.ksu_variant != 'None'
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+          set -uo pipefail
+
+          PATCHER="$GITHUB_WORKSPACE/.github/scripts/patch_susfs_unused_creds.py"
+
+          if [ ! -f "$PATCHER" ]; then
+            echo "::error::ABK SUSFS unused cred helper patcher not found: $PATCHER"
+            exit 1
+          fi
+
+          if ! python3 "$PATCHER" "$KERNEL_ROOT"; then
+            echo "::error::ABK SUSFS unused cred helper patcher FAILED; fs/susfs.c keeps -Werror=unused-function failures"
+            exit 1
+          fi
+
+          SRC="$KERNEL_ROOT/common/fs/susfs.c"
+          [ -f "$SRC" ] || SRC="$KERNEL_ROOT/fs/susfs.c"
+          if [ -f "$SRC" ] && grep -q 'susfs_switch_to_ksu_domain' "$SRC"; then
+            if grep -q 'SUSFS_UNUSED_CREDS_GUARD_ABK' "$SRC" \
+              && grep -q 'endif // CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER' "$SRC"; then
+              echo "[ABK] SUSFS cred helper guard verified (fs/susfs.c)"
+            else
+              echo "::error::ABK SUSFS cred helper guard verification FAILED"
+              exit 1
+            fi
+          fi
       - name: 编译内核
         uses: nick-fields/retry@v4
         with:
