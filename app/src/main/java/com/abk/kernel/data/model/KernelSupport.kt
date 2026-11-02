@@ -528,6 +528,31 @@ object KernelSupport {
     fun ksuBranchOptions(): List<String> = KSU_BRANCH_STANDARD_OPTIONS
 
     /**
+     * Classify a raw runtime string — the control-status `manager.variant`, `ksud --version`
+     * output, the kernel `KSU_VERSION_FULL`, or a probe display name — into the canonical
+     * manager family constant ([KSU_VARIANT_BAKASU] / [KSU_VARIANT_SUKISU]), or null when the
+     * string names no SukiSU-family backend.
+     *
+     * Match order is significant: the retired `ReSukiSU` spelling contains the substring
+     * `sukisu`, and the hyphenated upstream org name `Baka-SU` does not contain `bakasu`, so
+     * the legacy aliases ([KSU_VARIANT_LEGACY_ALIASES]) and hyphen spellings must be resolved
+     * before the plain SukiSU arm. Otherwise ReSukiSU/BakaSU kernels misclassify as SukiSU.
+     */
+    fun inferRuntimeKsuFamily(value: String?): String? {
+        val lower = value.orEmpty().lowercase()
+        if (lower.isBlank()) return null
+        return when {
+            "bakasu" in lower || "baka-su" in lower || "baka_su" in lower -> KSU_VARIANT_BAKASU
+            KSU_VARIANT_LEGACY_ALIASES.any { it in lower } -> KSU_VARIANT_BAKASU
+            // Shorter pre-rename spelling ("ReSuki") that survives in old build logs and
+            // older kernel version strings; it is not covered by the longer aliases.
+            "resuki" in lower -> KSU_VARIANT_BAKASU
+            "sukisu" in lower -> KSU_VARIANT_SUKISU
+            else -> null
+        }
+    }
+
+    /**
      * True when [value] is the retired `ReSukiSU` spelling rather than a current variant.
      * Only reachable from restored build records or plans shared by older app builds, so
      * [normalizeKsuVariant] has already folded these into [KSU_VARIANT_BAKASU].
