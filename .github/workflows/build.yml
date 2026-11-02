@@ -6802,6 +6802,60 @@ jobs:
             exit 1
           fi
 
+      - name: 为 BakaSU/SukiSU 注册 SUSFS sus_type / AVD (ABK)
+        if: inputs.enable_susfs && (inputs.ksu_variant == 'BakaSU' || inputs.ksu_variant == 'SukiSU')
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+          set -uo pipefail
+
+          PATCHER="$GITHUB_WORKSPACE/.github/scripts/patch_susfs_bakasu_sus_types.py"
+
+          if [ ! -f "$PATCHER" ]; then
+            echo "::error::ABK SUSFS sus-type patcher not found: $PATCHER"
+            exit 1
+          fi
+          if [ ! -f "$KERNEL_ROOT/common/fs/susfs.c" ]; then
+            echo "::error::kernel tree incomplete for the ABK SUSFS sus-type registration: $KERNEL_ROOT/common/fs/susfs.c"
+            exit 1
+          fi
+          if ! grep -q 'susfs_add_sus_type' "$KERNEL_ROOT/common/fs/susfs.c"; then
+            echo "[ABK] SUSFS predates the sus_type registration model; nothing to register"
+            exit 0
+          fi
+
+          OUTPUT=$(python3 "$PATCHER" "$KERNEL_ROOT" 2>&1) || {
+            echo "$OUTPUT"
+            echo "::error::ABK SUSFS sus-type patcher FAILED; ksu/magisk/lsposed SELinux contexts would stay visible"
+            exit 1
+          }
+          echo "$OUTPUT"
+          case "$OUTPUT" in
+            *"skip: no KernelSU-style"*) exit 0 ;;
+          esac
+
+          KSU_SEPOLICY=""
+          for candidate in \
+            "$KERNEL_ROOT/KernelSU/kernel/selinux/sepolicy.c" \
+            "$KERNEL_ROOT/common/KernelSU/kernel/selinux/sepolicy.c" \
+            "$KERNEL_ROOT/common/drivers/kernelsu/kernel/selinux/sepolicy.c" \
+            "$KERNEL_ROOT/drivers/kernelsu/kernel/selinux/sepolicy.c"; do
+            if [ -f "$candidate" ]; then
+              KSU_SEPOLICY="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$KSU_SEPOLICY" ]; then
+            echo "::error::ABK SUSFS sus-type registration: kernel/selinux/sepolicy.c not found"
+            exit 1
+          fi
+          if grep -q 'susfs_add_sus_type(type_name, type->value);' "$KSU_SEPOLICY" \
+            && grep -q 'susfs_add_sus_avd_allowed_by_type(src->value, tgt->value, cls->value, node->datum.u.data);' "$KSU_SEPOLICY"; then
+            echo "[ABK] SUSFS sus-type registration verified ($KSU_SEPOLICY)"
+          else
+            echo "::error::ABK SUSFS sus-type registration verification FAILED"
+            exit 1
+          fi
       - name: 修复 SUSFS 未使用的 cred 辅助函数 (ABK)
         if: inputs.enable_susfs && inputs.ksu_variant != 'None'
         working-directory: ${{ env.KERNEL_ROOT }}
