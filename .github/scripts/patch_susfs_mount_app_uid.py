@@ -44,6 +44,7 @@ Every missing or ambiguous anchor aborts with exit code 2 and an ::error::
 line.  Re-running is a no-op.
 """
 import os
+import re
 import sys
 
 MARKER = "SUS_MNT_APP_UID_GATE_ABK"
@@ -71,10 +72,12 @@ HELPER_TEXT = (
     "\n"
 )
 
-NS_ANCHOR = (
-    "#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */\n"
-    "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n"
-)
+# The 6.1 LTS header hunk of the upstream SUSFS patch does not apply to every
+# kernel tag, so build.yml falls back to a sed that injects the same block with
+# a different tail ("#define CL_COPY_MNT_NS BIT(25)" without the copy_mnt_ns()
+# comment and a bare "#endif").  Anchor on the define only and accept both
+# spellings of the closing guard.
+NS_DEFINE_RE = re.compile(r"^#define CL_COPY_MNT_NS BIT\(25\)[^\n]*\n", re.M)
 
 NS_GATE_OLD = (
     "\tif (susfs_is_current_proc_umounted()) {\n"
@@ -122,6 +125,27 @@ def sub_one(text, needle, repl, path, label):
     return text.replace(needle, repl, 1)
 
 
+def insert_helper_after_ns_block(text, path):
+    """Insert HELPER_TEXT right after the SUS_MOUNT guard that declares
+    CL_COPY_MNT_NS, tolerating the build.yml 6.1 fallback spelling."""
+    matches = list(NS_DEFINE_RE.finditer(text))
+    if len(matches) != 1:
+        die("anchor 'CL_COPY_MNT_NS block' matched " + str(len(matches)) +
+            " times (expected 1) in " + path)
+    end = matches[0].end()
+    insert_at = end
+    offset = 0
+    for line in text[end:].splitlines(keepends=True)[:3]:
+        stripped = line.strip()
+        offset += len(line)
+        if stripped.startswith("#endif"):
+            insert_at = end + offset
+            break
+        if stripped and not stripped.startswith("#"):
+            break
+    return text[:insert_at] + HELPER_TEXT + text[insert_at:]
+
+
 def main():
     if len(sys.argv) != 2:
         die("usage: patch_susfs_mount_app_uid.py <kernel_root>")
@@ -147,8 +171,7 @@ def main():
         if NS_GATE_OLD not in text:
             die("the SUSFS __lookup_mnt() umounted gate is missing from " + ns +
                 "; the SUSFS mount patch is missing or already changed")
-        text = sub_one(text, NS_ANCHOR, NS_ANCHOR + HELPER_TEXT, ns,
-                       "CL_COPY_MNT_NS block")
+        text = insert_helper_after_ns_block(text, ns)
         text = sub_one(text, NS_GATE_OLD, NS_GATE_NEW, ns,
                        "__lookup_mnt umounted gate")
         save(ns, text)
