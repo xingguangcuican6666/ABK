@@ -6856,6 +6856,34 @@ jobs:
             echo "::error::ABK SUSFS sus-type registration verification FAILED"
             exit 1
           fi
+      - name: sus_path uid 表忽略 ino 0 (ABK)
+        if: inputs.enable_susfs && (inputs.ksu_variant == 'BakaSU' || inputs.ksu_variant == 'SukiSU') && inputs.android_version == 'android14' && inputs.kernel_version == '6.1'
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+          set -uo pipefail
+
+          PATCHER="$GITHUB_WORKSPACE/.github/scripts/patch_susfs_ino_zero_guard.py"
+
+          if [ ! -f "$PATCHER" ]; then
+            echo "::error::ABK sus_path ino-0 guard patcher not found: $PATCHER"
+            exit 1
+          fi
+          if [ ! -f "$KERNEL_ROOT/common/fs/susfs.c" ]; then
+            echo "::error::kernel tree incomplete for the ABK sus_path ino-0 guard: $KERNEL_ROOT/common"
+            exit 1
+          fi
+
+          if ! python3 "$PATCHER" "$KERNEL_ROOT"; then
+            echo "::error::ABK sus_path ino-0 guard FAILED; FUSE i_ino 0 would hide every unresolved inode from a target"
+            exit 1
+          fi
+
+          if grep -q 'SUS_PATH_INO0_GUARD_ABK' "$KERNEL_ROOT/common/fs/susfs.c"; then
+            echo "[ABK] sus_path ino-0 guard verified"
+          else
+            echo "::error::ABK sus_path ino-0 guard verification FAILED"
+            exit 1
+          fi
       - name: 让 sus_path_loop 携带 per-uid 语义 (ABK)
         if: inputs.enable_susfs && (inputs.ksu_variant == 'BakaSU' || inputs.ksu_variant == 'SukiSU') && inputs.android_version == 'android14' && inputs.kernel_version == '6.1'
         working-directory: ${{ env.KERNEL_ROOT }}
