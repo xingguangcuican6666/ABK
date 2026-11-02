@@ -32,10 +32,11 @@
 | 3 | readdir/getdents 过滤 | `patch_susfs_readdir_filter.py` | `fs/readdir.c` 里 SUSFS 的 `ilookup` 钩子（≥3 处） | `expected at least 3 SUSFS ilookup blocks` |
 | 4 | app-uid 门控放宽 | `patch_susfs_app_uid_gate.py` | `if (!susfs_is_current_proc_umounted_app())` 原文 | `anchor '...' matched 0 times` |
 | 5 | **SUSFS sus_type 注册** | `patch_susfs_bakasu_sus_types.py` | 上游 `susfs.c` 里有 `susfs_add_sus_type()` / `susfs_add_sus_avd_allowed_by_type()` | 自动跳过（旧版没有这两个函数） |
-| 6 | **sus_path_loop per-uid 语义** | `patch_susfs_loop_mode.py` | `struct st_susfs_sus_path_list` 定义、`susfs_add_sus_path_hide_from()` 已由 #2 注入 | `anchor 'st_susfs_sus_path_list' missing` |
-| 7 | 未使用 cred 辅助函数 | `patch_susfs_unused_creds.py` | 上游有 `susfs_switch_to_ksu_domain()` / `susfs_restore_creds()` 但 Kconfig 没有 `CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER` | 编译报 `-Werror,-Wunused-function` |
+| 6 | **sus_path uid 表忽略 ino 0** | `patch_susfs_ino_zero_guard.py` | 无（在 #2 之后即可） | `anchor 'upsert guard (!inode || uid < 0)' missing` |
+| 7 | **sus_path_loop per-uid 语义** | `patch_susfs_loop_mode.py` | `struct st_susfs_sus_path_list` 定义、`susfs_add_sus_path_hide_from()` 已由 #2 注入 | `anchor 'st_susfs_sus_path_list' missing` |
+| 8 | 未使用 cred 辅助函数 | `patch_susfs_unused_creds.py` | 上游有 `susfs_switch_to_ksu_domain()` / `susfs_restore_creds()` 但 Kconfig 没有 `CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER` | 编译报 `-Werror,-Wunused-function` |
 
-> #5、#6 是 **ABK 对上游语义的适配**，不是上游自带功能，详见第 3 节。
+> #5～#7 是 **ABK 对上游语义的适配**（外加 #6 是踩过的坑），不是上游自带功能，详见第 3 节。
 
 ---
 
@@ -95,6 +96,39 @@ BakaSU 4.2.0-rc3 的 Kconfig 没有这个符号，于是 `-Werror,-Wunused-funct
 `/* used by copy_mnt_ns() */` 注释）。所以 `patch_susfs_mount_app_uid.py` 的锚点只匹配
 `#define CL_COPY_MNT_NS BIT(25)` 这一行，两种结尾都兼容——改这个锚点前先看这里。
 
+### 3.5 FUSE 的 `i_ino` 是 0，per-uid 表会退化成「通配符」（2026-11-03 教训）
+
+**症状**：某个 app 本身正常、但读不到自己的 `/sdcard/Android/data/<pkg>`
+（原神表现为「资源下载失败」）；`dmesg` 刷屏
+
+```
+susfs_is_inode_sus_path] hiding path with ino '0' from uid '10274'
+```
+
+**原因**：`/storage/emulated/0` 是 FUSE，子项在 readdir/lookup 时不会实例化 inode，
+`inode->i_ino == 0`。而 per-uid 表是按 `(i_ino, s_dev, uid, mode)` 记账、查询只比
+`(ino, dev)`，于是 `ino 0` 变成「所有 i_ino 为 0 的 FUSE inode」的通配条目——
+**一个 app 只要同时是 target，就会把自己的 FUSE 路径一起隐藏掉**。
+
+**修复**：`patch_susfs_ino_zero_guard.py` —— `ino == 0` 一律不写表、不查表。
+
+**代价**：FUSE 路径无法再做 per-target 隐藏（没有稳定 inode 可记账）；
+`/data/data` 这类真实文件系统不受影响。
+
+**验证**：
+
+```sh
+dmesg | grep "uid entry set: ino '0'" | wc -l                        # 期望 0
+dmesg | grep "from uid '<目标 app uid>'" | grep "ino '0'" | wc -l    # 期望 0
+```
+
+**教训（写新隐藏机制前必看）**：
+
+- 任何「按 inode 记账」的机制，第一步都要判断 inode 是否可用：
+  `!inode || inode->i_ino == 0` 在 FUSE / overlayfs / 未实例化的 dentry 上很常见；
+- 记账键里出现「哨兵值」时，它就是通配符。0、-1、`DEFAULT_KSU_MNT_ID` 这类值要显式排除；
+- 若需要隐藏 FUSE 路径，只能按「父目录 + 名字」或路径字符串做，不能按 inode。
+
 ---
 
 ## 4. 排障速查
@@ -114,6 +148,7 @@ su -c 'sh /data/adb/hma_susfs/sync.sh; echo rc=$?'     # 期望 SUSFS_SYNC_OK / 
 | 现象 | 先看什么 |
 |---|---|
 | 某路径隐藏过一会又出现 | `re-flag` 是否有该路径；没有说明没入 loop（检查 sync 是否用了 loop 命令） |
+| app 读不到自己的 `/sdcard/Android/data/<pkg>` | 3.5 的 ino 0 通配：`dmesg \| grep "ino '0'"` 是否有条目 |
 | 重启后全部失效 | 模块是否装上；`sync.sh` 是否在开机执行 |
 | 检测器报 SELinux 上下文 | 3.1 的 `sus_type` 注册是否生效（`patch_susfs_bakasu_sus_types.py` 是否被跳过） |
 | 编译失败 `unused function` | 3.3 的 guard 脚本 |
@@ -123,5 +158,7 @@ su -c 'sh /data/adb/hma_susfs/sync.sh; echo rc=$?'     # 期望 SUSFS_SYNC_OK / 
 
 ## 5. 变更记录
 
+- **2026-11-03**：修 FUSE `i_ino == 0` 导致的 per-uid 通配（原神读不到自己的
+  `/sdcard/Android/data`）。新增 `patch_susfs_ino_zero_guard.py`，dev 提交 `3f26140`。
 - **2026-11-02**：SUSFS 同步到 `a0ac906`；新增 sus_type 注册、loop per-uid 语义、cred guard；
   修正 mount app-uid gate 锚点。dev 提交：`c7933d2`、`99b4685`、`abc4d16`、`e039b2d`。
