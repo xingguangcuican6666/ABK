@@ -6913,6 +6913,33 @@ jobs:
             echo "::error::ABK sus_path_loop mode verification FAILED"
             exit 1
           fi
+      - name: 内核侧一次性加载 per-target 策略文件 (ABK)
+        if: inputs.enable_susfs && (inputs.ksu_variant == 'BakaSU' || inputs.ksu_variant == 'SukiSU') && inputs.android_version == 'android14' && inputs.kernel_version == '6.1'
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+          set -uo pipefail
+
+          PATCHER="$GITHUB_WORKSPACE/.github/scripts/patch_susfs_policy_file.py"
+
+          if [ ! -f "$PATCHER" ]; then
+            echo "::error::ABK sus_path policy-file patcher not found: $PATCHER"
+            exit 1
+          fi
+
+          if ! python3 "$PATCHER" "$KERNEL_ROOT"; then
+            echo "::error::ABK sus_path policy-file patcher FAILED; userspace would keep issuing one call per pair"
+            exit 1
+          fi
+
+          SRC="$KERNEL_ROOT/common/fs/susfs.c"
+          [ -f "$SRC" ] || SRC="$KERNEL_ROOT/fs/susfs.c"
+          if [ -f "$SRC" ] && grep -q 'POLICY_FILE_ABK' "$SRC" \
+            && grep -q 'susfs_load_policy_file' "$SRC"; then
+            echo "[ABK] policy file loader verified (one supercall applies the whole table)"
+          else
+            echo "::error::ABK policy file loader verification FAILED"
+            exit 1
+          fi
       - name: 修复 SUSFS 未使用的 cred 辅助函数 (ABK)
         if: inputs.enable_susfs && inputs.ksu_variant != 'None'
         working-directory: ${{ env.KERNEL_ROOT }}
