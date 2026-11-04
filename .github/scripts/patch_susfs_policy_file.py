@@ -151,13 +151,20 @@ def die(msg):
     sys.exit(2)
 
 
+def resolve(root):
+    """The build passes the repo root; the kernel tree is usually <root>/common."""
+    for base in (os.path.join(root, "common"), root):
+        candidate = os.path.join(base, REL_SRC)
+        if os.path.isfile(candidate):
+            return candidate
+    die("expected file not found: " + REL_SRC + " (looked in <root>/common and <root>)")
+
+
 def main():
     if len(sys.argv) != 2:
         die("usage: patch_susfs_policy_file.py <kernel_root>")
     root = sys.argv[1]
-    path = os.path.join(root, REL_SRC)
-    if not os.path.isfile(path):
-        die("expected file not found: " + REL_SRC)
+    path = resolve(root)
 
     with open(path, "r", encoding="utf-8", newline="") as fh:
         text = fh.read()
