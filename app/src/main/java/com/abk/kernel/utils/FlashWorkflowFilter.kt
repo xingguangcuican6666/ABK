@@ -1,6 +1,9 @@
 package com.abk.kernel.utils
 
 import com.abk.kernel.data.model.BuildParameterSummary
+import com.abk.kernel.data.model.KSU_VARIANT_BAKASU
+import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
+import com.abk.kernel.data.model.KernelSupport
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.isKernelBuild
 import com.abk.kernel.data.model.isManagerBuild
@@ -76,9 +79,13 @@ object FlashWorkflowFilter {
         val raw = summary?.ksuVariant.orEmpty().ifBlank { fallbackVariant.orEmpty() }
         val v = raw.lowercase()
         if (v.isBlank()) return null
+        // Shared classifier first: "ReSukiSU"/"ReSuki"/"Baka-SU" spellings must land on
+        // BakaSu even though they contain "sukisu"/"suki".
+        when (KernelSupport.inferRuntimeKsuFamily(v)) {
+            KSU_VARIANT_BAKASU -> return FlashFilterKernelKind.BakaSu
+            KSU_VARIANT_SUKISU -> return FlashFilterKernelKind.SukiSu
+        }
         return when {
-            "resuki" in v || "re-suki" in v || "bakasu" in v -> FlashFilterKernelKind.BakaSu
-            "sukisu" in v -> FlashFilterKernelKind.SukiSu
             "kernelsu" in v || "official" in v -> FlashFilterKernelKind.Official
             else -> FlashFilterKernelKind.None
         }

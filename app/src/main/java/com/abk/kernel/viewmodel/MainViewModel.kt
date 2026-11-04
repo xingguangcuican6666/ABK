@@ -4743,14 +4743,24 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
-    private fun RootUtils.ManagerRuntimeProbe.isBakaSu(): Boolean {
-        val text = listOf(displayName, variant, version).joinToString(" ").lowercase()
-        return "bakasu" in text
-    }
+    private fun RootUtils.ManagerRuntimeProbe.isBakaSu(): Boolean =
+        runtimeKsuFamily() == KSU_VARIANT_BAKASU
 
-    private fun RootUtils.ManagerRuntimeProbe.isSukiSu(): Boolean {
-        val text = listOf(displayName, variant, version).joinToString(" ").lowercase()
-        return "sukisu" in text && "bakasu" !in text
+    private fun RootUtils.ManagerRuntimeProbe.isSukiSu(): Boolean =
+        runtimeKsuFamily() == KSU_VARIANT_SUKISU
+
+    /**
+     * Classifies the probe against the shared runtime family detector. Checks the
+     * structured [variant] first (control status / ksud inference, already canonical),
+     * then falls back to a combined scan of every string the probe carries. The retired
+     * `ReSukiSU` spelling contains `sukisu`, so a bare substring test would route BakaSU
+     * and legacy ReSukiSU kernels into the SukiSU settings group.
+     */
+    private fun RootUtils.ManagerRuntimeProbe.runtimeKsuFamily(): String? {
+        KernelSupport.inferRuntimeKsuFamily(variant)?.let { return it }
+        return KernelSupport.inferRuntimeKsuFamily(
+            listOf(displayName, version).joinToString(" ")
+        )
     }
 
     private fun RootUtils.ManagerRuntimeProbe.isOfficialKernelSu(): Boolean {

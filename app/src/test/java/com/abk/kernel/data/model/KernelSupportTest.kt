@@ -2,6 +2,7 @@ package com.abk.kernel.data.model
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -24,6 +25,43 @@ class KernelSupportTest {
         // The retired spelling must not be mistaken for the current BakaSU option itself.
         assertFalse(KernelSupport.isDeprecatedKsuVariantAlias(KSU_VARIANT_BAKASU))
         assertTrue(KernelSupport.isDeprecatedKsuVariantAlias("ReSukiSU"))
+    }
+
+    @Test
+    fun inferRuntimeKsuFamilyDistinguishesBakaSuFromSukiSu() {
+        // Canonical and hyphenated BakaSU spellings, plus the retired ReSukiSU alias which
+        // contains "sukisu" and must still land on BakaSU.
+        listOf("BakaSU", "bakasu", "Baka-SU", "Baka_SU", "ReSukiSU", "resukisu", "re-suki").forEach { raw ->
+            assertEquals(
+                "<$raw> should classify as BakaSU",
+                KSU_VARIANT_BAKASU,
+                KernelSupport.inferRuntimeKsuFamily(raw),
+            )
+        }
+        // SukiSU spellings, including the kernel full-version string that carries the
+        // "SukiSU-Ultra" repo name.
+        listOf("SukiSU", "sukisu", "SukiSU-Ultra", "v4.3.0-1a2b3c4d@SukiSU-Ultra-main").forEach { raw ->
+            assertEquals(
+                "<$raw> should classify as SukiSU",
+                KSU_VARIANT_SUKISU,
+                KernelSupport.inferRuntimeKsuFamily(raw),
+            )
+        }
+        // A hyphenated BakaSU org name in the kernel full-version string wins over any
+        // SukiSU substring in the same probe text.
+        assertEquals(
+            KSU_VARIANT_BAKASU,
+            KernelSupport.inferRuntimeKsuFamily("v4.2.0-deadbeef@Baka-SU-main · kernel 31500 · Inline"),
+        )
+        // Pre-rename short spelling must not fall through to the SukiSU arm.
+        assertEquals(
+            KSU_VARIANT_BAKASU,
+            KernelSupport.inferRuntimeKsuFamily("ReSuki-v3.2.0-1a2b3c4d"),
+        )
+        assertNull(KernelSupport.inferRuntimeKsuFamily(null))
+        assertNull(KernelSupport.inferRuntimeKsuFamily(""))
+        assertNull(KernelSupport.inferRuntimeKsuFamily("KernelSU"))
+        assertNull(KernelSupport.inferRuntimeKsuFamily("31500"))
     }
 
     @Test
