@@ -9,7 +9,11 @@ I18N_DIR = Path(__file__).parent
 if os.name == "nt" and os.environ.get("APPDATA"):
     CONFIG_DIR = Path(os.environ["APPDATA"]) / "abk"
 else:
-    CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "abk"
+    # XDG_CONFIG_HOME set-but-empty means "unset" (XDG Base Directory spec),
+    # so fall back to ~/.config instead of resolving Path("") to the CWD.
+    CONFIG_DIR = Path(
+        os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")
+    ) / "abk"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 LANGUAGE_CATALOGS = {
