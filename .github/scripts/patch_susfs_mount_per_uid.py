@@ -198,10 +198,26 @@ def patch_proc_namespace(root):
     save(p, text)
 
 
+def diagnose(root):
+    """Print the real proc_namespace.c text around the sus-mount branch."""
+    p = find(root, os.path.join("fs", "proc_namespace.c"))
+    text = load(p)
+    idx = text.find("susfs_is_hide_sus_mnts_for_non_su_procs_enabled")
+    print("=====DIAG-BEGIN=====")
+    print("file: " + p + "  bytes: " + str(len(text)) + "  idx: " + str(idx))
+    if idx >= 0:
+        print(text[max(0, idx - 1200):idx + 2000])
+    print("=====DIAG-END=====")
+
+
 def main():
-    if len(sys.argv) != 2:
-        die("usage: patch_susfs_mount_per_uid.py <kernel_root>")
-    root = sys.argv[1]
+    args = [a for a in sys.argv[1:] if a != "--diagnose"]
+    if len(args) != 1:
+        die("usage: patch_susfs_mount_per_uid.py <kernel_root> [--diagnose]")
+    root = args[0]
+    if "--diagnose" in sys.argv:
+        diagnose(root)
+        return
     patch_susfs_c(root)
     patch_header(root)
     patch_proc_namespace(root)

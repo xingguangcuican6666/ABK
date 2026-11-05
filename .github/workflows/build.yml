@@ -6940,6 +6940,18 @@ jobs:
             echo "::error::ABK policy file loader verification FAILED"
             exit 1
           fi
+      - name: 诊断：挂载分支真实源码 (ABK)
+        if: inputs.enable_susfs && (inputs.ksu_variant == 'BakaSU' || inputs.ksu_variant == 'SukiSU') && inputs.android_version == 'android14' && inputs.kernel_version == '6.1'
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+          set -uo pipefail
+          PATCHER="$GITHUB_WORKSPACE/.github/scripts/patch_susfs_mount_per_uid.py"
+          if [ ! -f "$PATCHER" ]; then
+            echo "::warning::diagnostic patcher missing"
+            exit 0
+          fi
+          python3 "$PATCHER" "$KERNEL_ROOT" --diagnose || echo "::warning::diagnose failed"
+          exit 0
       - name: 修复 SUSFS 未使用的 cred 辅助函数 (ABK)
         if: inputs.enable_susfs && inputs.ksu_variant != 'None'
         working-directory: ${{ env.KERNEL_ROOT }}
