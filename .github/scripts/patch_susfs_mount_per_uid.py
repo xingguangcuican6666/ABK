@@ -156,21 +156,28 @@ def patch_proc_namespace(root):
     text = load(p)
     if MARKER in text:
         return
-    needle = (
-        "\tif (static_branch_likely(&susfs_is_hide_sus_mnts_for_non_su_procs_enabled))\n"
-        "\t\tif (likely(!susfs_is_current_ksu_domain()))\n"
-        "\t\t\treturn mounts_open_common(inode, file, susfs_show_mountinfo);\n"
+    # The block may already carry extra conditions from patch_susfs_mount_app_uid.py,
+    # so locate the sus-mount branch and guard the filtered return instead of
+    # matching the exact three lines.
+    idx = text.find("susfs_is_hide_sus_mnts_for_non_su_procs_enabled")
+    if idx < 0:
+        die("susfs mountinfo branch not found in fs/proc_namespace.c")
+
+    window = text[idx:idx + 1200]
+    m = re.search(
+        r"(\n(\t+)return mounts_open_common\(inode, file, susfs_show_mountinfo\);)",
+        window,
     )
-    if text.count(needle) != 1:
-        die("mountinfo filter anchor matched %d times (expected 1)" % text.count(needle))
-    repl = (
-        "\tif (static_branch_likely(&susfs_is_hide_sus_mnts_for_non_su_procs_enabled))\n"
-        "\t\tif (likely(!susfs_is_current_ksu_domain()))\n"
-        "\t\t\t/* ABK " + MARKER + ": only the configured targets get the filtered view */\n"
-        "\t\t\tif (susfs_uid_is_managed(current_uid().val))\n"
-        "\t\t\t\treturn mounts_open_common(inode, file, susfs_show_mountinfo);\n"
+    if not m:
+        die("filtered mountinfo return not found after the sus-mount branch")
+
+    indent = m.group(2)
+    guard = (
+        "\n" + indent + "/* ABK " + MARKER + ": only the configured targets get the filtered view */"
+        "\n" + indent + "if (susfs_uid_is_managed(current_uid().val))"
     )
-    text = text.replace(needle, repl, 1)
+    insert_at = idx + m.start(1)
+    text = text[:insert_at] + guard + text[insert_at:]
     save(p, text)
 
 
