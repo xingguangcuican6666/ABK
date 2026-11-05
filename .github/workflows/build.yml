@@ -6940,6 +6940,34 @@ jobs:
             echo "::error::ABK policy file loader verification FAILED"
             exit 1
           fi
+      - name: 挂载视角按 target uid 生效 (ABK)
+        if: inputs.enable_susfs && (inputs.ksu_variant == 'BakaSU' || inputs.ksu_variant == 'SukiSU') && inputs.android_version == 'android14' && inputs.kernel_version == '6.1'
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+          set -uo pipefail
+
+          PATCHER="$GITHUB_WORKSPACE/.github/scripts/patch_susfs_mount_per_uid.py"
+
+          if [ ! -f "$PATCHER" ]; then
+            echo "::error::ABK per-target mount patcher not found: $PATCHER"
+            exit 1
+          fi
+
+          if ! python3 "$PATCHER" "$KERNEL_ROOT"; then
+            echo "::error::ABK per-target mount patcher FAILED"
+            exit 1
+          fi
+
+          SRC="$KERNEL_ROOT/common/fs/susfs.c"
+          [ -f "$SRC" ] || SRC="$KERNEL_ROOT/fs/susfs.c"
+          PNS="$KERNEL_ROOT/common/fs/proc_namespace.c"
+          [ -f "$PNS" ] || PNS="$KERNEL_ROOT/fs/proc_namespace.c"
+          if grep -q 'MOUNT_PER_UID_ABK' "$SRC" && grep -q 'MOUNT_PER_UID_ABK' "$PNS"; then
+            echo "[ABK] per-target mount view verified (only managed uids are filtered)"
+          else
+            echo "::error::ABK per-target mount verification FAILED"
+            exit 1
+          fi
       - name: 修复 SUSFS 未使用的 cred 辅助函数 (ABK)
         if: inputs.enable_susfs && inputs.ksu_variant != 'None'
         working-directory: ${{ env.KERNEL_ROOT }}
