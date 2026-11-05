@@ -163,13 +163,15 @@ def patch_proc_namespace(root):
     if idx < 0:
         die("susfs mountinfo branch not found in fs/proc_namespace.c")
 
-    window = text[idx:idx + 1200]
-    m = re.search(
-        r"(\n(\t+)return mounts_open_common\(inode, file, susfs_show_mountinfo\);)",
-        window,
-    )
+    window = text[idx:idx + 2000]
+
+    # The upstream text differs between SUSFS revisions (the call may carry extra
+    # arguments or be wrapped in a helper), so take the first return statement that
+    # follows the flag instead of matching the exact call.
+    m = re.search(r"(\n(\t+)return [^\n]*;)", window)
     if not m:
-        die("filtered mountinfo return not found after the sus-mount branch")
+        sys.stderr.write("::warning::sus-mount branch text:\n" + window[:600] + "\n")
+        die("no return statement after the sus-mount branch in fs/proc_namespace.c")
 
     indent = m.group(2)
     guard = (
