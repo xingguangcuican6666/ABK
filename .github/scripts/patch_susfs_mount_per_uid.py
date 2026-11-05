@@ -87,7 +87,7 @@ TABLE_C = (
     "\tset_bit((unsigned int)uid, abk_managed_uids);\n"
     "}\n"
     "\n"
-    "bool susfs_uid_is_managed(uid_t uid)\n"
+    "bool susfs_uid_is_managed(unsigned int uid)\n"
     "{\n"
     "\tif (!abk_mount_per_uid)\n"
     "\t\treturn true; /* legacy behaviour: every app uid is filtered */\n"
@@ -101,7 +101,7 @@ TABLE_C = (
 HDR_DECL = (
     "/* ABK " + MARKER + " */\n"
     "void susfs_uid_mark_managed(int uid);\n"
-    "bool susfs_uid_is_managed(uid_t uid);\n"
+    "bool susfs_uid_is_managed(unsigned int uid);\n"
 )
 
 
@@ -159,6 +159,21 @@ def patch_proc_namespace(root):
     # The block may already carry extra conditions from patch_susfs_mount_app_uid.py,
     # so locate the sus-mount branch and guard the filtered return instead of
     # matching the exact three lines.
+    # Declare the helper locally as well: the include in this file is not
+    # guaranteed to be ordered before the branch on every SUSFS revision (the
+    # first build failed with an implicit-declaration error here).
+    if "susfs_uid_is_managed" not in text:
+        decl = "extern bool susfs_uid_is_managed(unsigned int uid); /* ABK " + MARKER + " */\n"
+        m_inc = re.search(r"(#include <linux/susfs\.h>\n)", text)
+        if m_inc:
+            text = text[:m_inc.end(1)] + decl + text[m_inc.end(1):]
+        else:
+            m_last = list(re.finditer(r"^#include [^\n]*\n", text, re.M))
+            if not m_last:
+                die("no #include block found in fs/proc_namespace.c")
+            pos = m_last[-1].end(0)
+            text = text[:pos] + decl + text[pos:]
+
     idx = text.find("susfs_is_hide_sus_mnts_for_non_su_procs_enabled")
     if idx < 0:
         die("susfs mountinfo branch not found in fs/proc_namespace.c")
