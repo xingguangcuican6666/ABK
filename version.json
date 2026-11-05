@@ -2,12 +2,12 @@
   "stable": {
     "normal": {
       "versionName": "1.2.9",
-      "versionCode": 10028,
+      "versionCode": 10029,
       "downloadUrl": "https://github.com/xingguangcuican6666/ABK/releases/download/app_v1.2.9/abk-app-abk-apks.zip"
     },
     "dev": {
       "versionName": "1.2.9-dev",
-      "versionCode": 10028,
+      "versionCode": 10029,
       "downloadUrl": "https://github.com/xingguangcuican6666/ABK/releases/download/app_v1.2.9/abk-app-dev-abk-apks.zip"
     }
   },
