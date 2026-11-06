@@ -32,6 +32,7 @@ import re
 import sys
 
 MARKER = "MOUNT_PER_UID_ABK"
+MARKER_HELPER = "MOUNT_PER_UID_HELPER_ABK"
 POLICY_PATH = "/data/adb/hma_susfs/policy.tsv"
 
 
@@ -197,6 +198,68 @@ def patch_proc_namespace(root):
     text = text.replace(cond_old, cond_new)
     save(p, text)
 
+def patch_mount_consistency_files(root):
+    """Make path resolution and fdinfo agree with the new mountinfo gate.
+
+    patch_susfs_mount_app_uid.py installed this helper in fs/namespace.c and
+    fs/proc/fd.c:
+
+        static inline bool abk_mount_app_target(void)
+        {
+                if (likely(susfs_is_current_proc_umounted()))
+                        return true;
+                if (!susfs_is_current_app_uid())
+                        return false;
+                return !susfs_is_current_ksu_domain();
+        }
+
+    i.e. every app uid still gets the redirected view, while the mountinfo gate now
+    only filters managed uids - exactly the "two different mount views" divergence
+    duck detector reports (cross-process mount tables).  Give the helper the same
+    predicate as the mountinfo gate.
+    """
+    old = (
+        "static inline bool abk_mount_app_target(void)\n"
+        "{\n"
+        "\tif (likely(susfs_is_current_proc_umounted()))\n"
+        "\t\treturn true;\n"
+        "\tif (!susfs_is_current_app_uid())\n"
+        "\t\treturn false;\n"
+        "\treturn !susfs_is_current_ksu_domain();\n"
+        "}\n"
+    )
+    new = (
+        "extern bool susfs_uid_is_managed(unsigned int uid);\n"
+        "static inline bool abk_mount_app_target(void)\n"
+        "{\n"
+        "\tif (likely(susfs_is_current_proc_umounted()))\n"
+        "\t\treturn true;\n"
+        "\tif (!susfs_is_current_app_uid())\n"
+        "\t\treturn false;\n"
+        "\tif (susfs_is_current_ksu_domain())\n"
+        "\t\treturn false;\n"
+        "\t/* ABK " + MARKER + ": path resolution and fdinfo follow the mountinfo gate */\n"
+        "\treturn susfs_uid_is_managed(current_uid().val);\n"
+        "}\n"
+    )
+    touched = 0
+    for rel in (os.path.join("fs", "namespace.c"), os.path.join("fs", "proc", "fd.c")):
+        p = find(root, rel)
+        text = load(p)
+        if MARKER_HELPER in text:
+            continue
+        if old not in text:
+            die("abk_mount_app_target() helper not found in " + rel)
+        text = text.replace(old, new, 1)
+        text = text.replace(
+            "static inline bool abk_mount_app_target(void)",
+            "/* ABK " + MARKER_HELPER + " */\nstatic inline bool abk_mount_app_target(void)",
+            1,
+        )
+        save(p, text)
+        touched += 1
+    print("mount consistency helper updated in %d file(s)" % touched)
+
 def diagnose(root):
     """Print the real proc_namespace.c text around the sus-mount branch."""
     p = find(root, os.path.join("fs", "proc_namespace.c"))
@@ -220,6 +283,7 @@ def main():
     patch_susfs_c(root)
     patch_header(root)
     patch_proc_namespace(root)
+    patch_mount_consistency_files(root)
     print("patch: per-target mount view (" + MARKER + ")")
 
 
