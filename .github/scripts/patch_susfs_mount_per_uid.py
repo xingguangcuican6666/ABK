@@ -67,7 +67,7 @@ TABLE_C = (
     " */\n"
     "#define ABK_MANAGED_UID_MAX 200000\n"
     "static DECLARE_BITMAP(abk_managed_uids, ABK_MANAGED_UID_MAX);\n"
-    "static bool abk_mount_per_uid __read_mostly = true;\n"
+    "static bool abk_mount_per_uid __read_mostly = false; /* ABK: default OFF - per-uid mount filtering is detectable */\n"
     "\n"
     "static int __init abk_mount_per_uid_setup(char *str)\n"
     "{\n"
