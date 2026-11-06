@@ -152,51 +152,50 @@ def patch_header(root):
 
 
 def patch_proc_namespace(root):
+    """Gate the three mount-view entries on the managed-uid bitmap.
+
+    Real upstream text (gki-android14-6.1, 50_add_susfs_in_gki-android14-6.1.patch):
+
+        if (static_branch_likely(&susfs_is_hide_sus_mnts_for_non_su_procs_enabled)) {
+            if (likely(!susfs_is_current_ksu_domain()))
+                return mounts_open_common(inode, file, susfs_show_mountinfo);
+        }
+        return mounts_open_common(inode, file, show_mountinfo);
+
+    Only the *condition* is extended - no statement is added or removed, so every
+    path keeps its original return value (the earlier attempt guarded the return
+    itself and tripped -Werror=return-type).
+    """
     p = find(root, os.path.join("fs", "proc_namespace.c"))
     text = load(p)
     if MARKER in text:
         return
-    # The block may already carry extra conditions from patch_susfs_mount_app_uid.py,
-    # so locate the sus-mount branch and guard the filtered return instead of
-    # matching the exact three lines.
-    # Declare the helper locally as well: the include in this file is not
-    # guaranteed to be ordered before the branch on every SUSFS revision (the
-    # first build failed with an implicit-declaration error here).
-    if "susfs_uid_is_managed" not in text:
-        decl = "extern bool susfs_uid_is_managed(unsigned int uid); /* ABK " + MARKER + " */\n"
-        m_inc = re.search(r"(#include <linux/susfs\.h>\n)", text)
-        if m_inc:
-            text = text[:m_inc.end(1)] + decl + text[m_inc.end(1):]
-        else:
-            m_last = list(re.finditer(r"^#include [^\n]*\n", text, re.M))
-            if not m_last:
-                die("no #include block found in fs/proc_namespace.c")
-            pos = m_last[-1].end(0)
-            text = text[:pos] + decl + text[pos:]
 
-    idx = text.find("susfs_is_hide_sus_mnts_for_non_su_procs_enabled")
-    if idx < 0:
-        die("susfs mountinfo branch not found in fs/proc_namespace.c")
-
-    window = text[idx:idx + 2000]
-
-    # The upstream text differs between SUSFS revisions (the call may carry extra
-    # arguments or be wrapped in a helper), so take the first return statement that
-    # follows the flag instead of matching the exact call.
-    m = re.search(r"(\n(\t+)return [^\n]*;)", window)
-    if not m:
-        sys.stderr.write("::warning::sus-mount branch text:\n" + window[:600] + "\n")
-        die("no return statement after the sus-mount branch in fs/proc_namespace.c")
-
-    indent = m.group(2)
-    guard = (
-        "\n" + indent + "/* ABK " + MARKER + ": only the configured targets get the filtered view */"
-        "\n" + indent + "if (susfs_uid_is_managed(current_uid().val))"
+    decl_anchor = "extern bool susfs_is_current_ksu_domain(void);\n"
+    if decl_anchor not in text:
+        die("extern susfs_is_current_ksu_domain() not found in fs/proc_namespace.c")
+    text = text.replace(
+        decl_anchor,
+        decl_anchor
+        + "extern bool susfs_uid_is_managed(unsigned int uid); /* ABK " + MARKER + " */\n",
+        1,
     )
-    insert_at = idx + m.start(1)
-    text = text[:insert_at] + guard + text[insert_at:]
-    save(p, text)
 
+    cond_old = (
+        "\tif (static_branch_likely(&susfs_is_hide_sus_mnts_for_non_su_procs_enabled)) {\n"
+        "\t\tif (likely(!susfs_is_current_ksu_domain()))\n"
+    )
+    cond_new = (
+        "\tif (static_branch_likely(&susfs_is_hide_sus_mnts_for_non_su_procs_enabled)) {\n"
+        "\t\t/* ABK " + MARKER + ": only the configured targets get the filtered view */\n"
+        "\t\tif (likely(!susfs_is_current_ksu_domain()) &&\n"
+        "\t\t    susfs_uid_is_managed(current_uid().val))\n"
+    )
+    n = text.count(cond_old)
+    if n != 3:
+        die("expected 3 sus-mount conditions (mounts/mountinfo/mountstats), found %d" % n)
+    text = text.replace(cond_old, cond_new)
+    save(p, text)
 
 def diagnose(root):
     """Print the real proc_namespace.c text around the sus-mount branch."""
