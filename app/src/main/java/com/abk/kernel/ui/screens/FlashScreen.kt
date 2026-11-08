@@ -1343,7 +1343,7 @@ fun FlashScreen(
                                     // Per-run dispatched config drives the kernel-kind + SUSFS chips.
                                     // Only fall back to pendingDispatchedConfig for runs that ARE
                                     // kernel-named (or have kernel artifacts) — otherwise the chip
-                                    // leaks the dispatched ReSuKiSU variant onto Build ABK App /
+                                    // leaks the dispatched BakaSU variant onto Build ABK App /
                                     // GetManager / Auto Trigger runs, making them visually
                                     // indistinguishable from kernel builds in the Manager filter.
                                     val dispatchedConfig = dispatchedConfigByRunId[group.runId]

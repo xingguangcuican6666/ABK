@@ -34,7 +34,7 @@ class BuildFormState {
     final inferred = _inferFromRuntime(runtime);
     return BuildFormState(
       target: 'custom',
-      ksuVariant: 'ReSukiSU',
+      ksuVariant: 'BakaSU',
       ksuBranch: 'Stable',
       version: '',
       revision: inferred.revision,

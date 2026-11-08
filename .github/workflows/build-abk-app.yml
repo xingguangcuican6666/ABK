@@ -12,6 +12,7 @@ on:
       - ".github/workflows/build-abk-app.yml"
       - ".github/actions/prepare-abk-app-inputs/**"
       - ".github/scripts/patch-ksud-uapi-compat.py"
+      - ".github/scripts/patch-ksud-script-wait.py"
   pull_request:
     paths:
       - "app/**"
@@ -22,6 +23,7 @@ on:
       - ".github/workflows/build-abk-app.yml"
       - ".github/actions/prepare-abk-app-inputs/**"
       - ".github/scripts/patch-ksud-uapi-compat.py"
+      - ".github/scripts/patch-ksud-script-wait.py"
 
 jobs:
   build:
@@ -143,7 +145,8 @@ jobs:
           git clone --depth 1 --branch "$SUKISU_ULTRA_REF" "$SUKISU_ULTRA_REPO" "$source_dir"
           commit="$(git -C "$source_dir" rev-parse HEAD)"
           python3 .github/scripts/patch-ksud-uapi-compat.py "$source_dir"
-          grep -q "ABK legacy uapi=0 compatibility" "$source_dir/userspace/ksud/src/ksucalls.rs"
+          python3 .github/scripts/patch-ksud-script-wait.py "$source_dir"
+          grep -q "ABK backward-compatible uapi check" "$source_dir/userspace/ksud/src/ksucalls.rs"
           mkdir -p "$target_dir" "$jni_target_dir"
 
           setup_rust_build() {
@@ -391,22 +394,43 @@ jobs:
             curl -fsSL -L "$url" -o "$out"
           }
 
-          runs_json="$(api_get "https://api.github.com/repos/$repo/actions/workflows/$workflow/runs?status=success&per_page=1")"
-          run_id="$(printf '%s' "$runs_json" | jq -r '.workflow_runs[0].id // empty')"
-          run_sha="$(printf '%s' "$runs_json" | jq -r '.workflow_runs[0].head_sha // empty')"
+          # Reuse the run the inputs step already picked rather than asking the API a
+          # second time. Two independent lookups could name different runs -- and this
+          # one filters by created_at and live artifacts precisely because the newest
+          # "successful" run is not always the newest run, nor always bundleable.
+          run_id="${{ steps.abk-inputs.outputs.lkm_run_id }}"
+          run_sha="${{ steps.abk-inputs.outputs.lkm_head_sha }}"
           if [ -z "$run_id" ]; then
-            echo "::error::未找到 $repo 的成功 LKM action"
+            echo "::error::未找到 $repo 可用的成功 LKM action"
             exit 1
           fi
 
           artifacts_json="$(api_get "https://api.github.com/repos/$repo/actions/runs/$run_id/artifacts?per_page=100")"
           artifact_count=0
-          printf '%s' "$artifacts_json" | jq -r '.artifacts[] | select(.name | endswith("-lkm")) | [.name, .archive_download_url] | @tsv' |
+          # Only the stable tier: artifact names are <variant>-<track>-<kmi>-lkm, so a dev
+          # build of the same variant+KMI would land on the same <kmi>_kernelsu.ko and
+          # whichever downloaded last would win. dev-* artifacts are produced for inspection
+          # only, and are never bundled into the app.
+          printf '%s' "$artifacts_json" | jq -r '.artifacts[] |
+            select((.name | test("-stable-.*-lkm$")) or ((.name | endswith("-lkm")) and ((.name | contains("-stable-")) | not) and ((.name | contains("-dev-")) | not))) |
+            [.name, .archive_download_url] | @tsv' |
           while IFS=$'\t' read -r name url; do
             [ -n "$name" ] || continue
             variant="${name%%-*}"
             remainder="${name#*-}"
+            # Current names are <variant>-<track>-<kmi>-lkm; runs from before the track
+            # field existed are <variant>-<kmi>-lkm and stay downloadable for 90 days.
+            head="${remainder%%-*}"
+            if [ "$head" = "stable" ] || [ "$head" = "dev" ]; then
+              remainder="${remainder#*-}"
+            fi
             kmi="${remainder%-lkm}"
+            # lkm.yml renamed its "resukisu" artifacts to "bakasu" alongside the upstream,
+            # but runs published before that rename stay downloadable for 90 days. Fold the
+            # retired spelling onto the id RootUtils.ABK_LKM_VARIANTS now looks up.
+            case "$variant" in
+              resukisu) variant="bakasu" ;;
+            esac
             out_dir="$target_dir/$variant"
             tmp_dir="$(mktemp -d)"
             mkdir -p "$out_dir"

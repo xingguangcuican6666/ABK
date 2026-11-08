@@ -175,7 +175,7 @@ on:
 jobs:
   build-kernel:
     name: "${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}-${{ inputs.ksu_variant }}"
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.KERNEL_SELF_HOSTED == 'false' && 'ubuntu-latest' || (startsWith(vars.KERNEL_RUNNER, '[') && fromJSON(vars.KERNEL_RUNNER) || vars.KERNEL_RUNNER || 'ubuntu-latest') }}
     timeout-minutes: 60
 
     env:
@@ -193,25 +193,44 @@ jobs:
           effective_zram_full_algo="${{ inputs.zram_full_algo }}"
           effective_zram_extra_algos="${{ inputs.zram_extra_algos || '' }}"
           effective_zram_legacy_lz4k="true"
-          effective_zram_use_optional_algo="false"
+          effective_modern_gki="false"
 
-          if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
-            effective_zram_legacy_lz4k="false"
+          case "${{ inputs.kernel_version }}" in
+            6.12|6.18)
+              effective_modern_gki="true"
+              effective_zram_legacy_lz4k="false"
+              ;;
+          esac
+
+          if [ "${{ inputs.android_version }}" = "android17" ] && [ "${{ inputs.kernel_version }}" = "6.18" ] \
+            && [ "${{ inputs.enable_susfs }}" = "true" ]; then
+            echo "::error::android17/6.18 暂不支持 SUSFS：susfs4ksu 尚未提供 gki-android17-6.18 分支，请关闭 SUSFS 后重试。"
+            exit 1
+          fi
+
+          if [ "${{ inputs.android_version }}" = "android17" ] && [ "${{ inputs.kernel_version }}" = "6.18" ] \
+            && [ "${{ inputs.use_bbg }}" = "true" ]; then
+            echo "::error::android17/6.18 暂不支持 BBG：上游 Baseband-guard 仍使用 6.18 已删除的 blkdev_get_no_open/blkdev_put_no_open，请关闭 BBG 后重试。"
+            exit 1
+          fi
+
+          if [ "$effective_zram_legacy_lz4k" = "false" ]; then
             if [ "$effective_zram_full_algo" = "true" ]; then
-              echo "::warning::Android16/6.12 会跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS 补丁栈，仅保留内核原生支持的 ZRAM 算法。"
+              echo "::warning::${{ inputs.android_version }}/${{ inputs.kernel_version }} 会跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS 补丁栈，仅保留内核原生支持的 ZRAM 算法。"
             fi
             if [ -n "$effective_zram_extra_algos" ]; then
-              filtered_algos="$(python3 -c 'import sys; blocked={\"lz4k\",\"lz4kd\",\"lz4k_oplus\"}; print(\",\".join(item.strip() for item in sys.argv[1].split(\",\") if item.strip() and item.strip().lower() not in blocked))' "$effective_zram_extra_algos")"
+              filtered_algos="$(python3 -c 'import sys; blocked={"lz4k","lz4kd","lz4k_oplus"}; print(",".join(item.strip() for item in sys.argv[1].split(",") if item.strip() and item.strip().lower() not in blocked))' "$effective_zram_extra_algos")"
               if [ "$filtered_algos" != "$effective_zram_extra_algos" ]; then
-                echo "::warning::Android16/6.12 不支持 legacy LZ4K/LZ4KD/LZ4K_OPLUS，已自动从自定义算法列表移除。"
+                echo "::warning::${{ inputs.android_version }}/${{ inputs.kernel_version }} 不支持 legacy LZ4K/LZ4KD/LZ4K_OPLUS，已自动从自定义算法列表移除。"
               fi
               effective_zram_extra_algos="$filtered_algos"
             fi
           fi
 
-          if [ "$effective_use_zram" = "true" ] && [ "$effective_zram_full_algo" != "true" ] && [ -n "$effective_zram_extra_algos" ]; then
+          if [ -n "$effective_zram_extra_algos" ]; then
             if python3 -c 'import sys; algos=[item.strip().lower() for item in sys.argv[1].split(",") if item.strip()]; raise SystemExit(0 if "zstdp" in algos else 1)' "$effective_zram_extra_algos"; then
-              effective_zram_use_optional_algo="true"
+              echo "::warning::zstdp 后端已废弃（scomp 回调与 6.12+ crypto API 不兼容），已从 ZRAM 算法列表移除。"
+              effective_zram_extra_algos="$(python3 -c 'import sys; print(",".join(item.strip() for item in sys.argv[1].split(",") if item.strip() and item.strip().lower() != "zstdp"))' "$effective_zram_extra_algos")"
             fi
           fi
 
@@ -220,7 +239,7 @@ jobs:
             echo "EFFECTIVE_ZRAM_FULL_ALGO=$effective_zram_full_algo"
             echo "EFFECTIVE_ZRAM_EXTRA_ALGOS=$effective_zram_extra_algos"
             echo "EFFECTIVE_ZRAM_LEGACY_LZ4K=$effective_zram_legacy_lz4k"
-            echo "EFFECTIVE_ZRAM_USE_OPTIONAL_ALGO=$effective_zram_use_optional_algo"
+            echo "EFFECTIVE_MODERN_GKI=$effective_modern_gki"
           } >> "$GITHUB_ENV"
 
           effective_ksu_branch="${{ inputs.ksu_branch }}"
@@ -272,10 +291,10 @@ jobs:
           combo="${android_version}-${kernel_version}"
 
           case "$combo" in
-            android12-5.10|android13-5.15|android14-6.1|android15-6.6|android16-6.12) ;;
+            android12-5.10|android13-5.15|android14-6.1|android15-6.6|android16-6.12|android17-6.18) ;;
             *)
               echo "::error::不支持的 Android/内核组合: ${android_version}/${kernel_version}"
-              echo "::error::当前工作流支持: android12/5.10, android13/5.15, android14/6.1, android15/6.6, android16/6.12"
+              echo "::error::当前工作流支持: android12/5.10, android13/5.15, android14/6.1, android15/6.6, android16/6.12, android17/6.18"
               exit 1
               ;;
           esac
@@ -287,9 +306,9 @@ jobs:
           fi
 
           if [ "${{ inputs.use_kpm }}" = "true" ] \
-            && [ "${{ inputs.ksu_variant }}" = "ReSukiSU" ] \
+            && [ "${{ inputs.ksu_variant }}" = "BakaSU" ] \
             && { [ "${{ inputs.ksu_branch }}" = "Dev(开发)" ] || [ "${{ inputs.ksu_branch }}" = "Latest(最新)" ]; }; then
-            echo "::error::ReSukiSU 仅 Stable(标准) / Custom(自定义) 支持 KPM，请切换分支或关闭 KPM。"
+            echo "::error::BakaSU 仅 Stable(标准) / Custom(自定义) 支持 KPM，请切换分支或关闭 KPM。"
             exit 1
           fi
 
@@ -399,8 +418,6 @@ jobs:
           android14 6.1 129 2025-04
           android14 6.1 134 2025-05
           android14 6.1 138 2025-06
-          android14 6.1 141 2025-07
-          android14 6.1 145 2025-08
           android14 6.1 145 2025-09
           android14 6.1 157 2025-12
           android14 6.1 162 2026-03
@@ -413,18 +430,17 @@ jobs:
           android15 6.6 82 2025-04
           android15 6.6 87 2025-05
           android15 6.6 89 2025-06
-          android15 6.6 92 2025-07
-          android15 6.6 98 2025-08
           android15 6.6 98 2025-09
           android15 6.6 102 2025-10
           android15 6.6 118 2026-01
           android15 6.6 127 2026-04
           android16 6.12 23 2025-06
-          android16 6.12 30 2025-07
-          android16 6.12 38 2025-08
           android16 6.12 38 2025-09
           android16 6.12 58 2025-12
           android16 6.12 69 2026-03
+          android17 6.18 20 2026-04
+          android17 6.18 21 2026-06
+          android17 6.18 32 2026-09
           EOF
           )
 
@@ -449,6 +465,7 @@ jobs:
           exit 1
 
       - name: 清理磁盘空间
+        if: runner.environment == 'github-hosted'
         uses: endersonmenezes/free-disk-space@v3
         with:
           remove_android: true
@@ -490,11 +507,11 @@ jobs:
           import os, re
           if not re.fullmatch(r"(?:\d{4}-(0[1-9]|1[0-2])|lts)", os.environ["SOURCE_PATCH_LEVEL"]):
               raise SystemExit("os_patch_level must use YYYY-MM or lts")
-          if os.environ["SOURCE_KERNEL_VERSION"] not in {"5.10", "5.15", "6.1", "6.6", "6.12"}:
+          if os.environ["SOURCE_KERNEL_VERSION"] not in {"5.10", "5.15", "6.1", "6.6", "6.12", "6.18"}:
               raise SystemExit("unsupported custom source kernel line")
           expected = {
               "5.10": "android12", "5.15": "android13", "6.1": "android14",
-              "6.6": "android15", "6.12": "android16",
+              "6.6": "android15", "6.12": "android16", "6.18": "android17",
           }[os.environ["SOURCE_KERNEL_VERSION"]]
           if os.environ["SOURCE_ANDROID_VERSION"] != expected:
               raise SystemExit("custom source Android/kernel mapping mismatch")
@@ -618,6 +635,10 @@ jobs:
       - name: 安装编译依赖
         run: |
           disable_broken_chrome_source() {
+            if [ "${{ runner.environment }}" != "github-hosted" ]; then
+              echo "保留自托管 Runner 的 Chrome APT 源"
+              return 0
+            fi
             local source
             while IFS= read -r source; do
               echo "::warning::禁用与构建无关的 Chrome APT 源: $source"
@@ -644,6 +665,13 @@ jobs:
           apt_update_retry
           sudo apt-get install -y ccache python3 git curl build-essential libssl-dev bison flex libelf-dev dwarves
 
+      - name: 配置自托管下载缓存
+        env:
+          ABK_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          KERNEL_LOCAL_CACHE: ${{ vars.KERNEL_LOCAL_CACHE || 'auto' }}
+          KERNEL_LOCAL_CACHE_DIR: ${{ vars.KERNEL_LOCAL_CACHE_DIR }}
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" configure
+
       - name: 配置 ccache
         run: |
           mkdir -p ~/.cache/bazel
@@ -653,6 +681,7 @@ jobs:
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
 
       - name: 恢复 ccache 缓存
+        if: env.ABK_LOCAL_CACHE_ENABLED != 'true'
         uses: actions/cache@v5
         with:
           path: ~/.ccache
@@ -661,6 +690,7 @@ jobs:
             ${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}-ccache-
 
       - name: 缓存工具链
+        if: env.ABK_LOCAL_CACHE_ENABLED != 'true'
         id: cache-toolchain
         uses: actions/cache@v5
         with:
@@ -681,7 +711,8 @@ jobs:
             local attempt
             for attempt in 1 2 3; do
               rm -rf "$target_dir"
-              if git clone "$repo_url" -b "$BRANCH" --depth 1 "$target_dir"; then
+              if python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+                "$repo_url" "$target_dir" --ref "$BRANCH" --depth 1; then
                 return 0
               fi
               echo "::warning::工具链克隆失败: $repo_url (attempt ${attempt}/3)"
@@ -712,10 +743,12 @@ jobs:
             local repo_url="$1"
             local branch="$2"
             local target_dir="$3"
+            local depth="${4:-1}"
             local attempt
             rm -rf "$target_dir"
             for attempt in 1 2 3; do
-              if git clone "$repo_url" -b "$branch" --depth 1 "$target_dir"; then
+              if python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+                "$repo_url" "$target_dir" --ref "$branch" --depth "$depth"; then
                 return 0
               fi
               echo "::warning::git clone 失败: $repo_url@$branch (attempt $attempt)"
@@ -727,12 +760,23 @@ jobs:
           }
 
           echo "克隆 AnyKernel3..."
-          git clone https://github.com/WildKernels/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+            https://github.com/WildKernels/AnyKernel3.git AnyKernel3 --ref "$ANYKERNEL_BRANCH"
           rm -rf AnyKernel3/.git
 
           if [ "${{ inputs.enable_susfs }}" == "true" ]; then
             echo "克隆 SUSFS (分支: $SUSFS_BRANCH)..."
-            retry_git_clone https://gitlab.com/simonpunk/susfs4ksu.git "$SUSFS_BRANCH" susfs4ksu
+            SUSFS_DEPTH=1
+            CONFIG_FILE="config/config"
+            if [ "$ABK_LOCAL_CACHE_ENABLED" = "true" ] && [ -f "$CONFIG_FILE" ] && grep -q '^custom=true$' "$CONFIG_FILE"; then
+              CUSTOM_COMMIT="$(sed -n "s/^${SUSFS_BRANCH}=//p" "$CONFIG_FILE" | head -n1)"
+              # Resolve abbreviated commits from branch history, not remote ref names.
+              # Cache the full history once so later pinned builds can reuse it.
+              if [ -n "$CUSTOM_COMMIT" ]; then
+                SUSFS_DEPTH=0
+              fi
+            fi
+            retry_git_clone https://gitlab.com/simonpunk/susfs4ksu.git "$SUSFS_BRANCH" susfs4ksu "$SUSFS_DEPTH"
 
             CONFIG_FILE="config/config"
             if [ -f "$CONFIG_FILE" ]; then
@@ -744,9 +788,11 @@ jobs:
                   cd susfs4ksu
                   # 浅克隆 (--depth 1) 只含分支 HEAD，历史里较旧的固定提交不在其中，
                   # 直接 checkout 会因 "reference is not a tree" 失败，先补全历史。
-                  git fetch --unshallow origin "$SUSFS_BRANCH" 2>/dev/null \
-                    || git fetch --depth=1000 origin "$SUSFS_BRANCH" 2>/dev/null \
-                    || true
+                  if ! git cat-file -e "${CUSTOM_COMMIT}^{commit}" 2>/dev/null; then
+                    git fetch --unshallow origin "$SUSFS_BRANCH" 2>/dev/null \
+                      || git fetch --depth=1000 origin "$SUSFS_BRANCH" 2>/dev/null \
+                      || true
+                  fi
                   git checkout "$CUSTOM_COMMIT"
                   cd ..
                 fi
@@ -762,10 +808,13 @@ jobs:
           fi
 
           echo "准备补丁资源..."
-          git clone https://github.com/WildKernels/kernel_patches.git
-          git clone https://github.com/ShirkNeko/SukiSU_patch.git
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+            https://github.com/WildKernels/kernel_patches.git kernel_patches
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+            https://github.com/ShirkNeko/SukiSU_patch.git SukiSU_patch
           echo "使用当前仓库补丁目录: $ZZH_PATCHES"
-          git clone https://github.com/Numbersf/Action-Build.git --depth=1
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+            https://github.com/Numbersf/Action-Build.git Action-Build --depth 1
 
       - name: 克隆自定义外部模块
         if: inputs.custom_external_modules != ''
@@ -1087,72 +1136,63 @@ jobs:
           KERNEL_VERSION_OVERRIDE: ${{ inputs.kernel_version_override }}
         run: |
           set -euo pipefail
-          git clone https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1.git gcc
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+            https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1.git gcc
 
           FORMATTED_BRANCH="${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.os_patch_level }}"
           echo "初始化 repo，分支: common-${FORMATTED_BRANCH}"
 
-          $REPO init --depth=1 -u https://android.googlesource.com/kernel/manifest -b common-${FORMATTED_BRANCH} --repo-rev=v2.16
+          if [ "$ABK_LOCAL_CACHE_ENABLED" = "true" ]; then
+            python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" sync-repo \
+              --repo "$REPO" --manifest-url https://android.googlesource.com/kernel/manifest \
+              --branch "common-${FORMATTED_BRANCH}" --destination "$KERNEL_ROOT" \
+              --kernel-branch "$FORMATTED_BRANCH"
+          else
+            $REPO init --depth=1 -u https://android.googlesource.com/kernel/manifest -b common-${FORMATTED_BRANCH} --repo-rev=v2.16
 
-          retry_git_ls_remote() {
-            local repo_url="$1"
-            local ref="$2"
-            local attempt
-            local output
-            for attempt in 1 2 3; do
-              if output=$(git ls-remote "$repo_url" "$ref"); then
-                printf '%s\n' "$output"
-                return 0
-              fi
-              echo "::warning::git ls-remote 失败: $repo_url $ref (attempt ${attempt}/3)" >&2
-              sleep "$((attempt * 5))"
-            done
-            echo "::error::git ls-remote 连续失败: $repo_url $ref" >&2
-            return 1
-          }
+            retry_git_ls_remote() {
+              local repo_url="$1"
+              local ref="$2"
+              local attempt
+              local output
+              for attempt in 1 2 3; do
+                if output=$(git ls-remote "$repo_url" "$ref"); then
+                  printf '%s\n' "$output"
+                  return 0
+                fi
+                echo "::warning::git ls-remote 失败: $repo_url $ref (attempt ${attempt}/3)" >&2
+                sleep "$((attempt * 5))"
+              done
+              echo "::error::git ls-remote 连续失败: $repo_url $ref" >&2
+              return 1
+            }
 
-          REMOTE_BRANCH=$(retry_git_ls_remote https://android.googlesource.com/kernel/common "$FORMATTED_BRANCH")
-          DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
+            REMOTE_BRANCH=$(retry_git_ls_remote https://android.googlesource.com/kernel/common "$FORMATTED_BRANCH")
+            DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
 
-          if grep -q deprecated <<< $REMOTE_BRANCH; then
-            echo "检测到已弃用的分支: $FORMATTED_BRANCH"
-            sed -i "s/\"${FORMATTED_BRANCH}\"/\"deprecated\/${FORMATTED_BRANCH}\"/g" $DEFAULT_MANIFEST_PATH
+            if grep -q deprecated <<< $REMOTE_BRANCH; then
+              echo "检测到已弃用的分支: $FORMATTED_BRANCH"
+              sed -i "s/\"${FORMATTED_BRANCH}\"/\"deprecated\/${FORMATTED_BRANCH}\"/g" $DEFAULT_MANIFEST_PATH
+            fi
+
+            repo_sync_retry() {
+              local attempt
+              for attempt in 1 2 3; do
+                if $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast; then
+                  return 0
+                fi
+                echo "::warning::GKI repo sync failed (attempt ${attempt}/3); retrying"
+                sleep "$((attempt * 5))"
+              done
+              echo "::error::GKI repo sync failed after 3 attempts"
+              return 1
+            }
+            repo_sync_retry
+            echo "REMOTE_BRANCH=$REMOTE_BRANCH" >> $GITHUB_ENV
           fi
 
-          repo_sync_retry() {
-            local attempt
-            for attempt in 1 2 3; do
-              if $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast; then
-                return 0
-              fi
-              echo "::warning::GKI repo sync failed (attempt ${attempt}/3); retrying"
-              sleep "$((attempt * 5))"
-            done
-            echo "::error::GKI repo sync failed after 3 attempts"
-            return 1
-          }
-          repo_sync_retry
-          echo "REMOTE_BRANCH=$REMOTE_BRANCH" >> $GITHUB_ENV
-
           if [ "$SOURCE_MODE" = "custom_git" ]; then
-            access_header=""
-            if [ "$SOURCE_PRIVATE" = "true" ]; then
-              if [ -z "${ABK_CUSTOM_SOURCE_GITHUB_TOKEN:-}" ]; then
-                echo "::error::缺少 ABK_CUSTOM_SOURCE_GITHUB_TOKEN，无法访问私有源码仓。"
-                exit 1
-              fi
-              access_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$ABK_CUSTOM_SOURCE_GITHUB_TOKEN" | base64 -w0)"
-              git config --global http.https://github.com/.extraheader "$access_header"
-            fi
-
-            rm -rf common
-            git init common
-            git -C common remote add origin "$SOURCE_REPO"
-            if [ -n "$access_header" ]; then
-              git -C common config http.https://github.com/.extraheader "$access_header"
-            fi
-            git -C common fetch --depth=1 origin "$SOURCE_COMMIT"
-            git -C common checkout --detach "$SOURCE_COMMIT"
+            bash "$GITHUB_WORKSPACE/.github/scripts/checkout-custom-source.sh"
             git -C common config user.name "ABK Custom Source"
             git -C common config user.email "abk-custom-source@localhost"
 
@@ -1279,13 +1319,13 @@ jobs:
             --feature "rekernel=$USE_REKERNEL"
           mkdir -p "$transaction_dir"
           if [ "$USE_KPM" = "true" ] &&
-            { [ "$KSU_VARIANT" != "SukiSU" ] && [ "$KSU_VARIANT" != "ReSukiSU" ]; }; then
+            { [ "$KSU_VARIANT" != "SukiSU" ] && [ "$KSU_VARIANT" != "BakaSU" ]; }; then
             python3 "$GITHUB_WORKSPACE/.github/scripts/custom-source-feature-status.py" mark \
               --file "$status_file" \
               --id kpm \
               --state skipped \
               --reason-code dependency_skipped \
-              --message "KPM requires the SukiSU or ReSukiSU KernelSU variant"
+              --message "KPM requires the SukiSU or BakaSU KernelSU variant"
             touch "$transaction_dir/kpm.disabled"
           fi
           echo "ABK_CUSTOM_SOURCE_FEATURE_STATUS=$status_file" >> "$GITHUB_ENV"
@@ -1439,9 +1479,9 @@ jobs:
                 exit 1
               fi
               ;;
-            "ReSukiSU")
-              echo "添加 ReSukiSU..."
-              curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s "$BRANCH"
+            "BakaSU")
+              echo "添加 BakaSU..."
+              curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash -s "$BRANCH"
               ;;
           esac
 
@@ -1452,16 +1492,16 @@ jobs:
             echo "KSU_LATEST_COMMIT_DATE=未知" >> $GITHUB_ENV
           fi
 
-      - name: 修复 ReSukiSU SUSFS 源码兼容
-        if: inputs.ksu_variant == 'ReSukiSU' && inputs.enable_susfs
+      - name: 修复 BakaSU SUSFS 源码兼容
+        if: inputs.ksu_variant == 'BakaSU' && inputs.enable_susfs
         env:
           BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
           ABK_FEATURE_ID: susfs
-          ABK_FEATURE_FAILURE_MESSAGE: "ReSukiSU SUSFS compatibility integration failed"
+          ABK_FEATURE_FAILURE_MESSAGE: "BakaSU SUSFS compatibility integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
-          echo "ReSukiSU SUSFS compat cwd: $(pwd)"
+          echo "BakaSU SUSFS compat cwd: $(pwd)"
 
           python3 - <<'PY'
           from pathlib import Path
@@ -1486,7 +1526,7 @@ jobs:
                       return text.replace(anchor, anchor + include_line, 1)
               raise SystemExit(f"{path} missing include anchor for {include_line.strip()}")
 
-          def patch_resukisu_selinux_hide(path):
+          def patch_bakasu_selinux_hide(path):
               original = path.read_text()
               text = original
 
@@ -1574,7 +1614,7 @@ jobs:
 
               if text != original:
                   path.write_text(text)
-                  print(f"Patched ReSukiSU selinux_hide compatibility exports: {path}")
+                  print(f"Patched BakaSU selinux_hide compatibility exports: {path}")
 
               final_text = path.read_text()
               required = (
@@ -1589,7 +1629,7 @@ jobs:
               )
               missing = [marker for marker in required if marker not in final_text]
               if missing:
-                  raise SystemExit(f"{path} missing ReSukiSU SELinux compatibility markers: {missing}")
+                  raise SystemExit(f"{path} missing BakaSU SELinux compatibility markers: {missing}")
 
               forbidden_patterns = {
                   "fake_state": r"(?m)^\s*(?:static|__maybe_static)\s+struct\s+selinux_state\s+fake_state\s*;",
@@ -1605,7 +1645,7 @@ jobs:
                   if re.search(pattern, final_text)
               ]
               if present:
-                  raise SystemExit(f"{path} still has non-exported ReSukiSU SELinux symbols: {present}")
+                  raise SystemExit(f"{path} still has non-exported BakaSU SELinux symbols: {present}")
 
               if (
                   "void __nocfi security_compute_av_user_with_policy(" not in final_text
@@ -1613,7 +1653,7 @@ jobs:
               ):
                   raise SystemExit(f"{path} missing exported security_compute_av_user_with_policy()")
 
-          def patch_resukisu_rules(path):
+          def patch_bakasu_rules(path):
               original = path.read_text()
               text = re.sub(
                   r"(?m)^\s*(?:static\s+|__maybe_static\s+)?struct\s+selinux_policy\s*\*\s*backup_sepolicy\s*;",
@@ -1623,7 +1663,7 @@ jobs:
 
               if text != original:
                   path.write_text(text)
-                  print(f"Patched ReSukiSU backup_sepolicy owner: {path}")
+                  print(f"Patched BakaSU backup_sepolicy owner: {path}")
 
               final_text = path.read_text()
               if "struct selinux_policy *backup_sepolicy;" not in final_text:
@@ -1636,7 +1676,7 @@ jobs:
               if present:
                   raise SystemExit(f"{path} still has non-exported backup_sepolicy definition: {present}")
 
-          def patch_resukisu_selinux(path):
+          def patch_bakasu_selinux(path):
               original = path.read_text()
               text = original
               marker = "/* ABK: simonpunk SUSFS SELinux hooks reference KernelSU selinux_hide globals. */"
@@ -1654,7 +1694,7 @@ jobs:
 
               if text != original:
                   path.write_text(text)
-                  print(f"Removed duplicate-prone ReSukiSU SELinux globals from {path}")
+                  print(f"Removed duplicate-prone BakaSU SELinux globals from {path}")
 
               final_text = path.read_text()
               forbidden = (
@@ -1669,20 +1709,20 @@ jobs:
               )
               present = [marker_text for marker_text in forbidden if marker_text in final_text]
               if present:
-                  raise SystemExit(f"{path} still contains duplicate-prone ReSukiSU SELinux definitions: {present}")
+                  raise SystemExit(f"{path} still contains duplicate-prone BakaSU SELinux definitions: {present}")
 
           variant = "${{ inputs.ksu_variant }}"
           candidates = []
           seen = set()
           roots = [Path("KernelSU/kernel")]
-          if variant == "ReSukiSU":
+          if variant == "BakaSU":
               roots.extend([Path("common/drivers/kernelsu"), Path("drivers/kernelsu")])
 
           for base in roots:
               resolved = base.resolve()
               if resolved in seen:
                   continue
-              if variant == "ReSukiSU":
+              if variant == "BakaSU":
                   markers = ["Kbuild", "core/init.c", "feature/sucompat.c", "sulog/event.c"]
                   if any((base / marker).exists() for marker in markers):
                       candidates.append(base)
@@ -1692,12 +1732,12 @@ jobs:
                   seen.add(resolved)
 
           if not candidates:
-              if variant == "ReSukiSU":
-                  raise SystemExit("未找到实际 ReSukiSU 源码目录，无法应用 SUSFS 兼容修复")
-              raise SystemExit("未找到 KernelSU/kernel/ksu.c，无法应用 SukiSU/ReSukiSU SUSFS 兼容修复")
+              if variant == "BakaSU":
+                  raise SystemExit("未找到实际 BakaSU 源码目录，无法应用 SUSFS 兼容修复")
+              raise SystemExit("未找到 KernelSU/kernel/ksu.c，无法应用 SukiSU/BakaSU SUSFS 兼容修复")
 
           for kernel_dir in candidates:
-              print(f"检查 SukiSU/ReSukiSU SUSFS 源码目录: {kernel_dir}")
+              print(f"检查 SukiSU/BakaSU SUSFS 源码目录: {kernel_dir}")
               ksu_c = kernel_dir / "ksu.c"
               tree_text = "\n".join(
                   path.read_text(errors="ignore")
@@ -1724,7 +1764,7 @@ jobs:
               ]
 
               if not missing_true and not missing_false:
-                  print("SukiSU/ReSukiSU SUSFS static key definitions already exist.")
+                  print("SukiSU/BakaSU SUSFS static key definitions already exist.")
               else:
                   if not ksu_c.exists():
                       print(f"  {kernel_dir} 未提供 ksu.c，跳过 static key 注入")
@@ -1733,14 +1773,14 @@ jobs:
                       text = ksu_c.read_text()
                   anchor = '#include "infra/kernel_compat.h"\n'
                   if ksu_c.exists() and anchor not in text:
-                      if variant == "ReSukiSU":
+                      if variant == "BakaSU":
                           print(f"  {ksu_c} 未找到 kernel_compat.h include anchor，跳过 static key 注入")
                           continue
                       raise SystemExit("kernel_compat.h include anchor not found in KernelSU/kernel/ksu.c")
                   elif ksu_c.exists():
                       block = [
                           "",
-                          "/* ABK: SukiSU/ReSukiSU builtin SUSFS expects these inline hook static keys. */",
+                          "/* ABK: SukiSU/BakaSU builtin SUSFS expects these inline hook static keys. */",
                           "#ifdef CONFIG_KSU_SUSFS",
                       ]
                       block.extend(f"DEFINE_STATIC_KEY_TRUE({sym});" for sym in missing_true)
@@ -1751,9 +1791,9 @@ jobs:
                       block.extend(["#endif", ""])
 
                       ksu_c.write_text(text.replace(anchor, anchor + "\n".join(block), 1))
-                      print("Injected missing SukiSU/ReSukiSU SUSFS static key definitions:", ", ".join(missing_true + missing_false))
+                      print("Injected missing SukiSU/BakaSU SUSFS static key definitions:", ", ".join(missing_true + missing_false))
 
-              if variant == "ReSukiSU":
+              if variant == "BakaSU":
                   selinux_hide_c = kernel_dir / "feature/selinux_hide.c"
                   rules_c = kernel_dir / "selinux/rules.c"
                   selinux_c = kernel_dir / "selinux/selinux.c"
@@ -1763,9 +1803,9 @@ jobs:
                       raise SystemExit(f"{kernel_dir} missing selinux/rules.c")
                   if not selinux_c.exists():
                       raise SystemExit(f"{kernel_dir} missing selinux/selinux.c")
-                  patch_resukisu_selinux_hide(selinux_hide_c)
-                  patch_resukisu_rules(rules_c)
-                  patch_resukisu_selinux(selinux_c)
+                  patch_bakasu_selinux_hide(selinux_hide_c)
+                  patch_bakasu_rules(rules_c)
+                  patch_bakasu_selinux(selinux_c)
 
               sucompat_c = kernel_dir / "feature/sucompat.c"
               if sucompat_c.exists():
@@ -1776,7 +1816,7 @@ jobs:
                       before_marker = text.split(marker, 1)[0]
                       if preprocessor_delta(before_marker) > 0:
                           sucompat_c.write_text(text.replace(marker, "\n" + guard + marker, 1))
-                          print("Closed missing SukiSU/ReSukiSU builtin CONFIG_KSU_SUSFS block in feature/sucompat.c")
+                          print("Closed missing SukiSU/BakaSU builtin CONFIG_KSU_SUSFS block in feature/sucompat.c")
 
               sulog_event_c = kernel_dir / "sulog/event.c"
               if sulog_event_c.exists():
@@ -1797,12 +1837,12 @@ jobs:
                       ):
                           if old in text:
                               sulog_event_c.write_text(text.replace(old, new, 1))
-                              print("Fixed SukiSU/ReSukiSU builtin sulog grant_root argv type for CONFIG_KSU_SUSFS")
+                              print("Fixed SukiSU/BakaSU builtin sulog grant_root argv type for CONFIG_KSU_SUSFS")
                               break
           PY
 
       - name: 确保 KernelSU SUSFS ABI 兼容
-        if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU') && inputs.enable_susfs
+        if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU') && inputs.enable_susfs
         env:
           BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
           ABK_FEATURE_ID: kernelsu
@@ -2009,8 +2049,8 @@ jobs:
 
               cd ..
               ;;
-            "ReSukiSU")
-              echo "ReSukiSU 使用内置 SUSFS 支持"
+            "BakaSU")
+              echo "BakaSU 使用内置 SUSFS 支持"
               ;;
             "SukiSU")
               echo "SukiSU 使用单独步骤注入 SUSFS Kconfig 符号"
@@ -2020,15 +2060,15 @@ jobs:
           cd $KERNEL_ROOT/common
           patch -p1 < "50_add_susfs_in_gki-${ABK_ANDROID_VERSION}-${ABK_KERNEL_VERSION}.patch" || true
 
-          if [ "$ABK_KSU_VARIANT" == "SukiSU" ] || [ "$ABK_KSU_VARIANT" == "ReSukiSU" ]; then
+          if [ "$ABK_KSU_VARIANT" == "SukiSU" ] || [ "$ABK_KSU_VARIANT" == "BakaSU" ]; then
             SUSFS_C="./fs/susfs.c"
             if [ -f "$SUSFS_C" ] && grep -q '^static void susfs_run_sus_path_loop(' "$SUSFS_C"; then
               sed -i 's/^static void susfs_run_sus_path_loop(/void susfs_run_sus_path_loop(/' "$SUSFS_C"
-              echo "已导出 susfs_run_sus_path_loop 供 SukiSU/ReSukiSU LSM hook 调用"
+              echo "已导出 susfs_run_sus_path_loop 供 SukiSU/BakaSU LSM hook 调用"
             fi
           fi
 
-          if [ "$ABK_KSU_VARIANT" == "Official" ] || [ "$ABK_KSU_VARIANT" == "SukiSU" ] || [ "$ABK_KSU_VARIANT" == "ReSukiSU" ]; then
+          if [ "$ABK_KSU_VARIANT" == "Official" ] || [ "$ABK_KSU_VARIANT" == "SukiSU" ] || [ "$ABK_KSU_VARIANT" == "BakaSU" ]; then
             CURRENT_SUB="$ABK_SUB_LEVEL"
             if [[ ! "$CURRENT_SUB" =~ ^[0-9]+$ ]]; then
               CURRENT_SUB=99999
@@ -2301,6 +2341,34 @@ jobs:
                 sed -i '1i #ifdef CONFIG_KSU_SUSFS\n#include <linux/susfs_def.h>\n#endif' "$file"
               fi
               echo "已修复 memory.c 缺少 susfs_def.h 问题"
+            }
+
+            fix_task_mmu_missing_susfs_def() {
+              local file="./fs/proc/task_mmu.c"
+              [ -f "$file" ] || return 0
+              # 仅当 SUSFS 主体 hunk 已应用（使用了宏）但头部 hunk 被 reject 时注入
+              grep -q 'SUSFS_IS_INODE_SUS_MAP\|SUSFS_IS_INODE_OPEN_REDIRECT' "$file" || return 0
+              grep -qF 'susfs_def.h' "$file" && return 0
+              if grep -qF '#include <linux/pkeys.h>' "$file"; then
+                sed -i '/#include <linux\/pkeys.h>/a #if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)\n#include <linux\/susfs_def.h>\n#endif' "$file"
+              elif grep -qF '#include <linux/shmem_fs.h>' "$file"; then
+                sed -i '/#include <linux\/shmem_fs.h>/a #if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)\n#include <linux\/susfs_def.h>\n#endif' "$file"
+              else
+                sed -i '1i #ifdef CONFIG_KSU_SUSFS\n#include <linux/susfs_def.h>\n#endif' "$file"
+              fi
+              echo "已修复 task_mmu.c 缺少 susfs_def.h 问题"
+            }
+
+            fix_a13_515_namespace_missing_susfs_def() {
+              local file="./fs/namespace.c"
+              [ -f "$file" ] || return 0
+              grep -q 'DEFAULT_KSU_MNT_ID\|susfs_is_current_ksu_domain\|CL_COPY_MNT_NS' "$file" || return 0
+              grep -qF 'susfs_def.h' "$file" && return 0
+              sed -i '/#include <linux\/mnt_idmapping.h>/a #ifdef CONFIG_KSU_SUSFS\n#include <linux\/susfs_def.h>\n#endif' "$file"
+              if ! grep -q 'extern bool susfs_is_current_ksu_domain' "$file"; then
+                sed -i '/#include "internal.h"/a \\n#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\nextern bool susfs_is_current_ksu_domain(void);\nextern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;\n#ifndef CL_COPY_MNT_NS\n#define CL_COPY_MNT_NS BIT(25)\n#endif\n#endif' "$file"
+              fi
+              echo "已修复 android13-5.15 namespace.c 缺少 susfs_def.h 问题"
             }
 
             fix_selinux_extern_static() {
@@ -2595,6 +2663,13 @@ jobs:
                   fix_task_mmu_show_pad
                 fi
               fi
+              # 2026-10: susfs4ksu gki-android13-5.15 分支 rebase 到 5.15.211 后，
+              # task_mmu.c / namespace.c 的头部 hunk（注入 susfs_def.h include 与
+              # extern 声明）在 <5.15.211 的所有子版本上被 reject，而主体 hunk 仍会
+              # 应用，导致 SUSFS_IS_INODE_* / DEFAULT_KSU_MNT_ID 等符号未声明。
+              # 这里对所有 5.15 子版本无条件做源码兜底注入（自带幂等守卫）。
+              fix_task_mmu_missing_susfs_def
+              fix_a13_515_namespace_missing_susfs_def
             fi
 
             # Android 14 - 6.1 修复
@@ -2647,8 +2722,9 @@ jobs:
               fi
             fi
 
-            # Android 16 - 6.12 修复
-            if [[ "$ABK_ANDROID_VERSION" == "android16" && "$ABK_KERNEL_VERSION" == "6.12" ]]; then
+            # Android 16 - 6.12 / Android 17 - 6.18 修复
+            if { [[ "$ABK_ANDROID_VERSION" == "android16" && "$ABK_KERNEL_VERSION" == "6.12" ]] || \
+                 [[ "$ABK_ANDROID_VERSION" == "android17" && "$ABK_KERNEL_VERSION" == "6.18" ]]; }; then
               # 修复 setuid_hook.c 重复定义
               SETUID_HOOK="$KERNEL_ROOT/common/drivers/kernelsu/setuid_hook.c"
               if [ -f "$SETUID_HOOK" ]; then
@@ -2794,8 +2870,8 @@ jobs:
           print("SUSFS Kconfig 与核心链接契约校验通过")
           PY
 
-      - name: 注入 SukiSU/ReSukiSU KPM Kconfig
-        if: inputs.use_kpm && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU')
+      - name: 注入 SukiSU/BakaSU KPM Kconfig
+        if: inputs.use_kpm && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU')
         env:
           BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
           ABK_FEATURE_ID: kpm
@@ -3047,18 +3123,27 @@ jobs:
             }
           }
 
-          # Android 16/6.12 已带原生 ntsync.c 与 UAPI；基础补丁是新增文件式补丁，
+          # Android 16/6.12 与 Android 17/6.18 已带原生 ntsync.c 与 UAPI；基础补丁是新增文件式补丁，
           # 对原生源码既不能正向应用，也不能用反向 dry-run 判定为已应用。
-          if [[ "$ABK_ANDROID_VERSION" != "android16" || "$ABK_KERNEL_VERSION" != "6.12" ]]; then
+          NATIVE_NTSYNC="false"
+          if [[ "$ABK_ANDROID_VERSION" == "android16" && "$ABK_KERNEL_VERSION" == "6.12" ]] \
+            || [[ "$ABK_ANDROID_VERSION" == "android17" && "$ABK_KERNEL_VERSION" == "6.18" ]]; then
+            NATIVE_NTSYNC="true"
+          fi
+
+          if [ "$NATIVE_NTSYNC" != "true" ]; then
             apply_ntsync_patch "$BASE_PATCH"
           elif [ -f "$NTSYNC_SOURCE" ] && [ -f include/uapi/linux/ntsync.h ]; then
-            echo "NTsync 基础源码已由 android16-6.12 内核提供"
+            echo "NTsync 基础源码已由 ${ABK_ANDROID_VERSION}-${ABK_KERNEL_VERSION} 内核提供"
           else
-            echo "::error::android16-6.12 内核缺少原生 NTsync 源码或 UAPI"
+            echo "::error::${ABK_ANDROID_VERSION}-${ABK_KERNEL_VERSION} 内核缺少原生 NTsync 源码或 UAPI"
             exit 1
           fi
           if [[ "$ABK_ANDROID_VERSION" == "android12" && "$ABK_KERNEL_VERSION" == "5.10" ]]; then
             apply_android12_ntsync_compat "$PATCH_FILE"
+          elif [ "$ABK_ANDROID_VERSION" = "android17" ] && [ "$ABK_KERNEL_VERSION" = "6.18" ] \
+            && [ ! -f "$PATCH_FILE" ]; then
+            echo "::warning::未找到 ${ABK_ANDROID_VERSION}-${ABK_KERNEL_VERSION} 的 NTsync 兼容补丁 ($(basename "$PATCH_FILE"))，按内核原生实现继续。"
           else
             apply_ntsync_patch "$PATCH_FILE"
           fi
@@ -3159,9 +3244,48 @@ jobs:
           ABK_FEATURE_ID: virtualization
           ABK_FEATURE_END: "false"
           ABK_FEATURE_FAILURE_MESSAGE: "Virtualization patch download failed"
+          ABK_DROIDSPACES_REF: ${{ vars.ABK_DROIDSPACES_REF || '' }}
+          ABK_DROIDSPACES_DEFAULT_REF: v7.1.0
         run: |
-          git clone --depth 1 https://github.com/ravindu644/Droidspaces-OSS.git /tmp/virtualization-support-patches
-          echo "VIRTUALIZATION_SUPPORT_PATCHES=/tmp/virtualization-support-patches/Documentation/resources/kernel-patches/GKI" >> $GITHUB_ENV
+          set -euo pipefail
+
+          patches_dir="$RUNNER_TEMP/virtualization-support-patches"
+          rm -rf "$patches_dir"
+
+          # 上游 Droidspaces-OSS 的 GKI kABI 补丁与配置清单按 tag 演进，跟随 HEAD 会让
+          # 上游一次文档改动在同一天改变构建产物，因此默认钉到 v7.1.0。
+          # 优先级: 环境变量 ABK_DROIDSPACES_REF > config/config 的 droidspaces= > 默认值。
+          droidspaces_ref="${ABK_DROIDSPACES_REF:-}"
+          config_file="$GITHUB_WORKSPACE/config/config"
+          if [ -z "$droidspaces_ref" ] && [ -f "$config_file" ]; then
+            droidspaces_ref="$(awk -F= '
+              /^[[:space:]]*#/ { next }
+              $1 == "droidspaces" {
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
+                print $2
+                exit
+              }' "$config_file")"
+          fi
+          droidspaces_ref="${droidspaces_ref:-$ABK_DROIDSPACES_DEFAULT_REF}"
+          echo "虚拟化补丁 ref: $droidspaces_ref"
+
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cached-downloads.py" clone \
+            https://github.com/ravindu644/Droidspaces-OSS.git "$patches_dir" \
+            --ref "$droidspaces_ref" --depth 1
+
+          resolved_sha="$(git -C "$patches_dir" rev-parse HEAD)"
+          resolved_tag="$(git -C "$patches_dir" describe --tags --exact-match "$resolved_sha" 2>/dev/null || echo "$droidspaces_ref")"
+
+          gki_patches="$patches_dir/Documentation/resources/kernel-patches/GKI"
+          [ -d "$gki_patches" ] || {
+            echo "::error::虚拟化补丁目录缺失: Documentation/resources/kernel-patches/GKI (ref=$droidspaces_ref)"
+            exit 1
+          }
+
+          echo "VIRTUALIZATION_PATCHES_REF=$resolved_tag" >> $GITHUB_ENV
+          echo "VIRTUALIZATION_PATCHES_SHA=$resolved_sha" >> $GITHUB_ENV
+          echo "VIRTUALIZATION_SUPPORT_PATCHES=$gki_patches" >> $GITHUB_ENV
+          echo "已检出 Droidspaces-OSS@$resolved_tag ($resolved_sha)"
 
       - name: 集成虚拟化支持
         if: inputs.virtualization_support != 'off'
@@ -3200,15 +3324,78 @@ jobs:
           apply_sysvipc_below_612_compat() {
             local sched="include/linux/sched.h"
             [ -f "$sched" ] || fail "缺少 $sched"
-            if grep -qF 'ANDROID_KABI_USE(6, struct sysv_sem sysvsem);' "$sched"; then
+            if grep -qF "ANDROID_KABI_USE(${SLOT:0:1}, struct sysv_sem sysvsem);" "$sched"; then
               echo "SYSVIPC below-6.12 kABI fallback 已应用"
               return 0
             fi
-            perl -0pi -e 's/#ifdef CONFIG_SYSVIPC\n\tstruct sysv_sem\s+sysvsem;\n\tstruct sysv_shm\s+sysvshm;\n#endif/#ifdef CONFIG_SYSVIPC\n\t\/\/ struct sysv_sem\t\t\tsysvsem;\n\t\/\/ struct sysv_shm\t\t\tsysvshm;\n#endif/s' "$sched"
-            perl -0pi -e 's/\tANDROID_KABI_RESERVE\(6\);\n\tANDROID_KABI_RESERVE\(7\);\n\tANDROID_KABI_RESERVE\(8\);/\n#ifdef CONFIG_SYSVIPC\n\tANDROID_KABI_USE(6, struct sysv_sem sysvsem);\n\t_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(7); ANDROID_KABI_RESERVE(8), struct sysv_shm sysvshm);\n#else\n\tANDROID_KABI_RESERVE(6);\n\tANDROID_KABI_RESERVE(7);\n\tANDROID_KABI_RESERVE(8);\n#endif/s' "$sched"
+            # 上游补丁按固定上下文书写，ACK 各分支的 KABI 预留区排布不同 (例如 5.10 已占用
+            # 槽位 1/2，6.1 已占用 1/2/3)，因此 123 与 345 补丁在多数分支上会 reject。
+            # 这里按所选槽位就地改写，使三种槽位在任何分支上都可用，并在槽位已被占用时
+            # 明确报错，而不是静默产出破坏 kABI 的内核。
+            if ! ABK_SYSVIPC_SLOT="$SLOT" ABK_SYSVIPC_SCHED="$sched" python3 - \
+              > "${RUNNER_TEMP:-/tmp}/abk-sysvipc-slot.log" 2>&1 <<'PY'
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          slot = os.environ["ABK_SYSVIPC_SLOT"]
+          sched = Path(os.environ["ABK_SYSVIPC_SCHED"])
+          if not re.fullmatch(r"[1-8]{3}", slot) or len(set(slot)) != 3:
+              sys.exit(f"invalid slot: {slot}")
+          first, second, third = slot
+
+          text = sched.read_text()
+          occupied = sorted(set(re.findall(r"ANDROID_KABI_USE\((\d),", text)))
+          conflicts = sorted(set(occupied) & set(slot))
+          if conflicts:
+              sys.exit(
+                  "slot {} is already taken by ANDROID_KABI_USE({}); pick another slot "
+                  "(678 fits every current ACK line)".format(slot, ",".join(conflicts))
+              )
+
+          fields = (
+              "#ifdef CONFIG_SYSVIPC\n"
+              "\tstruct sysv_sem\t\t\tsysvsem;\n"
+              "\tstruct sysv_shm\t\t\tsysvshm;\n"
+              "#endif"
+          )
+          commented = (
+              "#ifdef CONFIG_SYSVIPC\n"
+              "\t// struct sysv_sem\t\t\tsysvsem;\n"
+              "\t// struct sysv_shm\t\t\tsysvshm;\n"
+              "#endif"
+          )
+          if fields not in text:
+              sys.exit("CONFIG_SYSVIPC fields are not in their stock shape")
+
+          reserve = (
+              "\tANDROID_KABI_RESERVE({});\n"
+              "\tANDROID_KABI_RESERVE({});\n"
+              "\tANDROID_KABI_RESERVE({});"
+          ).format(first, second, third)
+          if reserve not in text:
+              sys.exit(f"ANDROID_KABI_RESERVE({first},{second},{third}) block not found")
+          replacement = (
+              "\n#ifdef CONFIG_SYSVIPC\n"
+              "\tANDROID_KABI_USE({}, struct sysv_sem sysvsem);\n"
+              "\t_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE({}); ANDROID_KABI_RESERVE({}), "
+              "struct sysv_shm sysvshm);\n"
+              "#else\n"
+              "{}\n"
+              "#endif"
+          ).format(first, second, third, reserve)
+
+          text = text.replace(fields, commented, 1).replace(reserve, replacement, 1)
+          sched.write_text(text)
+          PY
+            then
+              cat "${RUNNER_TEMP:-/tmp}/abk-sysvipc-slot.log"
+              fail "SYSVIPC kABI fallback 注入失败 (slot=$SLOT)；该内核线的预留槽位可能已被占用，请改用 678"
+            fi
             grep -qF '// struct sysv_sem' "$sched" || fail "SYSVIPC 原字段注释失败"
-            grep -qF 'ANDROID_KABI_USE(6, struct sysv_sem sysvsem);' "$sched" || fail "SYSVIPC kABI fallback 注入失败"
-            echo "已应用 SYSVIPC below-6.12 kABI fallback"
+            grep -qF "ANDROID_KABI_USE(${SLOT:0:1}, struct sysv_sem sysvsem);" "$sched" || fail "SYSVIPC kABI fallback 注入失败"
+            echo "已应用 SYSVIPC below-6.12 kABI fallback (slot=$SLOT)"
           }
 
           apply_mqueue_510_compat() {
@@ -3239,7 +3426,7 @@ jobs:
           }
 
           case "$KERNEL_VER" in
-            6.12)
+            6.12|6.18)
               PATCH_FILE="$VIRTUALIZATION_SUPPORT_PATCHES/kernel-6.12/001.GKI-6.12-or-above-fix_sysvipc_kabi.patch"
               if ! try_apply_patch "$PATCH_FILE"; then
                 apply_sysvipc_612_plus_compat
@@ -3248,16 +3435,15 @@ jobs:
             5.10|5.15|6.1|6.6)
               case "$SLOT" in
                 678|123|345) ;;
+                on) SLOT=678 ;;
                 *) fail "$KERNEL_VER 需要选择 678、123 或 345 槽位，当前为 $SLOT" ;;
               esac
               SLOT_NAME=$(echo "$SLOT" | sed 's/\(.\)/\1_/g; s/_$//')
               PATCH_FILE="$VIRTUALIZATION_SUPPORT_PATCHES/below-kernel-6.12/001.GKI-below-6.12-fix_sysvipc_kabi_${SLOT_NAME}.patch"
+              # 上游补丁按固定上下文书写，只有 6_7_8 在全部 ACK 分支上都能干净应用；
+              # reject 时按所选槽位就地改写，因此三种槽位都可用。
               if ! try_apply_patch "$PATCH_FILE"; then
-                if [ "$SLOT" = "678" ]; then
-                  apply_sysvipc_below_612_compat
-                else
-                  fail "SYSVIPC kABI patch 应用失败: $(basename "$PATCH_FILE")"
-                fi
+                apply_sysvipc_below_612_compat
               fi
               ;;
             *)
@@ -3274,10 +3460,10 @@ jobs:
             fi
           fi
 
-          # Android 16 / 6.12 的 rust_binder.ko 在启用 IPC_NS 后会引用
+          # Android 16 / 6.12 与 Android 17 / 6.18 的 rust_binder.ko 在启用 IPC_NS 后会引用
           # init_ipc_ns 与 put_ipc_ns，但当前 AOSP common 分支尚未导出这两个符号。
           # 这里补齐导出，避免 modpost 因 undefined symbol 失败。
-          if [ "$KERNEL_VER" = "6.12" ]; then
+          if [ "$KERNEL_VER" = "6.12" ] || [ "$KERNEL_VER" = "6.18" ]; then
             if [ -f "ipc/msgutil.c" ] && ! grep -qF 'EXPORT_SYMBOL(init_ipc_ns);' "ipc/msgutil.c"; then
               sed -i '/^struct msg_msgseg {/i EXPORT_SYMBOL(init_ipc_ns);' "ipc/msgutil.c"
               echo "已为 init_ipc_ns 补充符号导出"
@@ -3306,13 +3492,20 @@ jobs:
 
           config_defined() {
             local name="${1#CONFIG_}"
-            local file
-            while IFS= read -r -d '' file; do
-              if grep -Eq "^[[:space:]]*(menuconfig|config)[[:space:]]+${name}([[:space:]]|$)" "$file"; then
-                return 0
-              fi
-            done < <(find . -type f -name 'Kconfig*' -print0)
-            return 1
+            # 一次性建立 Kconfig 符号索引后查表，避免为每个配置项重复 find 整棵内核树。
+            # 索引写在 RUNNER_TEMP 而非内核树内，custom_git 模式下不会混入特性提交。
+            if [ "${ABK_KCONFIG_INDEX_READY:-false}" != "true" ]; then
+              ABK_KCONFIG_INDEX="${RUNNER_TEMP:-/tmp}/abk-kconfig-index-${KERNEL_VER}.txt"
+              # 仅做 source 转发、不含 config 行的 Kconfig 会让 grep 返回 1，
+              # 进而被 pipefail 判为失败，故对 grep 阶段单独放行。
+              find . -type f -name 'Kconfig*' -print0 |
+                { xargs -0 grep -hE '^[[:space:]]*(menuconfig|config)[[:space:]]+[A-Za-z0-9_]+' || true; } |
+                sed -E 's/^[[:space:]]*(menuconfig|config)[[:space:]]+([A-Za-z0-9_]+).*$/\2/' |
+                sort -u > "$ABK_KCONFIG_INDEX"
+              [ -s "$ABK_KCONFIG_INDEX" ] || fail "无法建立 Kconfig 符号索引，虚拟化配置校验不可用"
+              ABK_KCONFIG_INDEX_READY=true
+            fi
+            grep -qxF "$name" "$ABK_KCONFIG_INDEX"
           }
 
           enable_required_config() {
@@ -3340,6 +3533,17 @@ jobs:
           enable_required_config CONFIG_PID_NS
           enable_required_config CONFIG_DEVTMPFS
 
+          # 上游 v7.1.0 GKI 清单新增: 容器内 Docker 的 unsafe procfs 修复
+          enable_config_if_defined CONFIG_USER_NS
+
+          # 上游 v7.1.0 GKI 清单新增: NAT66 (缺失时 NAT 容器只有 IPv4)
+          enable_config_if_defined CONFIG_IP6_NF_NAT
+          enable_config_if_defined CONFIG_IP6_NF_TARGET_MASQUERADE
+
+          # 上游 v7.1.0 GKI 清单新增: macvlan 模式。上游已在 5.15 GKI 树上验证
+          # 8423 个导出符号无一变化，驱动自包含，属 kABI 安全项。
+          enable_config_if_defined CONFIG_MACVLAN
+
           # 可选: 网络相关配置 (Docker/NAT 模式)
           enable_config_if_defined CONFIG_NETFILTER_XT_MATCH_ADDRTYPE
           enable_config_if_defined CONFIG_NETFILTER_XT_TARGET_LOG
@@ -3352,6 +3556,24 @@ jobs:
           # REJECT 目标在不同内核版本上的符号名可能不同，按实际存在的配置启用
           enable_config_if_defined CONFIG_NETFILTER_XT_TARGET_REJECT
           enable_config_if_defined CONFIG_IP_NF_TARGET_REJECT
+
+          # NixOS 容器依赖 tmpfs 的 xattr 与 POSIX ACL。主流程的「配置内核选项」步骤
+          # 也会写入这两项，这里重复写入是为了让虚拟化支持自身可独立生效 (幂等)。
+          enable_config_if_defined CONFIG_TMPFS_XATTR
+          enable_config_if_defined CONFIG_TMPFS_POSIX_ACL
+
+          # 上游 v7.1.0 明确要求 GKI 上不得开启资源限制相关项:
+          # CONFIG_CFS_BANDWIDTH 与 CONFIG_CGROUP_PIDS 会改动调度器与 cgroup 结构体大小，
+          # 在 5.15 GKI 树上改变了约四千个导出符号的校验和，且没有任何 kABI 补丁可覆盖，
+          # 原厂厂商模块会拒绝加载导致 bootloop。ABK 只产出 boot.img，无法同时重刷
+          # vendor_boot / vendor_dlkm / system_dlkm，因此这两项一律不由本步骤开启。
+          # (android16-6.12 与 android17-6.18 的 stock gki_defconfig 自带这两项，属上游基线，保持原样。)
+          [ -f "$DEFCONFIG.orig" ] || fail "缺少 defconfig 基线 $DEFCONFIG.orig，无法校验虚拟化配置是否破坏 kABI"
+          for forbidden in CONFIG_CFS_BANDWIDTH CONFIG_CGROUP_PIDS; do
+            if ! grep -qxF "${forbidden}=y" "$DEFCONFIG.orig" && grep -qxF "${forbidden}=y" "$DEFCONFIG"; then
+              fail "虚拟化支持拒绝开启 ${forbidden}: GKI 上无 kABI 补丁覆盖，会导致厂商模块拒绝加载并 bootloop"
+            fi
+          done
 
           echo "虚拟化支持集成完成"
 
@@ -3408,15 +3630,7 @@ jobs:
               fi
             done
           else
-            echo "6.12 检测到新式 zram backend，跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS 补丁栈。"
-          fi
-
-          if [ "${EFFECTIVE_ZRAM_USE_OPTIONAL_ALGO:-false}" = "true" ]; then
-            chmod +x "$ZZH_PATCHES/zram/setup_zstdp.sh"
-            ABK_ZSTDP_UPSTREAM_TAG="v6.15" \
-              bash "$ZZH_PATCHES/zram/setup_zstdp.sh" integrate "$PWD"
-          else
-            echo "未请求额外可选 ZRAM 算法，跳过附加算法集成。"
+            echo "${{ inputs.kernel_version }} 检测到新式 zram backend，跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS 补丁栈。"
           fi
 
       - name: 修复 6.6 WiFi/蓝牙兼容性（三星 + 小米）
@@ -3498,11 +3712,6 @@ jobs:
             set_config_value "$1" n
           }
 
-          enable_zstdp_base() {
-            set_config_value CONFIG_XXHASH y
-            set_config_value CONFIG_CRYPTO_ZSTDP y
-          }
-
           enable_legacy_full_algos() {
             set_config_value CONFIG_CRYPTO_LZO y
             set_config_value CONFIG_CRYPTO_LZ4 y
@@ -3531,7 +3740,6 @@ jobs:
               "deflate")    set_config_value CONFIG_CRYPTO_DEFLATE y ;;
               "842")        set_config_value CONFIG_CRYPTO_842 y ;;
               "zstd")       set_config_value CONFIG_CRYPTO_ZSTD y ;;
-              "zstdp")      enable_zstdp_base ;;
               *) echo "::warning::未知的 ZRAM 算法: $algo，跳过" ;;
             esac
           }
@@ -3545,9 +3753,8 @@ jobs:
               "deflate")    set_config_value CONFIG_ZRAM_BACKEND_DEFLATE y ;;
               "842")        set_config_value CONFIG_ZRAM_BACKEND_842 y ;;
               "zstd")       set_config_value CONFIG_ZRAM_BACKEND_ZSTD y ;;
-              "zstdp")      set_config_value CONFIG_ZRAM_BACKEND_ZSTDP y; enable_zstdp_base ;;
               "lz4k"|"lz4k_oplus"|"lz4kd")
-                echo "::warning::${algo} 暂不支持 6.12 新式 zram backend，跳过"
+                echo "::warning::${algo} 暂不支持新式 zram backend（6.12/6.18），跳过"
                 ;;
               *)
                 echo "::warning::未知的 ZRAM 算法: $algo，跳过"
@@ -3562,12 +3769,42 @@ jobs:
           set_config_value CONFIG_ZSMALLOC y
           set_config_value CONFIG_ZRAM y
 
-          if [ -f "$KERNEL_ROOT/common/modules.bzl" ]; then
-            sed -i 's/"drivers\/block\/zram\/zram\.ko",//g; s/"mm\/zsmalloc\.ko",//g' "$KERNEL_ROOT/common/modules.bzl"
-          fi
+          python3 - "$KERNEL_ROOT" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          ENTRIES = ("drivers/block/zram/zram.ko", "mm/zsmalloc.ko")
+          QUOTES = "\"'"
+          patched, skipped = [], []
+          for rel in ("common/modules.bzl", "common/bazel/modules_private.bzl"):
+              path = root / rel
+              if not path.exists():
+                  skipped.append(rel)
+                  continue
+              text = path.read_text(encoding="utf-8")
+              new = text
+              for entry in ENTRIES:
+                  escaped = re.escape(entry)
+                  line_pattern = re.compile(
+                      rf"^[ \t]*[{QUOTES}]{escaped}[{QUOTES}][ \t]*,?[ \t]*(?:#.*)?\n?",
+                      re.M,
+                  )
+                  new, removed_count = line_pattern.subn("", new)
+                  if removed_count == 0:
+                      new = re.sub(rf"[{QUOTES}]{escaped}[{QUOTES}][ \t]*,", "", new)
+                  if entry in new:
+                      raise SystemExit(f"{rel}: 无法安全移除模块条目 {entry}")
+              if new != text:
+                  path.write_text(new, encoding="utf-8")
+                  patched.append(rel)
+          print("ZRAM/ZSMALLOC 模块清单清理:", ", ".join(patched) if patched else "无条目可删")
+          print("未找到的清单文件:", ", ".join(skipped) if skipped else "无")
+          PY
 
           if grep -q "CONFIG_ZSMALLOC=y" "$CONFIG_FILE" && grep -q "CONFIG_ZRAM=y" "$CONFIG_FILE"; then
-            if [ "${{ inputs.kernel_version }}" != "6.12" ]; then
+            if [ "${EFFECTIVE_MODERN_GKI:-false}" != "true" ]; then
               while IFS= read -r line; do
                 case "$line" in
                   ''|'#'*) continue ;;
@@ -3582,7 +3819,7 @@ jobs:
           # ---- ZRAM 完整算法支持 ----
           if [ "${EFFECTIVE_ZRAM_FULL_ALGO:-false}" = "true" ]; then
             echo "启用 ZRAM 完整算法支持..."
-            if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
+            if [ "${EFFECTIVE_MODERN_GKI:-false}" = "true" ]; then
               enable_modern_full_algos
             else
               enable_legacy_full_algos
@@ -3593,7 +3830,7 @@ jobs:
             IFS=',' read -ra ALGOS <<< "$EFFECTIVE_ZRAM_EXTRA_ALGOS"
             for raw_algo in "${ALGOS[@]}"; do
               algo=$(echo "$raw_algo" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
-              if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
+              if [ "${EFFECTIVE_MODERN_GKI:-false}" = "true" ]; then
                 enable_modern_algo "$algo"
               else
                 enable_legacy_algo "$algo"
@@ -3911,16 +4148,26 @@ jobs:
           kpm_kconfig_ready="${ABK_KPM_KCONFIG_READY:-false}"
           kpm_kconfig_path="${ABK_KPM_KCONFIG_PATH:-}"
 
-          cat >> "$DEFCONFIG" << 'EOF'
-          CONFIG_TMPFS_XATTR=y
-          CONFIG_TMPFS_POSIX_ACL=y
-          EOF
+          # NixOS 容器需要 tmpfs 的 xattr 与 POSIX ACL。虚拟化支持也会写入这两项，
+          # 这里保持幂等，避免 defconfig 出现重复赋值 (kconfig 会报 override 警告)。
+          ensure_global_config() {
+            local cfg="$1"
+            grep -qxF "${cfg}=y" "$DEFCONFIG" && return 0
+            if grep -qxF "# ${cfg} is not set" "$DEFCONFIG"; then
+              sed -i "s|^# ${cfg} is not set$|${cfg}=y|" "$DEFCONFIG"
+            else
+              echo "${cfg}=y" >> "$DEFCONFIG"
+            fi
+          }
+
+          ensure_global_config CONFIG_TMPFS_XATTR
+          ensure_global_config CONFIG_TMPFS_POSIX_ACL
           if [ "${{ inputs.ksu_variant }}" != "None" ] && ! feature_disabled kernelsu; then
             echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           fi
 
           kpm_config_supported="false"
-          if [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; then
+          if [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "BakaSU" ]; then
             if [ "$kpm_kconfig_ready" = "true" ] && [ -f "$kpm_kconfig_path" ]; then
               kpm_config_supported="true"
             else
@@ -3933,7 +4180,7 @@ jobs:
             fi
           fi
 
-          if [ "${{ inputs.use_kpm }}" == "true" ] && ! feature_disabled kpm && { [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; }; then
+          if [ "${{ inputs.use_kpm }}" == "true" ] && ! feature_disabled kpm && { [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "BakaSU" ]; }; then
             if [ "$kpm_config_supported" = "true" ]; then
               echo "CONFIG_KPM=y" >> "$DEFCONFIG"
               case "$kpm_kconfig_status" in
@@ -3951,14 +4198,14 @@ jobs:
               echo "::error::请求启用 KPM，但当前 ${{ inputs.ksu_variant }} 源码树仍未提供 config KPM。"
               exit 1
             fi
-          elif [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; then
+          elif [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "BakaSU" ]; then
             if [ "$kpm_config_supported" = "true" ]; then
               echo "# CONFIG_KPM is not set" >> "$DEFCONFIG"
               echo "检测到 KPM Kconfig，已显式关闭 CONFIG_KPM。"
             fi
           fi
 
-          if [ "${{ inputs.enable_susfs }}" != "true" ] && { [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "ReSukiSU" ]; }; then
+          if [ "${{ inputs.enable_susfs }}" != "true" ] && { [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "BakaSU" ]; }; then
             cat >> "$DEFCONFIG" << 'EOF'
           # CONFIG_KSU_SUSFS is not set
           # CONFIG_KSU_SUSFS_SUS_PATH is not set
@@ -3977,7 +4224,7 @@ jobs:
           if [[ ! "$CURRENT_SUB" =~ ^[0-9]+$ ]]; then
             CURRENT_SUB=99999
           fi
-          if [[ ( "${{ inputs.ksu_variant }}" == "Official" || "${{ inputs.ksu_variant }}" == "ReSukiSU" ) && "${{ inputs.android_version }}" == "android13" && "${{ inputs.kernel_version }}" == "5.15" && "$CURRENT_SUB" -ge 41 && "$CURRENT_SUB" -le 137 ]]; then
+          if [[ ( "${{ inputs.ksu_variant }}" == "Official" || "${{ inputs.ksu_variant }}" == "BakaSU" ) && "${{ inputs.android_version }}" == "android13" && "${{ inputs.kernel_version }}" == "5.15" && "$CURRENT_SUB" -ge 41 && "$CURRENT_SUB" -le 137 ]]; then
             {
               echo "CONFIG_KALLSYMS=y"
               echo "CONFIG_KALLSYMS_ALL=y"
@@ -3987,7 +4234,7 @@ jobs:
           sed -i 's/check_defconfig//' ./common/build.config.gki
 
       - name: 配置 KPM 超级密码
-        if: inputs.use_kpm && inputs.kpm_password != '' && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU')
+        if: inputs.use_kpm && inputs.kpm_password != '' && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU')
         run: |
           echo "KPM 超级密码将在 Image KPM patch 阶段写入。"
           echo "CONFIG_KPM_SUPER_KEY 不是当前 KSU Kconfig 符号，不能写入 defconfig fragment。"
@@ -4037,8 +4284,61 @@ jobs:
           if [ -f "build/build.sh" ]; then
             sed -i 's/-dirty//' ./common/scripts/setlocalversion
           else
-            sed -i '/^[[:space:]]*"protected_exports_list"[[:space:]]*:[[:space:]]*"android\/abi_gki_protected_exports_aarch64",$/d' ./common/BUILD.bazel
-            sed -i '/kmi_symbol_list_strict_mode/d' ./common/BUILD.bazel
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("common/BUILD.bazel")
+          if not path.exists():
+              print("未找到 common/BUILD.bazel，跳过属性清理")
+          else:
+              text = path.read_text(encoding="utf-8")
+              removed = []
+
+              kmi_multi = re.compile(
+                  r'^[ \t]*(?:"kmi_symbol_list_strict_mode"\s*:|kmi_symbol_list_strict_mode\s*=)\s*select\(\{.*?\}\),?[ \t]*\n?',
+                  re.M | re.S,
+              )
+              kmi_single = re.compile(
+                  r'^[ \t]*(?:"kmi_symbol_list_strict_mode"\s*:|kmi_symbol_list_strict_mode\s*=)[^\n]*$',
+                  re.M,
+              )
+              text, count = kmi_multi.subn("", text)
+              if count:
+                  removed.append("kmi_symbol_list_strict_mode(select)")
+              if kmi_single.search(text):
+                  if re.search(r'^[ \t]*(?:"kmi_symbol_list_strict_mode"\s*:|kmi_symbol_list_strict_mode\s*=)[^\n]*select\(', text, re.M):
+                      raise SystemExit("BUILD.bazel: kmi_symbol_list_strict_mode 多行形式无法安全移除")
+                  text, count = kmi_single.subn("", text)
+                  if count:
+                      removed.append("kmi_symbol_list_strict_mode")
+              if re.search(r'^[ \t]*(?:"kmi_symbol_list_strict_mode"\s*:|kmi_symbol_list_strict_mode\s*=)', text, re.M):
+                  raise SystemExit("BUILD.bazel: kmi_symbol_list_strict_mode 形式无法安全移除")
+
+              pe_multi = re.compile(
+                  r'^[ \t]*"protected_exports_list"\s*:\s*select\(\{.*?\}\),?[ \t]*\n?',
+                  re.M | re.S,
+              )
+              pe_single = re.compile(
+                  r'^[ \t]*"protected_exports_list"\s*:[^\n]*$',
+                  re.M,
+              )
+              text, count = pe_multi.subn("", text)
+              if count:
+                  removed.append("protected_exports_list(select)")
+              if pe_single.search(text):
+                  if re.search(r'^[ \t]*"protected_exports_list"\s*:[^\n]*select\(', text, re.M):
+                      raise SystemExit("BUILD.bazel: protected_exports_list 多行形式无法安全移除")
+                  text, count = pe_single.subn("", text)
+                  if count:
+                      removed.append("protected_exports_list")
+              if re.search(r'^[ \t]*"protected_exports_list"\s*:', text, re.M):
+                  raise SystemExit("BUILD.bazel: protected_exports_list 形式无法安全移除")
+
+              if removed:
+                  path.write_text(text, encoding="utf-8")
+              print("BUILD.bazel 属性清理:", ", ".join(removed) if removed else "无需修改")
+          PY
             rm -rf ./common/android/abi_gki_protected_exports_*
             sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
           fi
@@ -4057,6 +4357,7 @@ jobs:
               "android14-6.1")  KMI_TAG="android14-11" ;;
               "android15-6.6")  KMI_TAG="android15-8" ;;
               "android16-6.12") KMI_TAG="android16-5" ;;
+              "android17-6.18") KMI_TAG="android17-5" ;;
               *) KMI_TAG="${{ inputs.android_version }}" ;;
             esac
 
@@ -5005,19 +5306,18 @@ jobs:
                           const char __user *argv_user_ptr = get_user_arg_ptr(*argv_user, 0);
                           struct ksu_sulog_pending_event *pending_sucompat = NULL;
 
-                          pr_info("hook_manager: escape to root for init executing ksud: %d\\n", current->pid);
-                          pending_sucompat = ksu_sulog_capture_sucompat(filename->name, (struct user_arg_ptr *)argv_user, GFP_KERNEL);
-                          ret = escape_to_root_for_init();
-                          if (ret) {
-                              pr_err("escape_to_root_for_init() failed: %d\\n", ret);
-                              return ret;
-                          }
                           if (!argv_user_ptr || IS_ERR(argv_user_ptr)) {
                               pr_err("!argv_user_ptr || IS_ERR(argv_user_ptr)\\n");
                               return -EFAULT;
                           }
+                          pr_info("hook_manager: escape to root for init executing ksud: %d\\n", current->pid);
+                          pending_sucompat = ksu_sulog_capture_sucompat(filename->name, (struct user_arg_ptr *)argv_user, GFP_KERNEL);
+                          ret = escape_to_root_for_init();
                           ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
-                          return 0;
+                          if (ret) {
+                              pr_err("escape_to_root_for_init() failed: %d\\n", ret);
+                          }
+                          return ret;
                       } else if (likely(strstr(filename->name, "/app_process") == NULL &&
                                          strstr(filename->name, "/adbd") == NULL) &&
                                  !susfs_is_current_proc_umounted()) {
@@ -5049,26 +5349,33 @@ jobs:
                                                int *__never_use_flags)
               {
                   struct filename *filename;
-                  const char __user *argv_user_ptr = get_user_arg_ptr(*((struct user_arg_ptr *)argv_user), 0);
+                  const char __user *argv_user_ptr;
                   struct ksu_sulog_pending_event *pending_sucompat = NULL;
                   int ret;
 
-                  if (unlikely(!filename_ptr))
-                      return 0;
+                  if (unlikely(!filename_ptr || !*filename_ptr || !argv_user || !envp_user))
+                      return 1;
 
                   filename = *filename_ptr;
-                  if (IS_ERR(filename))
-                      return 0;
+                  if (IS_ERR(filename) || !filename->name)
+                      return 1;
 
+                  /* Zero means a successful su session to the SUSFS caller. */
                   if (!ksu_handle_execveat_init(filename, (struct user_arg_ptr *)argv_user, (struct user_arg_ptr *)envp_user))
-                      return 0;
+                      return strcmp(filename->name, KSUD_PATH) ? 1 : 0;
 
                   if (likely(memcmp(filename->name, su_path, sizeof(su_path))))
-                      return 0;
+                      return 1;
 
                   if (current_chrooted()) {
                       pr_err("ksu_handle_execveat_sucompat: su found but NOT allowed! Because current process is running in chrooted environment\\n");
-                      return 0;
+                      return 1;
+                  }
+
+                  argv_user_ptr = get_user_arg_ptr(*((struct user_arg_ptr *)argv_user), 0);
+                  if (!argv_user_ptr || IS_ERR(argv_user_ptr)) {
+                      pr_err("!argv_user_ptr || IS_ERR(argv_user_ptr)\\n");
+                      return -EFAULT;
                   }
 
                   pr_info("ksu_handle_execveat_sucompat: su found\\n");
@@ -5081,13 +5388,8 @@ jobs:
                   if (ret)
                       pr_err("escape_with_root_profile() failed: %d\\n", ret);
 
-                  if (!argv_user_ptr || IS_ERR(argv_user_ptr)) {
-                      pr_err("!argv_user_ptr || IS_ERR(argv_user_ptr)\\n");
-                      return 0;
-                  }
-
                   ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
-                  return 0;
+                  return ret;
               }
 
               #ifdef CONFIG_KSU_SUSFS
@@ -5095,8 +5397,12 @@ jobs:
                                                      void *argv_user, void *envp_user,
                                                      int *flags, int *retval)
               {
-                  if (*retval >= 0)
-                      (void)ksu_install_su_fd();
+                  /* Never inject a driver FD into an ordinary or failed exec. */
+                  if (!retval || *retval < 0 || !filename_ptr || !*filename_ptr ||
+                      IS_ERR(*filename_ptr) || !(*filename_ptr)->name ||
+                      strcmp((*filename_ptr)->name, KSUD_PATH))
+                      return 0;
+                  (void)ksu_install_su_fd();
                   return 0;
               }
               #endif
@@ -5105,7 +5411,7 @@ jobs:
                                       void *envp, int *flags)
               {
                   if (ksu_handle_execveat_ksud(fd, filename_ptr, argv, envp, flags))
-                      return 0;
+                      return 1;
 
                   return ksu_handle_execveat_sucompat(fd, filename_ptr, argv, envp, flags);
               }
@@ -5180,6 +5486,26 @@ jobs:
 
               // sucompat: permitted process can execute 'su' to gain root access.
               """)
+
+              # ABK: 新版 susfs4ksu 的 10_enable_susfs_for_ksu.patch 会把
+              # struct user_arg_ptr 与 static inline get_user_arg_ptr 注入
+              # runtime/ksud.h，而 sucompat.c 直接 include 该头文件；此时必须
+              # 去掉注入文本里的同名定义，否则报 redefinition of 'get_user_arg_ptr'。
+              # 旧版补丁树（ksud.h 无此定义）仍保留注入定义。
+              ksud_header = ksu_dir / "runtime/ksud.h"
+              if ksud_header.exists() and "static inline const char __user *get_user_arg_ptr" in ksud_header.read_text():
+                  stripped = re.sub(
+                      r"static const char __user \*get_user_arg_ptr\(struct user_arg_ptr argv, int nr\)\n\{.*?\n\}\n\n",
+                      "",
+                      replacement,
+                      count=1,
+                      flags=re.S,
+                  )
+                  if stripped == replacement:
+                      raise SystemExit(f"{path}: runtime/ksud.h 已定义 get_user_arg_ptr，但未能在注入文本中定位重复定义")
+                  replacement = stripped
+                  print(f"runtime/ksud.h 已提供 get_user_arg_ptr，已移除 {path} 注入文本中的重复定义")
+
               region_pattern = re.compile(
                   r'#define SU_PATH "/system/bin/su"\n#define SH_PATH "/system/bin/sh"\n.*?\n// sucompat: permitted process can execute \'su\' to gain root access\.\n',
                   re.S,
@@ -5694,8 +6020,8 @@ jobs:
               print("Official SUSFS 源码兼容修复无需修改。")
           PY
 
-      - name: 修复 Official SUSFS 6.1-6.12 SELinux 导出
-        if: inputs.ksu_variant == 'Official' && inputs.enable_susfs && (inputs.kernel_version == '6.1' || inputs.kernel_version == '6.6' || inputs.kernel_version == '6.12')
+      - name: 修复 Official SUSFS 6.1-6.18 SELinux 导出
+        if: inputs.ksu_variant == 'Official' && inputs.enable_susfs && (inputs.kernel_version == '6.1' || inputs.kernel_version == '6.6' || inputs.kernel_version == '6.12' || inputs.kernel_version == '6.18')
         env:
           BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
           ABK_FEATURE_ID: susfs
@@ -5862,13 +6188,13 @@ jobs:
           original = text
 
           text = ensure_official_selinux_hide_exports(text, path)
-          validate_official_selinux_hide_exports(text, path, "Official 6.1-6.12 SELinux 导出")
+          validate_official_selinux_hide_exports(text, path, "Official 6.1-6.18 SELinux 导出")
 
           if text != original:
               path.write_text(text)
-              print(f"已修复 {path} 的 Official 6.1-6.12 SELinux 导出")
+              print(f"已修复 {path} 的 Official 6.1-6.18 SELinux 导出")
           else:
-              print(f"{path} 的 Official 6.1-6.12 SELinux 导出已满足要求")
+              print(f"{path} 的 Official 6.1-6.18 SELinux 导出已满足要求")
           PY
 
       - name: 补齐 SukiSU SUSFS 内联 hook 符号
@@ -5882,8 +6208,8 @@ jobs:
           set -euo pipefail
           python3 "$GITHUB_WORKSPACE/.github/scripts/fix_sukisu_susfs.py" "$KERNEL_ROOT"
 
-      - name: 最终修复 SukiSU/ReSukiSU 源码兼容
-        if: inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU'
+      - name: 最终修复 SukiSU/BakaSU 源码兼容
+        if: inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU'
         env:
           BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
           ABK_FEATURE_ID: kernelsu
@@ -5959,7 +6285,17 @@ jobs:
 
           def ensure_post_execveat_wrapper(path):
               text = path.read_text()
+              guard = """    /* ABK: never inject an anonymous driver fd into ordinary execs. */
+              if (!retval || *retval < 0 || !filename_ptr || !*filename_ptr ||
+                  IS_ERR(*filename_ptr) || strcmp((*filename_ptr)->name, KSUD_PATH))
+                  return 0;
+          """
               if "int ksu_handle_post_execveat_sucompat(" in text:
+                  old = "    if (*retval >= 0)\n        (void)ksu_install_su_fd();"
+                  if "ABK: never inject an anonymous driver fd" not in text and old in text:
+                      path.write_text(text.replace(old, guard + old, 1))
+                      print(f"  已修复 {path} 的 post-exec su-session fd 范围")
+                      return True
                   return False
               marker = "\n// sucompat: permitted process can execute 'su' to gain root access."
               if marker not in text:
@@ -5978,6 +6314,10 @@ jobs:
                                                 void *argv_user, void *envp_user,
                                                 int *flags, int *retval)
           {
+              /* ABK: never inject an anonymous driver fd into ordinary execs. */
+              if (!retval || *retval < 0 || !filename_ptr || !*filename_ptr ||
+                  IS_ERR(*filename_ptr) || strcmp((*filename_ptr)->name, KSUD_PATH))
+                  return 0;
               if (*retval >= 0)
                   (void)ksu_install_su_fd();
               return 0;
@@ -6071,17 +6411,17 @@ jobs:
             if grep -qF 'struct user_arg_ptr *argv_user' "$KSU_BUILD_DIR/sulog/event.c" \
               && grep -Eq 'NULL, (&)?USER_ARG_NULL, gfp' "$KSU_BUILD_DIR/sulog/event.c" \
               && ! grep -qF 'builtin SUSFS ksu_sulog_capture() expects argv_user as a pointer' "$KSU_BUILD_DIR/sulog/event.c"; then
-              echo "::error::SukiSU/ReSukiSU sulog/event.c 仍存在 argv 参数类型不兼容调用: $KSU_BUILD_DIR/sulog/event.c"
+              echo "::error::SukiSU/BakaSU sulog/event.c 仍存在 argv 参数类型不兼容调用: $KSU_BUILD_DIR/sulog/event.c"
               exit 1
             fi
           fi
 
-      - name: 修复 SukiSU/ReSukiSU android16-6.12 源码兼容
-        if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU') && inputs.android_version == 'android16' && inputs.kernel_version == '6.12'
+      - name: 修复 SukiSU/BakaSU android16-6.12 / android17-6.18 源码兼容
+        if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU') && ((inputs.android_version == 'android16' && inputs.kernel_version == '6.12') || (inputs.android_version == 'android17' && inputs.kernel_version == '6.18'))
         env:
           BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
           ABK_FEATURE_ID: kernelsu
-          ABK_FEATURE_FAILURE_MESSAGE: "KernelSU android16 compatibility integration failed"
+          ABK_FEATURE_FAILURE_MESSAGE: "KernelSU android16/android17 compatibility integration failed"
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
@@ -6095,7 +6435,7 @@ jobs:
           done
 
           if [ -z "$KSU_BUILD_DIR" ]; then
-            echo "::error::未找到实际 SukiSU/ReSukiSU 编译目录"
+            echo "::error::未找到实际 SukiSU/BakaSU 编译目录"
             exit 1
           fi
 
@@ -6107,16 +6447,35 @@ jobs:
           changed = False
 
           netlink_h = Path("common/include/linux/netlink.h")
-          super_access_c = ksu_dir / "kpm/super_access.c"
-          if super_access_c.exists() and netlink_h.exists():
-              netlink_text = netlink_h.read_text(errors="ignore")
+          netlink_text = netlink_h.read_text(errors="ignore") if netlink_h.exists() else ""
+
+          for rel in ("kpm/super_access.c", "extension/kpm/super_access.c"):
+              super_access_c = ksu_dir / rel
+              if not super_access_c.exists():
+                  continue
+              text = super_access_c.read_text()
+              original = text
+
+              # 6.12+ 的 netlink_kernel_cfg 去掉了 cb_mutex，旧 pin 还在探测它
               if "cb_mutex" not in netlink_text:
-                  text = super_access_c.read_text()
                   line = "DEFINE_MEMBER(netlink_kernel_cfg, cb_mutex)\n"
                   if line in text:
-                      super_access_c.write_text(text.replace(line, "", 1))
-                      changed = True
-                      print("已移除 android16-6.12 不存在的 netlink_kernel_cfg.cb_mutex 成员探测")
+                      text = text.replace(line, "", 1)
+                      print("已移除 android16-6.12/android17-6.18 不存在的 netlink_kernel_cfg.cb_mutex 成员探测")
+
+              mnt_seq = "DEFINE_MEMBER(mnt_namespace, seq)\n"
+              guarded = "#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)\n" + mnt_seq
+              if mnt_seq in text and guarded not in text:
+                  text = text.replace(
+                      mnt_seq,
+                      "#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)\n" + mnt_seq + "#endif\n",
+                      1,
+                  )
+                  print("已为 mnt_namespace.seq 补 6.18 门控（6.18 起内核已移除该成员）")
+
+              if text != original:
+                  super_access_c.write_text(text)
+                  changed = True
 
           lsm_hooks_h = Path("common/include/linux/lsm_hooks.h")
           lsm_hook_c = ksu_dir / "hook/lsm_hook.c"
@@ -6141,7 +6500,7 @@ jobs:
                       )
                       lsmid_block = "\n".join([
                           "",
-                          "/* ABK: android16-6.12 security_add_hooks() expects struct lsm_id. */",
+                          "/* ABK: android16-6.12/android17-6.18 security_add_hooks() expects struct lsm_id. */",
                           "#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)",
                           "static const struct lsm_id ksu_lsmid = {",
                           '    .name = "ksu",',
@@ -6158,10 +6517,10 @@ jobs:
                       text = text.replace(old_block, new_block, 1)
                       lsm_hook_c.write_text(text)
                       changed = True
-                      print("已适配 android16-6.12 security_add_hooks() 的 struct lsm_id 参数")
+                      print("已适配 android16-6.12/android17-6.18 security_add_hooks() 的 struct lsm_id 参数")
 
           if not changed:
-              print("SukiSU/ReSukiSU android16-6.12 专项兼容修复无需修改。")
+              print("SukiSU/BakaSU android16-6.12/android17-6.18 专项兼容修复无需修改。")
           PY
 
       - name: 校验 ABK 管理器桥接
@@ -6239,8 +6598,15 @@ jobs:
               "KSU_GET_INFO_FLAG_MANAGER" \
               "ABK_CONTROL_IOCTL_GET_STATUS"
 
-            if grep -qF "TRACK_THRONE_FORCE_SEARCH_MGR" "$ksu_dir/manager/throne_tracker.h"; then
-              echo "检测到 ReSukiSU 多管理器实现，跳过 KernelSU/SukiSU 多管理器移植标记。"
+            # 必须与 ABK_control_module 的 abk_control_ksu_patch.py::is_bakasu_tracker()
+            # 保持一致：上游 2026-10-05 改名 ReSukiSU -> BakaSU 时已将
+            # TRACK_THRONE_FORCE_SEARCH_MGR 换成 TRACK_THRONE_FORCE_SYNCHRONOUS
+            # (ABK_control_module#0f2947d)，此处若不同步会在真正的 BakaSU tracker 上
+            # 误判为"需要移植"，导致本不存在的 manager_identity.h 桥接标记校验失败。
+            if grep -qF "do_track_throne" "$ksu_dir/manager/throne_tracker.c" \
+              && grep -qF "track_throne(unsigned int flags)" "$ksu_dir/manager/throne_tracker.h" \
+              && grep -qF "TRACK_THRONE_FORCE_SYNCHRONOUS" "$ksu_dir/manager/throne_tracker.h"; then
+              echo "检测到 BakaSU 多管理器实现，跳过 KernelSU/SukiSU 多管理器移植标记。"
             else
               require_marker "$ksu_dir/manager/manager_identity.h" \
                 "ABK_MANAGER_MULTI_MANAGER_BRIDGE" \
@@ -6269,7 +6635,7 @@ jobs:
           done
 
           if [ "$found_ksu" != "true" ]; then
-            echo "::error::未找到 KernelSU/ReSukiSU 源码目录，无法校验 ABK 管理器桥接。"
+            echo "::error::未找到 KernelSU/BakaSU 源码目录，无法校验 ABK 管理器桥接。"
             exit 1
           fi
 
@@ -6289,6 +6655,7 @@ jobs:
           command: |
             echo "当前 KSU 最新提交日期: ${KSU_LATEST_COMMIT_DATE}"
             echo "当前 SUSFS 最新提交日期: ${SUSFS_LATEST_COMMIT_DATE}"
+            echo "当前虚拟化补丁版本: ${VIRTUALIZATION_PATCHES_REF:-未启用}"
             set -ex
             cd "$KERNEL_ROOT"
 
@@ -6301,7 +6668,7 @@ jobs:
               && "${{ inputs.kernel_version }}" == "5.15" \
               && "$CURRENT_SUB" -ge 41 && "$CURRENT_SUB" -le 137 ]]; then
               case "${{ inputs.ksu_variant }}" in
-                "Official"|"ReSukiSU")
+                "Official"|"BakaSU")
                   echo "编译前兜底修复 ${{ inputs.ksu_variant }} 5.15 kallsyms symbol_resolver"
                   python3 - <<'PY'
             from pathlib import Path
@@ -6309,14 +6676,14 @@ jobs:
 
             VARIANT = "${{ inputs.ksu_variant }}"
             SUBLEVEL = "${{ inputs.sub_level }}"
-            TARGETED_RESUKISU_SUBLEVELS = {"41", "74", "78", "94", "104", "119", "123", "137"}
-            TARGETED_RESUKISU = VARIANT == "ReSukiSU" and SUBLEVEL in TARGETED_RESUKISU_SUBLEVELS
-            if TARGETED_RESUKISU:
-                MARKER = "ABK: Android 13 5.15.{41,74,78,94,104,119,123,137} ReSukiSU kallsyms lookup rewrite"
-                LEGACY_MARKER = "ABK: Android 13 5.15.{41,74,78,94,104,119,123,137} ReSukiSU kallsyms weak reference"
+            TARGETED_BAKASU_SUBLEVELS = {"41", "74", "78", "94", "104", "119", "123", "137"}
+            TARGETED_BAKASU = VARIANT == "BakaSU" and SUBLEVEL in TARGETED_BAKASU_SUBLEVELS
+            if TARGETED_BAKASU:
+                MARKER = "ABK: Android 13 5.15.{41,74,78,94,104,119,123,137} BakaSU kallsyms lookup rewrite"
+                LEGACY_MARKER = "ABK: Android 13 5.15.{41,74,78,94,104,119,123,137} BakaSU kallsyms weak reference"
             else:
-                MARKER = "ABK: Android 13 5.15.41-5.15.137 Official/ReSukiSU kallsyms lookup rewrite"
-                LEGACY_MARKER = "ABK: Android 13 5.15.41-5.15.137 Official/ReSukiSU kallsyms weak reference"
+                MARKER = "ABK: Android 13 5.15.41-5.15.137 Official/BakaSU kallsyms lookup rewrite"
+                LEGACY_MARKER = "ABK: Android 13 5.15.41-5.15.137 Official/BakaSU kallsyms weak reference"
 
             BASE_TARGET_SOURCE = dedent(f"""\
             // SPDX-License-Identifier: GPL-2.0-only
@@ -6326,7 +6693,7 @@ jobs:
              * The affected GKI 5.15 builds can fail while linking .tmp_vmlinux.btf
              * when KernelSU keeps a static kallsyms_on_each_symbol callback path
              * under clang ThinLTO. Rewrite symbol resolution to the simpler
-             * kallsyms_lookup_name path used by modern KernelSU/ReSukiSU trees so
+             * kallsyms_lookup_name path used by modern KernelSU/BakaSU trees so
              * the built-in code no longer emits forbidden PLT/GOT entries.
              */
             #include <linux/kernel.h>
@@ -6361,12 +6728,12 @@ jobs:
             }}
             """)
 
-            TARGETED_RESUKISU_SOURCE = dedent(f"""\
+            TARGETED_BAKASU_SOURCE = dedent(f"""\
             // SPDX-License-Identifier: GPL-2.0-only
             /*
              * {MARKER}.
              *
-             * The affected ReSukiSU GKI 5.15 builds reference newer symbol
+             * The affected BakaSU GKI 5.15 builds reference newer symbol
              * resolver entry points from LSM hook code. Keep the existing direct
              * kallsyms_lookup_name path and provide the missing entry points only
              * for the known failing Android 13 / 5.15 sublevels.
@@ -6422,7 +6789,7 @@ jobs:
             }}
             """)
 
-            TARGET_SOURCE = TARGETED_RESUKISU_SOURCE if TARGETED_RESUKISU else BASE_TARGET_SOURCE
+            TARGET_SOURCE = TARGETED_BAKASU_SOURCE if TARGETED_BAKASU else BASE_TARGET_SOURCE
 
             candidates = []
             seen = set()
@@ -6476,7 +6843,7 @@ jobs:
                     raise SystemExit(f"{path} 仍包含 kallsyms_on_each_symbol 直接调用")
                 if "__attribute__((weak))" in final_text:
                     raise SystemExit(f"{path} 仍包含 weak kallsyms extern")
-                if TARGETED_RESUKISU:
+                if TARGETED_BAKASU:
                     if "ksu_resolve_symbol_for_functable_hook(" not in final_text:
                         raise SystemExit(f"{path} 缺少 ksu_resolve_symbol_for_functable_hook() 目标实现")
                     if "find_kernel_symbol_exact(" not in final_text:
@@ -6520,19 +6887,22 @@ jobs:
                 FRAG_FLAG="--defconfig_fragment=//common:arch/arm64/configs/ksu.fragment"
               fi
               LTO_FLAG="--lto=thin"
-              if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
+              if [ "${EFFECTIVE_MODERN_GKI:-false}" = "true" ]; then
                 LTO_FLAG="--lto=none"
               fi
-              tools/bazel build --disk_cache=/home/runner/.cache/bazel --config=fast $LTO_FLAG $FRAG_FLAG //common:kernel_aarch64_dist || exit 1
+              BAZEL_DISK_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/bazel-disk"
+              mkdir -p "$BAZEL_DISK_CACHE"
+              tools/bazel build --disk_cache="$BAZEL_DISK_CACHE" --config=fast $LTO_FLAG $FRAG_FLAG //common:kernel_aarch64_dist || exit 1
               strings ./bazel-bin/common/kernel_aarch64/Image | grep 'Linux version'
             fi
 
             echo "当前 KSU 最新提交日期: ${KSU_LATEST_COMMIT_DATE}"
             echo "当前 SUSFS 最新提交日期: ${SUSFS_LATEST_COMMIT_DATE}"
+            echo "当前虚拟化补丁版本: ${VIRTUALIZATION_PATCHES_REF:-未启用}"
             echo "如果日期不同或相差过远则补丁失效、编译失败"
 
-      - name: 应用 KPM 补丁 (SukiSU/ReSukiSU)
-        if: inputs.use_kpm && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'ReSukiSU')
+      - name: 应用 KPM 补丁 (SukiSU/BakaSU)
+        if: inputs.use_kpm && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU')
         env:
           BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
           ABK_FEATURE_ID: kpm
@@ -6551,7 +6921,7 @@ jobs:
                 TARGET_PATH="$KERNEL_ROOT/out/${{ inputs.android_version }}-${{ inputs.kernel_version }}/dist"
               fi
               ;;
-            "android14"|"android15"|"android16")
+            "android14"|"android15"|"android16"|"android17")
               TARGET_PATH="$KERNEL_ROOT/bazel-bin/common/kernel_aarch64/"
               ;;
           esac
@@ -6643,7 +7013,7 @@ jobs:
           cp ./boot-lz4.img ../${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-boot-lz4.img
 
       - name: 构建 Boot 镜像 (Android 13+)
-        if: inputs.source_mode != 'custom_git' && (inputs.android_version == 'android13' || inputs.android_version == 'android14' || inputs.android_version == 'android15' || inputs.android_version == 'android16')
+        if: inputs.source_mode != 'custom_git' && (inputs.android_version == 'android13' || inputs.android_version == 'android14' || inputs.android_version == 'android15' || inputs.android_version == 'android16' || inputs.android_version == 'android17')
         working-directory: bootimgs
         run: |
           gzip -n -k -f -9 ./Image > ./Image.gz

@@ -192,7 +192,7 @@ private fun runLocalCommand(command: List<String>): LocalCommandResult {
 
 private fun collectRootDiagnostics(stagingDir: File): RootUtils.ShellResult {
     val outPath = shellQuote(stagingDir.absolutePath)
-    val keywordPattern = "ksu|ksud|kernelsu|sukisu|resukisu|susfs|sulog|abk"
+    val keywordPattern = "ksu|ksud|kernelsu|sukisu|bakasu|susfs|sulog|abk"
     val script = """
         set +e
         OUT=$outPath

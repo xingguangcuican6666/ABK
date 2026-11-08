@@ -39,7 +39,7 @@ The repository provides GitHub Actions kernel build workflows. The Android app h
 ## Scope
 
 - Android 12 / 13 / 14 / 15 / 16 GKI build workflows, plus OnePlus/Oplus device build workflows.
-- KernelSU Official, KernelSU Next, SukiSU, and ReSukiSU variants.
+- KernelSU Official, KernelSU Next, SukiSU, and BakaSU variants.
 - Optional SUSFS, ZRAM, BBG, KPM, Re-Kernel, lz4kd, BBR, proxy optimization, Unicode bypass, and OnePlus 8E support.
 - Artifact handling for AnyKernel3 packages, kernel images, KernelSU managers, and SUSFS modules.
 
@@ -63,7 +63,7 @@ You can also run the workflows manually from GitHub Actions.
 The app's Build tab can switch between `GKI` and `OnePlus` targets. Selecting `OnePlus` dispatches [`oneplus-custom.yml`](.github/workflows/oneplus-custom.yml), which syncs the selected CPU branch and device XML from the OnePlus/Oplus manifest.
 ABK no longer uses `_b/_v/_u/_t` as the user-facing selection rule; the app, workflow summaries, and matrix job names show the device, ColorOS/OxygenOS system line, Android KMI, and CPU directly, while the upstream XML name stays only as a repo-init parameter.
 
-OnePlus builds support `android12/5.10`, `android13/5.15`, `android14/6.1`, `android15/6.6`, and `android16/6.12`; OnePlus 15/15T use the `sm8850` `android16/6.12` manifests. KernelSU Official, SukiSU, ReSukiSU, and rootless builds are available. OnePlus-specific switches include SUSFS, KPM, lz4kd, BBG, BBR, proxy optimization, and the Unicode zero-width bypass fix. SUSFS applies to `android14/6.1`, `android15/6.6`, and `android16/6.12`; 6.12 automatically disables the incompatible legacy lz4kd patch, and MTK CPU branches force proxy optimization off.
+OnePlus builds support `android12/5.10`, `android13/5.15`, `android14/6.1`, `android15/6.6`, and `android16/6.12`; OnePlus 15/15T use the `sm8850` `android16/6.12` manifests. KernelSU Official, SukiSU, BakaSU, and rootless builds are available. OnePlus-specific switches include SUSFS, KPM, lz4kd, BBG, BBR, proxy optimization, and the Unicode zero-width bypass fix. SUSFS applies to `android14/6.1`, `android15/6.6`, and `android16/6.12`; 6.12 automatically disables the incompatible legacy lz4kd patch, and MTK CPU branches force proxy optimization off.
 
 To batch-build every currently supported OnePlus/Oplus device, manually run [`oneplus-full-feature-matrix.yml`](.github/workflows/oneplus-full-feature-matrix.yml) from GitHub Actions. The matrix reads the upstream manifest and generates jobs by CPU branch and KMI line.
 To trigger a full matrix across all manager variants for both GKI and OnePlus in one place, use [`all-managers-full-feature-matrix.yml`](.github/workflows/all-managers-full-feature-matrix.yml). Its inputs let you choose which variants to include, whether to run GKI or OnePlus, and the common build customizations.
@@ -78,7 +78,9 @@ To trigger a full matrix across all manager variants for both GKI and OnePlus in
 
 Virtualization support enables the kernel features needed by Linux container environments, including IPC and PID namespaces, SysV IPC, and POSIX mqueue, so Android devices can run full Linux environments for development or services.
 
-**Supported versions:** 5.10 / 5.15 / 6.1 / 6.6 / 6.12
+The patches and the required defconfig list come from upstream [`ravindu644/Droidspaces-OSS`](https://github.com/ravindu644/Droidspaces-OSS), pinned to a tag instead of tracking HEAD: `v7.1.0` by default, overridable through `droidspaces=` in [`config/config`](config/config) or, temporarily, through the repository variable `ABK_DROIDSPACES_REF` (precedence: repository variable > `config/config` > default). The build log prints the `Droidspaces-OSS@<tag> (<sha>)` checkout actually used.
+
+**Supported versions:** 5.10 / 5.15 / 6.1 / 6.6 / 6.12 / 6.18
 
 **Usage:** When triggering a build manually, select the `Virtualization Support` option:
 
@@ -89,13 +91,23 @@ Virtualization support enables the kernel features needed by Linux container env
 | `123` | Use 1_2_3 slot patch (fallback) |
 | `345` | Use 3_4_5 slot patch (fallback) |
 
-> **Note:** Kernel 6.12 has only one patch — any non-off option will use it.
+> **Note:** Kernels 6.12 and 6.18 have only one patch (the 6.12-or-above one under `kernel-6.12/`); any non-off option uses it and slot choices are normalized to `on`.
+>
+> **About slots:** upstream hunks are written against a fixed context, and `6_7_8` applies cleanly on every current ACK line (5.10/5.15/6.1/6.6/6.12/6.18). `1_2_3` and `3_4_5` reject on most branches because the `task_struct` reserve slots are already taken (5.10 uses 1 and 2; 5.15 uses 1; 6.1 uses 1, 2 and 3; 6.6 uses 1 and 2). When a hunk rejects, the workflow rewrites `include/linux/sched.h` in place for the selected slot, so `345` still works on 5.10/5.15/6.6 (6.12 uses its own patch and ignores the slot); when the slot really is occupied it fails with an explicit message pointing at `678` instead of silently producing a kernel that breaks kABI.
 
-**If the build fails or bootloops after flashing:** Try switching to a different slot patch (e.g. 678 → 123 or 345). Different kernel sub-levels may require different patches.
+**Kernel options written when enabled** (the upstream v7.1.0 GKI list; each symbol is applied only where the kernel tree defines it, and undefined ones are skipped):
+
+- kABI prerequisites: `CONFIG_SYSVIPC`, `CONFIG_POSIX_MQUEUE`, `CONFIG_IPC_NS`, `CONFIG_PID_NS`, `CONFIG_DEVTMPFS`
+- New in v7.1.0: `CONFIG_USER_NS` (the Docker unsafe-procfs fix), `CONFIG_IP6_NF_NAT` and `CONFIG_IP6_NF_TARGET_MASQUERADE` (NAT66; without them NAT containers are IPv4 only), and `CONFIG_MACVLAN` (macvlan mode; upstream measured no change across 8423 exported symbols on a 5.15 GKI tree)
+- Existing optional ones: `CONFIG_NETFILTER_XT_MATCH_ADDRTYPE`, `CONFIG_NETFILTER_XT_TARGET_LOG`, `CONFIG_NETFILTER_XT_MATCH_RECENT`, `CONFIG_IP_SET`, `CONFIG_IP_SET_HASH_IP`, `CONFIG_IP_SET_HASH_NET`, `CONFIG_NETFILTER_XT_SET`, `CONFIG_NETFILTER_XT_TARGET_REJECT`/`CONFIG_IP_NF_TARGET_REJECT`, `CONFIG_TMPFS_XATTR`, `CONFIG_TMPFS_POSIX_ACL`
+
+> **Never enabled:** upstream requires `CONFIG_CFS_BANDWIDTH` (`--cpus`) and `CONFIG_CGROUP_PIDS` (`--pids-limit`) to stay off on GKI. Both resize scheduler and cgroup structures, changing the checksum of roughly four thousand exported symbols on a 5.15 GKI tree, and no kABI patch covers them. ABK only produces `boot.img` and cannot rebuild and reflash `vendor_boot`, `vendor_dlkm` and `system_dlkm` together with it, so enabling them would make stock vendor modules refuse to load and bootloop the device. The integration step verifies neither was turned on by this build (the stock `gki_defconfig` of `android16-6.12` ships `CONFIG_CFS_BANDWIDTH=y` as part of the upstream baseline and is left as is). Containers therefore skip `--cpus` and `--pids-limit` with a warning; memory limits are unaffected.
+
+**If the build fails or bootloops after flashing:** Try switching to a different slot patch (e.g. 678 → 123 or 345). Different kernel sub-levels may require different patches. On 5.10, `002.5.10_or_lower_use_android_abi_padding_for_posix_mqueue.patch` is applied in addition to the SYSVIPC patch.
 - Flashing kernels is high-risk and may cause boot failure, data loss, or require restoring a stock boot image.
 - Do not build or flash if you are unsure about the target partition, kernel version, Android version, or security patch level.
 - OnePlus ColorOS/OxygenOS 13 / 14 / 15 / 16 compatibility still needs device-side validation and may require data wiping in failure cases.
-- If a build fails, first check whether SukiSU / SUSFS / ReSukiSU upstream branches have recently changed and are temporarily out of sync.
+- If a build fails, first check whether SukiSU / SUSFS / BakaSU upstream branches have recently changed and are temporarily out of sync.
 - Custom external modules execute `setup.sh` from third-party repository roots. Review the script and source before enabling it.
 - ABK is intended only for devices and repositories you own or are explicitly authorized to use. Do not use it for unauthorized access, fraud, abuse, anti-risk bypassing, cheating, data theft, service disruption, or other illegal purposes.
 
@@ -122,7 +134,7 @@ Applies to every GKI `workflow_dispatch` workflow ([`kernel-custom.yml`](.github
 
 On GitHub Actions and the app GKI build screen, **Latest(最新)** sits between **Dev** and **Custom**. [`resolve-ksu-ref.sh`](.github/scripts/resolve-ksu-ref.sh) resolves upstream KernelSU sources at run time:
 
-- **Official / SukiSU / ReSukiSU (GKI):** prefer upstream `main` **HEAD** when that commit has a successful `release.yml` (tag release) or standalone `build-manager.yml` run; kernel and manager share that `head_sha`. Otherwise fall back to the latest successful standalone `build-manager` on `main`. Manager APK via [nightly.link](https://nightly.link/) (`manager.zip` or `Manager-release.zip`); download also checks `release.yml` runs. Latest fails if neither path has a usable green run on `main`.
+- **Official / SukiSU / BakaSU (GKI):** prefer upstream `main` **HEAD** when that commit has a successful `release.yml` (tag release) or standalone `build-manager.yml` run; kernel and manager share that `head_sha`. Otherwise fall back to the latest successful standalone `build-manager` on `main`. Manager APK via [nightly.link](https://nightly.link/) (`manager.zip` or `Manager-release.zip`); download also checks `release.yml` runs. Latest fails if neither path has a usable green run on `main`.
 
 If manager download fails, the manager job step fails but **the kernel build continues**. Latest does not fall back to `releases/latest` (the Stable/Dev release path).
 
@@ -187,7 +199,7 @@ Conditional variables:
 
 ABK Control manager recognition notes:
 
-- When using `ABK_control_module` to make ABK work directly as a KernelSU / SukiSU / ReSukiSU manager, configure both `after_patch` and `before_build`.
+- When using `ABK_control_module` to make ABK work directly as a KernelSU / SukiSU / BakaSU manager, configure both `after_patch` and `before_build`.
 - The ABK APK installed on the phone must match the `ABK_MANAGER_PACKAGE` and `ABK_MANAGER_CERT_SHA256` printed in the kernel build log. Default debug or locally ad-hoc signed APKs do not match the checked-in release certificate metadata.
 - The kernel build validates the ABK Control bridge markers and `CONFIG_ABK_CONTROL=y` before compiling. If it fails, first check for a missing `before_build` stage or certificate metadata that does not match the installed APK.
 
@@ -241,6 +253,8 @@ The app is built by the [`Build ABK App`](.github/workflows/build-abk-app.yml) w
 
 ### Self-hosted runner (optional)
 
+Kernel builds can also select GKI or OnePlus/Oplus runners through repository variables, with persistent downloads for self-hosted GKI builds. GitHub-hosted runners remain the default. See [kernel runner configuration](docs/kernel-runner-options.md) for options and cache scope.
+
 The app build workflows (`Build ABK App` / `Build ABK App (dev)`) pick their runner from the repository variable `APP_RUNNER`. **When unset, both workflows default to the GitHub-hosted `ubuntu-latest`**, so a fork works with no configuration. To build on your own hardware, see [`docs/self-hosted-runner.md`](docs/self-hosted-runner.md).
 
 ## Contributors
@@ -277,7 +291,7 @@ The full notice list is maintained in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOT
 | KernelSU | <https://github.com/tiann/KernelSU> | GPL-3.0 |
 | KernelSU Next | <https://github.com/KernelSU-Next/KernelSU-Next> | GPL-3.0 |
 | SukiSU Ultra | <https://github.com/SukiSU-Ultra/SukiSU-Ultra> | GPL-3.0 |
-| ReSukiSU | <https://github.com/ReSukiSU/ReSukiSU> | GPL-3.0 |
+| BakaSU | <https://github.com/Baka-SU/BakaSU> | GPL-3.0 |
 | SUSFS | <https://gitlab.com/simonpunk/susfs4ksu> | GPL-2.0 |
 | ShirkNeko/susfs4ksu | <https://github.com/ShirkNeko/susfs4ksu> | GPL-2.0 |
 | SukiSU_patch | <https://github.com/ShirkNeko/SukiSU_patch> | GPL-2.0 |

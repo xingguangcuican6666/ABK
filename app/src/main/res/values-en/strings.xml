@@ -181,6 +181,7 @@
     <string name="build_no_root_scheme_desc">Do not inject any root authorization scheme. KSU branch, SUSFS, and KPM will be disabled automatically.</string>
     <string name="build_oneplus_no_root_scheme_desc">Build a rootless OnePlus kernel. SUSFS and KPM will be disabled automatically.</string>
     <string name="build_oneplus_ksu_branch_desc">OnePlus builds use the upstream default branch for the selected KernelSU variant.</string>
+    <string name="build_ksu_variant_deprecated">Upstream ReSukiSU was renamed BakaSU; this build is now using BakaSU.</string>
     <string name="build_ksu_none">None (no root scheme)</string>
     <string name="build_standard">stable</string>
     <string name="build_development">development</string>
@@ -420,7 +421,7 @@
     <string name="flash_chip_kernel_kind">Kernel: %1$s</string>
     <string name="flash_chip_susfs">SUSFS</string>
     <string name="flash_chip_kernel_unknown">?</string>
-    <string name="flash_kernel_resukisu">ReSukiSU</string>
+    <string name="flash_kernel_bakasu">BakaSU</string>
     <string name="flash_kernel_sukisu">SukiSU</string>
     <string name="flash_kernel_official">Official</string>
     <string name="flash_kernel_none">None</string>
@@ -433,7 +434,7 @@
     <string name="flash_cancel_confirm_yes">Yes, cancel</string>
     <string name="flash_build_elapsed">Build time %1$s</string>
     <string name="flash_filter_kernel">Kernel</string>
-    <string name="flash_filter_kernel_resukisu">ReSukiSU</string>
+    <string name="flash_filter_kernel_bakasu">BakaSU</string>
     <string name="flash_filter_kernel_sukisu">SukiSU</string>
     <string name="flash_filter_kernel_official">Official KernelSU</string>
     <string name="flash_filter_kernel_none">No KSU</string>
@@ -647,7 +648,7 @@
     <string name="settings_notify_build_desc">Show build status in notifications</string>
     <string name="settings_navigation">Navigation</string>
     <string name="settings_predictive_back">Predictive back gesture</string>
-    <string name="settings_predictive_back_desc">Enable edge-swipe back preview and custom page dismiss animation</string>
+    <string name="settings_predictive_back_desc">Enable edge-swipe back preview, custom page dismiss animation, and the system predictive back-to-home animation</string>
     <string name="settings_color_appearance">Color and appearance</string>
     <string name="settings_enter_color_appearance">Open color and appearance</string>
     <string name="settings_about_desc">Repository entry points, version information, and contributors</string>
@@ -741,7 +742,7 @@
     <string name="settings_group_system_tools_desc">Tools for SELinux and module umount paths.</string>
     <string name="settings_group_allowlist_desc">Export or import the current root authorization list.</string>
     <string name="settings_group_tool_status_desc">Result of the most recent tool operation.</string>
-    <string name="settings_group_local_templates_desc">Manage templates saved in ReSukiSU profile storage.</string>
+    <string name="settings_group_local_templates_desc">Manage templates saved in BakaSU profile storage.</string>
     <string name="settings_group_status_desc">Result of the most recent template operation.</string>
     <string name="settings_group_edit_template_desc">Edit App Profile template JSON directly.</string>
     <string name="settings_app_update">App updates</string>
@@ -1003,7 +1004,7 @@
     <string name="settings_unknown">Unknown</string>
     <string name="settings_local_templates">Local templates</string>
     <string name="settings_templates_loading">Reading templates</string>
-    <string name="settings_templates_loading_desc">Loading from ReSukiSU profile storage</string>
+    <string name="settings_templates_loading_desc">Loading from BakaSU profile storage</string>
     <string name="settings_templates_empty">No templates</string>
     <string name="settings_templates_empty_desc">Saved templates appear here</string>
     <string name="settings_template_editing">Editing</string>
@@ -1237,7 +1238,7 @@
     <string name="ru_no_embedded_ksud">No runnable APK-bundled SukiSU-Ultra ksud found; without root you can only generate a patched image after selecting boot.img.</string>
     <string name="ru_install_requires_root">This installation method requires root permission.</string>
     <string name="ru_not_active">Not active</string>
-    <string name="ru_only_generic_su">Only a generic su shell was detected; no KernelSU/ReSukiSU control interface usable for ABK runtime management was found.</string>
+    <string name="ru_only_generic_su">Only a generic su shell was detected; no KernelSU/BakaSU control interface usable for ABK runtime management was found.</string>
     <string name="ru_unknown_su_compat">Unknown su compatibility mode</string>
     <string name="ru_unknown_feature">Unknown feature</string>
     <string name="ru_invalid_template_name">Invalid template name</string>
@@ -1250,10 +1251,10 @@
     <string name="ru_hide_selinux_toggle_failed">Failed to toggle hide-SELinux-modifications: %1$d</string>
     <string name="ru_command_timeout">Command timed out</string>
     <string name="ru_manager_not_active">Manager not active</string>
-    <string name="ru_no_manager_interface">No usable KernelSU/ReSukiSU manager interface or root shell was detected.</string>
+    <string name="ru_no_manager_interface">No usable KernelSU/BakaSU manager interface or root shell was detected.</string>
     <string name="ru_diag_compat_shell_only">Currently working only through the ksud/root shell compatibility layer. ABK is not yet recognized by the kernel as the native manager and cannot manage root authorization policies.</string>
-    <string name="ru_diag_generic_su_only">Only a generic su shell is available; no KernelSU/ReSukiSU native manager interface was detected.</string>
-    <string name="ru_diag_native_not_manager">The KernelSU/ReSukiSU native interface is reachable, but the current ABK APK is not recognized as the manager. Make sure the installed app is the officially signed com.abk.kernel APK whose signature matches ABK_MANAGER_CERT_SHA256 used at kernel build time.</string>
+    <string name="ru_diag_generic_su_only">Only a generic su shell is available; no KernelSU/BakaSU native manager interface was detected.</string>
+    <string name="ru_diag_native_not_manager">The KernelSU/BakaSU native interface is reachable, but the current ABK APK is not recognized as the manager. Make sure the installed app is the officially signed com.abk.kernel APK whose signature matches ABK_MANAGER_CERT_SHA256 used at kernel build time.</string>
     <string name="susfs_title">SUSFS Control</string>
     <string name="susfs_unavailable">No usable SUSFS capability was detected in the current kernel.</string>
     <string name="susfs_load_failed">Failed to load SUSFS status.</string>
@@ -1351,4 +1352,26 @@
     <string name="gh_root_must_be_object">Root node must be a JSON object</string>
     <string name="gh_missing_module_name">Missing ABK_MODULE_NAME</string>
     <string name="gh_catalog_fallback_name">Module repository</string>
+
+    <!-- Kernel runner repository settings -->
+    <string name="settings_kernel_runner_title">Kernel build environment</string>
+    <string name="settings_kernel_runner_desc">Choose GitHub-hosted or self-hosted runners for GKI and OnePlus/Oplus</string>
+    <string name="settings_kernel_runner_requires_fork">Sign in to GitHub and prepare your own fork before configuring build runners.</string>
+    <string name="settings_kernel_runner_scope">Saved to Actions repository variables in %1$s</string>
+    <string name="settings_kernel_runner_applies_next">This setting is shared by the repository and applies to future builds. Queued and running jobs stay where they are. Tap Save to apply changes.</string>
+    <string name="settings_kernel_runner_gki">GKI / custom source</string>
+    <string name="settings_kernel_runner_oneplus">OnePlus / Oplus</string>
+    <string name="settings_kernel_runner_self_hosted">Use a self-hosted runner</string>
+    <string name="settings_kernel_runner_self_hosted_desc">Use the build machine matching the labels below</string>
+    <string name="settings_kernel_runner_github_hosted_desc">Use GitHub-hosted ubuntu-latest</string>
+    <string name="settings_kernel_runner_labels">Self-hosted runner labels</string>
+    <string name="settings_kernel_runner_labels_example">[\"self-hosted\",\"linux\",\"x64\",\"kernel-builder\"]</string>
+    <string name="settings_kernel_runner_labels_hint">Enter one label or a JSON array of labels. Labels are kept when self-hosting is disabled.</string>
+    <string name="settings_kernel_runner_labels_required">Enter runner labels before enabling self-hosting.</string>
+    <string name="settings_kernel_runner_unsupported">The default branch of this fork does not support runner variables yet. Sync workflows that include this feature, then refresh.</string>
+    <string name="settings_kernel_runner_offline">The runner must be registered for this repository, online, and match every label. Otherwise builds stay queued; there is no automatic fallback to GitHub-hosted runners.</string>
+    <string name="settings_kernel_runner_unsaved">Unsaved changes</string>
+    <string name="settings_kernel_runner_saved">Saved to GitHub</string>
+    <string name="settings_kernel_runner_saving">Saving…</string>
+    <string name="settings_kernel_runner_request_failed">The GitHub repository variables request did not complete. Refresh and try again.</string>
 </resources>

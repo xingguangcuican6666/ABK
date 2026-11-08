@@ -35,7 +35,9 @@ object KernelSupport {
         KernelVersionLine("android13", "5.15"),
         KernelVersionLine("android14", "6.1"),
         KernelVersionLine("android15", "6.6"),
-        KernelVersionLine("android16", "6.12")
+        KernelVersionLine("android16", "6.12"),
+        // android17/6.18：新一代 GKI 主线（AOSP common-android17-6.18-*）
+        KernelVersionLine("android17", "6.18")
     )
 
     val onePlusLines = listOf(
@@ -224,7 +226,11 @@ object KernelSupport {
         KernelSupportEntry("android16", "6.12", "38", "2025-08"),
         KernelSupportEntry("android16", "6.12", "38", "2025-09"),
         KernelSupportEntry("android16", "6.12", "58", "2025-12"),
-        KernelSupportEntry("android16", "6.12", "69", "2026-03")
+        KernelSupportEntry("android16", "6.12", "69", "2026-03"),
+        // android17/6.18 目前只有 2026-04/06/09 三个发布点，对应 6.18.20/21/32
+        KernelSupportEntry("android17", "6.18", "20", "2026-04"),
+        KernelSupportEntry("android17", "6.18", "21", "2026-06"),
+        KernelSupportEntry("android17", "6.18", "32", "2026-09")
     )
 
     fun androidVersions(): List<String> = lines.map { it.androidVersion }
@@ -252,7 +258,17 @@ object KernelSupport {
     fun onePlusSusfsSupported(androidVersion: String, kernelVersion: String): Boolean =
         "$androidVersion/$kernelVersion" in setOf("android14/6.1", "android15/6.6", "android16/6.12")
 
-    fun onePlusLz4kdSupported(kernelVersion: String): Boolean = kernelVersion != "6.12"
+    private const val ANDROID17_UNSUPPORTED_LINE = "android17/6.18"
+
+
+    fun bbgSupported(androidVersion: String, kernelVersion: String): Boolean =
+        "$androidVersion/$kernelVersion" != ANDROID17_UNSUPPORTED_LINE
+
+    fun suppOpSupported(androidVersion: String, kernelVersion: String): Boolean =
+        "$androidVersion/$kernelVersion" != ANDROID17_UNSUPPORTED_LINE
+
+    fun onePlusLz4kdSupported(kernelVersion: String): Boolean =
+        kernelVersion != "6.12" && kernelVersion != "6.18"
 
     fun normalize(config: KernelBuildConfig): KernelBuildConfig {
         val target = normalizeBuildTarget(config.buildTarget)
@@ -294,7 +310,7 @@ object KernelSupport {
             if (isOnePlus || ksuVariant == KSU_VARIANT_NONE) KSU_BRANCH_STABLE else config.kernelsuBranch
         )
         val onePlusIsMtk = onePlusCpu.startsWith("mt")
-        val onePlusKpmSupported = !onePlusIsMtk && ksuVariant in setOf(KSU_VARIANT_SUKISU, KSU_VARIANT_RESUKISU)
+        val onePlusKpmSupported = !onePlusIsMtk && ksuVariant == KSU_VARIANT_SUKISU
         val gkiKpmSupported = isKpmSupported(BUILD_TARGET_GKI, ksuVariant, normalizedKsuBranch)
         val onePlusProxyAllowed = !onePlusIsMtk
         val onePlusSusfsEnabled = onePlusSusfsSupported(line.androidVersion, line.kernelVersion)
@@ -330,6 +346,7 @@ object KernelSupport {
             },
             cancelSusfs = when {
                 ksuVariant == KSU_VARIANT_NONE -> true
+                ksuVariant == KSU_VARIANT_BAKASU -> true
                 isOnePlus && !onePlusSusfsEnabled -> true
                 else -> config.cancelSusfs
             },
@@ -488,21 +505,64 @@ object KernelSupport {
     fun normalizeKsuVariant(value: String?): String = normalizeKsuVariant(value, BUILD_TARGET_GKI)
 
     fun normalizeKsuVariant(value: String?, buildTarget: String?): String {
-        val normalized = when (value.orEmpty().trim().lowercase()) {
-            KSU_VARIANT_OFFICIAL.lowercase() -> KSU_VARIANT_OFFICIAL
-            KSU_VARIANT_SUKISU.lowercase() -> KSU_VARIANT_SUKISU
-            KSU_VARIANT_RESUKISU.lowercase() -> KSU_VARIANT_RESUKISU
-            KSU_VARIANT_NONE.lowercase(), "无" -> KSU_VARIANT_NONE
-            else -> KSU_VARIANT_RESUKISU
+        val lower = value.orEmpty().trim().lowercase()
+        // Upstream renamed ReSukiSU/ReSukiSU to Baka-SU/BakaSU; older app builds and
+        // already-saved build records still carry the retired spelling.
+        val isLegacyAlias = lower.isNotBlank() &&
+            KSU_VARIANT_LEGACY_ALIASES.any { it in lower }
+        val normalized = when {
+            lower == KSU_VARIANT_OFFICIAL.lowercase() -> KSU_VARIANT_OFFICIAL
+            lower == KSU_VARIANT_SUKISU.lowercase() -> KSU_VARIANT_SUKISU
+            lower == KSU_VARIANT_BAKASU.lowercase() -> KSU_VARIANT_BAKASU
+            lower == KSU_VARIANT_NONE.lowercase() || lower == "无" -> KSU_VARIANT_NONE
+            isLegacyAlias -> KSU_VARIANT_BAKASU
+            else -> KSU_VARIANT_BAKASU
         }
         return if (normalizeBuildTarget(buildTarget) == BUILD_TARGET_ONEPLUS) {
             normalized.takeIf { it in ONEPLUS_KSU_VARIANT_OPTIONS } ?: KSU_VARIANT_SUKISU
         } else {
-            normalized.takeIf { it in KSU_VARIANT_OPTIONS } ?: KSU_VARIANT_RESUKISU
+            normalized.takeIf { it in KSU_VARIANT_OPTIONS } ?: KSU_VARIANT_BAKASU
         }
     }
 
     fun ksuBranchOptions(): List<String> = KSU_BRANCH_STANDARD_OPTIONS
+
+    /**
+     * Classify a raw runtime string — the control-status `manager.variant`, `ksud --version`
+     * output, the kernel `KSU_VERSION_FULL`, or a probe display name — into the canonical
+     * manager family constant ([KSU_VARIANT_BAKASU] / [KSU_VARIANT_SUKISU]), or null when the
+     * string names no SukiSU-family backend.
+     *
+     * Match order is significant: the retired `ReSukiSU` spelling contains the substring
+     * `sukisu`, and the hyphenated upstream org name `Baka-SU` does not contain `bakasu`, so
+     * the legacy aliases ([KSU_VARIANT_LEGACY_ALIASES]) and hyphen spellings must be resolved
+     * before the plain SukiSU arm. Otherwise ReSukiSU/BakaSU kernels misclassify as SukiSU.
+     */
+    fun inferRuntimeKsuFamily(value: String?): String? {
+        val lower = value.orEmpty().lowercase()
+        if (lower.isBlank()) return null
+        return when {
+            "bakasu" in lower || "baka-su" in lower || "baka_su" in lower -> KSU_VARIANT_BAKASU
+            KSU_VARIANT_LEGACY_ALIASES.any { it in lower } -> KSU_VARIANT_BAKASU
+            // Shorter pre-rename spelling ("ReSuki") that survives in old build logs and
+            // older kernel version strings; it is not covered by the longer aliases.
+            "resuki" in lower -> KSU_VARIANT_BAKASU
+            "sukisu" in lower -> KSU_VARIANT_SUKISU
+            else -> null
+        }
+    }
+
+    /**
+     * True when [value] is the retired `ReSukiSU` spelling rather than a current variant.
+     * Only reachable from restored build records or plans shared by older app builds, so
+     * [normalizeKsuVariant] has already folded these into [KSU_VARIANT_BAKASU].
+     */
+    fun isDeprecatedKsuVariantAlias(value: String?): Boolean {
+        val lower = value.orEmpty().trim().lowercase()
+        return lower.isNotBlank() &&
+            lower !in KSU_VARIANT_OPTIONS.map { it.lowercase() } &&
+            KSU_VARIANT_LEGACY_ALIASES.any { it in lower }
+    }
 
     fun normalizeKsuBranch(value: String): String =
         value.takeIf { it in KSU_BRANCH_STANDARD_OPTIONS } ?: KSU_BRANCH_STABLE
@@ -510,26 +570,20 @@ object KernelSupport {
     fun isKpmSupported(buildTarget: String, ksuVariant: String, ksuBranch: String): Boolean {
         val normalizedTarget = normalizeBuildTarget(buildTarget)
         val normalizedVariant = normalizeKsuVariant(ksuVariant, normalizedTarget)
-        val normalizedBranch = normalizeKsuBranch(ksuBranch)
-        return when {
-            normalizedVariant == KSU_VARIANT_NONE -> false
-            normalizedVariant == KSU_VARIANT_OFFICIAL -> false
-            normalizedTarget == BUILD_TARGET_ONEPLUS ->
-                normalizedVariant in setOf(KSU_VARIANT_SUKISU, KSU_VARIANT_RESUKISU)
-            normalizedVariant == KSU_VARIANT_RESUKISU &&
-                normalizedBranch !in setOf(KSU_BRANCH_STABLE, KSU_BRANCH_CUSTOM) -> false
-            else -> true
-        }
+        return normalizedVariant == KSU_VARIANT_SUKISU
     }
 
+    fun isSusfsSelectable(ksuVariant: String): Boolean =
+        normalizeKsuVariant(ksuVariant, BUILD_TARGET_GKI) != KSU_VARIANT_BAKASU
+
     fun virtualizationSupportOptions(kernelVersion: String): List<String> =
-        if (kernelVersion == "6.12") listOf("off", "on") else listOf("off", "678", "123", "345")
+        if (kernelVersion == "6.12" || kernelVersion == "6.18") listOf("off", "on") else listOf("off", "678", "123", "345")
 
     private fun normalizeVirtualizationSupport(kernelVersion: String, value: String): String {
         val normalized = value.trim().lowercase()
         return when {
             normalized in virtualizationSupportOptions(kernelVersion) -> normalized
-            kernelVersion == "6.12" && normalized in setOf("678", "123", "345") -> "on"
+            kernelVersion in setOf("6.12", "6.18") && normalized in setOf("678", "123", "345") -> "on"
             else -> "off"
         }
     }

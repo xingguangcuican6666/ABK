@@ -11,7 +11,7 @@ import com.abk.kernel.data.model.BUILD_TARGET_ONEPLUS
 import com.abk.kernel.data.model.KSU_BRANCH_CUSTOM
 import com.abk.kernel.data.model.KSU_BRANCH_STABLE
 import com.abk.kernel.data.model.KSU_VARIANT_NONE
-import com.abk.kernel.data.model.KSU_VARIANT_RESUKISU
+import com.abk.kernel.data.model.KSU_VARIANT_BAKASU
 import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
 import com.abk.kernel.data.model.SOURCE_ACCESS_GITHUB_PRIVATE
 import com.abk.kernel.data.model.KernelBuildConfig
@@ -329,7 +329,7 @@ class BuildPlanLogicTest {
         val baseConfig = KernelSupport.normalize(
             KernelBuildConfig(
                 buildTarget = BUILD_TARGET_GKI,
-                kernelsuVariant = KSU_VARIANT_RESUKISU
+                kernelsuVariant = KSU_VARIANT_BAKASU
             )
         )
         val sharedFeatures = KernelSupport.normalize(

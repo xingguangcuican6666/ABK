@@ -115,6 +115,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showKernelRunnerSettings by remember { mutableStateOf(false) }
     var exportingDiagnostics by remember { mutableStateOf(false) }
     var showThemeSettings by rememberSaveable { mutableStateOf(false) }
     var showAppProfileTemplates by rememberSaveable { mutableStateOf(false) }
@@ -323,6 +324,15 @@ fun SettingsScreen(
         )
     }
 
+    if (showKernelRunnerSettings) {
+        KernelRunnerSettingsDialog(
+            state = state.kernelRunnerSettings,
+            onRefresh = vm::refreshKernelRunnerSettings,
+            onSave = vm::saveKernelRunnerSettings,
+            onDismiss = { showKernelRunnerSettings = false }
+        )
+    }
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val childPageTopInset = outerPadding.calculateTopPadding()
         val childPageBottomInset = outerPadding.calculateBottomPadding()
@@ -348,6 +358,7 @@ fun SettingsScreen(
                 vm = vm,
                 scrollBehavior = scrollBehavior,
                 onLogout = { showLogoutDialog = true },
+                onOpenKernelRunnerSettings = { showKernelRunnerSettings = true },
                 onOpenThemeSettings = ::openThemeSettings,
                 onOpenAppProfileTemplates = ::openAppProfileTemplates,
                 onOpenManagerTools = ::openManagerTools,
@@ -416,6 +427,7 @@ fun SettingsScreen(
                         uiSurfaceAlpha = state.uiSurfaceAlpha,
                         blurEnabled = state.blurEnabled,
                         blurBackgroundExpEnabled = state.blurBackgroundExpEnabled,
+                        predictiveBackEnabled = state.predictiveBackEnabled,
                         onThemeModeChange = { value -> vm.setThemeMode(value) },
                         onDynamicColorEnabledChange = { enabled, themeColor, accentColor ->
                             vm.setDynamicColorEnabled(enabled, themeColor, accentColor)
@@ -429,6 +441,7 @@ fun SettingsScreen(
                         onUiSurfaceAlphaPreviewChange = { alpha -> vm.setUiSurfaceAlphaPreview(alpha) },
                         onBlurEnabledChange = vm::setBlurEnabled,
                         onBlurBackgroundExpEnabledChange = vm::setBlurBackgroundExpEnabled,
+                        onPredictiveBackEnabledChange = vm::setPredictiveBackEnabled,
                         onUiSurfaceAlphaSync = vm::syncUiSurfaceAlphaPreview
                     )
                 }
@@ -775,6 +788,7 @@ private fun SettingsMainContent(
     vm: MainViewModel,
     scrollBehavior: TopAppBarScrollBehavior,
     onLogout: () -> Unit,
+    onOpenKernelRunnerSettings: () -> Unit,
     onOpenThemeSettings: () -> Unit,
     onOpenAppProfileTemplates: () -> Unit,
     onOpenManagerTools: () -> Unit,
@@ -844,6 +858,13 @@ private fun SettingsMainContent(
                     )
                 },
                 onClick = { vm.openLoginOobe() }
+            )
+            ExpressiveListItem(
+                title = stringResource(R.string.settings_kernel_runner_title),
+                subtitle = stringResource(R.string.settings_kernel_runner_desc),
+                leadingIcon = Icons.Default.Computer,
+                onClick = onOpenKernelRunnerSettings,
+                trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
             )
         }
 
@@ -1030,16 +1051,6 @@ private fun SettingsMainContent(
                 subtitle = stringResource(R.string.settings_notify_build_desc),
                 checked = state.notifyBuild,
                 onCheckedChange = { vm.setNotifyBuild(it) }
-            )
-        }
-
-        SettingsGroup(title = stringResource(R.string.settings_navigation)) {
-            SwitchSettingsItem(
-                icon = Icons.Default.ArrowBack,
-                title = stringResource(R.string.settings_predictive_back),
-                subtitle = stringResource(R.string.settings_predictive_back_desc),
-                checked = state.predictiveBackEnabled,
-                onCheckedChange = { vm.setPredictiveBackEnabled(it) }
             )
         }
 
@@ -2107,6 +2118,7 @@ private fun ThemeSettingsScreen(
     uiSurfaceAlpha: Float,
     blurEnabled: Boolean,
     blurBackgroundExpEnabled: Boolean,
+    predictiveBackEnabled: Boolean,
     onThemeModeChange: (String) -> Unit,
     onDynamicColorEnabledChange: (Boolean, Int?, Int?) -> Unit,
     onCustomThemeColorsChange: (Int, Int) -> Unit,
@@ -2116,6 +2128,7 @@ private fun ThemeSettingsScreen(
     onUiSurfaceAlphaPreviewChange: (Float) -> Unit,
     onBlurEnabledChange: (Boolean) -> Unit,
     onBlurBackgroundExpEnabledChange: (Boolean) -> Unit,
+    onPredictiveBackEnabledChange: (Boolean) -> Unit,
     onUiSurfaceAlphaSync: () -> Unit
 ) {
     // An interrupted slider drag (back gesture / backgrounding / the slider being
@@ -2218,6 +2231,16 @@ private fun ThemeSettingsScreen(
                     }
                 )
             }
+        }
+
+        SettingsGroup(title = stringResource(R.string.settings_navigation)) {
+            SwitchSettingsItem(
+                icon = Icons.Default.SwipeLeft,
+                title = stringResource(R.string.settings_predictive_back),
+                subtitle = stringResource(R.string.settings_predictive_back_desc),
+                checked = predictiveBackEnabled,
+                onCheckedChange = onPredictiveBackEnabledChange
+            )
         }
 
         SettingsGroup(title = stringResource(R.string.settings_background)) {
@@ -2696,7 +2719,7 @@ private fun openSourceNoticeGroups(): List<OpenSourceNoticeGroup> = listOf(
             OpenSourceNotice("KernelSU", "GPL-3.0", "workflow setup.sh source", "https://github.com/tiann/KernelSU"),
             OpenSourceNotice("KernelSU Next", "GPL-3.0", "workflow setup.sh source", "https://github.com/KernelSU-Next/KernelSU-Next"),
             OpenSourceNotice("SukiSU Ultra", "GPL-3.0", "kernel setup, ksud, android_bootimg", "https://github.com/SukiSU-Ultra/SukiSU-Ultra"),
-            OpenSourceNotice("ReSukiSU", "GPL-3.0", "workflow setup.sh source", "https://github.com/ReSukiSU/ReSukiSU"),
+            OpenSourceNotice("BakaSU", "GPL-3.0", "workflow setup.sh source", "https://github.com/Baka-SU/BakaSU"),
             OpenSourceNotice("SUSFS", "GPL-2.0", "kernel patches and module integration", "https://gitlab.com/simonpunk/susfs4ksu"),
             OpenSourceNotice("ShirkNeko/susfs4ksu", "GPL-2.0", "GitHub mirror / patch source", "https://github.com/ShirkNeko/susfs4ksu"),
             OpenSourceNotice("SukiSU_patch", "GPL-2.0", "workflow patch source", "https://github.com/ShirkNeko/SukiSU_patch"),
@@ -2999,7 +3022,7 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
             stringResource(R.string.settings_navigation) -> stringResource(R.string.settings_group_navigation_desc)
             stringResource(R.string.settings_language) -> stringResource(R.string.settings_language_desc)
             stringResource(R.string.settings_theme) -> stringResource(R.string.settings_group_theme_desc)
-            "ReSukiSU" -> stringResource(R.string.settings_group_backend_desc, "ReSukiSU")
+            "BakaSU" -> stringResource(R.string.settings_group_backend_desc, "BakaSU")
             "SukiSU" -> stringResource(R.string.settings_group_backend_desc, "SukiSU")
             "KernelSU" -> stringResource(R.string.settings_group_backend_desc, "KernelSU")
             stringResource(R.string.settings_manager_settings) -> stringResource(R.string.settings_group_manager_settings_desc)
@@ -3023,10 +3046,10 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
             stringResource(R.string.settings_security) -> Icons.Default.VerifiedUser
             stringResource(R.string.settings_app_update) -> Icons.Default.Download
             stringResource(R.string.settings_notification) -> Icons.Default.Notifications
-            stringResource(R.string.settings_navigation) -> Icons.Default.ArrowBack
+            stringResource(R.string.settings_navigation) -> Icons.Default.SwipeLeft
             stringResource(R.string.settings_language) -> Icons.Default.Language
             stringResource(R.string.settings_theme) -> Icons.Default.Palette
-            "ReSukiSU", "SukiSU", "KernelSU" -> Icons.Default.AdminPanelSettings
+            "BakaSU", "SukiSU", "KernelSU" -> Icons.Default.AdminPanelSettings
             stringResource(R.string.settings_manager_settings) -> Icons.Default.AdminPanelSettings
             stringResource(R.string.settings_kernel_capabilities) -> Icons.Default.Tune
             stringResource(R.string.settings_tcp_congestion_control) -> Icons.Default.Tune

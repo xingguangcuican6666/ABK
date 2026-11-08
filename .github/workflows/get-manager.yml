@@ -92,9 +92,9 @@ jobs:
           if [ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]; then
             echo "This is the SukiSU variant"
             git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
-          elif [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
-            echo "This is the ReSukiSU variant"
-            git clone https://github.com/ReSukiSU/ReSukiSU.git KernelSU
+          elif [ "${{ inputs.kernelsu_variant }}" == "BakaSU" ]; then
+            echo "This is the BakaSU variant"
+            git clone https://github.com/Baka-SU/BakaSU.git KernelSU
           elif [ "${{ inputs.kernelsu_variant }}" == "Official" ]; then
             echo "This is the Official"
             git clone https://github.com/tiann/KernelSU.git KernelSU
@@ -114,7 +114,7 @@ jobs:
 
           if [ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]; then
             KSU_VERSION=$((40000 + KSU_GIT_VERSION - 2815))
-          elif [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
+          elif [ "${{ inputs.kernelsu_variant }}" == "BakaSU" ]; then
             KSU_VERSION=$((30700 + KSU_GIT_VERSION))
           elif [ "${{ inputs.kernelsu_variant }}" == "Official" ]; then
             KSU_VERSION=$((30000 + KSU_GIT_VERSION))
@@ -211,9 +211,9 @@ jobs:
                 download_manager_for_repo "SukiSU-Ultra/SukiSU-Ultra" "SukiSU"
               fi
               ;;
-            "ReSukiSU")
-              # ReSukiSU has no release APKs; Actions build-manager (fallback to main latest in script).
-              download_manager_for_repo "ReSukiSU/ReSukiSU" "ReSukiSU"
+            "BakaSU")
+              # BakaSU has no release APKs; Actions build-manager (fallback to main latest in script).
+              download_manager_for_repo "Baka-SU/BakaSU" "BakaSU"
               ;;
             *)
               echo "::error::未知 KernelSU 变体: ${{ inputs.kernelsu_variant }}"

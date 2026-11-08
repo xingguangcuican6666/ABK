@@ -29,7 +29,7 @@ class BuildSummaryParserTest {
             2026-03-01T00:00:03Z 内核版本: 6.1
             子版本号：162
             补丁级别: 2026-03
-            KSU 变体: ReSukiSU
+            KSU 变体: BakaSU
             KSU 分支: Stable(标准)
             构建时间:
             SUSFS 状态: 启用
@@ -59,7 +59,7 @@ class BuildSummaryParserTest {
         assertEquals("6.1", summary.kernelVersion)
         assertEquals("162", summary.subLevel)
         assertEquals("2026-03", summary.osPatchLevel)
-        assertEquals("ReSukiSU", summary.ksuVariant)
+        assertEquals("BakaSU", summary.ksuVariant)
         assertEquals("Stable(标准)", summary.ksuBranch)
         assertEquals("无", summary.buildTime)
         assertEquals("true", summary.networkingEnabled)

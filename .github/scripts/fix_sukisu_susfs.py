@@ -151,17 +151,17 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
     (void)flags;
 
     if (unlikely(!filename_ptr || !*filename_ptr || IS_ERR(*filename_ptr)))
-        return 0;
+        return 1;
 
     filename = *filename_ptr;
     if (unlikely(!filename->name))
-        return 0;
+        return 1;
 
     if (!ksu_is_allow_uid_for_current(current_uid().val))
-        return 0;
+        return 1;
 
     if (likely(memcmp(filename->name, SU_PATH, sizeof(SU_PATH))))
-        return 0;
+        return 1;
 
     pr_info("ksu_handle_execveat_sucompat: su found\n");
     memcpy((void *)filename->name, KSUD_PATH, sizeof(KSUD_PATH));
@@ -170,7 +170,7 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
     if (ret)
         pr_err("escape_with_root_profile() failed: %d\n", ret);
 
-    return 0;
+    return ret;
 }
 
 int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
@@ -247,17 +247,17 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
     (void)__never_use_flags;
 
     if (unlikely(!filename_ptr))
-        return 0;
+        return 1;
 
     filename = *filename_ptr;
     if (IS_ERR(filename) || !filename || !filename->name)
-        return 0;
+        return 1;
 
     if (!ksu_is_allow_uid_for_current(current_uid().val))
-        return 0;
+        return 1;
 
     if (likely(memcmp(filename->name, su_path, sizeof(su_path))))
-        return 0;
+        return 1;
 
     pr_info("ksu_handle_execveat_sucompat: su found\n");
     memcpy((void *)filename->name, KSUD_PATH, sizeof(KSUD_PATH));
@@ -269,7 +269,7 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
         pr_err("escape_with_root_profile() failed: %d\n", ret);
 
     ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
-    return 0;
+    return ret;
 }
 
 int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
@@ -340,6 +340,21 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 #endif
 '''
         text = text.replace(marker, compat_block + marker, 1)
+
+    # fs/exec.c uses !hook_result to select post-exec su-session handling.
+    # Older ABK wrappers returned zero for ordinary/denied execs as well,
+    # causing anonymous driver FDs to be injected into services like zygote.
+    pattern = re.compile(
+        r"(int ksu_handle_execveat_sucompat\(int \*fd, struct filename \*\*filename_ptr,.*?\n\{)"
+        r"(?P<body>.*?)(\n\})",
+        re.S,
+    )
+    match = pattern.search(text)
+    if match and "(void)fd;" in match["body"] and "ret = escape_with_root_profile();" in match["body"]:
+        body = match["body"]
+        body = re.sub(r"\n    return 0;\s*$", "\n    return ret;", body)
+        body = body.replace("return 0;", "return 1;")
+        text = text[:match.start("body")] + body + text[match.end("body"):]
 
     write_if_changed(path, text, original, changed_files)
 
@@ -803,7 +818,12 @@ def patch_selinux_hide(path, changed_files):
     original = path.read_text()
     text = original
 
-    text = text.replace("static struct selinux_state fake_state;", "struct selinux_state fake_state;")
+    # 旧版 SukiSU 带 fake_state，需要去掉 static 导出；新版已移除该变量，故改为可选匹配。
+    text = re.sub(
+        r"(?m)^\s*(?:static\s+)?struct\s+selinux_state\s+fake_state\s*;",
+        "struct selinux_state fake_state;",
+        text,
+    )
     text = text.replace(
         "static bool ksu_selinux_hide_running __read_mostly = false;",
         "bool ksu_selinux_hide_running __read_mostly = false;",
@@ -811,6 +831,25 @@ def patch_selinux_hide(path, changed_files):
     text = text.replace(
         "static bool ksu_selinux_hide_enabled __read_mostly = false;",
         "bool ksu_selinux_hide_enabled __read_mostly = false;",
+    )
+    # The SUSFS GKI patch calls these helpers from security/selinux/*.c.
+    # Official KernelSU is patched by 10_enable_susfs_for_ksu.patch, but the
+    # SukiSU path does not apply that patch, so export them here.
+    text = text.replace(
+        "static ssize_t my_write_context(struct file *file, char *buf, size_t size)",
+        "ssize_t my_write_context(struct file *file, char *buf, size_t size)",
+    )
+    text = text.replace(
+        "static ssize_t my_write_access(struct file *file, char *buf, size_t size)",
+        "ssize_t my_write_access(struct file *file, char *buf, size_t size)",
+    )
+    text = text.replace(
+        "static int my_setprocattr(const char *name, void *value, size_t size);",
+        "int my_setprocattr(const char *name, void *value, size_t size);",
+    )
+    text = text.replace(
+        "static int __nocfi my_setprocattr(",
+        "int __nocfi my_setprocattr(",
     )
     text = text.replace(
         "static DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
@@ -859,7 +898,32 @@ void initialize_fake_status(void)
         "static void security_compute_av_user_with_policy(",
         "void security_compute_av_user_with_policy(",
     )
+    if "ksu_setup_preinit_file" not in text:
+        text += r'''
 
+#ifdef CONFIG_KSU_SUSFS
+/* SukiSU has no preinit backend; satisfy the SUSFS GKI preinit hooks. */
+struct filename;
+struct user_arg_ptr;
+
+int ksu_setup_preinit_file(struct filename **filename_ptr, struct user_arg_ptr *argv_user);
+int ksu_preinit_handle_post_execveat(int *fd, struct filename **filename_ptr,
+                                     void *argv_user, void *envp_user,
+                                     int *flags, int *retval, int *preinit_fd);
+
+int ksu_setup_preinit_file(struct filename **filename_ptr, struct user_arg_ptr *argv_user)
+{
+    return -EINVAL;
+}
+
+int ksu_preinit_handle_post_execveat(int *fd, struct filename **filename_ptr,
+                                     void *argv_user, void *envp_user,
+                                     int *flags, int *retval, int *preinit_fd)
+{
+    return 0;
+}
+#endif
+'''
     write_if_changed(path, text, original, changed_files)
 
 
@@ -1119,7 +1183,6 @@ def verify(ksu_dir):
             "bool susfs_is_current_ksu_domain",
         ),
         ksu_dir / "feature/selinux_hide.c": (
-            "struct selinux_state fake_state;",
             "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key)",
             "struct page *fake_status",
             "bool ksu_selinux_hide_enabled __read_mostly",
@@ -1127,6 +1190,12 @@ def verify(ksu_dir):
             "void initialize_fake_status(",
             "int security_context_to_sid_with_policy(",
             "int security_sid_to_context_with_policy(",
+            "ssize_t my_write_context(",
+            "ssize_t my_write_access(",
+            "int my_setprocattr(",
+            "int __nocfi my_setprocattr(",
+            "int ksu_setup_preinit_file(",
+            "int ksu_preinit_handle_post_execveat(",
         ),
         ksu_dir / "supercall/supercall.c": ("int ksu_handle_sys_reboot",),
     }
@@ -1167,6 +1236,10 @@ def verify(ksu_dir):
         "static int security_sid_to_context_with_policy(",
         "static void __nocfi security_compute_av_user_with_policy(",
         "static void security_compute_av_user_with_policy(",
+        "static ssize_t my_write_context(",
+        "static ssize_t my_write_access(",
+        "static int my_setprocattr(",
+        "static int __nocfi my_setprocattr(",
     )
     present = [marker for marker in forbidden if marker in selinux_hide]
     if present:

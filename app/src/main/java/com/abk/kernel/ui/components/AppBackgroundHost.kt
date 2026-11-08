@@ -88,7 +88,7 @@ fun AppBackgroundHost(
             // While a wallpaper is configured, wait on a slightly lighter neutral than
             // surface: on a cold start the decode lands a frame or two later, and pure
             // black behind translucent frosted surfaces reads as a black flash (this
-            // mirrors ReSukiSU's use of surfaceContainer as the pre-load color).
+            // mirrors BakaSU's use of surfaceContainer as the pre-load color).
             .background(
                 if (hasBackground) colorScheme.surfaceContainer else colorScheme.surface
             )

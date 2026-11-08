@@ -1,0 +1,234 @@
+name: 内核构建 - Android 17 (6.18)
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernelsu_variant:
+        description: "KernelSU 变体"
+        required: true
+        type: choice
+        options:
+          - None
+          - Official
+          - SukiSU
+          - BakaSU
+        default: BakaSU
+      kernelsu_branch:
+        description: "KSU 分支"
+        required: true
+        type: choice
+        options:
+          - Stable(标准)
+          - Dev(开发)
+          - Latest(最新)
+          - Custom(自定义)
+        default: Stable(标准)
+      custom_ref:
+        description: "自定义引用 (仅在KSU分支为'Custom(自定义)'时使用)"
+        required: false
+        type: string
+      version:
+        description: "自定义版本名 (可选)"
+        required: false
+        type: string
+      build_time:
+        description: "自定义构建时间 (可选，N或留空=当前UTC)"
+        required: false
+        type: string
+        default: "Sun Dec 01 08:10:00 UTC 2024"
+      virtualization_support:
+        description: "虚拟化支持"
+        required: false
+        type: choice
+        options:
+          - "off"
+          - "on"
+        default: "off"
+      use_zram:
+        description: "启用 ZRAM 增强算法"
+        required: true
+        type: boolean
+        default: false
+      use_bbg:
+        description: "启用 BBG 防格机"
+        required: true
+        type: boolean
+        default: false
+      use_ddk:
+        description: "启用 DDK 防格机 LSM"
+        required: true
+        type: boolean
+        default: false
+      use_ntsync:
+        description: "启用 NTsync"
+        required: true
+        type: boolean
+        default: false
+      use_networking:
+        description: "启用网络增强（IPSet + BBR）"
+        required: true
+        type: boolean
+        default: false
+      use_kpm:
+        description: "启用 KPM 功能"
+        required: true
+        type: boolean
+        default: false
+      use_rekernel:
+        description: "启用 Re-Kernel 驱动"
+        required: false
+        type: boolean
+        default: false
+      zram_full_algo:
+        description: "启用 ZRAM 完整算法支持（legacy LZ4K/LZ4KD/LZ4K_OPLUS 会自动跳过）"
+        required: false
+        type: boolean
+        default: false
+      zram_extra_algos:
+        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；会忽略 lz4k/lz4kd/lz4k_oplus）"
+        required: false
+        type: string
+        default: ""
+      kpm_password:
+        description: "自定义 KPM 超级密码（留空=使用默认密码）"
+        required: false
+        type: string
+        default: ""
+      custom_external_modules:
+        description: "自定义外部模块（兼容旧 repo;stage，也支持 module:repo;stage 与 set:repo#child;stage，用 | 分隔）"
+        required: false
+        type: string
+        default: ""
+      custom_kernel_options:
+        description: "自定义内核选项（每行一条 Kconfig/defconfig 片段）"
+        required: false
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      kernelsu_variant:
+        required: true
+        type: string
+      kernelsu_branch:
+        required: true
+        type: string
+      custom_ref:
+        required: false
+        type: string
+      version:
+        required: false
+        type: string
+      build_time:
+        required: false
+        type: string
+        default: "Sun Dec 01 08:10:00 UTC 2024"
+      use_zram:
+        required: true
+        type: boolean
+      use_bbg:
+        required: true
+        type: boolean
+      use_ddk:
+        required: false
+        type: boolean
+        default: false
+      use_ntsync:
+        required: true
+        type: boolean
+      use_networking:
+        required: true
+        type: boolean
+      use_kpm:
+        required: true
+        type: boolean
+        default: false
+      use_rekernel:
+        required: false
+        type: boolean
+        default: false
+      virtualization_support:
+        required: false
+        type: string
+        default: "off"
+      zram_full_algo:
+        required: false
+        type: boolean
+        default: false
+      zram_extra_algos:
+        required: false
+        type: string
+        default: ""
+      kpm_password:
+        required: false
+        type: string
+        default: ""
+      custom_external_modules:
+        required: false
+        type: string
+        default: ""
+      custom_kernel_options:
+        required: false
+        type: string
+        default: ""
+      called_from_main:
+        description: "是否从 main.yml 调用（内部使用）"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-kernels-a17-6-18:
+    name: "6.18.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sub_level: "20"
+            os_patch_level: "2026-04"
+          - sub_level: "21"
+            os_patch_level: "2026-06"
+          - sub_level: "32"
+            os_patch_level: "2026-09"
+          # - sub_level: "X"
+          #   os_patch_level: "lts"
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      android_version: "android17"
+      kernel_version: "6.18"
+      sub_level: ${{ matrix.sub_level }}
+      os_patch_level: ${{ matrix.os_patch_level }}
+      ksu_variant: ${{ inputs.kernelsu_variant }}
+      ksu_branch: ${{ inputs.kernelsu_branch }}
+      custom_ref: ${{ inputs.custom_ref || '' }}
+      version: ${{ inputs.version || '' }}
+      build_time: ${{ inputs.build_time || '' }}
+      use_zram: ${{ inputs.use_zram }}
+      use_bbg: false
+      use_ddk: ${{ inputs.use_ddk }}
+      use_ntsync: ${{ inputs.use_ntsync }}
+      use_networking: ${{ inputs.use_networking }}
+      use_kpm: ${{ inputs.use_kpm }}
+      use_rekernel: ${{ inputs.use_rekernel || false }}
+      enable_susfs: false
+      virtualization_support: ${{ inputs.virtualization_support || 'off' }}
+      zram_full_algo: ${{ inputs.zram_full_algo || false }}
+      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
+      kpm_password: ${{ inputs.kpm_password || '' }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
+      custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
+      upload_aux_artifacts: false
+
+  # 仅在直接触发时运行，从 main.yml 调用时跳过
+  get-ksu-manager:
+    if: ${{ !inputs.called_from_main }}
+    uses: ./.github/workflows/get-manager.yml
+    secrets: inherit
+    with:
+      kernelsu_variant: ${{ inputs.kernelsu_variant }}
+      ksu_branch: ${{ inputs.kernelsu_branch }}
+      custom_ref: ${{ inputs.custom_ref || '' }}

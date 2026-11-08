@@ -20,9 +20,10 @@ SUPPORTED_KERNELS = {
     (6, 1): "android14",
     (6, 6): "android15",
     (6, 12): "android16",
+    (6, 18): "android17",
 }
 # 受支持的 GKI 编译 profile，按版本升序排列。任意内核线都会被映射到其中之一：
-# 低于最低线（5.10）套用最低线，高于/等于最高线（6.12）套用最高线，
+# 低于最低线（5.10）套用最低线，高于/等于最高线（6.18）套用最高线，
 # 中间版本 floor 到不超过它的最近一条线。映射后的 (major, patchlevel) 决定
 # AOSP manifest 分支与 build.yml 中所有按 kernel_version 分叉的编译方式/工作流。
 SUPPORTED_PROFILE_LINES = sorted(SUPPORTED_KERNELS)
@@ -37,7 +38,7 @@ def resolve_build_profile(major: int, patchlevel: int) -> tuple[tuple[int, int],
 
     返回 ((profile_major, profile_patchlevel), android_version)。
     - 低于最低受支持线：套用最低线（5.10 / android12）。
-    - 高于或等于最高受支持线：套用最高线（6.12 / android16），覆盖未来更高版本。
+    - 高于或等于最高受支持线：套用最高线（6.18 / android17），覆盖未来更高版本。
     - 位于两线之间：floor 到不超过该版本的最近一条受支持线。
     """
     lowest = SUPPORTED_PROFILE_LINES[0]

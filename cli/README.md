@@ -99,6 +99,17 @@ abk fork                                 # 创建/检查 fork
 abk sync                                 # 同步 fork 与上游
 ```
 
+### 私有源码凭据 / Private Source Credentials
+
+`abk source-secret` 管理目标 ABK fork 中用于读取私有 GitHub 内核源码的
+Actions Secret：
+
+```bash
+abk source-secret status
+abk source-secret set --token-file FILE
+abk source-secret delete --yes
+```
+
 ### 触发构建 / Trigger Build
 
 #### 自定义构建 (默认) / Custom Build (Default)
@@ -110,11 +121,91 @@ abk build --sub-level 246 --os-patch-level 2025-12
 abk build --android-version android14 --kernel-version 6.1 --sub-level 162 --os-patch-level 2026-03
 ```
 
+未指定 `--build-time` 时，CLI 会向 workflow 显式传入空值，由 workflow 使用
+当前 UTC。需要可复现的构建时间时，请显式传入固定的 `--build-time` 值。
+
+#### 类 LineageOS 源码构建 / Lineage-like Source Build
+
+CLI 现在与 App 共用 `kernel-source.yml`。源码必须位于 Git 仓库根目录，
+`--source-ref` 可以是 branch、tag、`refs/...` 或完整 commit SHA：
+
+```bash
+abk build \
+  --source-repo https://github.com/example/android_kernel_device.git \
+  --source-ref lineage-23.2 \
+  --os-patch-level lts
+```
+
+源码模式默认使用 `KSU=None` 并关闭 SUSFS；选择其他 KSU 后仍需用 `--susfs`
+显式开启。工作流会从源码根目录的 `Makefile` 自动检测内核版本。如果源码声明的
+版本不适合实际编译 profile，可以显式覆盖为 `X.Y` 或 `X.Y.Z`：
+
+```bash
+abk build \
+  --source-repo https://github.com/example/android_kernel_device.git \
+  --source-ref main \
+  --source-defconfig gki_defconfig \
+  --source-defconfig vendor/device_defconfig \
+  --source-device-label device-codename \
+  --source-kernel-version 6.13.4 \
+  --os-patch-level 2026-09 \
+  --ksu SukiSU
+```
+
+`--source-defconfig` 可重复使用，路径相对于 `arch/arm64/configs`，并且必须包含
+`gki_defconfig`。`--os-patch-level` 接受 `YYYY-MM` 或 `lts`。启用虚拟化时需同时
+指定 `--source-kernel-version`，CLI 会按实际编译 profile 归一为可用模式。
+
+私有源码仅支持 `github.com/OWNER/REPO`。先把具有源码读取权限的 token 保存到
+目标 ABK fork 的 Actions Secret，再触发构建：
+
+```bash
+abk source-secret status
+abk source-secret set --token-file ~/.config/abk/private-source.token
+# 也可以明确复用当前 CLI 登录 token：
+abk source-secret set --use-login-token
+
+abk build \
+  --source-repo https://github.com/example/private-kernel.git \
+  --source-ref main \
+  --source-private \
+  --os-patch-level 2026-09
+
+abk source-secret delete --yes
+```
+
+自动化环境可用 `ABK_CUSTOM_SOURCE_TOKEN`。仅在非 JSON 模式下可用
+`--token-file -` 从标准输入读取；`--json` 模式不会读取 stdin，请改用实际文件、
+`ABK_CUSTOM_SOURCE_TOKEN` 或 `--use-login-token`。token 不接受命令行明文参数，
+也不会写入 workflow inputs、dry-run 或 JSON 输出。
+
+#### 自定义 Kconfig / Custom Kconfig
+
+App 支持的内核选项覆盖也可通过 CLI 使用。文件采用标准 defconfig 片段格式，
+重复 symbol 以最后一项为准：
+
+```text
+CONFIG_LTO_CLANG_THIN=y
+CONFIG_LOCALVERSION="-my-kernel"
+# CONFIG_DEBUG_INFO is not set
+```
+
+```bash
+abk build --sub-level 246 --os-patch-level 2025-12 \
+  --kernel-options-file ./kernel.config
+```
+
+该选项支持普通 GKI、矩阵和自定义源码构建；OnePlus 工作流不接受它。CLI 会在
+dispatch 前检查所有 workflow inputs 的总载荷，超出 GitHub 上限时直接指出需要缩短
+Kconfig 或其他自定义输入。
+
 #### 预览构建计划 / Preview Build Plan
 
 ```bash
 abk build --sub-level 246 --os-patch-level 2025-12 --dry-run
 abk build --matrix both --ksu all --dry-run
+abk build --source-repo https://github.com/example/kernel.git \
+  --source-ref main --os-patch-level lts --dry-run
 ```
 
 #### 矩阵构建 / Matrix Build
@@ -163,7 +254,7 @@ abk build --oneplus --device oneplus_15
 - MTK CPU 设备 → 代理优化自动禁用
 - SUSFS 支持 android14/6.1、android15/6.6 和 android16/6.12
 - android16/6.12 自动关闭不兼容的 legacy lz4kd
-- KPM 仅对 SukiSU / ReSukiSU 生效；其他变体会自动禁用
+- KPM 仅对 SukiSU / BakaSU 生效；其他变体会自动禁用
 - 全管理器 OnePlus 矩阵由工作流按每个 KernelSU 变体独立决定 KPM
 
 不兼容的选项会被自动禁用并给出警告。
@@ -176,6 +267,10 @@ abk build --matrix both --ksu all        # 全版本 × 全 KSU
 ```
 
 ### 查看构建状态 / Check Build Status
+
+GitHub 返回 run 信息时，构建命令会直接显示 run ID、精确 Actions 链接，以及可复制的
+状态和下载命令。目标 fork 中的 workflow 仅因 GitHub 的 fork 默认策略而处于
+`disabled_fork` 状态时，CLI 会自动恢复并复查；手动禁用的 workflow 不会被覆盖。
 
 ```bash
 abk status                               # 最近构建
@@ -262,7 +357,7 @@ CLI 与 Android App 使用相同的远程 Secret 和公钥资产，但启用/禁
 abk --json --version
 abk --json whoami
 abk --json status --limit 20
-abk --json build --matrix a14 --ksu ReSukiSU --force
+abk --json build --matrix a14 --ksu BakaSU --force
 abk --json artifacts --run-id 12345 --download --artifact-id 67890
 ```
 
@@ -284,7 +379,8 @@ abk list
 | `--matrix full` | 全属性内核构建矩阵 |
 | `--matrix all-managers` | 全管理器全矩阵编译 |
 | `--oneplus` | OnePlus/Oplus 设备 |
-| `--ksu all` | 全 KSU 变体 (Official + SukiSU + ReSukiSU) |
+| `--source-repo HTTPS_URL` | 类 LineageOS 源码构建，需同时指定 `--source-ref` 和 `--os-patch-level` |
+| `--ksu all` | 全 KSU 变体 (Official + SukiSU + BakaSU) |
 
 ## 内核版本参数 / Kernel Version Options
 
@@ -330,8 +426,8 @@ android16/6.12）。
 | `None` | 无 Root |
 | `Official` | KernelSU 官方版 |
 | `SukiSU` | SukiSU Ultra |
-| `ReSukiSU` | ReSukiSU (默认) |
-| `all` | 全部 (Official + SukiSU + ReSukiSU) |
+| `BakaSU` | BakaSU (默认) |
+| `all` | 全部 (Official + SukiSU + BakaSU) |
 
 | 分支 / Branch | 描述 / Description |
 |------|------|

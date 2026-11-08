@@ -36,6 +36,7 @@ class ResolveBuildProfileTests(unittest.TestCase):
             (6, 1): "android14",
             (6, 6): "android15",
             (6, 12): "android16",
+            (6, 18): "android17",
         }
         for (major, patch), android in cases.items():
             with self.subTest(version=f"{major}.{patch}"):
@@ -49,8 +50,16 @@ class ResolveBuildProfileTests(unittest.TestCase):
         self.assertEqual(self.cs.resolve_build_profile(6, 5)[0], (6, 1))
         self.assertEqual(self.cs.resolve_build_profile(6, 11)[0], (6, 6))
 
-    def test_at_or_above_highest_line_maps_to_6_12(self):
-        for major, patch in [(6, 12), (6, 13), (7, 0), (8, 3)]:
+    def test_at_or_above_highest_line_maps_to_6_18(self):
+        # 最高受支持线已推进到 6.18 / android17；6.13~6.17 仍 floor 到 6.12。
+        for major, patch in [(6, 18), (6, 19), (7, 0), (8, 3)]:
+            with self.subTest(version=f"{major}.{patch}"):
+                (pm, pp), android = self.cs.resolve_build_profile(major, patch)
+                self.assertEqual((pm, pp), (6, 18))
+                self.assertEqual(android, "android17")
+
+    def test_between_6_12_and_6_18_floors_to_6_12(self):
+        for major, patch in [(6, 13), (6, 17)]:
             with self.subTest(version=f"{major}.{patch}"):
                 (pm, pp), android = self.cs.resolve_build_profile(major, patch)
                 self.assertEqual((pm, pp), (6, 12))

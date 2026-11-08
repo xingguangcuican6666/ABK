@@ -1,6 +1,9 @@
 package com.abk.kernel.utils
 
 import com.abk.kernel.data.model.BuildParameterSummary
+import com.abk.kernel.data.model.KSU_VARIANT_BAKASU
+import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
+import com.abk.kernel.data.model.KernelSupport
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.isKernelBuild
 import com.abk.kernel.data.model.isManagerBuild
@@ -8,7 +11,7 @@ import com.abk.kernel.data.model.isManagerDevBuild
 import com.abk.kernel.data.model.isPureManagerBuild
 import com.abk.kernel.data.model.workflowNameIndicatesManagerDev
 
-enum class FlashFilterKernelKind { ResuKisu, SukiSu, Official, None }
+enum class FlashFilterKernelKind { BakaSu, SukiSu, Official, None }
 
 enum class FlashFilterManagerKind { Release, Dev }
 
@@ -76,9 +79,13 @@ object FlashWorkflowFilter {
         val raw = summary?.ksuVariant.orEmpty().ifBlank { fallbackVariant.orEmpty() }
         val v = raw.lowercase()
         if (v.isBlank()) return null
+        // Shared classifier first: "ReSukiSU"/"ReSuki"/"Baka-SU" spellings must land on
+        // BakaSu even though they contain "sukisu"/"suki".
+        when (KernelSupport.inferRuntimeKsuFamily(v)) {
+            KSU_VARIANT_BAKASU -> return FlashFilterKernelKind.BakaSu
+            KSU_VARIANT_SUKISU -> return FlashFilterKernelKind.SukiSu
+        }
         return when {
-            "resuki" in v || "re-suki" in v || "resukisu" in v -> FlashFilterKernelKind.ResuKisu
-            "sukisu" in v -> FlashFilterKernelKind.SukiSu
             "kernelsu" in v || "official" in v -> FlashFilterKernelKind.Official
             else -> FlashFilterKernelKind.None
         }
@@ -105,14 +112,14 @@ object FlashWorkflowFilter {
     }
 
     /**
-     * Kernel sub-filters (ReSukiSU / SukiSu / …) need a resolved [FlashFilterKernelKind].
+     * Kernel sub-filters (BakaSU / SukiSu / …) need a resolved [FlashFilterKernelKind].
      *
      * While a run is [FlashFilterWorkflowState.Running] and [kernelKind] is still null
      * (no log summary yet, or dispatch config not linked), we show it under any active
      * kind filter so the list does not go empty mid-build. Once [kernelKind] is known
      * (queue [KernelBuildConfig] or parsed summary), non-matching kinds are hidden even
      * if GitHub status is still in_progress — e.g. SukiSu build disappears when only
-     * ReSukiSU is selected. That flicker is intentional: strict filter beats hiding
+     * BakaSU is selected. That flicker is intentional: strict filter beats hiding
      * the active run entirely.
      */
     private fun matchesKernelKindFilter(

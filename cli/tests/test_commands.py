@@ -1,5 +1,6 @@
 import contextlib
 import io
+import json
 import os
 import sys
 import tempfile
@@ -25,6 +26,12 @@ def build_args(**overrides):
         "lang": None,
         "matrix": None,
         "oneplus": False,
+        "source_repo": None,
+        "source_ref": None,
+        "source_private": False,
+        "source_defconfigs": None,
+        "source_device_label": None,
+        "source_kernel_version": None,
         "ref": "dev",
         "ksu_variant": "Official",
         "ksu_branch": None,
@@ -59,6 +66,7 @@ def build_args(**overrides):
         "zram_full_algo": False,
         "zram_extra_algos": None,
         "custom_modules": None,
+        "kernel_options_file": None,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -97,13 +105,22 @@ def artifact_args(**overrides):
 
 
 class RecordingGitHubClient:
-    def __init__(self, *, fork=None, trigger_error=None):
+    def __init__(
+        self,
+        *,
+        fork=None,
+        trigger_error=None,
+        trigger_response=None,
+        source_secret_exists=False,
+    ):
         self.token = "test-token"
         self.username = "alice"
         self.repo = fork["full_name"] if fork else abk.DEFAULT_REPO
         self.fork_repo = fork
         self._fork = fork
         self.trigger_error = trigger_error
+        self.trigger_response = trigger_response or {}
+        self.source_secret_exists = source_secret_exists
         self.create_fork_calls = 0
         self.sync_fork_calls = 0
         self.check_behind_calls = 0
@@ -147,7 +164,11 @@ class RecordingGitHubClient:
         )
         if self.trigger_error is not None:
             raise self.trigger_error
-        return {}
+        return self.trigger_response
+
+    def repository_secret_exists(self, name):
+        self.last_secret_name = name
+        return self.source_secret_exists
 
     def get_run(self, run_id):
         self.get_run_calls.append(run_id)
@@ -201,7 +222,7 @@ class ArtifactGitHubClient:
             "artifacts": [
                 {
                     "id": 77,
-                    "name": "ReSukiSU_kernel-test",
+                    "name": "BakaSU_kernel-test",
                     "size_in_bytes": 128,
                 }
             ]
@@ -305,6 +326,331 @@ class CommandBehaviorTests(unittest.TestCase):
         self.assertEqual(0, client.sync_fork_calls)
         self.assertEqual([], client.trigger_calls)
 
+    def test_custom_source_dry_run_matches_app_workflow_contract(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            options_file = Path(temp_dir) / "kernel.config"
+            options_file.write_text(
+                "CONFIG_TEST=y\n"
+                "# CONFIG_UNUSED is not set\n"
+                "CONFIG_TEST=m\n",
+                encoding="utf-8",
+            )
+            client = RecordingGitHubClient(fork=None)
+            result, output = self._run_build(
+                client,
+                source_repo="https://GitHub.com/example/kernel.git/",
+                source_ref="lineage-23.2",
+                source_defconfigs=["gki_defconfig", "vendor/device_defconfig"],
+                source_device_label="example-device",
+                source_kernel_version="6.13.4",
+                android_version=None,
+                kernel_version=None,
+                sub_level=None,
+                os_patch_level="LTS",
+                revision=None,
+                ksu_variant=None,
+                kernel_options_file=str(options_file),
+                dry_run=True,
+            )
+
+        self.assertEqual(0, result, output)
+        inputs_line = next(
+            line.strip().removeprefix("inputs=")
+            for line in output.splitlines()
+            if line.strip().startswith("inputs=")
+        )
+        inputs = json.loads(inputs_line)
+        self.assertEqual(25, len(inputs))
+        self.assertEqual("https://github.com/example/kernel.git", inputs["source_repo"])
+        self.assertEqual("lineage-23.2", inputs["source_ref"])
+        self.assertEqual(
+            "gki_defconfig\nvendor/device_defconfig",
+            inputs["defconfigs"],
+        )
+        self.assertEqual(
+            '{"os_patch_level":"lts","kernel_version_override":"6.13.4"}',
+            inputs["version_overrides"],
+        )
+        self.assertEqual("None", inputs["kernelsu_variant"])
+        self.assertEqual("true", inputs["cancel_susfs"])
+        self.assertEqual("false", inputs["use_kpm"])
+        self.assertEqual("", inputs["build_time"])
+        self.assertEqual(
+            "# CONFIG_UNUSED is not set\nCONFIG_TEST=m",
+            inputs["custom_kernel_options"],
+        )
+        self.assertIn("workflow=kernel-source.yml", output)
+
+    def test_custom_source_validation_fails_before_remote_calls(self):
+        cases = (
+            {"source_repo": "http://github.com/acme/kernel"},
+            {"source_repo": "https://github.com/acme/kernel name"},
+            {"source_repo": "https://github.com/acme/%2e%2e/kernel"},
+            {"source_repo": "https://[2001:db8::1]/acme/kernel"},
+            {"source_repo": "https://user:secret@github.com/acme/kernel"},
+            {"source_repo": "https://github.com/acme/kernel?token=secret"},
+            {
+                "source_repo": "https://gitlab.com/acme/kernel",
+                "source_private": True,
+            },
+            {"source_ref": "../unsafe"},
+            {"source_defconfigs": ["vendor/device_defconfig"]},
+            {"source_defconfigs": ["gki_defconfig", "../escape"]},
+            {"source_defconfigs": ["gki_defconfig", "vendor/./device_defconfig"]},
+            {"source_kernel_version": "6.x"},
+            {"source_kernel_version": None, "virt": "on"},
+            {"os_patch_level": "2026-13"},
+        )
+        for override in cases:
+            with self.subTest(override=override):
+                client = RecordingGitHubClient(fork=None)
+                source = {
+                    "source_repo": "https://github.com/acme/kernel",
+                    "source_ref": "main",
+                    "source_defconfigs": ["gki_defconfig"],
+                    "android_version": None,
+                    "kernel_version": None,
+                    "sub_level": None,
+                    "os_patch_level": "2026-01",
+                    "revision": None,
+                    "ksu_variant": None,
+                    "dry_run": True,
+                }
+                source.update(override)
+                result, output = self._run_build(client, **source)
+
+                self.assertEqual(2, result, output)
+                self.assertEqual(0, client.create_fork_calls)
+                self.assertEqual([], client.trigger_calls)
+
+    def test_custom_source_susfs_defaults_off_but_can_be_enabled(self):
+        common = {
+            "source_repo": "https://github.com/acme/kernel",
+            "source_ref": "main",
+            "source_defconfigs": ["gki_defconfig"],
+            "source_kernel_version": "5.10",
+            "android_version": None,
+            "kernel_version": None,
+            "sub_level": None,
+            "os_patch_level": "2026-01",
+            "revision": None,
+            "ksu_variant": "BakaSU",
+            "dry_run": True,
+        }
+        for susfs, expected in ((None, "true"), (True, "false")):
+            with self.subTest(susfs=susfs):
+                client = RecordingGitHubClient(fork=None)
+                result, output = self._run_build(client, susfs=susfs, **common)
+                self.assertEqual(0, result, output)
+                inputs_line = next(
+                    line.strip().removeprefix("inputs=")
+                    for line in output.splitlines()
+                    if line.strip().startswith("inputs=")
+                )
+                self.assertEqual(
+                    expected,
+                    json.loads(inputs_line)["cancel_susfs"],
+                )
+
+    def test_custom_source_virtualization_uses_detected_build_profile(self):
+        common = {
+            "source_repo": "https://github.com/acme/kernel",
+            "source_ref": "main",
+            "source_defconfigs": ["gki_defconfig"],
+            "android_version": None,
+            "kernel_version": None,
+            "sub_level": None,
+            "os_patch_level": "2026-01",
+            "revision": None,
+            "ksu_variant": None,
+            "dry_run": True,
+        }
+        cases = (
+            ("5.10.177", "on", "678"),
+            ("6.13.4", "123", "on"),
+        )
+        for version, requested, expected in cases:
+            with self.subTest(version=version, requested=requested):
+                client = RecordingGitHubClient(fork=None)
+                result, output = self._run_build(
+                    client,
+                    source_kernel_version=version,
+                    virt=requested,
+                    **common,
+                )
+                self.assertEqual(0, result, output)
+                inputs_line = next(
+                    line.strip().removeprefix("inputs=")
+                    for line in output.splitlines()
+                    if line.strip().startswith("inputs=")
+                )
+                self.assertEqual(
+                    expected,
+                    json.loads(inputs_line)["virtualization_support"],
+                )
+
+    def test_custom_source_618_disables_susfs_and_bbg(self):
+        client = RecordingGitHubClient(fork=None)
+        result, output = self._run_build(
+            client,
+            source_repo="https://github.com/acme/kernel",
+            source_ref="main",
+            source_defconfigs=["gki_defconfig"],
+            source_kernel_version="6.18.21",
+            os_patch_level="2026-06",
+            android_version=None,
+            kernel_version=None,
+            sub_level=None,
+            revision=None,
+            ksu_variant=None,
+            susfs=True,
+            bbg=True,
+            dry_run=True,
+        )
+
+        self.assertEqual(0, result, output)
+        inputs_line = next(
+            line.strip().removeprefix("inputs=")
+            for line in output.splitlines()
+            if line.strip().startswith("inputs=")
+        )
+        inputs = json.loads(inputs_line)
+        self.assertEqual("true", inputs["cancel_susfs"])
+        self.assertEqual("false", inputs["use_bbg"])
+
+    def test_private_custom_source_requires_configured_secret(self):
+        fork = {"full_name": "alice/ABK", "name": "ABK", "owner": {"login": "alice"}}
+        common = {
+            "source_repo": "https://github.com/acme/private-kernel",
+            "source_ref": "main",
+            "source_private": True,
+            "android_version": None,
+            "kernel_version": None,
+            "sub_level": None,
+            "os_patch_level": "2026-01",
+            "revision": None,
+            "ksu_variant": None,
+        }
+
+        missing = RecordingGitHubClient(fork=fork, source_secret_exists=False)
+        result, output = self._run_build(missing, **common)
+        self.assertEqual(1, result, output)
+        self.assertIn(abk.CUSTOM_SOURCE_SECRET_NAME, output)
+        self.assertIn("source-secret set", output)
+        self.assertEqual([], missing.trigger_calls)
+
+        configured = RecordingGitHubClient(fork=fork, source_secret_exists=True)
+        result, output = self._run_build(configured, **common)
+        self.assertEqual(0, result, output)
+        self.assertEqual(abk.CUSTOM_SOURCE_SECRET_NAME, configured.last_secret_name)
+        self.assertEqual("kernel-source.yml", configured.trigger_calls[0]["workflow_file"])
+        self.assertEqual("true", configured.trigger_calls[0]["inputs"]["source_private"])
+
+    def test_kernel_options_and_current_time_semantics_reach_standard_builds(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            options_file = Path(temp_dir) / "kernel.config"
+            options_file.write_text(
+                "CONFIG_ALPHA=y\r\nCONFIG_BETA=n\r\n",
+                encoding="utf-8",
+            )
+            client = RecordingGitHubClient(fork=None)
+            result, output = self._run_build(
+                client,
+                kernel_options_file=str(options_file),
+                build_time=None,
+                dry_run=True,
+            )
+
+        self.assertEqual(0, result, output)
+        self.assertIn('"build_time": ""', output)
+        self.assertIn(
+            '"custom_kernel_options": "CONFIG_ALPHA=y\\n# CONFIG_BETA is not set"',
+            output,
+        )
+
+    def test_oversized_combined_workflow_inputs_fail_before_dispatch(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            options_file = Path(temp_dir) / "near-limit.config"
+            options_file.write_text(
+                "\n".join(
+                    f"CONFIG_OPT_{index:03d}=" + ("x" * 495)
+                    for index in range(128)
+                ),
+                encoding="utf-8",
+            )
+            self.assertLessEqual(
+                options_file.stat().st_size,
+                abk.MAX_KERNEL_OPTIONS_SIZE,
+            )
+
+            modes = (
+                {},
+                {"matrix": "full"},
+                {
+                    "source_repo": "https://github.com/acme/kernel",
+                    "source_ref": "main",
+                    "source_kernel_version": "6.12",
+                    "android_version": None,
+                    "kernel_version": None,
+                    "sub_level": None,
+                    "revision": None,
+                    "os_patch_level": "2026-01",
+                    "ksu_variant": None,
+                },
+            )
+            for mode in modes:
+                with self.subTest(mode=mode or {"target": "custom"}):
+                    client = RecordingGitHubClient(fork=None)
+                    result, output = self._run_build(
+                        client,
+                        kernel_options_file=str(options_file),
+                        dry_run=True,
+                        **mode,
+                    )
+
+                    self.assertEqual(2, result, output)
+                    self.assertIn("workflow inputs", output)
+                    self.assertIn(
+                        str(abk.MAX_WORKFLOW_DISPATCH_INPUT_BYTES),
+                        output,
+                    )
+                    self.assertEqual([], client.trigger_calls)
+                    self.assertEqual(0, client.create_fork_calls)
+
+    def test_build_enables_workflow_before_dispatch(self):
+        fork = {"full_name": "alice/ABK", "name": "ABK", "owner": {"login": "alice"}}
+        client = RecordingGitHubClient(fork=fork)
+        client.ensure_workflow_active = mock.Mock()
+
+        result, output = self._run_build(client)
+
+        self.assertEqual(0, result, output)
+        client.ensure_workflow_active.assert_called_once_with("kernel-custom.yml")
+        self.assertEqual(1, len(client.trigger_calls))
+
+    def test_build_output_hands_off_exact_run_commands(self):
+        fork = {"full_name": "alice/ABK", "name": "ABK", "owner": {"login": "alice"}}
+        client = RecordingGitHubClient(
+            fork=fork,
+            trigger_response={
+                "workflow_run_id": 4242,
+                "run_url": "https://api.github.test/repos/alice/ABK/actions/runs/4242",
+                "html_url": "https://github.test/alice/ABK/actions/runs/4242",
+            },
+        )
+
+        result, output = self._run_build(client)
+
+        self.assertEqual(0, result, output)
+        self.assertIn("#4242", output)
+        self.assertIn("https://github.test/alice/ABK/actions/runs/4242", output)
+        self.assertIn("abk --repo alice/ABK status --run-id 4242", output)
+        self.assertIn(
+            "abk --repo alice/ABK artifacts --run-id 4242 --download",
+            output,
+        )
+        self.assertNotIn("test-token", output)
+
     def test_explicit_repo_build_never_switches_to_the_users_default_fork(self):
         client = RecordingGitHubClient(fork=None)
         client.repo = "org/custom-abk"
@@ -386,7 +732,7 @@ class CommandBehaviorTests(unittest.TestCase):
         _, output = self._run_build(
             client,
             matrix="full",
-            ksu_variant="ReSukiSU",
+            ksu_variant="BakaSU",
             dry_run=True,
             **defaulted,
         )
@@ -404,12 +750,12 @@ class CommandBehaviorTests(unittest.TestCase):
             self.assertIn(f'"{input_name}": "true"', output)
         self.assertEqual(0, client.create_fork_calls)
 
-    def test_resukisu_dev_dry_run_disables_kpm(self):
+    def test_bakasu_dev_dry_run_disables_kpm(self):
         client = RecordingGitHubClient(fork=None)
 
         result, output = self._run_build(
             client,
-            ksu_variant="ReSukiSU",
+            ksu_variant="BakaSU",
             ksu_branch="Dev",
             kpm=True,
             kpm_password="secret",
@@ -419,23 +765,23 @@ class CommandBehaviorTests(unittest.TestCase):
         self.assertEqual(0, result, output)
         self.assertIn('"use_kpm": "false"', output)
         self.assertNotIn('"kpm_password"', output)
-        self.assertIn("ReSukiSU", output)
+        self.assertIn("BakaSU", output)
 
-    def test_oneplus_resukisu_dry_run_enables_supported_kpm(self):
+    def test_oneplus_bakasu_dry_run_enables_supported_kpm(self):
         client = RecordingGitHubClient(fork=None)
 
         result, output = self._run_build(
             client,
             oneplus=True,
             device="oneplus_12_b",
-            ksu_variant="ReSukiSU",
+            ksu_variant="BakaSU",
             kpm=True,
             dry_run=True,
         )
 
         self.assertEqual(0, result, output)
         self.assertIn('"use_kpm": "true"', output)
-        self.assertIn("ReSukiSU", output)
+        self.assertIn("BakaSU", output)
 
     def test_oneplus_15t_dry_run_dispatches_sm8850_android16(self):
         client = RecordingGitHubClient(fork=None)
@@ -704,11 +1050,14 @@ class CommandBehaviorTests(unittest.TestCase):
     def test_first_build_dispatches_to_newly_created_user_fork(self):
         client = RecordingGitHubClient(fork=None)
 
-        self._run_build(client)
+        result, output = self._run_build(client)
 
+        self.assertEqual(0, result, output)
         self.assertEqual(1, client.create_fork_calls)
         self.assertEqual(1, len(client.trigger_calls))
         self.assertEqual("alice/ABK", client.trigger_calls[0]["repo"])
+        self.assertIn("https://github.com/alice/ABK/actions", output)
+        self.assertNotIn("--run-id None", output)
 
     def test_status_run_id_fetches_exact_run(self):
         fork = {"full_name": "alice/ABK", "name": "ABK", "owner": {"login": "alice"}}

@@ -113,6 +113,7 @@ import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
 import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.viewmodel.MainViewModel
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
@@ -451,6 +452,7 @@ private fun AbkMainScaffold(
     var rootAuthDetailPageVisible by rememberSaveable { mutableStateOf(false) }
     var managerPatchPageVisible by rememberSaveable { mutableStateOf(false) }
     var lastBackAt by remember { mutableStateOf(0L) }
+    var exitBackWindowOpen by remember { mutableStateOf(false) }
     val runtimeNativeManagerActive = state.hasNativeManagerPermission
     val visibleTabs = remember(state.runtimeNavigationEnabled, state.rootGranted, runtimeNativeManagerActive) {
         if (state.runtimeNavigationEnabled) {
@@ -581,16 +583,27 @@ private fun AbkMainScaffold(
 
     fun handleTopLevelBack() {
         val now = System.currentTimeMillis()
-        if (now - lastBackAt <= EXIT_BACK_INTERVAL_MS) {
-            context.findActivity()?.finish()
-        } else {
+        if (now - lastBackAt > EXIT_BACK_INTERVAL_MS) {
             lastBackAt = now
+            if (state.predictiveBackEnabled) exitBackWindowOpen = true
             Toast.makeText(context, context.getString(R.string.press_again_exit), Toast.LENGTH_SHORT).show()
+        } else if (!state.predictiveBackEnabled || exitBackWindowOpen) {
+            context.findActivity()?.finish()
         }
     }
 
     if (!childPageVisible) {
-        BackHandler(onBack = ::handleTopLevelBack)
+        BackHandler(
+            enabled = !state.predictiveBackEnabled || !exitBackWindowOpen,
+            onBack = ::handleTopLevelBack
+        )
+    }
+
+    LaunchedEffect(exitBackWindowOpen) {
+        if (exitBackWindowOpen) {
+            delay(EXIT_BACK_INTERVAL_MS)
+            exitBackWindowOpen = false
+        }
     }
 
     val navProgressAnim = remember { Animatable(1f) }

@@ -18,10 +18,10 @@
     "添加 KernelSU": "Add KernelSU",
     "应用 SUSFS 补丁": "Apply SUSFS patch",
     "注入 SukiSU SUSFS Kconfig": "Inject SukiSU SUSFS Kconfig",
-    "注入 SukiSU/ReSukiSU KPM Kconfig": "Inject SukiSU/ReSukiSU KPM Kconfig",
+    "注入 SukiSU/BakaSU KPM Kconfig": "Inject SukiSU/BakaSU KPM Kconfig",
     "添加 SUSFS 配置": "Add SUSFS config",
     "应用 Kernel 特定补丁": "Apply kernel-specific patches",
-    "应用 KPM 补丁 (SukiSU/ReSukiSU)": "Apply KPM patch (SukiSU/ReSukiSU)",
+    "应用 KPM 补丁 (SukiSU/BakaSU)": "Apply KPM patch (SukiSU/BakaSU)",
     "应用 NTsync 补丁": "Apply NTsync patch",
     "应用 Networking 增强 (IPSet + BBR)": "Networking enhancements (IPSet + BBR)",
     "应用 Re-Kernel": "Apply Re-Kernel",
@@ -68,12 +68,13 @@
     "添加一加 8E 处理器支持": "Add OnePlus 8E SoC support",
     "修复 6.6 WiFi/蓝牙兼容性（三星 + 小米）": "Fix 6.6 WiFi/BT compatibility (Samsung + Xiaomi)",
     "修复 Official SUSFS 源码兼容": "Fix Official SUSFS source compatibility",
-    "修复 ReSukiSU SUSFS 源码兼容": "Fix ReSukiSU SUSFS source compatibility",
-    "修复 SukiSU/ReSukiSU android16-6.12 源码兼容": "Fix SukiSU/ReSukiSU android16-6.12 compatibility",
-    "修复 SukiSU/ReSukiSU sulog 兼容": "Fix SukiSU/ReSukiSU sulog compatibility",
+    "修复 BakaSU SUSFS 源码兼容": "Fix BakaSU SUSFS source compatibility",
+    "修复 SukiSU/BakaSU android16-6.12 / android17-6.18 源码兼容": "Fix SukiSU/BakaSU android16-6.12 / android17-6.18 compatibility",
+    "修复 SukiSU/BakaSU android16-6.12 源码兼容": "Fix SukiSU/BakaSU android16-6.12 compatibility",
+    "修复 SukiSU/BakaSU sulog 兼容": "Fix SukiSU/BakaSU sulog compatibility",
     "修复 glibc 2.38 兼容性": "Fix glibc 2.38 compatibility",
     "应用 Unicode 绕过修复": "Apply Unicode bypass fix",
     "补齐 SukiSU SUSFS 内联 hook 符号": "Complete SukiSU SUSFS inline-hook symbols",
-    "最终修复 SukiSU/ReSukiSU 源码兼容": "Final SukiSU/ReSukiSU source compatibility fix"
+    "最终修复 SukiSU/BakaSU 源码兼容": "Final SukiSU/BakaSU source compatibility fix"
   }
 }

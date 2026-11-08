@@ -179,6 +179,7 @@
     <string name="build_no_root_scheme_desc">不注入任何 Root 授权方案；KSU 分支、SUSFS 和 KPM 会自动关闭。</string>
     <string name="build_oneplus_no_root_scheme_desc">构建无 Root 的 OnePlus 内核；SUSFS 和 KPM 会自动关闭。</string>
     <string name="build_oneplus_ksu_branch_desc">OnePlus 构建使用对应 KernelSU 上游默认分支。</string>
+    <string name="build_ksu_variant_deprecated">ReSukiSU 上游已更名为 BakaSU，当前已按 BakaSU 处理。</string>
     <string name="build_ksu_none">None（无 Root 方案）</string>
     <string name="build_standard">标准</string>
     <string name="build_development">开发</string>
@@ -436,7 +437,7 @@
     <string name="flash_chip_kernel_kind">内核: %1$s</string>
     <string name="flash_chip_susfs">SUSFS</string>
     <string name="flash_chip_kernel_unknown">?</string>
-    <string name="flash_kernel_resukisu">ReSukiSU</string>
+    <string name="flash_kernel_bakasu">BakaSU</string>
     <string name="flash_kernel_sukisu">SukiSU</string>
     <string name="flash_kernel_official">Official</string>
     <string name="flash_kernel_none">None</string>
@@ -449,7 +450,7 @@
     <string name="flash_cancel_confirm_yes">是的，取消</string>
     <string name="flash_build_elapsed">构建时长 %1$s</string>
     <string name="flash_filter_kernel">内核</string>
-    <string name="flash_filter_kernel_resukisu">ReSukiSU</string>
+    <string name="flash_filter_kernel_bakasu">BakaSU</string>
     <string name="flash_filter_kernel_sukisu">SukiSU</string>
     <string name="flash_filter_kernel_official">Official KernelSU</string>
     <string name="flash_filter_kernel_none">无 KSU</string>
@@ -752,7 +753,7 @@
     <string name="settings_group_system_tools_desc">SELinux 和模块卸载路径相关工具。</string>
     <string name="settings_group_allowlist_desc">导出或导入当前 Root 授权列表。</string>
     <string name="settings_group_tool_status_desc">最近一次工具操作的执行结果。</string>
-    <string name="settings_group_local_templates_desc">管理保存在 ReSukiSU profile 存储中的模板。</string>
+    <string name="settings_group_local_templates_desc">管理保存在 BakaSU profile 存储中的模板。</string>
     <string name="settings_group_status_desc">最近一次模板操作的执行结果。</string>
     <string name="settings_group_edit_template_desc">直接编辑 App Profile 模板 JSON。</string>
     <string name="settings_app_update">应用更新</string>
@@ -1039,7 +1040,7 @@
     <string name="settings_tools_refreshing">正在刷新工具状态</string>
     <string name="settings_local_templates">本地模板</string>
     <string name="settings_templates_loading">正在读取模板</string>
-    <string name="settings_templates_loading_desc">从 ReSukiSU profile 存储加载</string>
+    <string name="settings_templates_loading_desc">从 BakaSU profile 存储加载</string>
     <string name="settings_templates_empty">暂无模板</string>
     <string name="settings_templates_empty_desc">保存后会出现在这里</string>
     <string name="settings_template_editing">正在编辑</string>
@@ -1273,7 +1274,7 @@
     <string name="ru_no_embedded_ksud">未找到可执行的 APK 内置 SukiSU-Ultra ksud；无 Root 时只能在选择 boot.img 后生成 patched 镜像。</string>
     <string name="ru_install_requires_root">该安装方式需要 Root 权限。</string>
     <string name="ru_not_active">未激活</string>
-    <string name="ru_only_generic_su">仅检测到通用 su shell，未检测到可用于 ABK 运行态管理的 KernelSU/ReSukiSU 控制接口。</string>
+    <string name="ru_only_generic_su">仅检测到通用 su shell，未检测到可用于 ABK 运行态管理的 KernelSU/BakaSU 控制接口。</string>
     <string name="ru_unknown_su_compat">未知 su 兼容模式</string>
     <string name="ru_unknown_feature">未知 Feature</string>
     <string name="ru_invalid_template_name">模板名称无效</string>
@@ -1286,10 +1287,10 @@
     <string name="ru_hide_selinux_toggle_failed">隐藏 SELinux 修改切换失败: %1$d</string>
     <string name="ru_command_timeout">命令超时</string>
     <string name="ru_manager_not_active">管理器未激活</string>
-    <string name="ru_no_manager_interface">未检测到可用的 KernelSU/ReSukiSU 管理器接口或 Root shell。</string>
+    <string name="ru_no_manager_interface">未检测到可用的 KernelSU/BakaSU 管理器接口或 Root shell。</string>
     <string name="ru_diag_compat_shell_only">当前仅通过 ksud/root shell 兼容层工作，ABK 尚未被内核识别为原生管理器，无法管理 Root 授权策略。</string>
-    <string name="ru_diag_generic_su_only">当前仅有通用 su shell 可用，未检测到 KernelSU/ReSukiSU 原生管理器接口。</string>
-    <string name="ru_diag_native_not_manager">KernelSU/ReSukiSU native 接口可访问，但当前 ABK APK 未被识别为管理器。请确认安装的是与内核构建时 ABK_MANAGER_CERT_SHA256 匹配的 com.abk.kernel 正式签名 APK。</string>
+    <string name="ru_diag_generic_su_only">当前仅有通用 su shell 可用，未检测到 KernelSU/BakaSU 原生管理器接口。</string>
+    <string name="ru_diag_native_not_manager">KernelSU/BakaSU native 接口可访问，但当前 ABK APK 未被识别为管理器。请确认安装的是与内核构建时 ABK_MANAGER_CERT_SHA256 匹配的 com.abk.kernel 正式签名 APK。</string>
     <string name="ru_diag_control_no_response">ABK control 未响应；内核可能没有启用 CONFIG_ABK_CONTROL，或 ABK Control 外部模块缺少 before_build 阶段。</string>
     <string name="ru_log_invoke_libksud">[ABK] 通过 Root shell 调用内置 libksud.so</string>
     <string name="ru_log_ksud_path">[ABK] ksud 路径: %1$s</string>

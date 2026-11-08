@@ -41,7 +41,7 @@ void main() {
   test('classifies workflow artifacts into Android-aligned categories', () {
     const kernel = BuildArtifactSummary(
       id: 1,
-      name: 'ReSuKiSU_kernel-android14-6.1.zip',
+      name: 'BakaSU_kernel-android14-6.1.zip',
       sizeBytes: 1,
       expired: false,
       archiveDownloadUrl: null,

@@ -73,7 +73,7 @@ normalize_variant() {
         none) printf 'None\n' ;;
         official) printf 'Official\n' ;;
         sukisu) printf 'SukiSU\n' ;;
-        resukisu) printf 'ReSukiSU\n' ;;
+        bakasu) printf 'BakaSU\n' ;;
         *) log_error "unsupported KSU_VARIANT: $1" ;;
     esac
 }
@@ -131,6 +131,8 @@ source_env() {
     : "${VIRTUALIZATION_SUPPORT:=off}"
     : "${VIRTUALIZATION_SOURCE:=$SOURCES_DIR/Droidspaces-OSS}"
     : "${VIRTUALIZATION_SUPPORT_PATCHES:=$VIRTUALIZATION_SOURCE/Documentation/resources/kernel-patches/GKI}"
+    : "${VIRTUALIZATION_REF:=${ABK_DROIDSPACES_REF:-v7.1.0}}"
+    : "${ABK_DROIDSPACES_REF:=$VIRTUALIZATION_REF}"
     : "${REVISION:=r1}"
     : "${ABK_MANAGER_CERT_ENV_FILE:=$ABK_SOURCE/app/signing/abk-manager-cert.env}"
     : "${ABK_MANAGER_PACKAGE:=$(read_shell_kv "$ABK_MANAGER_CERT_ENV_FILE" ABK_MANAGER_PACKAGE)}"
@@ -281,12 +283,16 @@ resolve_ksu_ref() {
     track="$(normalize_track "$KSU_TRACK")"
 
     case "$variant:$track" in
-        Official:'Stable(标准)') printf '%s\n' '3f388ef137c78e1ca0c92c0ada3b8717cdcc4302' ;;
-        Official:'Dev(开发)') printf '%s\n' '290609c945728fc93d85735918793567588103c1' ;;
-        SukiSU:'Stable(标准)') printf '%s\n' 'c5af9eadac43b1f0b9751471be78e6eef681554b' ;;
-        SukiSU:'Dev(开发)') printf '%s\n' 'aac170bcb86ce45516b3e2c0e2b32b57004b8f73' ;;
-        ReSukiSU:'Stable(标准)') printf '%s\n' 'b6706363b95525acd4007da19edadb1d41b2ea27' ;;
-        ReSukiSU:'Dev(开发)') printf '%s\n' 'fb771414f249ab886c09f2cfcbbf91c4b4dab2d1' ;;
+        # 与 .github/scripts/resolve-ksu-ref.sh 的 Stable/Dev 层保持一致：同一 commit 在两处
+        # 独立维护，漂移会让本地构建与 CI 编出不同的内核管理器。
+        Official:'Stable(标准)') printf '%s\n' '08a3b087e49227c8a6731c5f1114998b5e25255b' ;;
+        Official:'Dev(开发)') printf '%s\n' '08a3b087e49227c8a6731c5f1114998b5e25255b' ;;
+        SukiSU:'Stable(标准)') printf '%s\n' 'cf87e3f4ddd3f6e5464d85acf56aaa6950e70841' ;;
+        SukiSU:'Dev(开发)') printf '%s\n' 'cf87e3f4ddd3f6e5464d85acf56aaa6950e70841' ;;
+        # Baka-SU/BakaSU 上游没有 dev 分支（只有 main 与若干 feature 分支），故 Stable 与 Dev
+        # 同钉 main HEAD 9dbce02e；旧 SHA b6706363/fb771414 在改名后的仓库里仍可达，可作回退。
+        BakaSU:'Stable(标准)') printf '%s\n' '9dbce02e511ea6b6305a238b84e456f6a92e1d0b' ;;
+        BakaSU:'Dev(开发)') printf '%s\n' '9dbce02e511ea6b6305a238b84e456f6a92e1d0b' ;;
         None:'Stable(标准)'|None:'Dev(开发)'|None:'Custom(自定义)') printf '%s\n' '' ;;
         *:'Custom(自定义)')
             [[ -n "$KSU_CUSTOM_REF" ]] || log_error "KSU_CUSTOM_REF must be set when KSU_TRACK=Custom(自定义)"
@@ -304,7 +310,7 @@ resolve_ksu_setup_url() {
     case "$variant" in
         Official) printf '%s\n' 'https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh' ;;
         SukiSU) printf '%s\n' 'https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh' ;;
-        ReSukiSU) printf '%s\n' 'https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh' ;;
+        BakaSU) printf '%s\n' 'https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh' ;;
         None) printf '%s\n' '' ;;
         *) log_error "unsupported KSU_VARIANT: $variant" ;;
     esac
@@ -316,7 +322,7 @@ resolve_ksu_repo_url() {
     case "$variant" in
         Official) printf '%s\n' 'https://github.com/tiann/KernelSU.git' ;;
         SukiSU) printf '%s\n' 'https://github.com/SukiSU-Ultra/SukiSU-Ultra.git' ;;
-        ReSukiSU) printf '%s\n' 'https://github.com/ReSukiSU/ReSukiSU.git' ;;
+        BakaSU) printf '%s\n' 'https://github.com/Baka-SU/BakaSU.git' ;;
         None) printf '%s\n' '' ;;
         *) log_error "unsupported KSU_VARIANT: $variant" ;;
     esac
@@ -334,6 +340,7 @@ KSU_TRACK=$(normalize_track "$KSU_TRACK")
 KSU_CUSTOM_REF=$KSU_CUSTOM_REF
 ENABLE_SUSFS=$ENABLE_SUSFS
 VIRTUALIZATION_SUPPORT=$VIRTUALIZATION_SUPPORT
+VIRTUALIZATION_REF=${VIRTUALIZATION_REF:-$ABK_DROIDSPACES_REF}
 USE_ZRAM=$USE_ZRAM
 ZRAM_FULL_ALGO=$ZRAM_FULL_ALGO
 ZRAM_EXTRA_ALGOS=$ZRAM_EXTRA_ALGOS
@@ -771,8 +778,8 @@ apply_unicode_bypass_fix() {
     )
 }
 
-apply_resukisu_susfs_pre_compat() {
-    [[ "$(normalize_variant "$KSU_VARIANT")" == "ReSukiSU" ]] || return 0
+apply_bakasu_susfs_pre_compat() {
+    [[ "$(normalize_variant "$KSU_VARIANT")" == "BakaSU" ]] || return 0
     bool_is_true "$ENABLE_SUSFS" || return 0
 
     (
@@ -795,7 +802,7 @@ for base in roots:
         seen.add(resolved)
 
 if not candidates:
-    raise SystemExit("未找到实际 ReSukiSU 源码目录，无法应用 SUSFS 兼容修复")
+    raise SystemExit("未找到实际 BakaSU 源码目录，无法应用 SUSFS 兼容修复")
 
 for kernel_dir in candidates:
     tree_text = "\n".join(
@@ -812,7 +819,7 @@ for kernel_dir in candidates:
             and "DEFINE_STATIC_KEY_TRUE(ksu_is_init_rc_hook_enabled);" not in tree_text
         ):
             block = (
-                "\n/* ABK: ReSukiSU builtin SUSFS expects these inline hook static keys. */\n"
+                "\n/* ABK: BakaSU builtin SUSFS expects these inline hook static keys. */\n"
                 "#ifdef CONFIG_KSU_SUSFS\n"
                 "DEFINE_STATIC_KEY_TRUE(ksu_is_init_rc_hook_enabled);\n"
                 "DEFINE_STATIC_KEY_TRUE(ksu_is_input_hook_enabled);\n"
@@ -997,7 +1004,7 @@ apply_susfs_patch_stack() {
         patch -p1 <"50_add_susfs_in_gki-${ANDROID_VERSION}-${KERNEL_VERSION}.patch" || true
     )
 
-    if [[ "$variant" == "SukiSU" || "$variant" == "ReSukiSU" ]]; then
+    if [[ "$variant" == "SukiSU" || "$variant" == "BakaSU" ]]; then
         [[ -f "$KERNEL_ROOT/common/fs/susfs.c" ]] && \
             sed -i 's/^static void susfs_run_sus_path_loop(/void susfs_run_sus_path_loop(/' "$KERNEL_ROOT/common/fs/susfs.c"
     fi
@@ -1037,10 +1044,10 @@ apply_susfs_patch_stack() {
     fi
 }
 
-finalize_sukisu_resukisu_susfs_compat() {
+finalize_sukisu_bakasu_susfs_compat() {
     local variant
     variant="$(normalize_variant "$KSU_VARIANT")"
-    [[ "$variant" == "SukiSU" || "$variant" == "ReSukiSU" ]] || return 0
+    [[ "$variant" == "SukiSU" || "$variant" == "BakaSU" ]] || return 0
 
     (
         cd "$KERNEL_ROOT"
@@ -1108,7 +1115,7 @@ prepare_profile() {
     apply_glibc_fix
     apply_supp_op
     inject_kernelsu
-    apply_resukisu_susfs_pre_compat
+    apply_bakasu_susfs_pre_compat
     apply_susfs_patch_stack
 
     cp "$DEFCONFIG" "$DEFCONFIG.orig"
@@ -1168,24 +1175,72 @@ apply_networking() {
 
 apply_virtualization_support() {
     local slot="${VIRTUALIZATION_SUPPORT:-off}"
-    local patch_file slot_name
+    local patch_file slot_name ref
 
     [[ "$slot" != "off" ]] || return 0
-    [[ "$ANDROID_VERSION" == "android14" && "$KERNEL_VERSION" == "6.1" ]] || \
-        log_error "virtualization support is currently implemented only for android14-6.1"
 
-    case "$slot" in
-        678|123|345) ;;
-        *) log_error "VIRTUALIZATION_SUPPORT must be one of: off, 678, 123, 345" ;;
+    case "$KERNEL_VERSION" in
+        5.10|5.15|6.1|6.6|6.12|6.18) ;;
+        *) log_error "virtualization support is not implemented for kernel $KERNEL_VERSION" ;;
     esac
 
-    if [[ ! -d "$VIRTUALIZATION_SOURCE/.git" ]]; then
-        log_info "cloning virtualization support patches"
-        git clone --depth 1 https://github.com/ravindu644/Droidspaces-OSS.git "$VIRTUALIZATION_SOURCE"
+    # 6.12 and newer use a single kABI patch and ignore the padding slot selection.
+    if [[ "$KERNEL_VERSION" == "6.12" || "$KERNEL_VERSION" == "6.18" ]]; then
+        slot="on"
+    else
+        case "$slot" in
+            678|123|345) ;;
+            on) slot="678" ;;
+            *) log_error "VIRTUALIZATION_SUPPORT must be one of: off, 678, 123, 345" ;;
+        esac
     fi
 
-    slot_name="$(sed 's/\(.\)/\1_/g; s/_$//' <<<"$slot")"
-    patch_file="$VIRTUALIZATION_SUPPORT_PATCHES/below-kernel-6.12/001.GKI-below-6.12-fix_sysvipc_kabi_${slot_name}.patch"
+    # Mirror the workflow pin: config/config carries droidspaces=<ref>, default v7.1.0.
+    # Following upstream HEAD would let a docs-only change alter build output.
+    ref="${ABK_DROIDSPACES_REF:-}"
+    if [[ -z "$ref" && -f "$ABK_SOURCE/config/config" ]]; then
+        ref="$(awk -F= '
+            /^[[:space:]]*#/ { next }
+            $1 == "droidspaces" {
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
+                print $2
+                exit
+            }' "$ABK_SOURCE/config/config")"
+    fi
+    ref="${ref:-v7.1.0}"
+
+    local repo_url="https://github.com/ravindu644/Droidspaces-OSS.git"
+    local marker="$VIRTUALIZATION_SOURCE/.git/abk-droidspaces-ref"
+    local cached_ref=""
+
+    # Record which ref produced the checkout. Comparing it avoids both a stale tree
+    # after a pin change and a network round trip on every rebuild.
+    [[ -f "$marker" ]] && cached_ref="$(cat "$marker" 2>/dev/null || true)"
+
+    if [[ "$cached_ref" == "$ref" && -d "$VIRTUALIZATION_SUPPORT_PATCHES" ]]; then
+        log_info "virtualization patches already at $ref"
+    else
+        log_info "cloning virtualization support patches ($ref)"
+        rm -rf "$VIRTUALIZATION_SOURCE"
+        mkdir -p "$(dirname "$VIRTUALIZATION_SOURCE")"
+        if [[ "$ref" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            # A commit pin is not fetchable by --branch; clone and detach onto it.
+            git clone --no-checkout "$repo_url" "$VIRTUALIZATION_SOURCE"
+            git -C "$VIRTUALIZATION_SOURCE" checkout --detach "$ref"
+        else
+            git clone --depth 1 --branch "$ref" "$repo_url" "$VIRTUALIZATION_SOURCE"
+        fi
+        printf '%s\n' "$ref" >"$marker"
+    fi
+    [[ -d "$VIRTUALIZATION_SUPPORT_PATCHES" ]] || \
+        log_error "missing $VIRTUALIZATION_SUPPORT_PATCHES in the Droidspaces checkout ($ref)"
+
+    if [[ "$KERNEL_VERSION" == "6.12" || "$KERNEL_VERSION" == "6.18" ]]; then
+        patch_file="$VIRTUALIZATION_SUPPORT_PATCHES/kernel-6.12/001.GKI-6.12-or-above-fix_sysvipc_kabi.patch"
+    else
+        slot_name="$(sed 's/\(.\)/\1_/g; s/_$//' <<<"$slot")"
+        patch_file="$VIRTUALIZATION_SUPPORT_PATCHES/below-kernel-6.12/001.GKI-below-6.12-fix_sysvipc_kabi_${slot_name}.patch"
+    fi
 
     (
         cd "$KERNEL_ROOT/common"
@@ -1193,13 +1248,111 @@ apply_virtualization_support() {
             patch -p1 --forward <"$patch_file"
         elif patch -p1 --reverse --dry-run <"$patch_file" >/dev/null 2>&1; then
             :
-        elif [[ "$slot" == "678" ]]; then
+        elif [[ "$KERNEL_VERSION" == "6.12" || "$KERNEL_VERSION" == "6.18" ]]; then
+            perl -0pi -e 's/(\n\tunsigned int\s+rt_priority;\n)/$1\n#ifdef CONFIG_SYSVIPC\n\tunion {\n\t\tchar __kabi_ignored_0;\n\t\tstruct sysv_sem\t\t\tsysvsem;\n\t}__attribute__((packed));\n\tunion {\n\t\tchar __kabi_ignored_1;\n\t\tstruct sysv_shm\t\t\tsysvshm;\n\t}__attribute__((packed));\n#endif\n/s or die "rt_priority anchor not found\n";' include/linux/sched.h
             perl -0pi -e 's/#ifdef CONFIG_SYSVIPC\n\tstruct sysv_sem\s+sysvsem;\n\tstruct sysv_shm\s+sysvshm;\n#endif/#ifdef CONFIG_SYSVIPC\n\t\/\/ struct sysv_sem\t\t\tsysvsem;\n\t\/\/ struct sysv_shm\t\t\tsysvshm;\n#endif/s' include/linux/sched.h
-            perl -0pi -e 's/\tANDROID_KABI_RESERVE\(6\);\n\tANDROID_KABI_RESERVE\(7\);\n\tANDROID_KABI_RESERVE\(8\);/\n#ifdef CONFIG_SYSVIPC\n\tANDROID_KABI_USE(6, struct sysv_sem sysvsem);\n\t_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(7); ANDROID_KABI_RESERVE(8), struct sysv_shm sysvshm);\n#else\n\tANDROID_KABI_RESERVE(6);\n\tANDROID_KABI_RESERVE(7);\n\tANDROID_KABI_RESERVE(8);\n#endif/s' include/linux/sched.h
+            grep -qF 'char __kabi_ignored_0;' include/linux/sched.h || \
+                log_error "virtualization SYSVIPC 6.12+ kABI fallback failed"
         else
-            log_error "virtualization SYSVIPC patch failed for slot $slot"
+            # Upstream hunks are written against a fixed context and ACK branches lay out
+            # the KABI reserve block differently (5.10 already uses slots 1/2, 6.1 uses
+            # 1/2/3), so 123 and 345 reject on most branches. Rewrite in place for the
+            # selected slot, and fail loudly when the slot is already occupied rather than
+            # silently producing a kernel that breaks kABI.
+            ABK_SYSVIPC_SLOT="$slot" python3 - <<'PY' || \
+                log_error "virtualization SYSVIPC kABI fallback failed for slot $slot (reserve slots may be occupied; use 678)"
+import os
+import re
+import sys
+from pathlib import Path
+
+slot = os.environ["ABK_SYSVIPC_SLOT"]
+sched = Path("include/linux/sched.h")
+if not re.fullmatch(r"[1-8]{3}", slot) or len(set(slot)) != 3:
+    sys.exit(f"invalid slot: {slot}")
+first, second, third = slot
+
+text = sched.read_text()
+occupied = sorted(set(re.findall(r"ANDROID_KABI_USE\((\d),", text)))
+conflicts = sorted(set(occupied) & set(slot))
+if conflicts:
+    sys.exit(
+        "slot {} is already taken by ANDROID_KABI_USE({}); pick another slot "
+        "(678 fits every current ACK line)".format(slot, ",".join(conflicts))
+    )
+
+fields = (
+    "#ifdef CONFIG_SYSVIPC\n"
+    "\tstruct sysv_sem\t\t\tsysvsem;\n"
+    "\tstruct sysv_shm\t\t\tsysvshm;\n"
+    "#endif"
+)
+commented = (
+    "#ifdef CONFIG_SYSVIPC\n"
+    "\t// struct sysv_sem\t\t\tsysvsem;\n"
+    "\t// struct sysv_shm\t\t\tsysvshm;\n"
+    "#endif"
+)
+if fields not in text:
+    sys.exit("CONFIG_SYSVIPC fields are not in their stock shape")
+
+reserve = (
+    "\tANDROID_KABI_RESERVE({});\n"
+    "\tANDROID_KABI_RESERVE({});\n"
+    "\tANDROID_KABI_RESERVE({});"
+).format(first, second, third)
+if reserve not in text:
+    sys.exit(f"ANDROID_KABI_RESERVE({first},{second},{third}) block not found")
+replacement = (
+    "\n#ifdef CONFIG_SYSVIPC\n"
+    "\tANDROID_KABI_USE({}, struct sysv_sem sysvsem);\n"
+    "\t_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE({}); ANDROID_KABI_RESERVE({}), "
+    "struct sysv_shm sysvshm);\n"
+    "#else\n"
+    "{}\n"
+    "#endif"
+).format(first, second, third, reserve)
+
+text = text.replace(fields, commented, 1).replace(reserve, replacement, 1)
+sched.write_text(text)
+PY
+            grep -qF "ANDROID_KABI_USE(${slot:0:1}, struct sysv_sem sysvsem);" include/linux/sched.h || \
+                log_error "virtualization SYSVIPC kABI fallback produced no marker for slot $slot"
         fi
     )
+
+    # 5.10 and older also need the POSIX_MQUEUE kABI fix, or enabling
+    # CONFIG_POSIX_MQUEUE moves struct user_struct and vendor modules refuse to load.
+    if [[ "$KERNEL_VERSION" == "5.10" ]]; then
+        patch_file="$VIRTUALIZATION_SUPPORT_PATCHES/below-kernel-6.12/002.5.10_or_lower_use_android_abi_padding_for_posix_mqueue.patch"
+        (
+            cd "$KERNEL_ROOT/common"
+            if patch -p1 --forward --dry-run <"$patch_file" >/dev/null 2>&1; then
+                patch -p1 --forward <"$patch_file"
+            elif patch -p1 --reverse --dry-run <"$patch_file" >/dev/null 2>&1; then
+                :
+            else
+                perl -0pi -e 's/#ifdef CONFIG_POSIX_MQUEUE\n\t\/\* protected by mq_lock\t\*\/\n\tunsigned long mq_bytes;\t\/\* How many bytes can be allocated to mqueue\? \*\/\n#endif/#ifdef CONFIG_POSIX_MQUEUE\n\t\/\* protected by mq_lock\t\*\/\n\t\/\/unsigned long mq_bytes;\t\/\* How many bytes can be allocated to mqueue? \*\/\n#endif/s' include/linux/sched/user.h
+                perl -0pi -e 's/\tANDROID_KABI_RESERVE\(1\);\n\tANDROID_KABI_RESERVE\(2\);\n\tANDROID_OEM_DATA_ARRAY\(1, 2\);/\n#if defined(CONFIG_POSIX_MQUEUE)\n\tANDROID_KABI_USE(1, unsigned long mq_bytes);\n\tANDROID_KABI_RESERVE(2);\n\tANDROID_OEM_DATA_ARRAY(1, 2);\n#else\n\tANDROID_KABI_RESERVE(1);\n\tANDROID_KABI_RESERVE(2);\n\tANDROID_OEM_DATA_ARRAY(1, 2);\n#endif/s' include/linux/sched/user.h
+                grep -qF 'ANDROID_KABI_USE(1, unsigned long mq_bytes);' include/linux/sched/user.h || \
+                    log_error "virtualization POSIX_MQUEUE kABI fallback failed"
+            fi
+        )
+    fi
+
+    # Enabling IPC_NS on 6.12 and newer makes rust_binder.ko reference init_ipc_ns
+    # and put_ipc_ns, which the AOSP common branches do not export yet.
+    if [[ "$KERNEL_VERSION" == "6.12" || "$KERNEL_VERSION" == "6.18" ]]; then
+        (
+            cd "$KERNEL_ROOT/common"
+            if [[ -f ipc/msgutil.c ]] && ! grep -qF 'EXPORT_SYMBOL(init_ipc_ns);' ipc/msgutil.c; then
+                sed -i '/^struct msg_msgseg {/i EXPORT_SYMBOL(init_ipc_ns);' ipc/msgutil.c
+            fi
+            if [[ -f ipc/namespace.c ]] && ! grep -qF 'EXPORT_SYMBOL(put_ipc_ns);' ipc/namespace.c; then
+                sed -i '/^static struct ns_common \*ipcns_get(/i EXPORT_SYMBOL(put_ipc_ns);' ipc/namespace.c
+            fi
+        )
+    fi
 
     enable_virtualization_config() {
         local cfg="$1"
@@ -1217,7 +1370,40 @@ apply_virtualization_support() {
     enable_virtualization_config CONFIG_IPC_NS
     enable_virtualization_config CONFIG_PID_NS
     enable_virtualization_config CONFIG_DEVTMPFS
+
+    # Upstream v7.1.0 GKI list: Docker unsafe-procfs fix, NAT66 and macvlan.
+    # macvlan is kABI-safe: upstream measured no change across 8423 exported
+    # symbols on a 5.15 GKI tree, and the driver is self-contained.
     enable_virtualization_config CONFIG_USER_NS
+    enable_virtualization_config CONFIG_IP6_NF_NAT
+    enable_virtualization_config CONFIG_IP6_NF_TARGET_MASQUERADE
+    enable_virtualization_config CONFIG_MACVLAN
+
+    enable_virtualization_config CONFIG_NETFILTER_XT_MATCH_ADDRTYPE
+    enable_virtualization_config CONFIG_NETFILTER_XT_TARGET_LOG
+    enable_virtualization_config CONFIG_NETFILTER_XT_MATCH_RECENT
+    enable_virtualization_config CONFIG_IP_SET
+    enable_virtualization_config CONFIG_IP_SET_HASH_IP
+    enable_virtualization_config CONFIG_IP_SET_HASH_NET
+    enable_virtualization_config CONFIG_NETFILTER_XT_SET
+    enable_virtualization_config CONFIG_NETFILTER_XT_TARGET_REJECT
+    enable_virtualization_config CONFIG_IP_NF_TARGET_REJECT
+    enable_virtualization_config CONFIG_TMPFS_XATTR
+    enable_virtualization_config CONFIG_TMPFS_POSIX_ACL
+
+    # Upstream v7.1.0 keeps CONFIG_CFS_BANDWIDTH and CONFIG_CGROUP_PIDS off on GKI:
+    # they resize scheduler and cgroup structures, change the CRC of roughly four
+    # thousand exported symbols, and no kABI patch covers them. A local build only
+    # produces boot.img, so vendor_boot/vendor_dlkm/system_dlkm cannot be rebuilt
+    # and reflashed together with it. The stock defconfigs of android16-6.12 and
+    # android17-6.18 already ship both, which is upstream baseline and stays as is.
+    local forbidden
+    [[ -f "$DEFCONFIG.orig" ]] || log_error "missing defconfig baseline $DEFCONFIG.orig; cannot verify the virtualization options are kABI-safe"
+    for forbidden in CONFIG_CFS_BANDWIDTH CONFIG_CGROUP_PIDS; do
+        if ! grep -qxF "${forbidden}=y" "$DEFCONFIG.orig" && grep -qxF "${forbidden}=y" "$DEFCONFIG"; then
+            log_error "virtualization refuses to enable ${forbidden}: no kABI patch covers it on GKI and vendor modules would fail to load"
+        fi
+    done
 }
 
 apply_zram_stack() {
@@ -1393,7 +1579,7 @@ configure_kernel_options() {
         ensure_defconfig_value CONFIG_TMPFS_POSIX_ACL y
     fi
 
-    if [[ "$variant" == "SukiSU" || "$variant" == "ReSukiSU" ]]; then
+    if [[ "$variant" == "SukiSU" || "$variant" == "BakaSU" ]]; then
         if bool_is_true "$USE_KPM"; then
             ensure_defconfig_value CONFIG_KPM y
         else
@@ -1564,7 +1750,7 @@ apply_kpm_patch() {
     bool_is_true "$USE_KPM" || return 0
 
     case "$(normalize_variant "$KSU_VARIANT")" in
-        SukiSU|ReSukiSU) ;;
+        SukiSU|BakaSU) ;;
         *) return 0 ;;
     esac
 
@@ -1725,7 +1911,7 @@ main() {
         prepare_profile
         finalize_profile
         run_custom_external_modules before_build
-        finalize_sukisu_resukisu_susfs_compat
+        finalize_sukisu_bakasu_susfs_compat
         store_profile_snapshot
     fi
 

@@ -38,9 +38,9 @@ on:
         type: choice
         options:
           - SukiSU
-          - ReSukiSU
+          - BakaSU
           - Official
-        default: ReSukiSU
+        default: BakaSU
       kernelsu_branch:
         description: "KSU 分支"
         type: choice
@@ -156,6 +156,7 @@ on:
         description: "Android 16 - 6.12"
         type: boolean
         default: false
+
       build_all:
         description: "构建全部版本（忽略上方单独版本选项）"
         type: boolean
@@ -169,7 +170,7 @@ jobs:
     secrets: inherit
     with:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
-      kernelsu_branch: ${{ inputs.kernelsu_branch }}
+      ksu_branch: ${{ inputs.kernelsu_branch }}
 
   # ==================== Android 12 - 5.10 构建 ====================
   build-a12-5-10:
@@ -301,6 +302,31 @@ jobs:
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       called_from_main: true
 
+  # ==================== Android 17 - 6.18 构建 ====================
+  build-a17-6-18:
+    if: inputs.build_all
+    uses: ./.github/workflows/kernel-a17-6-18.yml
+    secrets: inherit
+    with:
+      kernelsu_variant: ${{ inputs.kernelsu_variant }}
+      kernelsu_branch: ${{ inputs.kernelsu_branch }}
+      version: ${{ inputs.version }}
+      build_time: ${{ inputs.build_time || '' }}
+      use_zram: ${{ inputs.use_zram }}
+      use_bbg: false
+      use_ddk: ${{ inputs.use_ddk }}
+      use_ntsync: ${{ inputs.use_ntsync || false }}
+      use_networking: ${{ inputs.use_networking || false }}
+      use_kpm: ${{ inputs.use_kpm }}
+      use_rekernel: ${{ inputs.use_rekernel }}
+      virtualization_support: ${{ inputs.virtualization_support }}
+      zram_full_algo: ${{ inputs.zram_full_algo }}
+      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
+      kpm_password: ${{ inputs.kpm_password || '' }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
+      custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
+      called_from_main: true
+
   # ==================== 收集补丁冲突文件 ====================
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题
   collect-rejects:
@@ -312,6 +338,7 @@ jobs:
       - build-a14-6-1
       - build-a15-6-6
       - build-a16-6-12
+      - build-a17-6-18
     steps:
       - name: 下载冲突文件
         uses: actions/download-artifact@v8
@@ -356,6 +383,7 @@ jobs:
       - build-a14-6-1
       - build-a15-6-6
       - build-a16-6-12
+      - build-a17-6-18
 
     # ==================== 环境变量 ====================
     env:
@@ -372,7 +400,7 @@ jobs:
           case "${{ inputs.kernelsu_variant }}" in
             "Official")  KSU_NAME="KernelSU" ;;
             "SukiSU")    KSU_NAME="SukiSU" ;;
-            "ReSukiSU")  KSU_NAME="ReSukiSU" ;;
+            "BakaSU")  KSU_NAME="BakaSU" ;;
           esac
           echo "KSU_NAME=$KSU_NAME" >> $GITHUB_ENV
 
@@ -392,7 +420,7 @@ jobs:
           fi
 
           # Hook 类型
-          if [ "${{ inputs.kernelsu_variant }}" = "SukiSU" ] || [ "${{ inputs.kernelsu_variant }}" = "ReSukiSU" ]; then
+          if [ "${{ inputs.kernelsu_variant }}" = "SukiSU" ] || [ "${{ inputs.kernelsu_variant }}" = "BakaSU" ]; then
             echo "HOOK_TYPE=SUSFS Inline Hooks" >> $GITHUB_ENV
           else
             echo "HOOK_TYPE=KPROBE Hooks" >> $GITHUB_ENV
@@ -432,6 +460,7 @@ jobs:
           check_build "${{ inputs.build_a14_6_1 || inputs.build_all }}" "build-a14-6-1" "${{ needs.build-a14-6-1.result }}"
           check_build "${{ inputs.build_a15_6_6 || inputs.build_all }}" "build-a15-6-6" "${{ needs.build-a15-6-6.result }}"
           check_build "${{ inputs.build_a16_6_12 || inputs.build_all }}" "build-a16-6-12" "${{ needs.build-a16-6-12.result }}"
+          check_build "${{ inputs.build_all }}" "build-a17-6-18" "${{ needs.build-a17-6-18.result }}"
           [[ "$failed" -ne 0 ]] && exit 1 || true
 
       # ==================== 检出代码 ====================
@@ -441,11 +470,11 @@ jobs:
       # ==================== 确定 KSU 分支 ====================
       # 根据用户选择确定实际的 Git 分支
       - name: 确定 KSU 分支
-        if: inputs.kernelsu_branch == 'Dev(开发)' || inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'ReSukiSU'
+        if: inputs.kernelsu_branch == 'Dev(开发)' || inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'BakaSU'
         run: |
           case "${{ inputs.kernelsu_variant }}" in
             "Official") BRANCH="main" ;;
-            "SukiSU"|"ReSukiSU") BRANCH="main" ;;
+            "SukiSU"|"BakaSU") BRANCH="main" ;;
             *) echo "错误: 未知变体" >&2; exit 1 ;;
           esac
           echo "KSU_BRANCH=$BRANCH" >> $GITHUB_ENV
@@ -457,7 +486,7 @@ jobs:
           case "${{ inputs.kernelsu_variant }}" in
             "Official") REPO_URL="https://github.com/tiann/KernelSU.git"; REPO_URL2="tiann/KernelSU" ;;
             "SukiSU") REPO_URL="https://github.com/SukiSU-Ultra/SukiSU-Ultra.git"; REPO_URL2="SukiSU-Ultra/SukiSU-Ultra" ;;
-            "ReSukiSU") REPO_URL="https://github.com/ReSukiSU/ReSukiSU.git"; REPO_URL2="ReSukiSU/ReSukiSU" ;;
+            "BakaSU") REPO_URL="https://github.com/Baka-SU/BakaSU.git"; REPO_URL2="Baka-SU/BakaSU" ;;
           esac
 
           branch_input="${{ inputs.kernelsu_branch }}"
@@ -465,24 +494,28 @@ jobs:
             branch_input="Stable(标准)"
           fi
 
-          OFFICIAL_STABLE_REF="3f388ef137c78e1ca0c92c0ada3b8717cdcc4302"
-          SUKISU_STABLE_REF="c5af9eadac43b1f0b9751471be78e6eef681554b"
-          RESUKISU_STABLE_REF="3d790eaaabe9e7e33d938bbf836e0f247121e79e"
+          # 与 .github/scripts/resolve-ksu-ref.sh 的 Stable 层保持一致：同一 commit 在
+          # 两处独立维护，漂移会让 App 构建与发布链路编出不同的内核管理器。
+          OFFICIAL_STABLE_REF="08a3b087e49227c8a6731c5f1114998b5e25255b"
+          SUKISU_STABLE_REF="cf87e3f4ddd3f6e5464d85acf56aaa6950e70841"
+          # Baka-SU/BakaSU 上游（2026-09 由 ReSukiSU/ReSukiSU 改名而来）没有 dev 分支，
+          # 故 BAKASU_DEV_REF 直接继承 BAKASU_STABLE_REF，两者同为 main HEAD。
+          BAKASU_STABLE_REF="9dbce02e511ea6b6305a238b84e456f6a92e1d0b"
 
           OFFICIAL_DEV_REF="$OFFICIAL_STABLE_REF"
           SUKISU_DEV_REF="$SUKISU_STABLE_REF"
-          RESUKISU_DEV_REF="$RESUKISU_STABLE_REF"
+          BAKASU_DEV_REF="$BAKASU_STABLE_REF"
 
           case "$branch_input" in
             "Stable(标准)")
               OFFICIAL_REF="$OFFICIAL_STABLE_REF"
               SUKISU_REF="$SUKISU_STABLE_REF"
-              RESUKISU_REF="$RESUKISU_STABLE_REF"
+              BAKASU_REF="$BAKASU_STABLE_REF"
               ;;
             "Dev(开发)")
               OFFICIAL_REF="$OFFICIAL_DEV_REF"
               SUKISU_REF="$SUKISU_DEV_REF"
-              RESUKISU_REF="$RESUKISU_DEV_REF"
+              BAKASU_REF="$BAKASU_DEV_REF"
               ;;
             *) echo "错误: 未知 KSU 分支 $branch_input" >&2; exit 1 ;;
           esac
@@ -490,7 +523,7 @@ jobs:
           case "${{ inputs.kernelsu_variant }}" in
             "Official") KSU_REF="$OFFICIAL_REF"; KSU_URL="https://github.com/$REPO_URL2/commit/$KSU_REF" ;;
             "SukiSU") KSU_REF="$SUKISU_REF"; KSU_URL="https://github.com/$REPO_URL2/commit/$KSU_REF" ;;
-            "ReSukiSU") KSU_REF="$RESUKISU_REF"; KSU_URL="https://github.com/$REPO_URL2/commit/$KSU_REF" ;;
+            "BakaSU") KSU_REF="$BAKASU_REF"; KSU_URL="https://github.com/$REPO_URL2/commit/$KSU_REF" ;;
             *) echo "错误: 未知变体" >&2; exit 1 ;;
           esac
 
@@ -547,6 +580,7 @@ jobs:
           append_target "${{ inputs.build_a14_6_1 || inputs.build_all }}" "Android 14 / 6.1"
           append_target "${{ inputs.build_a15_6_6 || inputs.build_all }}" "Android 15 / 6.6"
           append_target "${{ inputs.build_a16_6_12 || inputs.build_all }}" "Android 16 / 6.12"
+          append_target "${{ inputs.build_all }}" "Android 17 / 6.18"
           if [[ -z "$build_targets" ]]; then
             build_targets="未选择"
           fi

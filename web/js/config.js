@@ -9,6 +9,7 @@ export const DATA_FILES = [
   { android: 'android14', kernel: '6.1',  label: 'android14 / 6.1',  deprecatedCutoff: '2024-09' },
   { android: 'android15', kernel: '6.6',  label: 'android15 / 6.6',  deprecatedCutoff: '' },
   { android: 'android16', kernel: '6.12', label: 'android16 / 6.12', deprecatedCutoff: '' },
+  { android: 'android17', kernel: '6.18', label: 'android17 / 6.18', deprecatedCutoff: '' },
 ];
 
 // 运行时缓存键（每次加载页面生成新的，防止缓存）
@@ -21,4 +22,6 @@ export var SUSFS_COMPAT_MIN = {
   '6.1': 145,
   '6.6': 98,
   '6.12': 0,
+  // 6.18 故意不登记：susfs4ksu 没有 gki-android17-6.18 分支，
+  // isSusfsCompat() 查不到最小值即返回 false，页面不会给出 SUSFS 兼容徽章。
 };

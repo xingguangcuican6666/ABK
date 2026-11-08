@@ -181,6 +181,7 @@
     <string name="build_no_root_scheme_desc">Не внедрять схему авторизации root. Ветка KSU, SUSFS и KPM будут автоматически отключены.</string>
     <string name="build_oneplus_no_root_scheme_desc">Сборка ядра OnePlus без root. SUSFS и KPM будут отключены автоматически.</string>
     <string name="build_oneplus_ksu_branch_desc">Сборки OnePlus используют ветку upstream по умолчанию для выбранного варианта KernelSU.</string>
+    <string name="build_ksu_variant_deprecated">Апстрим ReSukiSU переименован в BakaSU; эта сборка использует BakaSU.</string>
     <string name="build_ksu_none">None (без root)</string>
     <string name="build_standard">стабильная</string>
     <string name="build_development">разработка</string>
@@ -420,7 +421,7 @@
     <string name="flash_chip_kernel_kind">Ядро: %1$s</string>
     <string name="flash_chip_susfs">SUSFS</string>
     <string name="flash_chip_kernel_unknown">?</string>
-    <string name="flash_kernel_resukisu">ReSukiSU</string>
+    <string name="flash_kernel_bakasu">BakaSU</string>
     <string name="flash_kernel_sukisu">SukiSU</string>
     <string name="flash_kernel_official">Official</string>
     <string name="flash_kernel_none">None</string>
@@ -433,7 +434,7 @@
     <string name="flash_cancel_confirm_yes">Да, отменить</string>
     <string name="flash_build_elapsed">Время сборки %1$s</string>
     <string name="flash_filter_kernel">Ядро</string>
-    <string name="flash_filter_kernel_resukisu">ReSukiSU</string>
+    <string name="flash_filter_kernel_bakasu">BakaSU</string>
     <string name="flash_filter_kernel_sukisu">SukiSU</string>
     <string name="flash_filter_kernel_official">Official KernelSU</string>
     <string name="flash_filter_kernel_none">Без KSU</string>
@@ -645,7 +646,7 @@
     <string name="settings_notify_build_desc">Показывать статус сборки в уведомлениях</string>
     <string name="settings_navigation">Навигация</string>
     <string name="settings_predictive_back">Жест predictive back</string>
-    <string name="settings_predictive_back_desc">Включить предпросмотр при свайпе назад и кастомную анимацию закрытия страницы</string>
+    <string name="settings_predictive_back_desc">Включить предпросмотр при свайпе назад, кастомную анимацию закрытия страницы и системную анимацию predictive back при выходе на главный экран</string>
     <string name="settings_color_appearance">Цвет и внешний вид</string>
     <string name="settings_enter_color_appearance">Открыть «Цвет и внешний вид»</string>
     <string name="settings_about_desc">Ссылки репозитория, версия и участники</string>
@@ -739,7 +740,7 @@
     <string name="settings_group_system_tools_desc">Инструменты для SELinux и путей размонтирования модулей.</string>
     <string name="settings_group_allowlist_desc">Экспорт или импорт текущего списка авторизации root.</string>
     <string name="settings_group_tool_status_desc">Результат последней операции с инструментами.</string>
-    <string name="settings_group_local_templates_desc">Управление шаблонами, сохранёнными в хранилище профилей ReSukiSU.</string>
+    <string name="settings_group_local_templates_desc">Управление шаблонами, сохранёнными в хранилище профилей BakaSU.</string>
     <string name="settings_group_status_desc">Результат последней операции с шаблоном.</string>
     <string name="settings_group_edit_template_desc">Прямое редактирование JSON-шаблона App Profile.</string>
     <string name="settings_app_update">Обновление приложения</string>
@@ -1000,7 +1001,7 @@
     <string name="settings_unknown">Неизвестно</string>
     <string name="settings_local_templates">Локальные шаблоны</string>
     <string name="settings_templates_loading">Чтение шаблонов</string>
-    <string name="settings_templates_loading_desc">Загрузка из хранилища профилей ReSukiSU</string>
+    <string name="settings_templates_loading_desc">Загрузка из хранилища профилей BakaSU</string>
     <string name="settings_templates_empty">Шаблонов нет</string>
     <string name="settings_templates_empty_desc">Сохранённые шаблоны появятся здесь</string>
     <string name="settings_template_editing">Редактирование</string>
@@ -1234,7 +1235,7 @@
     <string name="ru_no_embedded_ksud">Исполняемый встроенный в APK SukiSU-Ultra ksud не найден; без root можно только сгенерировать пропатченный образ после выбора boot.img.</string>
     <string name="ru_install_requires_root">Этот способ установки требует прав root.</string>
     <string name="ru_not_active">Не активно</string>
-    <string name="ru_only_generic_su">Обнаружен только обычный su shell — управляющий интерфейс KernelSU/ReSukiSU для runtime-управления ABK не найден.</string>
+    <string name="ru_only_generic_su">Обнаружен только обычный su shell — управляющий интерфейс KernelSU/BakaSU для runtime-управления ABK не найден.</string>
     <string name="ru_unknown_su_compat">Неизвестный режим совместимости su</string>
     <string name="ru_unknown_feature">Неизвестная функция</string>
     <string name="ru_invalid_template_name">Недопустимое имя шаблона</string>
@@ -1247,10 +1248,10 @@
     <string name="ru_hide_selinux_toggle_failed">Не удалось переключить «Скрывать изменения SELinux»: %1$d</string>
     <string name="ru_command_timeout">Истекло время выполнения команды</string>
     <string name="ru_manager_not_active">Менеджер не активен</string>
-    <string name="ru_no_manager_interface">Не обнаружен ни доступный интерфейс менеджера KernelSU/ReSukiSU, ни root shell.</string>
+    <string name="ru_no_manager_interface">Не обнаружен ни доступный интерфейс менеджера KernelSU/BakaSU, ни root shell.</string>
     <string name="ru_diag_compat_shell_only">Сейчас работа идёт только через слой совместимости ksud/root shell — ABK ещё не распознан ядром как нативный менеджер, политикой авторизации root управлять нельзя.</string>
-    <string name="ru_diag_generic_su_only">Доступен только обычный su shell — нативный интерфейс менеджера KernelSU/ReSukiSU не обнаружен.</string>
-    <string name="ru_diag_native_not_manager">Нативный интерфейс KernelSU/ReSukiSU доступен, но текущий APK ABK не распознан как менеджер. Убедитесь, что установлен официально подписанный APK com.abk.kernel, чья подпись соответствует ABK_MANAGER_CERT_SHA256, заданному при сборке ядра.</string>
+    <string name="ru_diag_generic_su_only">Доступен только обычный su shell — нативный интерфейс менеджера KernelSU/BakaSU не обнаружен.</string>
+    <string name="ru_diag_native_not_manager">Нативный интерфейс KernelSU/BakaSU доступен, но текущий APK ABK не распознан как менеджер. Убедитесь, что установлен официально подписанный APK com.abk.kernel, чья подпись соответствует ABK_MANAGER_CERT_SHA256, заданному при сборке ядра.</string>
     <string name="ru_diag_control_no_response">ABK control не отвечает — возможно, в ядре не включён CONFIG_ABK_CONTROL или у внешнего модуля ABK Control нет этапа before_build.</string>
     <string name="ru_log_invoke_libksud">[ABK] Вызов встроенной libksud.so через root shell</string>
     <string name="ru_log_ksud_path">[ABK] Путь к ksud: %1$s</string>
@@ -1278,4 +1279,26 @@
     <string name="gh_root_must_be_object">Корневой узел должен быть JSON-объектом</string>
     <string name="gh_missing_module_name">Отсутствует ABK_MODULE_NAME</string>
     <string name="gh_catalog_fallback_name">Репозиторий модулей</string>
+
+    <!-- Kernel runner repository settings -->
+    <string name="settings_kernel_runner_title">Среда сборки ядра</string>
+    <string name="settings_kernel_runner_desc">Выбор runner GitHub или собственного для GKI и OnePlus/Oplus</string>
+    <string name="settings_kernel_runner_requires_fork">Войдите в GitHub и подготовьте собственный форк для настройки среды сборки.</string>
+    <string name="settings_kernel_runner_scope">Сохранение в переменные Actions репозитория %1$s</string>
+    <string name="settings_kernel_runner_applies_next">Настройка общая для репозитория и применяется к будущим сборкам. Задания в очереди и выполняющиеся задания не перемещаются. Нажмите «Сохранить», чтобы применить изменения.</string>
+    <string name="settings_kernel_runner_gki">GKI / свой исходный код</string>
+    <string name="settings_kernel_runner_oneplus">OnePlus / Oplus</string>
+    <string name="settings_kernel_runner_self_hosted">Использовать собственный runner</string>
+    <string name="settings_kernel_runner_self_hosted_desc">Использовать машину, соответствующую меткам ниже</string>
+    <string name="settings_kernel_runner_github_hosted_desc">Использовать ubuntu-latest на GitHub</string>
+    <string name="settings_kernel_runner_labels">Метки собственного runner</string>
+    <string name="settings_kernel_runner_labels_example">[\"self-hosted\",\"linux\",\"x64\",\"kernel-builder\"]</string>
+    <string name="settings_kernel_runner_labels_hint">Укажите одну метку или JSON-массив меток. Метки сохраняются после отключения собственного runner.</string>
+    <string name="settings_kernel_runner_labels_required">Перед включением собственного runner укажите его метки.</string>
+    <string name="settings_kernel_runner_unsupported">Основная ветка форка ещё не поддерживает переменные runner. Синхронизируйте рабочие процессы с этой функцией и обновите данные.</string>
+    <string name="settings_kernel_runner_offline">Runner должен быть зарегистрирован для этого репозитория, находиться в сети и соответствовать всем меткам. Иначе сборки останутся в очереди; автоматического перехода на GitHub нет.</string>
+    <string name="settings_kernel_runner_unsaved">Есть несохранённые изменения</string>
+    <string name="settings_kernel_runner_saved">Сохранено в GitHub</string>
+    <string name="settings_kernel_runner_saving">Сохранение…</string>
+    <string name="settings_kernel_runner_request_failed">Не удалось завершить запрос переменных GitHub. Обновите данные и повторите попытку.</string>
 </resources>

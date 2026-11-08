@@ -3,6 +3,7 @@
 import argparse
 import contextlib
 import errno
+import getpass
 import io
 import json
 import os
@@ -17,7 +18,7 @@ import webbrowser
 from pathlib import Path, PurePosixPath
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urljoin, urlparse
+from urllib.parse import urlencode, urljoin, urlparse, urlsplit, urlunsplit
 import zipfile
 import hashlib
 import hmac
@@ -102,12 +103,20 @@ SIGNING_KEY_VERSION = 1
 SIGNING_STATE_CONFIG_KEY = "signing_keys"
 MAX_SIGNING_KEY_FILE_SIZE = 64 * 1024
 CONFIG_LOCK_FILE = ".config.lock"
-CLI_VERSION = "0.1.0"
+CLI_VERSION = "0.2.0"
 JSON_SCHEMA_VERSION = 1
 MAX_MANIFEST_SIZE = 1024 * 1024
 MAX_SIGNATURE_SIZE = 64 * 1024
 MAX_PAYLOAD_SIZE = 8 * 1024 * 1024 * 1024
 MAX_ARTIFACT_DOWNLOAD_SIZE = MAX_PAYLOAD_SIZE + 64 * 1024 * 1024
+CUSTOM_SOURCE_SECRET_NAME = "ABK_CUSTOM_SOURCE_GITHUB_TOKEN"
+MAX_CUSTOM_SOURCE_TOKEN_SIZE = 16 * 1024
+MAX_KERNEL_OPTIONS_SIZE = 64 * 1024
+MAX_KERNEL_OPTIONS = 256
+# GitHub caps workflow_dispatch inputs at 65,535 characters. Use the UTF-8
+# serialized size as a conservative preflight so requests fail locally instead
+# of reaching the API as an opaque 422 response.
+MAX_WORKFLOW_DISPATCH_INPUT_BYTES = 65_535
 
 _CONFIG_THREAD_LOCK = threading.RLock()
 _CONFIG_LOCK_STATE = threading.local()
@@ -118,20 +127,26 @@ WORKFLOWS = {
     "a14": {"file": "kernel-a14-6-1.yml", "name": t("build_target_a14"), "android": "android14", "kernel": "6.1"},
     "a15": {"file": "kernel-a15-6-6.yml", "name": t("build_target_a15"), "android": "android15", "kernel": "6.6"},
     "a16": {"file": "kernel-a16-6-12.yml", "name": t("build_target_a16"), "android": "android16", "kernel": "6.12"},
+    # Android 17 / 6.18：SUSFS 固定关闭（susfs4ksu 无 gki-android17-6.18 分支），
+    # 因此该工作流不声明 cancel_susfs 输入，CLI 侧也不再下发。
+    "a17": {"file": "kernel-a17-6-18.yml", "name": t("build_target_a17"), "android": "android17", "kernel": "6.18"},
     "custom": {"file": "kernel-custom.yml", "name": t("build_target_custom")},
+    "source": {"file": "kernel-source.yml", "name": t("build_target_source")},
     "oneplus": {"file": "oneplus-custom.yml", "name": t("build_target_oneplus")},
 }
 
-ANDROID_VERSIONS = ["android12", "android13", "android14", "android15", "android16"]
-KERNEL_VERSIONS = ["5.10", "5.15", "6.1", "6.6", "6.12"]
+ANDROID_VERSIONS = ["android12", "android13", "android14", "android15", "android16", "android17"]
+KERNEL_VERSIONS = ["5.10", "5.15", "6.1", "6.6", "6.12", "6.18"]
 
-MATRIX_TARGETS = ["a12", "a13", "a14", "a15", "a16"]
+MATRIX_TARGETS = ["a12", "a13", "a14", "a15", "a16", "a17"]
 MATRIX_TARGETS_ALL = MATRIX_TARGETS + ["both", "full", "all-managers"]
-KSU_ALL_VARIANTS = ["Official", "SukiSU", "ReSukiSU"]
+KSU_ALL_VARIANTS = ["Official", "SukiSU", "BakaSU"]
 MANAGER_VARIANT_ALIASES = {
     "official": "Official",
     "sukisu": "SukiSU",
-    "resukisu": "ReSukiSU",
+    "bakasu": "BakaSU",
+    # Retired spelling of "bakasu"; older app builds can still dispatch with it.
+    "resukisu": "BakaSU",
     "none": "None",
 }
 
@@ -149,13 +164,15 @@ WORKFLOW_RUNTIME_NAMES = {
     "kernel-a14-6-1.yml": "内核构建 - Android 14 (6.1)",
     "kernel-a15-6-6.yml": "内核构建 - Android 15 (6.6)",
     "kernel-a16-6-12.yml": "内核构建 - Android 16 (6.12)",
+    "kernel-a17-6-18.yml": "内核构建 - Android 17 (6.18)",
     "kernel-custom.yml": "Android 内核构建-自定义",
+    "kernel-source.yml": "Android 内核构建-类 LineageOS 源码",
     "oneplus-custom.yml": "OnePlus 内核构建-自定义",
     "kernel-full-feature-matrix.yml": "全属性内核构建矩阵",
     "all-managers-full-feature-matrix.yml": "全管理器全矩阵编译",
 }
 
-KSU_VARIANTS = ["None", "Official", "SukiSU", "ReSukiSU"]
+KSU_VARIANTS = ["None", "Official", "SukiSU", "BakaSU"]
 KSU_BRANCH_MAP = {
     "stable": "Stable(标准)", "Stable": "Stable(标准)",
     "latest": "Latest(最新)", "Latest": "Latest(最新)",
@@ -186,10 +203,10 @@ def supports_kpm(variant, ksu_branch=None, *, oneplus=False):
     Keep this aligned with Android's KernelSupport.isKpmSupported contract.
     """
     if oneplus:
-        return variant in {"SukiSU", "ReSukiSU"}
+        return variant in {"SukiSU", "BakaSU"}
     if variant == "SukiSU":
         return True
-    if variant != "ReSukiSU":
+    if variant != "BakaSU":
         return False
     return resolve_ksu_branch(ksu_branch) in {
         "Stable(标准)",
@@ -302,6 +319,248 @@ def _valid_git_ref(value, allow_history_suffix=False):
     )
 
 
+def normalize_source_repo_url(value, *, private=False):
+    """Validate and canonicalize the custom-source repository URL."""
+    raw = (value or "").strip()
+    if len(raw) > 2048:
+        raise ValueError("--source-repo is too long")
+    if (
+        not raw
+        or "%" in raw
+        or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in raw)
+    ):
+        raise ValueError(
+            "--source-repo must not contain whitespace, controls, or percent encoding"
+        )
+    try:
+        parsed = urlsplit(raw)
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("--source-repo is not a valid URL") from exc
+    if parsed.scheme.lower() != "https":
+        raise ValueError("--source-repo must use HTTPS")
+    if not parsed.hostname:
+        raise ValueError("--source-repo must include a host")
+    if ":" in parsed.hostname:
+        raise ValueError("--source-repo does not support IPv6 host literals")
+    if parsed.username or parsed.password:
+        raise ValueError("--source-repo must not contain credentials")
+    if parsed.query or parsed.fragment:
+        raise ValueError("--source-repo must not contain a query or fragment")
+    if port not in (None, 443):
+        raise ValueError("--source-repo must use the default HTTPS port")
+
+    path = re.sub(r"/+", "/", parsed.path).rstrip("/")
+    segments = [segment for segment in path.split("/") if segment]
+    if not segments or any(segment in {".", ".."} for segment in segments):
+        raise ValueError("--source-repo must include a safe repository path")
+    host = parsed.hostname.lower()
+    if private and (host != "github.com" or len(segments) != 2):
+        raise ValueError(
+            "--source-private supports only https://github.com/OWNER/REPO"
+        )
+    return urlunsplit(("https", host, "/" + "/".join(segments), "", ""))
+
+
+def normalize_source_defconfigs(values):
+    """Return the workflow's newline-delimited, traversal-safe defconfig list."""
+    entries = []
+    for value in values or ["gki_defconfig"]:
+        for item in str(value).replace("\r", "").split("\n"):
+            item = item.strip()
+            if item:
+                entries.append(item)
+    if not entries or "gki_defconfig" not in entries:
+        raise ValueError("--source-defconfig must include gki_defconfig")
+    if len(entries) > 32:
+        raise ValueError("at most 32 --source-defconfig values are supported")
+    for entry in entries:
+        path = PurePosixPath(entry)
+        raw_parts = entry.split("/")
+        if (
+            path.is_absolute()
+            or not path.parts
+            or "\\" in entry
+            or len(entry) > 255
+            or any(part in {"", ".", ".."} for part in raw_parts)
+            or any(ord(char) < 32 or ord(char) == 127 for char in entry)
+        ):
+            raise ValueError(f"invalid --source-defconfig path: {entry}")
+    return entries
+
+
+def load_custom_kernel_options(path_value):
+    """Load and normalize an App-compatible Kconfig fragment from disk."""
+    if not path_value:
+        return ""
+    path = Path(path_value).expanduser()
+    try:
+        if not path.is_file():
+            raise ValueError(f"kernel options file does not exist: {path}")
+        if path.stat().st_size > MAX_KERNEL_OPTIONS_SIZE:
+            raise ValueError(
+                f"kernel options file exceeds {MAX_KERNEL_OPTIONS_SIZE} bytes"
+            )
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ValueError(f"cannot read kernel options file: {path}: {exc}") from exc
+
+    disabled_pattern = re.compile(
+        r"^#\s*(CONFIG_[A-Za-z0-9_]+)\s+is\s+not\s+set$",
+        re.IGNORECASE,
+    )
+    assigned_pattern = re.compile(r"^(CONFIG_[A-Za-z0-9_]+)=(.+)$")
+    bare_pattern = re.compile(r"^(CONFIG_[A-Za-z0-9_]+|[A-Za-z0-9_]+)$")
+    normalized = {}
+    for line_number, raw in enumerate(text.replace("\r", "").splitlines(), start=1):
+        line = raw.strip()
+        if not line or (line.startswith("#") and not line.upper().startswith("# CONFIG_")):
+            continue
+        disabled = disabled_pattern.fullmatch(line)
+        assigned = assigned_pattern.fullmatch(line)
+        bare = bare_pattern.fullmatch(line)
+        if disabled:
+            symbol = disabled.group(1).upper()
+            value = f"# {symbol} is not set"
+        elif assigned:
+            symbol = assigned.group(1).upper()
+            option_value = _unescape_kernel_option_value(
+                assigned.group(2).strip()
+            )
+            if (
+                not option_value
+                or len(option_value) > 512
+                or any(ord(char) < 32 or ord(char) == 127 for char in option_value)
+                or any(char in option_value for char in ("$", "`"))
+            ):
+                raise ValueError(
+                    f"invalid kernel option value on line {line_number}"
+                )
+            value = (
+                f"# {symbol} is not set"
+                if option_value.lower() == "n"
+                else f"{symbol}={option_value}"
+            )
+        elif bare:
+            symbol = bare.group(1).upper()
+            if not symbol.startswith("CONFIG_"):
+                symbol = f"CONFIG_{symbol}"
+            # App imports bare symbols as IGNORE. If repeated, IGNORE wins and
+            # removes an earlier emitted assignment for the same symbol.
+            normalized.pop(symbol, None)
+            normalized[symbol] = None
+            continue
+        else:
+            raise ValueError(
+                "invalid kernel option on line "
+                f"{line_number}; expected CONFIG_NAME=value or "
+                "# CONFIG_NAME is not set"
+            )
+        # Match the App: the last value for a symbol wins and moves to the end.
+        normalized.pop(symbol, None)
+        normalized[symbol] = value
+    if len(normalized) > MAX_KERNEL_OPTIONS:
+        raise ValueError(f"at most {MAX_KERNEL_OPTIONS} kernel options are supported")
+    return "\n".join(value for value in normalized.values() if value is not None)
+
+
+def _unescape_kernel_option_value(value):
+    """Match the App's RAW Kconfig import for escaped quotes and slashes."""
+    if "\\" not in value:
+        return value
+    result = []
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if char == "\\" and index + 1 < len(value):
+            following = value[index + 1]
+            if following in {'"', "\\"}:
+                result.append(following)
+                index += 2
+                continue
+        result.append(char)
+        index += 1
+    return "".join(result)
+
+
+def validate_source_build(args):
+    """Normalize custom-source flags and return an actionable error, if any."""
+    source_repo = getattr(args, "source_repo", None)
+    source_only_values = {
+        "--source-ref": getattr(args, "source_ref", None),
+        "--source-private": getattr(args, "source_private", False),
+        "--source-defconfig": getattr(args, "source_defconfigs", None),
+        "--source-device-label": getattr(args, "source_device_label", None),
+        "--source-kernel-version": getattr(args, "source_kernel_version", None),
+    }
+    if not source_repo:
+        used = next((name for name, value in source_only_values.items() if value), None)
+        if used:
+            return f"{used} requires --source-repo"
+        return None
+
+    try:
+        args.source_repo = normalize_source_repo_url(
+            source_repo,
+            private=bool(getattr(args, "source_private", False)),
+        )
+        args.source_defconfigs = normalize_source_defconfigs(
+            getattr(args, "source_defconfigs", None)
+        )
+        args.custom_kernel_options = load_custom_kernel_options(
+            getattr(args, "kernel_options_file", None)
+        )
+    except ValueError as exc:
+        return str(exc)
+
+    source_ref = (getattr(args, "source_ref", None) or "").strip()
+    if not source_ref:
+        return "--source-ref is required with --source-repo"
+    if not _valid_git_ref(source_ref):
+        return "unsafe or invalid value for --source-ref"
+    args.source_ref = source_ref
+
+    if not getattr(args, "os_patch_level", None):
+        return "--os-patch-level is required with --source-repo (YYYY-MM or lts)"
+
+    version = (getattr(args, "source_kernel_version", None) or "").strip()
+    if version and re.fullmatch(r"\d+\.\d+(?:\.\d+)?", version) is None:
+        return "--source-kernel-version must use X.Y or X.Y.Z"
+    args.source_kernel_version = version
+    if not version and getattr(args, "virt", None) not in (None, "off"):
+        return (
+            "--virt requires --source-kernel-version for custom-source builds "
+            "so the virtualization mode can be normalized"
+        )
+
+    label = (getattr(args, "source_device_label", None) or "").strip()
+    if (
+        len(label) > 128
+        or any(ord(char) < 32 or ord(char) == 127 for char in label)
+    ):
+        return "--source-device-label must be at most 128 printable characters"
+    args.source_device_label = label
+
+    incompatible = {
+        "--android-version": getattr(args, "android_version", None),
+        "--kernel-version": getattr(args, "kernel_version", None),
+        "--sub-level": getattr(args, "sub_level", None),
+        "--revision": getattr(args, "revision", None),
+        "--device": getattr(args, "device", None),
+        "--build-scope": getattr(args, "build_scope", None),
+        "--manager-variants": getattr(args, "manager_variants", None),
+        "--oneplus-8e": getattr(args, "oneplus_8e", None),
+        "--lz4kd": getattr(args, "lz4kd", None),
+        "--bbr": getattr(args, "bbr", None),
+        "--proxy-optimization": getattr(args, "proxy_optimization", None),
+        "--unicode-bypass": getattr(args, "unicode_bypass", None),
+    }
+    used = next((name for name, value in incompatible.items() if value), None)
+    if used:
+        return f"{used} is not supported with --source-repo"
+    return None
+
+
 def invalid_build_argument(args):
     """Return the first unsafe CLI flag before it reaches an existing workflow."""
     ref = getattr(args, "ref", None)
@@ -364,7 +623,7 @@ def invalid_build_argument(args):
     if manager_variants:
         raw = manager_variants.strip()
         if raw.lower() not in {"all", "*"}:
-            allowed = {"official", "sukisu", "resukisu", "none"}
+            allowed = set(MANAGER_VARIANT_ALIASES)
             tokens = [
                 token.strip().lower().replace("-", "").replace("_", "")
                 for token in raw.split(",")
@@ -968,6 +1227,44 @@ class GitHubClient:
             "inputs": inputs,
             "return_run_details": True,
         })
+
+    def ensure_workflow_active(self, workflow_file):
+        """Restore GitHub's fork-default workflow state and verify it became active."""
+        workflow = self.get(
+            f"/repos/{self.repo}/actions/workflows/{workflow_file}"
+        )
+        state = workflow.get("state") or "unknown"
+        if state == "active":
+            return workflow
+        if state != "disabled_fork":
+            raise RuntimeError(
+                f"workflow {workflow_file} is disabled ({state}); "
+                "enable it explicitly in GitHub Actions"
+            )
+        workflow_id = workflow.get("id")
+        if not workflow_id:
+            raise RuntimeError(
+                f"GitHub did not return an id for workflow {workflow_file}"
+            )
+        self.put(
+            f"/repos/{self.repo}/actions/workflows/{workflow_id}/enable"
+        )
+        refreshed = workflow
+        for _ in range(3):
+            # GitHub may acknowledge the enable request before the workflow
+            # state is visible from the read endpoint.
+            time.sleep(1)
+            refreshed = self.get(
+                f"/repos/{self.repo}/actions/workflows/{workflow_id}"
+            )
+            state = refreshed.get("state") or "unknown"
+            if state == "active":
+                return refreshed
+            if state != "disabled_fork":
+                break
+        raise RuntimeError(
+            f"workflow {workflow_file} is still disabled ({state})"
+        )
 
     def list_runs(self, workflow_file=None, status=None, per_page=10):
         params = {"per_page": per_page}
@@ -2880,17 +3177,25 @@ def _signing_key_metadata(repo, client=None):
 
 def _dispatch_run_details(response):
     response = response if isinstance(response, dict) else {}
+    nested = response.get("workflow_run")
+    nested = nested if isinstance(nested, dict) else {}
     run_id = (
         response.get("workflow_run_id")
         or response.get("run_id")
         or response.get("id")
+        or nested.get("id")
     )
     run_url = (
         response.get("workflow_run_url")
         or response.get("run_url")
         or response.get("url")
+        or nested.get("url")
     )
-    html_url = response.get("workflow_run_html_url") or response.get("html_url")
+    html_url = (
+        response.get("workflow_run_html_url")
+        or response.get("html_url")
+        or nested.get("html_url")
+    )
     return run_id, run_url, html_url
 
 
@@ -3316,6 +3621,202 @@ def cmd_sync(args):
     except Exception as exc:
         print(t("err_sync_failed", error=exc), file=sys.stderr)
         _set_json_error(args, exc, "sync_failed")
+        return 1
+
+
+def _read_custom_source_token(args, login_token):
+    if getattr(args, "use_login_token", False):
+        value = login_token
+    elif getattr(args, "source_token_file", None):
+        path_value = args.source_token_file
+        if path_value == "-":
+            if _json_mode(args):
+                raise ValueError(t("source_secret_stdin_unavailable_json"))
+            value = sys.stdin.read(MAX_CUSTOM_SOURCE_TOKEN_SIZE + 1)
+        else:
+            path = Path(path_value).expanduser()
+            try:
+                if not path.is_file():
+                    raise ValueError(t("source_secret_token_file_missing", path=path))
+                if path.stat().st_size > MAX_CUSTOM_SOURCE_TOKEN_SIZE:
+                    raise ValueError(
+                        t(
+                            "source_secret_token_file_too_large",
+                            limit=MAX_CUSTOM_SOURCE_TOKEN_SIZE,
+                        )
+                    )
+                value = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as exc:
+                raise ValueError(
+                    t("source_secret_token_file_read_failed", path=path, error=exc)
+                ) from exc
+    else:
+        value = os.environ.get("ABK_CUSTOM_SOURCE_TOKEN", "")
+        if not value:
+            if _json_mode(args):
+                raise ValueError(t("source_secret_input_required_json"))
+            value = getpass.getpass(t("source_secret_token_prompt"))
+
+    value = (value or "").strip()
+    if (
+        not value
+        or len(value.encode("utf-8")) > MAX_CUSTOM_SOURCE_TOKEN_SIZE
+        or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in value)
+    ):
+        raise ValueError(t("source_secret_token_invalid"))
+    args._source_secret_value = value
+    return value
+
+
+def cmd_source_secret(args):
+    """Manage the fork-scoped token used by private custom-source builds."""
+    action = args.source_secret_action
+    has_token_source = bool(
+        getattr(args, "source_token_file", None)
+        or getattr(args, "use_login_token", False)
+    )
+    if action != "set" and has_token_source:
+        message = t("source_secret_token_options_set_only")
+        print(message, file=sys.stderr)
+        _set_json_error(args, message, "invalid_arguments", action=action)
+        return 2
+    if action != "delete" and getattr(args, "yes", False):
+        message = t("source_secret_yes_delete_only")
+        print(message, file=sys.stderr)
+        _set_json_error(args, message, "invalid_arguments", action=action)
+        return 2
+    if (
+        action == "set"
+        and _json_mode(args)
+        and getattr(args, "source_token_file", None) == "-"
+    ):
+        message = t("source_secret_stdin_unavailable_json")
+        print(message, file=sys.stderr)
+        _set_json_error(args, message, "invalid_arguments", action=action)
+        return 2
+
+    login_token = get_token(args)
+    if not login_token:
+        print(t("err_no_token"), file=sys.stderr)
+        _set_json_error(args, t("err_no_token"), "not_authenticated", action=action)
+        return 1
+    client = make_client(args, login_token)
+    if _report_client_authentication_error(client, args, action=action):
+        return 1
+
+    try:
+        repo = _select_signing_repository(client, args)
+        if action == "status":
+            configured = client.repository_secret_exists(CUSTOM_SOURCE_SECRET_NAME)
+            state = t(
+                "source_secret_state_configured"
+                if configured
+                else "source_secret_state_missing"
+            )
+            print(
+                t(
+                    "source_secret_status",
+                    secret=CUSTOM_SOURCE_SECRET_NAME,
+                    state=state,
+                    repo=repo,
+                )
+            )
+            _set_json_result(
+                args,
+                ok=True,
+                action=action,
+                repo=repo,
+                configured=configured,
+                changed=False,
+            )
+            return 0
+
+        if action == "set":
+            source_token = _read_custom_source_token(args, login_token)
+            accepted = client.create_or_update_secret(
+                CUSTOM_SOURCE_SECRET_NAME,
+                source_token,
+            )
+            if accepted is False:
+                raise RuntimeError(t("source_secret_not_accepted"))
+            print(
+                t(
+                    "source_secret_status",
+                    secret=CUSTOM_SOURCE_SECRET_NAME,
+                    state=t("source_secret_state_configured"),
+                    repo=repo,
+                )
+            )
+            _set_json_result(
+                args,
+                ok=True,
+                action=action,
+                repo=repo,
+                configured=True,
+                changed=True,
+            )
+            return 0
+
+        if action == "delete":
+            configured = client.repository_secret_exists(CUSTOM_SOURCE_SECRET_NAME)
+            if configured and not args.yes:
+                if _json_mode(args):
+                    message = t("source_secret_delete_requires_yes_json")
+                    print(message, file=sys.stderr)
+                    _set_json_error(
+                        args,
+                        message,
+                        "confirmation_required",
+                        action=action,
+                        repo=repo,
+                        configured=True,
+                    )
+                    return 1
+                answer = input(
+                    t(
+                        "source_secret_delete_confirm",
+                        secret=CUSTOM_SOURCE_SECRET_NAME,
+                        repo=repo,
+                    )
+                ).strip().lower()
+                if answer not in {"y", "yes"}:
+                    print(t("source_secret_unchanged"))
+                    return 1
+            if configured:
+                client.delete_repository_secret(CUSTOM_SOURCE_SECRET_NAME)
+            print(
+                t(
+                    "source_secret_status",
+                    secret=CUSTOM_SOURCE_SECRET_NAME,
+                    state=t("source_secret_state_missing"),
+                    repo=repo,
+                )
+            )
+            _set_json_result(
+                args,
+                ok=True,
+                action=action,
+                repo=repo,
+                configured=False,
+                changed=configured,
+            )
+            return 0
+
+        raise ValueError(t("source_secret_unsupported_action", action=action))
+    except ValueError as exc:
+        message = _redact_secret_text(str(exc), _collect_json_secrets(args))
+        print(message, file=sys.stderr)
+        _set_json_error(args, message, "invalid_arguments", action=action)
+        return 2
+    except Exception as exc:
+        message = _redact_secret_text(str(exc), _collect_json_secrets(args))
+        print(message, file=sys.stderr)
+        _set_json_error(
+            args,
+            message,
+            "source_secret_operation_failed",
+            action=action,
+        )
         return 1
 
 
@@ -3820,12 +4321,13 @@ def cmd_status(args):
 def _set_build_defaults(args):
     full_mode = args.matrix in ("full", "all-managers")
     all_managers = args.matrix == "all-managers"
+    source_mode = bool(getattr(args, "source_repo", None))
     defaults = {
         "zram": full_mode,
         "bbg": full_mode,
         "ddk": full_mode,
         "kpm": full_mode,
-        "susfs": True,
+        "susfs": False if source_mode else True,
         "rekernel": full_mode,
         "oneplus_8e": full_mode,
         "ntsync": full_mode,
@@ -3848,11 +4350,32 @@ def normalize_virtualization_support(kernel_version, value):
     value = value or "off"
     if value == "off":
         return "off"
-    if kernel_version == "6.12":
+    # 6.12 / 6.18 工作流只暴露 off/on 两档；更早版本仍使用 678/123/345 槽位。
+    if kernel_version in ("6.12", "6.18"):
         return "on"
     if value == "on":
         return "678"
     return value
+
+
+def resolve_source_build_profile(version):
+    """Map an arbitrary source kernel version to its workflow GKI profile."""
+    match = re.fullmatch(r"(\d+)\.(\d+)(?:\.\d+)?", version or "")
+    if not match:
+        raise ValueError("source kernel version must use X.Y or X.Y.Z")
+    selected = (int(match.group(1)), int(match.group(2)))
+    profiles = ((5, 10), (5, 15), (6, 1), (6, 6), (6, 12), (6, 18))
+    if selected <= profiles[0]:
+        profile = profiles[0]
+    elif selected >= profiles[-1]:
+        profile = profiles[-1]
+    else:
+        profile = profiles[0]
+        for candidate in profiles:
+            if candidate > selected:
+                break
+            profile = candidate
+    return f"{profile[0]}.{profile[1]}"
 
 
 def _susfs_enabled(args, variant):
@@ -3866,9 +4389,12 @@ def _standard_build_inputs(
     kernel_version="5.10",
     *,
     supports_supp_op=False,
+    supports_susfs_toggle=True,
 ):
     kpm_enabled = bool(args.kpm) and supports_kpm(variant, args.ksu_branch)
-    susfs_enabled = _susfs_enabled(args, variant)
+    # 6.18 没有可用的 susfs4ksu 分支，SUSFS 一律强制关闭，
+    # 否则 build.yml 的版本组合校验会直接拒绝这次构建。
+    susfs_enabled = bool(_susfs_enabled(args, variant)) and kernel_version != "6.18"
     virtualization_support = normalize_virtualization_support(
         kernel_version,
         args.virt,
@@ -3881,11 +4407,18 @@ def _standard_build_inputs(
         "use_ddk": str(bool(args.ddk)).lower(),
         "use_kpm": str(kpm_enabled).lower(),
         "use_rekernel": str(bool(args.rekernel)).lower(),
-        "cancel_susfs": str(not susfs_enabled).lower(),
         "use_ntsync": str(bool(args.ntsync)).lower(),
         "use_networking": str(bool(args.networking)).lower(),
         "zram_full_algo": str(bool(args.zram_full_algo)).lower(),
+        # Empty means current UTC. Omitting this input selects the historical
+        # fixed timestamp in the workflow, unlike the Android App.
+        "build_time": args.build_time or "",
+        "custom_kernel_options": getattr(args, "custom_kernel_options", ""),
     }
+    # 6.18 工作流没有 cancel_susfs 输入（SUSFS 强制关闭），下发未知输入会被
+    # workflow_dispatch 以 422 拒绝，所以只在支持 SUSFS 开关的工作流上带这一项。
+    if supports_susfs_toggle:
+        inputs["cancel_susfs"] = str(not susfs_enabled).lower()
     if virtualization_support != "off":
         inputs["virtualization_support"] = virtualization_support
     if supports_supp_op:
@@ -3898,11 +4431,59 @@ def _standard_build_inputs(
         inputs["kpm_password"] = args.kpm_password
     if args.zram_extra_algos:
         inputs["zram_extra_algos"] = args.zram_extra_algos
-    if args.build_time:
-        inputs["build_time"] = args.build_time
     if args.custom_modules:
         inputs["custom_external_modules"] = args.custom_modules
     return inputs
+
+
+def _source_build_inputs(args, variant):
+    """Return all 25 inputs in kernel-source.yml's App-compatible contract."""
+    kpm_enabled = bool(args.kpm) and supports_kpm(variant, args.ksu_branch)
+    virtualization_support = args.virt or "off"
+    cancel_susfs = not _susfs_enabled(args, variant)
+    use_bbg = bool(args.bbg)
+    if args.source_kernel_version:
+        profile = resolve_source_build_profile(args.source_kernel_version)
+        virtualization_support = normalize_virtualization_support(
+            profile,
+            virtualization_support,
+        )
+        if profile == "6.18":
+            cancel_susfs = True
+            use_bbg = False
+    return {
+        "source_repo": args.source_repo,
+        "source_ref": args.source_ref,
+        "source_private": str(bool(args.source_private)).lower(),
+        "defconfigs": "\n".join(args.source_defconfigs),
+        "device_label": args.source_device_label,
+        "version_overrides": json.dumps(
+            {
+                "os_patch_level": args.os_patch_level.lower(),
+                "kernel_version_override": args.source_kernel_version,
+            },
+            separators=(",", ":"),
+        ),
+        "kernelsu_variant": variant,
+        "kernelsu_branch": resolve_plan_ksu_branch(variant, args.ksu_branch),
+        "custom_ref": args.custom_ref if args.custom_ref and variant != "None" else "",
+        "version": args.version or "",
+        "build_time": args.build_time or "",
+        "virtualization_support": virtualization_support,
+        "use_zram": str(bool(args.zram)).lower(),
+        "use_bbg": str(use_bbg).lower(),
+        "use_ddk": str(bool(args.ddk)).lower(),
+        "use_ntsync": str(bool(args.ntsync)).lower(),
+        "use_networking": str(bool(args.networking)).lower(),
+        "use_kpm": str(kpm_enabled).lower(),
+        "use_rekernel": str(bool(args.rekernel)).lower(),
+        "cancel_susfs": str(cancel_susfs).lower(),
+        "zram_full_algo": str(bool(args.zram_full_algo)).lower(),
+        "zram_extra_algos": args.zram_extra_algos or "",
+        "kpm_password": args.kpm_password if kpm_enabled and args.kpm_password else "",
+        "custom_external_modules": args.custom_modules or "",
+        "custom_kernel_options": getattr(args, "custom_kernel_options", ""),
+    }
 
 
 def _full_matrix_inputs(args, variant):
@@ -3927,6 +4508,7 @@ def _full_matrix_inputs(args, variant):
         "zram_full_algo": str(bool(args.zram_full_algo)).lower(),
         "zram_extra_algos": args.zram_extra_algos or "",
         "custom_external_modules": args.custom_modules or "",
+        "custom_kernel_options": getattr(args, "custom_kernel_options", ""),
     }
 
 
@@ -3975,6 +4557,7 @@ def _all_managers_inputs(args):
         "zram_full_algo": str(bool(args.zram_full_algo)).lower(),
         "zram_extra_algos": args.zram_extra_algos or "",
         "custom_external_modules": args.custom_modules or "",
+        "custom_kernel_options": getattr(args, "custom_kernel_options", ""),
         "oneplus_options_json": json.dumps(oneplus_options, separators=(",", ":")),
     }
 
@@ -3989,6 +4572,15 @@ def _redacted_inputs(inputs):
             continue
         result[name] = value
     return result
+
+
+def _workflow_inputs_payload_size(inputs):
+    payload = json.dumps(
+        inputs,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return len(payload)
 
 
 def _build_plan_id(plan, ref):
@@ -4007,21 +4599,52 @@ def _build_plan_id(plan, ref):
 
 def cmd_build(args):
     warning_messages = []
-    if args.matrix and args.oneplus:
-        message = "--matrix and --oneplus are mutually exclusive"
+    source_mode = bool(getattr(args, "source_repo", None))
+    selected_modes = sum(bool(value) for value in (args.matrix, args.oneplus, source_mode))
+    if selected_modes > 1:
+        message = "--matrix, --oneplus, and --source-repo are mutually exclusive"
         print(message, file=sys.stderr)
         _set_build_error(args, message, "invalid_arguments")
         return 2
 
+    source_error = validate_source_build(args)
+    if source_error:
+        print(source_error, file=sys.stderr)
+        _set_build_error(args, source_error, "invalid_arguments")
+        return 2
+    if not source_mode:
+        if getattr(args, "kernel_options_file", None) and args.oneplus:
+            message = "--kernel-options-file is not supported with --oneplus"
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
+            return 2
+        try:
+            args.custom_kernel_options = load_custom_kernel_options(
+                getattr(args, "kernel_options_file", None)
+            )
+        except ValueError as exc:
+            message = str(exc)
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
+            return 2
+
     effective_ksu_branch = resolve_ksu_branch(args.ksu_branch)
+    effective_ksu_variant = args.ksu_variant or (
+        "None" if source_mode else "BakaSU"
+    )
     if not args.oneplus:
+        if args.custom_ref and effective_ksu_variant == "None":
+            message = "--custom-ref cannot be used with --ksu None"
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
+            return 2
         if args.matrix in ("full", "all-managers") and (
             args.custom_ref
             or (
                 effective_ksu_branch == "Custom(自定义)"
                 and not (
                     args.matrix == "full"
-                    and args.ksu_variant == "None"
+                    and effective_ksu_variant == "None"
                 )
             )
         ):
@@ -4036,7 +4659,7 @@ def cmd_build(args):
             return 2
         if (
             effective_ksu_branch == "Custom(自定义)"
-            and args.ksu_variant != "None"
+            and effective_ksu_variant != "None"
             and not args.custom_ref
         ):
             message = t("err_custom_branch_requires_ref")
@@ -4056,6 +4679,7 @@ def cmd_build(args):
         revision_supported = args.matrix in ("full", "all-managers") or (
             not args.matrix
             and not args.oneplus
+            and not source_mode
             and (args.kernel_version or "5.10") == "5.10"
         )
         if not revision_supported:
@@ -4067,7 +4691,7 @@ def cmd_build(args):
             _set_build_error(args, message, "invalid_arguments")
             return 2
 
-    if not args.matrix and not args.oneplus:
+    if not args.matrix and not args.oneplus and not source_mode:
         selected_line = (
             args.android_version or "android12",
             args.kernel_version or "5.10",
@@ -4122,7 +4746,7 @@ def cmd_build(args):
                 warnings=warning_messages,
             )
             return 2
-    elif not args.matrix:
+    elif not args.matrix and not source_mode:
         if not args.sub_level:
             message = t("err_need_sub_level")
             print(message, file=sys.stderr)
@@ -4146,7 +4770,7 @@ def cmd_build(args):
         variants = (
             KSU_ALL_VARIANTS
             if args.ksu_variant == "all"
-            else [args.ksu_variant or "ReSukiSU"]
+            else [args.ksu_variant or "BakaSU"]
         )
         for variant in variants:
             if args.kpm and not supports_kpm(variant, args.ksu_branch):
@@ -4180,13 +4804,15 @@ def cmd_build(args):
             targets = [args.matrix]
         elif args.oneplus:
             targets = ["oneplus"]
+        elif source_mode:
+            targets = ["source"]
         else:
             targets = ["custom"]
 
         variants = (
             KSU_ALL_VARIANTS
             if args.ksu_variant == "all"
-            else [args.ksu_variant or "ReSukiSU"]
+            else [effective_ksu_variant]
         )
         for target in targets:
             for variant in variants:
@@ -4215,6 +4841,16 @@ def cmd_build(args):
                         "use_proxy_optimization": str(bool(args.proxy_optimization)).lower(),
                         "use_unicode_bypass": str(bool(args.unicode_bypass)).lower(),
                     }
+                elif target == "source":
+                    if args.kpm and not supports_kpm(variant, args.ksu_branch):
+                        selection = (
+                            f"{variant} "
+                            f"({resolve_plan_ksu_branch(variant, args.ksu_branch)})"
+                        )
+                        warning = t("op_no_kpm_ksu", ksu=selection)
+                        warning_messages.append(warning)
+                        print(t("warning_prefix") + " " + warning)
+                    inputs = _source_build_inputs(args, variant)
                 else:
                     if args.kpm and not supports_kpm(variant, args.ksu_branch):
                         selection = (
@@ -4234,6 +4870,8 @@ def cmd_build(args):
                         variant,
                         kernel_version,
                         supports_supp_op=target in ("a15", "a16"),
+                        # 一加 SUPP 与 SUSFS 开关都只存在于 6.x 老工作流，a17 不参与。
+                        supports_susfs_toggle=target != "a17",
                     )
                     if target == "custom":
                         inputs.update({
@@ -4252,6 +4890,18 @@ def cmd_build(args):
                     "ksu_variant": variant,
                     "inputs": inputs,
                 })
+
+    for plan in plans:
+        payload_size = _workflow_inputs_payload_size(plan["inputs"])
+        if payload_size > MAX_WORKFLOW_DISPATCH_INPUT_BYTES:
+            message = (
+                f"workflow inputs for {plan['target']} use {payload_size} bytes; "
+                f"GitHub allows at most {MAX_WORKFLOW_DISPATCH_INPUT_BYTES}. "
+                "Shorten the kernel options or other custom inputs."
+            )
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
+            return 2
 
     client = None
     if args.dry_run:
@@ -4283,6 +4933,67 @@ def cmd_build(args):
             return 1
         if not prepare_build_repository(client, args):
             return 1
+        if source_mode and args.source_private:
+            try:
+                source_secret_ready = client.repository_secret_exists(
+                    CUSTOM_SOURCE_SECRET_NAME
+                )
+            except Exception as exc:
+                message = _redact_secret_text(
+                    t(
+                        "source_secret_check_failed",
+                        secret=CUSTOM_SOURCE_SECRET_NAME,
+                        error=exc,
+                    ),
+                    _collect_json_secrets(args),
+                )
+                print(message, file=sys.stderr)
+                _set_build_error(
+                    args,
+                    message,
+                    "source_secret_check_failed",
+                    repo=client.repo,
+                    stage="check_source_secret",
+                    warnings=warning_messages,
+                )
+                return 1
+            if not source_secret_ready:
+                message = t(
+                    "source_secret_required",
+                    secret=CUSTOM_SOURCE_SECRET_NAME,
+                )
+                print(message, file=sys.stderr)
+                _set_build_error(
+                    args,
+                    message,
+                    "source_secret_missing",
+                    repo=client.repo,
+                    stage="check_source_secret",
+                    warnings=warning_messages,
+                )
+                return 1
+        ensure_workflow_active = getattr(client, "ensure_workflow_active", None)
+        if callable(ensure_workflow_active):
+            try:
+                for workflow_file in dict.fromkeys(
+                    plan["workflow"] for plan in plans
+                ):
+                    ensure_workflow_active(workflow_file)
+            except Exception as exc:
+                message = _redact_secret_text(
+                    f"cannot enable build workflow: {exc}",
+                    _collect_json_secrets(args),
+                )
+                print(message, file=sys.stderr)
+                _set_build_error(
+                    args,
+                    message,
+                    "workflow_enable_failed",
+                    repo=client.repo,
+                    stage="enable_workflow",
+                    warnings=warning_messages,
+                )
+                return 1
         try:
             ref = args.ref or client.get_default_branch()
         except Exception as exc:
@@ -4303,6 +5014,7 @@ def cmd_build(args):
     dispatches = []
     dispatched_runs = []
     failure_messages = []
+    missing_run_handoff = False
     for index, plan in enumerate(plans, start=1):
         dispatch = {
             "planId": _build_plan_id(plan, ref),
@@ -4324,6 +5036,7 @@ def cmd_build(args):
             print(f"\n[{index}/{len(plans)}] ", end="")
         print(t("triggering_name", name=plan["name"]))
         plan_kpm_enabled = plan["inputs"].get("use_kpm", str(bool(args.kpm)).lower()) == "true"
+        plan_bbg_enabled = bool(args.bbg) and plan.get("target") != "a17"
         if "enable_susfs" in plan["inputs"]:
             plan_susfs_enabled = (
                 str(plan["inputs"]["enable_susfs"]).lower() == "true"
@@ -4333,13 +5046,13 @@ def cmd_build(args):
                 str(plan["inputs"]["cancel_susfs"]).lower() != "true"
             )
         else:
-            plan_susfs_enabled = bool(args.susfs)
+            plan_susfs_enabled = bool(args.susfs) and plan.get("target") != "a17"
         print(
             "  " + t(
                 "build_feat_line",
                 susfs=t("enabled") if plan_susfs_enabled else t("disabled"),
                 zram=t("enabled") if args.zram else t("disabled"),
-                bbg=t("enabled") if args.bbg else t("disabled"),
+                bbg=t("enabled") if plan_bbg_enabled else t("disabled"),
                 ddk=t("enabled") if args.ddk else t("disabled"),
                 kpm=t("enabled") if plan_kpm_enabled else t("disabled"),
                 rekernel=t("enabled") if args.rekernel else t("disabled"),
@@ -4398,6 +5111,33 @@ def cmd_build(args):
                 if response_run:
                     dispatched_runs.append(_normalize_run(response_run))
             print(t("build_triggered_ok"))
+            if run_id:
+                web_url = html_url or (
+                    f"https://github.com/{client.repo}/actions/runs/{run_id}"
+                )
+                print("  " + t("build_handoff_run", id=run_id))
+                print("  " + t("build_handoff_url", url=web_url))
+                print(
+                    "  "
+                    + t(
+                        "build_handoff_status",
+                        command=(
+                            f"abk --repo {client.repo} status --run-id {run_id}"
+                        ),
+                    )
+                )
+                print(
+                    "  "
+                    + t(
+                        "build_handoff_download",
+                        command=(
+                            f"abk --repo {client.repo} artifacts "
+                            f"--run-id {run_id} --download"
+                        ),
+                    )
+                )
+            else:
+                missing_run_handoff = True
             successes += 1
         except Exception as exc:
             failures += 1
@@ -4414,7 +5154,7 @@ def cmd_build(args):
 
     if not args.dry_run and len(plans) > 1 and successes:
         print(t("build_multiple_count", count=successes))
-    if not args.dry_run:
+    if not args.dry_run and successes and missing_run_handoff:
         print(t("build_check_status"))
         print(t("build_actions_url", repo=client.repo))
     _set_json_result(
@@ -4741,6 +5481,13 @@ def cmd_list(args):
     print(f"  --matrix {'full':<10} full")
     print(f"  --matrix {'all-managers':<10} all-managers")
     print(f"  --oneplus{'':<10} (--device required)")
+    print(
+        "  "
+        + t(
+            "list_source_target",
+            name=WORKFLOWS["source"]["name"],
+        )
+    )
     print(f"\n  " + t("default_build_info"))
 
     print(f"\n{t('ksu_variants_label')}")
@@ -4764,12 +5511,13 @@ def cmd_list(args):
             ("signing", "cmd_signing_help"),("list", "cmd_list_help")]
     for cmd, key in cmds:
         print(f"  abk {cmd:<12} {t(key)}")
+    print(f"  abk {'source-secret':<12} {t('cmd_source_secret_help')}")
 
     print("\n  abk build --help | abk status --help")
     _set_json_result(
         args,
         ok=True,
-        targets=list(MATRIX_TARGETS_ALL),
+        targets=list(MATRIX_TARGETS_ALL) + ["source"],
         ksuVariants=list(KSU_VARIANTS) + ["all"],
     )
     return 0
@@ -4811,7 +5559,9 @@ def refresh_workflow_names():
         "a14": "build_target_a14",
         "a15": "build_target_a15",
         "a16": "build_target_a16",
+        "a17": "build_target_a17",
         "custom": "build_target_custom",
+        "source": "build_target_source",
         "oneplus": "build_target_oneplus",
     }
     for target, key in name_keys.items():
@@ -4869,7 +5619,8 @@ class ABKArgumentParser(argparse.ArgumentParser):
             command = getattr(self, "_command_hint", None)
             if command is None and candidate in {
                 "login", "logout", "whoami", "fork", "sync", "build",
-                "status", "artifacts", "signing", "list", "self-test",
+                "source-secret", "status", "artifacts", "signing", "list",
+                "self-test",
             }:
                 command = candidate
             payload = {
@@ -4928,9 +5679,11 @@ def _collect_json_secrets(args=None, argv=None):
         for value in (
             getattr(args, "token", None) if args is not None else None,
             getattr(args, "kpm_password", None) if args is not None else None,
+            getattr(args, "_source_secret_value", None) if args is not None else None,
             os.environ.get("GITHUB_TOKEN"),
             os.environ.get("GH_TOKEN"),
             os.environ.get("ABK_KPM_PASSWORD"),
+            os.environ.get("ABK_CUSTOM_SOURCE_TOKEN"),
             stored_token,
         )
         if isinstance(value, str) and value
@@ -5193,6 +5946,37 @@ def main():
     build_mode = build_parser.add_mutually_exclusive_group()
     build_mode.add_argument("--matrix", choices=MATRIX_TARGETS_ALL, help=t("arg_matrix"))
     build_mode.add_argument("--oneplus", action="store_true", help=t("arg_oneplus"))
+    build_mode.add_argument(
+        "--source-repo",
+        metavar="HTTPS_URL",
+        help=t("arg_source_repo"),
+    )
+    build_parser.add_argument(
+        "--source-ref",
+        help=t("arg_source_ref"),
+    )
+    build_parser.add_argument(
+        "--source-private",
+        action="store_true",
+        help=t("arg_source_private", secret=CUSTOM_SOURCE_SECRET_NAME),
+    )
+    build_parser.add_argument(
+        "--source-defconfig",
+        dest="source_defconfigs",
+        action="append",
+        metavar="PATH",
+        help=t("arg_source_defconfig"),
+    )
+    build_parser.add_argument(
+        "--source-device-label",
+        metavar="LABEL",
+        help=t("arg_source_device_label"),
+    )
+    build_parser.add_argument(
+        "--source-kernel-version",
+        metavar="X.Y[.Z]",
+        help=t("arg_source_kernel_version"),
+    )
     build_parser.add_argument("--ref", help=t("arg_ref"))
     build_parser.add_argument("--ksu", dest="ksu_variant", choices=KSU_VARIANTS + ["all"], help=t("arg_ksu"))
     build_parser.add_argument(
@@ -5282,6 +6066,13 @@ def main():
     )
     build_parser.add_argument("--zram-extra-algos", help=t("arg_zram_extra_algos"))
     build_parser.add_argument("--custom-modules", help=t("arg_custom_modules"))
+    build_parser.add_argument(
+        "--kernel-options-file",
+        "--custom-kernel-options-file",
+        dest="kernel_options_file",
+        metavar="FILE",
+        help=t("arg_kernel_options_file"),
+    )
     build_parser.set_defaults(
         func=cmd_build,
         zram=None,
@@ -5299,6 +6090,37 @@ def main():
         networking=None,
         zram_full_algo=None,
     )
+
+    source_secret_parser = subparsers.add_parser(
+        "source-secret",
+        help=t("cmd_source_secret_help"),
+        description=t("cmd_source_secret_desc"),
+    )
+    source_secret_parser.add_argument(
+        "source_secret_action",
+        nargs="?",
+        default="status",
+        choices=["status", "set", "delete"],
+        help=t("arg_source_secret_action"),
+    )
+    source_token_input = source_secret_parser.add_mutually_exclusive_group()
+    source_token_input.add_argument(
+        "--token-file",
+        dest="source_token_file",
+        metavar="FILE",
+        help=t("arg_source_token_file"),
+    )
+    source_token_input.add_argument(
+        "--use-login-token",
+        action="store_true",
+        help=t("arg_source_use_login_token"),
+    )
+    source_secret_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help=t("arg_source_secret_yes"),
+    )
+    source_secret_parser.set_defaults(func=cmd_source_secret)
 
     # status
     status_parser = subparsers.add_parser("status", 

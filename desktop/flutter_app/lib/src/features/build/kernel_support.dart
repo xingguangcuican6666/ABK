@@ -125,8 +125,6 @@ class DesktopKernelSupport {
     KernelSupportEntry('android14', '6.1', '129', '2025-04'),
     KernelSupportEntry('android14', '6.1', '134', '2025-05'),
     KernelSupportEntry('android14', '6.1', '138', '2025-06'),
-    KernelSupportEntry('android14', '6.1', '141', '2025-07'),
-    KernelSupportEntry('android14', '6.1', '145', '2025-08'),
     KernelSupportEntry('android14', '6.1', '145', '2025-09'),
     KernelSupportEntry('android14', '6.1', '157', '2025-12'),
     KernelSupportEntry('android14', '6.1', '162', '2026-03'),
@@ -139,15 +137,11 @@ class DesktopKernelSupport {
     KernelSupportEntry('android15', '6.6', '82', '2025-04'),
     KernelSupportEntry('android15', '6.6', '87', '2025-05'),
     KernelSupportEntry('android15', '6.6', '89', '2025-06'),
-    KernelSupportEntry('android15', '6.6', '92', '2025-07'),
-    KernelSupportEntry('android15', '6.6', '98', '2025-08'),
     KernelSupportEntry('android15', '6.6', '98', '2025-09'),
     KernelSupportEntry('android15', '6.6', '102', '2025-10'),
     KernelSupportEntry('android15', '6.6', '118', '2026-01'),
     KernelSupportEntry('android15', '6.6', '127', '2026-04'),
     KernelSupportEntry('android16', '6.12', '23', '2025-06'),
-    KernelSupportEntry('android16', '6.12', '30', '2025-07'),
-    KernelSupportEntry('android16', '6.12', '38', '2025-08'),
     KernelSupportEntry('android16', '6.12', '38', '2025-09'),
     KernelSupportEntry('android16', '6.12', '58', '2025-12'),
     KernelSupportEntry('android16', '6.12', '69', '2026-03'),
@@ -156,7 +150,7 @@ class DesktopKernelSupport {
   static const List<String> ksuVariantOptions = <String>[
     'Official',
     'SukiSU',
-    'ReSukiSU',
+    'BakaSU',
     'None',
   ];
 
@@ -267,7 +261,7 @@ class DesktopKernelSupport {
     final normalizedBranch = normalizeKsuBranch(ksuBranch);
     if (normalizedVariant == 'None') return false;
     if (normalizedVariant == 'Official') return false;
-    if (normalizedVariant == 'ReSukiSU' &&
+    if (normalizedVariant == 'BakaSU' &&
         !const <String>{'Stable', 'Custom'}.contains(normalizedBranch)) {
       return false;
     }
@@ -275,7 +269,7 @@ class DesktopKernelSupport {
   }
 
   static String normalizeKsuVariant(String value) {
-    return ksuVariantOptions.contains(value) ? value : 'ReSukiSU';
+    return ksuVariantOptions.contains(value) ? value : 'BakaSU';
   }
 
   static String normalizeKsuBranch(String value) {

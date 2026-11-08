@@ -36,6 +36,11 @@ internal fun mergeRuntimeStatus(
         }
         compilerManager.copy(
             active = true,
+            // Kernels built before the ReSukiSU -> BakaSU rename still report the retired
+            // spelling here; fold SukiSU-family variants into the canonical constant so the
+            // runtime card and the LKM patch screen agree with the settings classification.
+            variant = KernelSupport.inferRuntimeKsuFamily(compilerManager.variant)
+                ?: compilerManager.variant,
             capabilities = (compilerManager.capabilities + extraCaps).distinct(),
             diagnostics = (compilerManager.diagnostics + manager.diagnostics).distinct()
         )

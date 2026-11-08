@@ -35,3 +35,15 @@ gki-android16-6.12=72bdce7ce2de
 # ==================== SukiSU 的 commit hash ====================
 # 仅当 custom=true 且使用 SukiSU 变体时生效
 sukisu=
+
+# ==================== 虚拟化补丁 (Droidspaces) 的 tag/commit ====================
+# 与 custom 开关无关，虚拟化支持始终按此 ref 克隆 ravindu644/Droidspaces-OSS。
+# 上游 2026-10-27 发布 v7.1.0：GKI kABI 补丁自 2026-04-22 起内容未变
+# (below-kernel-6.12 与 kernel-6.12 目录树 sha 在 v6.6.0/v7.0.0/v7.1.0 完全一致)，
+# 变化在 Documentation/Kernel-Configuration.md 的 GKI 配置清单：
+#   新增 CONFIG_USER_NS、CONFIG_IP6_NF_NAT、CONFIG_IP6_NF_TARGET_MASQUERADE、CONFIG_MACVLAN；
+#   明确 CONFIG_CFS_BANDWIDTH / CONFIG_CGROUP_PIDS 在 GKI 上必须保持关闭 (无补丁可覆盖，
+#   会改动约四千个导出符号的 CRC 导致厂商模块拒绝加载)。
+# 钉 tag 而非跟随 HEAD，避免上游文档/补丁漂移在同一天改变构建产物。
+# 留空表示回退到 v7.1.0。
+droidspaces=v7.1.0
