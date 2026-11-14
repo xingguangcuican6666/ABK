@@ -63,23 +63,31 @@ BODY_NEW_HEAD = "static bool susfs_sus_path_uid_upsert(struct inode *inode, int 
 
 
 def patch_upsert_body(text):
+    """Turn every early 'return;' into 'return false;' and add 'return true;'.
+
+    The guard block is whatever the patch chain left there - the ino-0 guard
+    (patch_susfs_ino_zero_guard.py) adds a second condition, so counting returns is
+    wrong.  Every 'return;' inside this function is a failure path (argument guards
+    and the kzalloc failure), so all of them become 'return false;' and the success
+    path is added before the closing brace.
+    """
     if text.count(BODY_OLD_HEAD) != 1:
         die("upsert definition head matched %d times (expected 1)" % text.count(BODY_OLD_HEAD))
     start = text.index(BODY_OLD_HEAD)
     end = text.index("\n}\n", start) + len("\n}\n")
     body = text[start:end]
 
-    if body.count("return;") != 2:
-        die("upsert body has %d 'return;' statements (expected 2)" % body.count("return;"))
-    body = body.replace("return;", "return false;")
-    if body.count("return true;") != 0:
+    n_returns = body.count("return;")
+    if n_returns < 2:
+        die("upsert body has %d 'return;' statements (expected at least 2)" % n_returns)
+    if "return true;" in body:
         die("upsert body already returns true - unexpected")
-    body = body[: body.rindex("\n}\n")] + "\n\treturn true; /* ABK " + MARKER + " */" + body[body.rindex("\n}\n"):]
+    body = body.replace("return;", "return false;")
+    close = body.rindex("\n}\n")
+    body = body[:close] + "\n\treturn true; /* ABK " + MARKER + " */" + body[close:]
     body = body.replace(BODY_OLD_HEAD, BODY_NEW_HEAD, 1)
     return text[:start] + body + text[end:]
 
-# hide_from handler: FUSE branch (indented with two tabs) and the plain branch
-HIDE_FUSE_OLD = "\t\tsusfs_sus_path_uid_upsert(&fi->inode, info.uid, 1);\n"
 HIDE_FUSE_RE = r"(?P<ind>\t+)susfs_sus_path_uid_upsert\(&fi->inode, info\.uid, 1\);\n"
 HIDE_PLAIN_RE = r"(?P<ind>\t+)susfs_sus_path_uid_upsert\(inode, info\.uid, 1\);\n"
 HIDE_FUSE_NEW = (
@@ -98,16 +106,42 @@ HIDE_PLAIN_NEW = (
     "\t}\n"
 )
 
-# policy loader: count only what really landed, and fail the call when it did not.
-# Indentation is captured so the same code works for the 3/4-tab layout of the real
-# tree and for any reformatting.
+# Policy loader: only count what really landed, and fail the call when a rule that
+# exists on disk could not be installed.  A path that does not exist (ENOENT) is not
+# a failure - nothing can leak through it - but a mode-2 entry is still queued so the
+# loop worker retries it on the next app spawn ("deferred").
 POLICY_RE = re.compile(
-    r"(?P<i1>\t+)if \(kpath\.dentry && kpath\.dentry->d_inode\) \{\n"
-    r"(?P<i2>\t+)susfs_sus_path_uid_upsert\(kpath\.dentry->d_inode, uid, 1\);\n"
-    r"(?P<i3>\t+)if \(mode == 2\)\n"
-    r"(?P<i4>\t+)susfs_loop_queue_path\(target, uid, 1\);\n"
-    r"(?P<i5>\t+)applied\+\+;\n"
-    r"(?P<i6>\t+)\}\n"
+    r"(?P<i>\t+)if \(\*target && kern_path\(target, LOOKUP_FOLLOW, &kpath\) == 0\) \{\n"
+    r"\t+if \(kpath\.dentry && kpath\.dentry->d_inode\) \{\n"
+    r"\t+susfs_sus_path_uid_upsert\(kpath\.dentry->d_inode, uid, 1\);\n"
+    r"\t+if \(mode == 2\)\n"
+    r"\t+susfs_loop_queue_path\(target, uid, 1\);\n"
+    r"\t+applied\+\+;\n"
+    r"\t+\}\n"
+    r"\t+path_put\(&kpath\);\n"
+    r"\t+\}\n"
+)
+
+POLICY_DECL_OLD = "\tint applied = 0;\n"
+POLICY_DECL_NEW = (
+    "\tint applied = 0;\n"
+    "\tint deferred = 0; /* ABK " + MARKER + ": path absent, nothing to hide */\n"
+    "\tint failed = 0;   /* ABK " + MARKER + ": rule exists but was not installed */\n"
+    "\tint kerr = 0;     /* ABK " + MARKER + " */\n"
+)
+
+POLICY_RET_RE = re.compile(
+    r"\tkvfree\(buf\);\n"
+    r"\tSUSFS_LOGI\(\"policy: applied %d entries\\n\", applied\);\n"
+    r"\treturn applied > 0 \? 0 : -ENOENT;\n"
+)
+
+POLICY_RET_NEW = (
+    "\tkvfree(buf);\n"
+    "\tSUSFS_LOGI(\"policy: applied %d, deferred %d, failed %d\\n\", applied, deferred, failed);\n"
+    "\tif (failed)\n"
+    "\t\treturn -EIO; /* ABK " + MARKER + ": a partial publish is a failure */\n"
+    "\treturn (applied > 0 || deferred > 0) ? 0 : -ENOENT;\n"
 )
 
 
@@ -116,37 +150,42 @@ def patch_policy_upsert(text):
     if len(matches) != 1:
         die("policy loader upsert matched %d times (expected 1)" % len(matches))
     m = matches[0]
-    i1, i2, i3, i4, i5, i6 = (m.group("i%d" % n) for n in range(1, 7))
+    i = m.group("i")
+    i1, i2, i3 = i + "\t", i + "\t\t", i + "\t\t\t"
     body = (
-        i1 + "if (kpath.dentry && kpath.dentry->d_inode) {\n"
+        i + "kerr = kern_path(target, LOOKUP_FOLLOW, &kpath);\n"
+        + i + "if (kerr == 0) {\n"
+        + i1 + "if (kpath.dentry && kpath.dentry->d_inode) {\n"
         + i2 + "if (!susfs_sus_path_uid_upsert(kpath.dentry->d_inode, uid, 1)) {\n"
-        + i2 + "\t/* ABK " + MARKER + ": never report a publish we did not install */\n"
-        + i2 + "\tfailed++;\n"
+        + i3 + "/* ABK " + MARKER + ": never report a publish we did not install */\n"
+        + i3 + "failed++;\n"
         + i2 + "} else {\n"
         + i3 + "if (mode == 2)\n"
-        + i4 + "susfs_loop_queue_path(target, uid, 1);\n"
-        + i5 + "applied++;\n"
+        + i3 + "\tsusfs_loop_queue_path(target, uid, 1);\n"
+        + i3 + "applied++;\n"
         + i2 + "}\n"
-        + i6 + "}\n"
+        + i1 + "} else {\n"
+        + i2 + "/* positive dentry without an inode: nothing can be enforced */\n"
+        + i2 + "failed++;\n"
+        + i1 + "}\n"
+        + i1 + "path_put(&kpath);\n"
+        + i + "} else if (kerr == -ENOENT) {\n"
+        + i1 + "/* the path does not exist (yet): nothing can leak through it */\n"
+        + i1 + "if (mode == 2)\n"
+        + i2 + "susfs_loop_queue_path(target, uid, 1);\n"
+        + i1 + "deferred++;\n"
+        + i + "} else {\n"
+        + i1 + "failed++;\n"
+        + i + "}\n"
     )
-    return text[:m.start()] + body + text[m.end():]
+    text = text[:m.start()] + body + text[m.end():]
 
-POLICY_DECL_OLD = "\tint applied = 0;\n"
-POLICY_DECL_NEW = "\tint applied = 0;\n\tint failed = 0; /* ABK " + MARKER + " */\n"
-
-POLICY_RET_OLD = (
-    "\tkvfree(buf);\n"
-    "\tSUSFS_LOGI(\"policy: applied %d entries\\n\", applied);\n"
-    "\treturn applied > 0 ? 0 : -ENOENT;\n"
-)
-POLICY_RET_NEW = (
-    "\tkvfree(buf);\n"
-    "\tSUSFS_LOGI(\"policy: applied %d entries, %d failed\\n\", applied, failed);\n"
-    "\tif (failed)\n"
-    "\t\treturn -EIO; /* ABK " + MARKER + ": partial publish is a failure */\n"
-    "\treturn applied > 0 ? 0 : -ENOENT;\n"
-)
-
+    text = replace_once(text, POLICY_DECL_OLD, POLICY_DECL_NEW, "policy loader counters")
+    matches = list(POLICY_RET_RE.finditer(text))
+    if len(matches) != 1:
+        die("policy loader return matched %d times (expected 1)" % len(matches))
+    m = matches[0]
+    return text[:m.start()] + POLICY_RET_NEW + text[m.end():]
 
 def die(msg):
     sys.stderr.write("::error::" + msg + "\n")
@@ -193,7 +232,7 @@ def main():
     with open(path, "r", encoding="utf-8", newline="") as fh:
         text = fh.read()
 
-    if MARKER in text:
+    if "static bool susfs_sus_path_uid_upsert" in text and ("return true; /* ABK " + MARKER) in text:
         print("skip (already patched): " + REL_SRC)
         return
 
@@ -204,9 +243,7 @@ def main():
     text = patch_upsert_body(text)
     text = replace_once_re(text, HIDE_FUSE_RE, "hide_from fuse call")
     text = replace_once_re(text, HIDE_PLAIN_RE, "hide_from plain call")
-    text = replace_once(text, POLICY_DECL_OLD, POLICY_DECL_NEW, "policy loader counter")
     text = patch_policy_upsert(text)
-    text = replace_once(text, POLICY_RET_OLD, POLICY_RET_NEW, "policy loader return")
 
     with open(path, "w", encoding="utf-8", newline="") as fh:
         fh.write(text)
