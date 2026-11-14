@@ -55,29 +55,28 @@ NEW_PROTO = "static bool susfs_sus_path_uid_upsert(struct inode *inode, int uid,
 OLD_DEF = "static void susfs_sus_path_uid_upsert(struct inode *inode, int uid, int mode) {\n"
 NEW_DEF = "static bool susfs_sus_path_uid_upsert(struct inode *inode, int uid, int mode) {\n"
 
-OLD_GUARD = "\tif (!inode || uid < 0)\n\t\treturn;\n"
-NEW_GUARD = "\tif (!inode || uid < 0)\n\t\treturn false;\n"
+# Guard / alloc failure / success tail are rewritten on the function body slice:
+# the body has exactly two "return;" statements (bad args, kzalloc failure) and must
+# end with "return true;", so exact indentation no longer matters.
+BODY_OLD_HEAD = "static void susfs_sus_path_uid_upsert(struct inode *inode, int uid, int mode) {\n"
+BODY_NEW_HEAD = "static bool susfs_sus_path_uid_upsert(struct inode *inode, int uid, int mode) {\n"
 
-OLD_ALLOC = (
-    "\t\tif (!entry) {\n"
-    "\t\t\tSUSFS_LOGE(\"failed allocating sus_path uid entry\\n\");\n"
-    "\t\t\tmutex_unlock(&susfs_mutex_lock_sus_path_uid);\n"
-    "\t\t\treturn;\n"
-    "\t\t}\n"
-)
-NEW_ALLOC = (
-    "\t\tif (!entry) {\n"
-    "\t\t\tSUSFS_LOGE(\"failed allocating sus_path uid entry\\n\");\n"
-    "\t\t\tmutex_unlock(&susfs_mutex_lock_sus_path_uid);\n"
-    "\t\t\treturn false;\n"
-    "\t\t}\n"
-)
 
-# Tail: the function ends with mutex_unlock(&susfs_mutex_lock_sus_path_uid) + "}",
-# not necessarily right after the log line, so insert before the closing brace that
-# follows the unlock inside this function.
-TAIL_NEEDLE = "\tmutex_unlock(&susfs_mutex_lock_sus_path_uid);\n}\n"
-TAIL_PATCH = "\tmutex_unlock(&susfs_mutex_lock_sus_path_uid);\n\treturn true; /* ABK " + MARKER + " */\n}\n"
+def patch_upsert_body(text):
+    if text.count(BODY_OLD_HEAD) != 1:
+        die("upsert definition head matched %d times (expected 1)" % text.count(BODY_OLD_HEAD))
+    start = text.index(BODY_OLD_HEAD)
+    end = text.index("\n}\n", start) + len("\n}\n")
+    body = text[start:end]
+
+    if body.count("return;") != 2:
+        die("upsert body has %d 'return;' statements (expected 2)" % body.count("return;"))
+    body = body.replace("return;", "return false;")
+    if body.count("return true;") != 0:
+        die("upsert body already returns true - unexpected")
+    body = body[: body.rindex("\n}\n")] + "\n\treturn true; /* ABK " + MARKER + " */" + body[body.rindex("\n}\n"):]
+    body = body.replace(BODY_OLD_HEAD, BODY_NEW_HEAD, 1)
+    return text[:start] + body + text[end:]
 
 # hide_from handler: FUSE branch (indented with two tabs) and the plain branch
 HIDE_FUSE_OLD = "\t\tsusfs_sus_path_uid_upsert(&fi->inode, info.uid, 1);\n"
@@ -199,10 +198,10 @@ def main():
         return
 
     text = replace_once(text, OLD_PROTO, NEW_PROTO, "upsert prototype")
-    text = replace_once(text, OLD_DEF, NEW_DEF, "upsert definition")
-    text = replace_once(text, OLD_GUARD, NEW_GUARD, "upsert guard")
-    text = replace_once(text, OLD_ALLOC, NEW_ALLOC, "upsert alloc failure")
-    text = replace_once(text, TAIL_NEEDLE, TAIL_PATCH, "upsert success tail")
+
+
+
+    text = patch_upsert_body(text)
     text = replace_once_re(text, HIDE_FUSE_RE, "hide_from fuse call")
     text = replace_once_re(text, HIDE_PLAIN_RE, "hide_from plain call")
     text = replace_once(text, POLICY_DECL_OLD, POLICY_DECL_NEW, "policy loader counter")
