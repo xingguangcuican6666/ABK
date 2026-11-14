@@ -43,6 +43,7 @@ patch_susfs_loop_mode.py and patch_susfs_policy_file.py).
 Re-running is a no-op; missing anchors abort with exit code 2.
 """
 import os
+import re
 import sys
 
 MARKER = "UPSERT_RESULT_ABK"
@@ -72,22 +73,16 @@ NEW_ALLOC = (
     "\t\t}\n"
 )
 
-OLD_TAIL = (
-    "\tSUSFS_LOGI(\"sus_path uid entry set: ino '%lu', dev '%u', uid '%d', mode '%d'\\n\",\n"
-    "\t\t\tinode->i_ino, inode->i_sb->s_dev, uid, mode);\n"
-    "\tmutex_unlock(&susfs_mutex_lock_sus_path_uid);\n"
-    "}\n"
-)
-NEW_TAIL = (
-    "\tSUSFS_LOGI(\"sus_path uid entry set: ino '%lu', dev '%u', uid '%d', mode '%d'\\n\",\n"
-    "\t\t\tinode->i_ino, inode->i_sb->s_dev, uid, mode);\n"
-    "\tmutex_unlock(&susfs_mutex_lock_sus_path_uid);\n"
-    "\treturn true;\n"
-    "}\n"
-)
+# Tail: the function ends with mutex_unlock(&susfs_mutex_lock_sus_path_uid) + "}",
+# not necessarily right after the log line, so insert before the closing brace that
+# follows the unlock inside this function.
+TAIL_NEEDLE = "\tmutex_unlock(&susfs_mutex_lock_sus_path_uid);\n}\n"
+TAIL_PATCH = "\tmutex_unlock(&susfs_mutex_lock_sus_path_uid);\n\treturn true; /* ABK " + MARKER + " */\n}\n"
 
 # hide_from handler: FUSE branch (indented with two tabs) and the plain branch
 HIDE_FUSE_OLD = "\t\tsusfs_sus_path_uid_upsert(&fi->inode, info.uid, 1);\n"
+HIDE_FUSE_RE = r"(?P<ind>\t+)susfs_sus_path_uid_upsert\(&fi->inode, info\.uid, 1\);\n"
+HIDE_PLAIN_RE = r"(?P<ind>\t+)susfs_sus_path_uid_upsert\(inode, info\.uid, 1\);\n"
 HIDE_FUSE_NEW = (
     "\t\tif (!susfs_sus_path_uid_upsert(&fi->inode, info.uid, 1)) {\n"
     "\t\t\tSUSFS_LOGE(\"sus_path uid entry allocation failed (fuse)\\n\");\n"
@@ -104,27 +99,38 @@ HIDE_PLAIN_NEW = (
     "\t}\n"
 )
 
-# policy loader: only count what really landed, and fail the call when it did not
-POLICY_OLD = (
-    "\t\t\tif (kpath.dentry && kpath.dentry->d_inode) {\n"
-    "\t\t\t\tsusfs_sus_path_uid_upsert(kpath.dentry->d_inode, uid, 1);\n"
-    "\t\t\t\tif (mode == 2)\n"
-    "\t\t\t\t\tsusfs_loop_queue_path(target, uid, 1);\n"
-    "\t\t\t\tapplied++;\n"
-    "\t\t\t}\n"
+# policy loader: count only what really landed, and fail the call when it did not.
+# Indentation is captured so the same code works for the 3/4-tab layout of the real
+# tree and for any reformatting.
+POLICY_RE = re.compile(
+    r"(?P<i1>\t+)if \(kpath\.dentry && kpath\.dentry->d_inode\) \{\n"
+    r"(?P<i2>\t+)susfs_sus_path_uid_upsert\(kpath\.dentry->d_inode, uid, 1\);\n"
+    r"(?P<i3>\t+)if \(mode == 2\)\n"
+    r"(?P<i4>\t+)susfs_loop_queue_path\(target, uid, 1\);\n"
+    r"(?P<i5>\t+)applied\+\+;\n"
+    r"(?P<i6>\t+)\}\n"
 )
-POLICY_NEW = (
-    "\t\t\tif (kpath.dentry && kpath.dentry->d_inode) {\n"
-    "\t\t\t\tif (!susfs_sus_path_uid_upsert(kpath.dentry->d_inode, uid, 1)) {\n"
-    "\t\t\t\t\t/* ABK " + MARKER + ": do not report a publish we did not install */\n"
-    "\t\t\t\t\tfailed++;\n"
-    "\t\t\t\t} else {\n"
-    "\t\t\t\t\tif (mode == 2)\n"
-    "\t\t\t\t\t\tsusfs_loop_queue_path(target, uid, 1);\n"
-    "\t\t\t\t\tapplied++;\n"
-    "\t\t\t\t}\n"
-    "\t\t\t}\n"
-)
+
+
+def patch_policy_upsert(text):
+    matches = list(POLICY_RE.finditer(text))
+    if len(matches) != 1:
+        die("policy loader upsert matched %d times (expected 1)" % len(matches))
+    m = matches[0]
+    i1, i2, i3, i4, i5, i6 = (m.group("i%d" % n) for n in range(1, 7))
+    body = (
+        i1 + "if (kpath.dentry && kpath.dentry->d_inode) {\n"
+        + i2 + "if (!susfs_sus_path_uid_upsert(kpath.dentry->d_inode, uid, 1)) {\n"
+        + i2 + "\t/* ABK " + MARKER + ": never report a publish we did not install */\n"
+        + i2 + "\tfailed++;\n"
+        + i2 + "} else {\n"
+        + i3 + "if (mode == 2)\n"
+        + i4 + "susfs_loop_queue_path(target, uid, 1);\n"
+        + i5 + "applied++;\n"
+        + i2 + "}\n"
+        + i6 + "}\n"
+    )
+    return text[:m.start()] + body + text[m.end():]
 
 POLICY_DECL_OLD = "\tint applied = 0;\n"
 POLICY_DECL_NEW = "\tint applied = 0;\n\tint failed = 0; /* ABK " + MARKER + " */\n"
@@ -156,6 +162,24 @@ def resolve(root):
     die("expected file not found: " + REL_SRC)
 
 
+def replace_once_re(text, pattern, label):
+    """Wrap a hide_from upsert call in a failure check, keeping its indentation."""
+    global _repl
+    matches = list(re.finditer(pattern, text))
+    if len(matches) != 1:
+        die("anchor '%s' matched %d times (expected 1)" % (label, len(matches)))
+    m = matches[0]
+    ind = m.group("ind")
+    body = (
+        ind + "/* ABK " + MARKER + ": a failed deny-entry install is not success */\n"
+        + ind + "if (!susfs_sus_path_uid_upsert(" + ("&fi->inode" if "fi->inode" in m.group(0) else "inode") + ", info.uid, 1)) {\n"
+        + ind + "\tSUSFS_LOGE(\"sus_path uid entry allocation failed\\n\");\n"
+        + ind + "\tinfo.err = -ENOMEM;\n"
+        + ind + "\tgoto out_path_put_path;\n"
+        + ind + "}\n"
+    )
+    return text[:m.start()] + body + text[m.end():]
+
 def replace_once(text, old, new, label):
     n = text.count(old)
     if n != 1:
@@ -178,11 +202,11 @@ def main():
     text = replace_once(text, OLD_DEF, NEW_DEF, "upsert definition")
     text = replace_once(text, OLD_GUARD, NEW_GUARD, "upsert guard")
     text = replace_once(text, OLD_ALLOC, NEW_ALLOC, "upsert alloc failure")
-    text = replace_once(text, OLD_TAIL, NEW_TAIL, "upsert success tail")
-    text = replace_once(text, HIDE_FUSE_OLD, HIDE_FUSE_NEW, "hide_from fuse call")
-    text = replace_once(text, HIDE_PLAIN_OLD, HIDE_PLAIN_NEW, "hide_from plain call")
+    text = replace_once(text, TAIL_NEEDLE, TAIL_PATCH, "upsert success tail")
+    text = replace_once_re(text, HIDE_FUSE_RE, "hide_from fuse call")
+    text = replace_once_re(text, HIDE_PLAIN_RE, "hide_from plain call")
     text = replace_once(text, POLICY_DECL_OLD, POLICY_DECL_NEW, "policy loader counter")
-    text = replace_once(text, POLICY_OLD, POLICY_NEW, "policy loader upsert")
+    text = patch_policy_upsert(text)
     text = replace_once(text, POLICY_RET_OLD, POLICY_RET_NEW, "policy loader return")
 
     with open(path, "w", encoding="utf-8", newline="") as fh:
