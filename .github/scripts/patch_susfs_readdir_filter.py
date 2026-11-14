@@ -268,14 +268,17 @@ def main():
                          (src, "bool susfs_is_ino_sus_path_hidden(u64 ino, u64 dev) {")):
         if needle not in load(path):
             die("verification failed: '" + needle + "' missing from " + path)
+    # Every actor now consults the uid table twice: once in the !inode fallback and
+    # once on the cache-hit path, so the expected count is twice the block count.
     guards = rd.count(READDIR_CALL)
     orig = rd.count("goto orig_flow;")
-    if guards < 3 or guards != orig:
-        die("verification failed: " + str(guards) + " readdir fallbacks for " + str(orig) +
-            " ilookup blocks (expected >= 3 and equal)")
+    if guards < 6 or guards != 2 * orig:
+        die("verification failed: " + str(guards) + " readdir uid-table checks for " +
+            str(orig) + " ilookup blocks (expected >= 6 and exactly twice the blocks)")
 
     print("[ABK] readdir sus_path filter OK: " + MARKER + " in fs/susfs.c, fs/readdir.c, "
-          "include/linux/susfs.h (" + str(guards) + " readdir fallbacks)")
+          "include/linux/susfs.h (" + str(guards) + " uid-table checks, " + str(orig) +
+          " actors)")
     return 0
 
 
