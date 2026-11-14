@@ -62,12 +62,20 @@ def save(p, text):
 TABLE_C = (
     "/* ABK " + MARKER + ": uids whose mount view is filtered (the HMA targets).\n"
     " *\n"
-    " * Bitmap on purpose: uid range of an Android device is bounded (< 200000) and\n"
-    " * a bitmap keeps the check to one test_bit() on the mountinfo hot path.\n"
+    " * Open-addressed set instead of a bitmap: an Android UID is\n"
+    " * userId * 100000 + appId, so a secondary user (e.g. user 10 -> 1010123) does\n"
+    " * not fit a small bitmap and silently losing it would report success without\n"
+    " * filtering.  Slot value 0 means empty, so uids are stored as (uid + 1).\n"
+    " * Removal only happens through the full clear below, so no tombstones.\n"
     " */\n"
-    "#define ABK_MANAGED_UID_MAX 200000\n"
-    "static DECLARE_BITMAP(abk_managed_uids, ABK_MANAGED_UID_MAX);\n"
-    "static bool abk_mount_per_uid __read_mostly = true; /* ABK: per-uid mount gate ON (matches the flashed kernel ab10012829) */\n"
+    "#define ABK_MANAGED_UID_SLOTS 4096\n"
+    "static u32 abk_managed_uid_slots[ABK_MANAGED_UID_SLOTS];\n"
+    "static bool abk_mount_per_uid __read_mostly = true;\n"
+    "\n"
+    "static inline unsigned int abk_uid_hash(u32 v)\n"
+    "{\n"
+    "\treturn (unsigned int)((v * 2654435761u) % ABK_MANAGED_UID_SLOTS);\n"
+    "}\n"
     "\n"
     "static int __init abk_mount_per_uid_setup(char *str)\n"
     "{\n"
@@ -81,32 +89,60 @@ TABLE_C = (
     "}\n"
     "__setup(\"abk_mount_per_uid\", abk_mount_per_uid_setup);\n"
     "\n"
-    "void susfs_uid_mark_managed(int uid)\n"
+    "/* Returns false when the set is full - the caller must count that as a failure\n"
+    " * instead of claiming the uid is managed.\n"
+    " */\n"
+    "bool susfs_uid_mark_managed(int uid)\n"
     "{\n"
-    "\tif (uid < 0 || uid >= ABK_MANAGED_UID_MAX)\n"
-    "\t\treturn;\n"
-    "\tset_bit((unsigned int)uid, abk_managed_uids);\n"
+    "\tu32 v;\n"
+    "\tunsigned int i, n;\n"
+    "\n"
+    "\tif (uid < 0)\n"
+    "\t\treturn false;\n"
+    "\tv = (u32)uid + 1;\n"
+    "\ti = abk_uid_hash(v);\n"
+    "\tfor (n = 0; n < ABK_MANAGED_UID_SLOTS; n++) {\n"
+    "\t\tunsigned int s = (i + n) % ABK_MANAGED_UID_SLOTS;\n"
+    "\t\tif (READ_ONCE(abk_managed_uid_slots[s]) == v)\n"
+    "\t\t\treturn true;\n"
+    "\t\tif (READ_ONCE(abk_managed_uid_slots[s]) == 0) {\n"
+    "\t\t\tWRITE_ONCE(abk_managed_uid_slots[s], v);\n"
+    "\t\t\treturn true;\n"
+    "\t\t}\n"
+    "\t}\n"
+    "\treturn false;\n"
+    "}\n"
+    "\n"
+    "void susfs_uid_clear_managed(void)\n"
+    "{\n"
+    "\tmemset(abk_managed_uid_slots, 0, sizeof(abk_managed_uid_slots));\n"
     "}\n"
     "\n"
     "bool susfs_uid_is_managed(unsigned int uid)\n"
     "{\n"
+    "\tu32 v;\n"
+    "\tunsigned int i, n;\n"
+    "\n"
     "\tif (!abk_mount_per_uid)\n"
     "\t\treturn true; /* legacy behaviour: every app uid is filtered */\n"
-    "\t/* ABK MOUNT_PER_UID_ABK: isolated app processes (90000-99999, e.g. the\n"
-    "\t * WebView sandboxed process) never appear in /data/user/0, so userspace\n"
-    "\t * cannot list them - treat them like any other app process.  Duck Detector\n"
-    "\t * compares exactly against an isolated-process baseline; leaving them on\n"
-    "\t * the raw view made the two mount tables diverge.\n"
+    "\t/* isolated app processes (90000-99999) never appear in /data/user/0, so\n"
+    "\t * userspace cannot list them - treat them like any other app process.\n"
     "\t */\n"
     "\tif (uid >= 90000 && uid <= 99999)\n"
     "\t\treturn true;\n"
-    "\tif (uid >= ABK_MANAGED_UID_MAX)\n"
-    "\t\treturn false;\n"
-    "\treturn test_bit((unsigned int)uid, abk_managed_uids);\n"
+    "\tv = uid + 1;\n"
+    "\ti = abk_uid_hash(v);\n"
+    "\tfor (n = 0; n < ABK_MANAGED_UID_SLOTS; n++) {\n"
+    "\t\tunsigned int s = (i + n) % ABK_MANAGED_UID_SLOTS;\n"
+    "\t\tif (READ_ONCE(abk_managed_uid_slots[s]) == v)\n"
+    "\t\t\treturn true;\n"
+    "\t\tif (READ_ONCE(abk_managed_uid_slots[s]) == 0)\n"
+    "\t\t\treturn false;\n"
+    "\t}\n"
+    "\treturn false;\n"
     "}\n"
     "\n"
 )
-
 HDR_DECL = (
     "/* ABK " + MARKER + " */\n"
     "void susfs_uid_mark_managed(int uid);\n"
@@ -138,8 +174,11 @@ def patch_susfs_c(root):
         parse_anchor,
         parse_anchor
         + "\t\tif (mode == 4) {\n"
-        + "\t\t\tsusfs_uid_mark_managed(uid); /* ABK " + MARKER + " */\n"
-        + "\t\t\tapplied++;\n"
+        + "\t\t\t/* ABK " + MARKER + ": only count uids the set actually recorded */\n"
+        + "\t\t\tif (susfs_uid_mark_managed(uid))\n"
+        + "\t\t\t\tapplied++;\n"
+        + "\t\t\telse\n"
+        + "\t\t\t\tfailed++;\n"
         + "\t\t\tline = next;\n"
         + "\t\t\tcontinue;\n"
         + "\t\t}\n",
@@ -158,6 +197,59 @@ def patch_header(root):
         die("struct st_susfs_sus_path not found in include/linux/susfs.h")
     text = text.replace(anchor, HDR_DECL + "\n" + anchor, 1)
     save(p, text)
+
+
+def patch_policy_loader_clear(root):
+    """Empty the managed-uid set before applying a new policy file.
+
+    The loader is called again whenever the magic path is used; without a clear, a
+    uid removed from the policy would keep its filtered mount view until reboot.
+    """
+    p = find(root, os.path.join("fs", "susfs.c"))
+    text = load(p)
+    if "susfs_uid_clear_managed();" in text:
+        return
+    anchor = "\tline = buf;\n"
+    if text.count(anchor) != 1:
+        die("policy loader anchor 'line = buf;' matched %d times (expected 1)" % text.count(anchor))
+    text = text.replace(
+        anchor,
+        "\tsusfs_uid_clear_managed(); /* ABK " + MARKER + ": set mirrors the current file */\n" + anchor,
+        1,
+    )
+    save(p, text)
+
+
+def patch_statfs_gate(root):
+    """Make statfs() use the same gate as the three mount tables."""
+    for rel in (os.path.join("fs", "statfs.c"), os.path.join("fs", "namespace.c")):
+        try:
+            p = find(root, rel)
+        except SystemExit:
+            continue
+        text = load(p)
+        if MARKER in text and "susfs_uid_is_managed" in text:
+            return
+        tail = "\treturn !susfs_is_current_ksu_domain();\n}\n"
+        if text.count(tail) != 1:
+            continue
+        text = text.replace(
+            tail,
+            "\tif (susfs_is_current_ksu_domain())\n"
+            "\t\treturn false;\n"
+            "\t/* ABK " + MARKER + ": same managed-uid gate as mountinfo/path/fdinfo */\n"
+            "\treturn susfs_uid_is_managed(current_uid().val);\n"
+            "}\n",
+            1,
+        )
+        decl = "extern bool susfs_uid_is_managed(unsigned int uid);\n"
+        if decl not in text:
+            anchor = "static bool abk_statfs_must_use_non_sus_mnt(void)"
+            if anchor not in text:
+                continue
+            text = text.replace(anchor, decl + anchor, 1)
+        save(p, text)
+        return
 
 
 def patch_proc_namespace(root):
@@ -292,6 +384,8 @@ def main():
     patch_header(root)
     patch_proc_namespace(root)
     patch_mount_consistency_files(root)
+    patch_policy_loader_clear(root)
+    patch_statfs_gate(root)
     print("patch: per-target mount view (" + MARKER + ")")
 
 
