@@ -145,7 +145,8 @@ TABLE_C = (
 )
 HDR_DECL = (
     "/* ABK " + MARKER + " */\n"
-    "void susfs_uid_mark_managed(int uid);\n"
+    "bool susfs_uid_mark_managed(int uid);\n"
+    "void susfs_uid_clear_managed(void);\n"
     "bool susfs_uid_is_managed(unsigned int uid);\n"
 )
 

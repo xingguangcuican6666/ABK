@@ -149,6 +149,8 @@ def patch_upsert_body(text):
     body = body[:close] + "\n\treturn true; /* ABK " + MARKER + " */" + body[close:]
     body = body.replace(BODY_OLD_HEAD, BODY_NEW_HEAD, 1)
 
+    # The converted guard still rejects uid < 0, which would make the revoke branch
+    # below unreachable.  Drop that clause from the guard and handle it explicitly.
     guard = None
     for candidate in (GUARD_INO0, GUARD_PLAIN):
         if body.count(candidate) == 1:
@@ -156,7 +158,10 @@ def patch_upsert_body(text):
             break
     if guard is None:
         die("upsert argument guard not found after the return conversion")
-    body = body.replace(guard, guard + GUARD_REVOKE, 1)
+    relaxed = guard.replace(" || uid < 0", "")
+    if relaxed == guard:
+        die("upsert argument guard does not contain the uid < 0 clause")
+    body = body.replace(guard, relaxed + GUARD_REVOKE, 1)
     return text[:start] + body + text[end:]
 
 
