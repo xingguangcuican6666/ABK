@@ -66,10 +66,16 @@ TABLE_C = (
     " * userId * 100000 + appId, so a secondary user (e.g. user 10 -> 1010123) does\n"
     " * not fit a small bitmap and silently losing it would report success without\n"
     " * filtering.  Slot value 0 means empty, so uids are stored as (uid + 1).\n"
-    " * Removal only happens through the full clear below, so no tombstones.\n"
+    " *\n"
+    " * Double buffered: a policy reload builds the inactive buffer and publishes it\n"
+    " * with rcu_assign_pointer() + synchronize_rcu(), so a reader never observes a\n"
+    " * half-cleared set and the old buffer stays valid until every reader is done.\n"
+    " * Writers are serialised by susfs_mutex_lock_policy_load.\n"
     " */\n"
     "#define ABK_MANAGED_UID_SLOTS 4096\n"
-    "static u32 abk_managed_uid_slots[ABK_MANAGED_UID_SLOTS];\n"
+    "static u32 abk_managed_slots[2][ABK_MANAGED_UID_SLOTS];\n"
+    "static u32 *abk_managed_active = abk_managed_slots[0];\n"
+    "static u32 *abk_managed_building = abk_managed_slots[1];\n"
     "static bool abk_mount_per_uid __read_mostly = true;\n"
     "\n"
     "static inline unsigned int abk_uid_hash(u32 v)\n"
@@ -89,6 +95,14 @@ TABLE_C = (
     "}\n"
     "__setup(\"abk_mount_per_uid\", abk_mount_per_uid_setup);\n"
     "\n"
+    "/* Prepare the building buffer for a new policy file (readers keep the old set).\n"
+    " */\n"
+    "void susfs_uid_clear_managed(void)\n"
+    "{\n"
+    "\tmemset(abk_managed_building, 0,\n"
+    "\t       ABK_MANAGED_UID_SLOTS * sizeof(abk_managed_building[0]));\n"
+    "}\n"
+    "\n"
     "/* Returns false when the set is full - the caller must count that as a failure\n"
     " * instead of claiming the uid is managed.\n"
     " */\n"
@@ -103,25 +117,34 @@ TABLE_C = (
     "\ti = abk_uid_hash(v);\n"
     "\tfor (n = 0; n < ABK_MANAGED_UID_SLOTS; n++) {\n"
     "\t\tunsigned int s = (i + n) % ABK_MANAGED_UID_SLOTS;\n"
-    "\t\tif (READ_ONCE(abk_managed_uid_slots[s]) == v)\n"
+    "\t\tif (abk_managed_building[s] == v)\n"
     "\t\t\treturn true;\n"
-    "\t\tif (READ_ONCE(abk_managed_uid_slots[s]) == 0) {\n"
-    "\t\t\tWRITE_ONCE(abk_managed_uid_slots[s], v);\n"
+    "\t\tif (abk_managed_building[s] == 0) {\n"
+    "\t\t\tabk_managed_building[s] = v;\n"
     "\t\t\treturn true;\n"
     "\t\t}\n"
     "\t}\n"
     "\treturn false;\n"
     "}\n"
     "\n"
-    "void susfs_uid_clear_managed(void)\n"
+    "/* Publish the buffer built by the current load.  Called with the policy-load\n"
+    " * mutex held, i.e. a single writer; readers are lock-free RCU readers.\n"
+    " */\n"
+    "void susfs_uid_publish_managed(void)\n"
     "{\n"
-    "\tmemset(abk_managed_uid_slots, 0, sizeof(abk_managed_uid_slots));\n"
+    "\tu32 *old = abk_managed_active;\n"
+    "\n"
+    "\trcu_assign_pointer(abk_managed_active, abk_managed_building);\n"
+    "\tsynchronize_rcu();\n"
+    "\tabk_managed_building = old;\n"
     "}\n"
     "\n"
     "bool susfs_uid_is_managed(unsigned int uid)\n"
     "{\n"
+    "\tu32 *slots;\n"
     "\tu32 v;\n"
     "\tunsigned int i, n;\n"
+    "\tbool found = false;\n"
     "\n"
     "\tif (!abk_mount_per_uid)\n"
     "\t\treturn true; /* legacy behaviour: every app uid is filtered */\n"
@@ -131,15 +154,20 @@ TABLE_C = (
     "\tif (uid >= 90000 && uid <= 99999)\n"
     "\t\treturn true;\n"
     "\tv = uid + 1;\n"
+    "\trcu_read_lock();\n"
+    "\tslots = rcu_dereference(abk_managed_active);\n"
     "\ti = abk_uid_hash(v);\n"
     "\tfor (n = 0; n < ABK_MANAGED_UID_SLOTS; n++) {\n"
     "\t\tunsigned int s = (i + n) % ABK_MANAGED_UID_SLOTS;\n"
-    "\t\tif (READ_ONCE(abk_managed_uid_slots[s]) == v)\n"
-    "\t\t\treturn true;\n"
-    "\t\tif (READ_ONCE(abk_managed_uid_slots[s]) == 0)\n"
-    "\t\t\treturn false;\n"
+    "\t\tif (READ_ONCE(slots[s]) == v) {\n"
+    "\t\t\tfound = true;\n"
+    "\t\t\tbreak;\n"
+    "\t\t}\n"
+    "\t\tif (READ_ONCE(slots[s]) == 0)\n"
+    "\t\t\tbreak;\n"
     "\t}\n"
-    "\treturn false;\n"
+    "\trcu_read_unlock();\n"
+    "\treturn found;\n"
     "}\n"
     "\n"
 )
@@ -147,6 +175,7 @@ HDR_DECL = (
     "/* ABK " + MARKER + " */\n"
     "bool susfs_uid_mark_managed(int uid);\n"
     "void susfs_uid_clear_managed(void);\n"
+    "void susfs_uid_publish_managed(void);\n"
     "bool susfs_uid_is_managed(unsigned int uid);\n"
 )
 
@@ -224,7 +253,22 @@ def patch_policy_loader_clear(root):
             % (text.count(candidates[0]), text.count(candidates[1])))
     text = text.replace(
         anchor,
-        anchor + "\tsusfs_uid_clear_managed(); /* ABK " + MARKER + ": set mirrors the current file */\n",
+        anchor + "\tsusfs_uid_clear_managed(); /* ABK " + MARKER +
+        ": prepare the building buffer, readers keep the old set */\n",
+        1,
+    )
+
+    # Publish the new set once the whole file has been parsed: the old buffer stays
+    # valid for every reader until synchronize_rcu(), so a reader never observes a
+    # half-filled set.
+    pub_anchor = "\tkvfree(buf);\n\tSUSFS_LOGI(\"policy: applied"
+    if text.count(pub_anchor) != 1:
+        die("policy loader publish anchor matched %d times (expected 1)"
+            % text.count(pub_anchor))
+    text = text.replace(
+        pub_anchor,
+        "\tsusfs_uid_publish_managed(); /* ABK " + MARKER +
+        ": publish after the loop */\n" + pub_anchor,
         1,
     )
     save(p, text)
