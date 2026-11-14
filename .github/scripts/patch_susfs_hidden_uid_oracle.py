@@ -40,9 +40,11 @@ INCLUDE_ADD = (
 )
 
 HOOK = (
+    "#ifdef CONFIG_KSU_SUSFS_SUS_PATH\n"
     "\t/* ABK " + MARKER + ": a hidden uid must not look alive to an app */\n"
     "\tif (which == PRIO_USER && who >= 0 && " + LOOKUP + "((uid_t)who))\n"
     "\t\treturn -ESRCH;\n"
+    "#endif // CONFIG_KSU_SUSFS_SUS_PATH\n"
 )
 
 SETPRIO_ANCHOR = (

@@ -401,6 +401,11 @@ def patch_clih(root):
     if MARKER in text:
         return "skip", REL["clih"]
     text = insert_after_line(text, CLIH_ANCHOR, CLIH_ADD, path, CLIH_ANCHOR)
+    # The CLI is a separate build: the kernel header that apply_def() patches is not
+    # visible here, so the command id must be defined in this header as well,
+    # otherwise sus_path.c fails on an undefined CMD_SUSFS_ADD_HIDDEN_UID_FROM.
+    if DEF_LINE not in text:
+        text = text.replace(CLIH_ANCHOR, DEF_LINE + "\n" + CLIH_ANCHOR, 1)
     save(path, text)
     return "patch", REL["clih"]
 

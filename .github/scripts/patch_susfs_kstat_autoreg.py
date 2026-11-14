@@ -95,24 +95,12 @@ HELPER_DEF = (
     "\tentry->target_dev = inode->i_sb->s_dev;\n"
     "\tentry->is_fuse = is_fuse;\n"
     "\tentry->info.is_statically = true;\n"
-    "\tentry->info.flags = KSTAT_SPOOF_INO | KSTAT_SPOOF_DEV |\n"
-    "\t\t\t    KSTAT_SPOOF_NLINK | KSTAT_SPOOF_SIZE |\n"
-    "\t\t\t    KSTAT_SPOOF_ATIME_TV_SEC | KSTAT_SPOOF_ATIME_TV_NSEC |\n"
-    "\t\t\t    KSTAT_SPOOF_MTIME_TV_SEC | KSTAT_SPOOF_MTIME_TV_NSEC |\n"
-    "\t\t\t    KSTAT_SPOOF_CTIME_TV_SEC | KSTAT_SPOOF_CTIME_TV_NSEC |\n"
-    "\t\t\t    KSTAT_SPOOF_BLKSIZE | KSTAT_SPOOF_BLOCKS;\n"
+    "\t/* ABK review fix: spoof only the identity fields.  Baking size, times and\n"
+    "\t * blocks in at registration time would make fstat() of a growing file (even\n"
+    "\t * for its owner) keep returning the size it had when the rule was added. */\n"
+    "\tentry->info.flags = KSTAT_SPOOF_INO | KSTAT_SPOOF_DEV;\n"
     "\tentry->info.spoofed_ino = inode->i_ino;\n"
     "\tentry->info.spoofed_dev = inode->i_sb->s_dev;\n"
-    "\tentry->info.spoofed_nlink = inode->i_nlink;\n"
-    "\tentry->info.spoofed_size = inode->i_size;\n"
-    "\tentry->info.spoofed_atime_tv_sec = inode->i_atime.tv_sec;\n"
-    "\tentry->info.spoofed_atime_tv_nsec = inode->i_atime.tv_nsec;\n"
-    "\tentry->info.spoofed_mtime_tv_sec = inode->i_mtime.tv_sec;\n"
-    "\tentry->info.spoofed_mtime_tv_nsec = inode->i_mtime.tv_nsec;\n"
-    "\tentry->info.spoofed_ctime_tv_sec = inode->i_ctime.tv_sec;\n"
-    "\tentry->info.spoofed_ctime_tv_nsec = inode->i_ctime.tv_nsec;\n"
-    "\tentry->info.spoofed_blocks = inode->i_blocks;\n"
-    "\tentry->info.spoofed_blksize = 1 << inode->i_blkbits;\n"
     "\tstrscpy(entry->info.target_pathname, pathname, SUSFS_MAX_LEN_PATHNAME - 1);\n"
     "\n"
     "\t/* fills spoofed_mnt_id + spoofed_kstatfs from the non-sus mount and sets\n"
@@ -141,20 +129,26 @@ HELPER_DEF = (
     "\n"
 )
 
-# add_sus_path: fuse branch and normal branch (unique log strings)
+# add_sus_path: fuse branch and normal branch (unique log strings).
+# 60_add_per_uid_sus_path.patch inserts susfs_sus_path_uid_upsert() between the
+# set_bit() calls and the log line, so that call is optional in every anchor.
 RE_FUSE = re.compile(
     r"(?m)^([ \t]*)set_bit\(AS_FLAGS_SUS_PATH, &fi->inode\.i_mapping->flags\);\n"
     r"([ \t]*)set_bit\(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags\);\n"
+    r"\2(?:susfs_sus_path_uid_upsert\([^\n]*\);\n)?"
     r"\2SUSFS_LOGI\(\"flagged AS_FLAGS_SUS_PATH on pathname: '%s', fi->nodeid:")
 RE_NORMAL = re.compile(
     r"(?m)^([ \t]*)set_bit\(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags\);\n"
+    r"\1(?:susfs_sus_path_uid_upsert\([^\n]*\);\n)?"
     r"\1SUSFS_LOGI\(\"flagged AS_FLAGS_SUS_PATH on pathname: '%s', ino: '%lu'")
 RE_LOOP_FUSE = re.compile(
     r"(?m)^([ \t]*)set_bit\(AS_FLAGS_SUS_PATH, &fi->inode\.i_mapping->flags\);\n"
     r"([ \t]*)set_bit\(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags\);\n"
+    r"\2(?:susfs_sus_path_uid_upsert\([^\n]*\);\n)?"
     r"\2SUSFS_LOGI\(\"re-flag AS_FLAGS_SUS_PATH on path '%s', fi->inode\.i_ino:")
 RE_LOOP_NORMAL = re.compile(
     r"(?m)^([ \t]*)set_bit\(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags\);\n"
+    r"\1(?:susfs_sus_path_uid_upsert\([^\n]*\);\n)?"
     r"\1SUSFS_LOGI\(\"re-flag AS_FLAGS_SUS_PATH on path '%s', inode->i_ino:")
 
 

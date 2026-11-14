@@ -128,6 +128,15 @@ PREDICATE = (
     "\n"
 )
 
+READDIR_HIT_OLD = "\tif (susfs_is_inode_sus_path(inode)) {\n"
+READDIR_HIT_NEW = (
+    "\t/* ABK " + MARKER + ": a recycled inode carries no AS_FLAGS_SUS_PATH, so the\n"
+    "\t * cache-hit path must consult the uid table as well.\n"
+    "\t */\n"
+    "\tif (susfs_is_inode_sus_path(inode) ||\n"
+    "\t    susfs_is_ino_sus_path_hidden((u64)ino, (u64)buf->sb->s_dev)) {\n"
+)
+
 READDIR_FALLBACK = (
     "\tinode = ilookup(buf->sb, ino);\n"
     "\tif (!inode) {\n"
@@ -215,6 +224,16 @@ def patch_readdir(path):
                 str(pos) + " in " + path)
         value = "true" if actors[-1].group(1) == "bool" else "0"
         text = text[:pos] + (READDIR_FALLBACK % value) + text[pos + len(READDIR_ILOOKUP):]
+
+    # Cache-hit path: the upstream hook only tests the inode flags, and an inode
+    # that was evicted and recreated carries none, so the name would reappear in
+    # the same process until the next loop replay.  Consult the uid table here too.
+    spent = text.count(READDIR_HIT_OLD)
+    if spent < 3:
+        die("cache-hit anchor matched " + str(spent) +
+            " times (expected at least 3: filldir / filldir64 / compat_filldir) in " + path)
+    text = text.replace(READDIR_HIT_OLD, READDIR_HIT_NEW)
+
     save(path, text)
     return "patch (" + str(len(spots)) + " actors)"
 
