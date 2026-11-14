@@ -6996,6 +6996,15 @@ jobs:
             echo "::error::ABK upsert result verification FAILED"
             exit 1
           fi
+      - name: 诊断：隐藏谓词输入 (ABK，临时)
+        if: inputs.enable_susfs && (inputs.ksu_variant == 'BakaSU' || inputs.ksu_variant == 'SukiSU') && inputs.android_version == 'android14' && inputs.kernel_version == '6.1'
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: |
+          set -uo pipefail
+          PATCHER="$GITHUB_WORKSPACE/.github/scripts/patch_susfs_inode_pred_diag.py"
+          [ -f "$PATCHER" ] || { echo "::error::diagnostic patcher missing"; exit 1; }
+          python3 "$PATCHER" "$KERNEL_ROOT" || { echo "::error::diagnostic patcher FAILED"; exit 1; }
+          echo "[ABK] inode predicate diagnostic inserted (temporary)"
       - name: 修复 SUSFS 未使用的 cred 辅助函数 (ABK)
         if: inputs.enable_susfs && inputs.ksu_variant != 'None'
         working-directory: ${{ env.KERNEL_ROOT }}
