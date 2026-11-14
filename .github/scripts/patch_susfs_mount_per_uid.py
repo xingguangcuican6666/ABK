@@ -209,12 +209,21 @@ def patch_policy_loader_clear(root):
     text = load(p)
     if "susfs_uid_clear_managed();" in text:
         return
-    anchor = "\tline = buf;\n"
-    if text.count(anchor) != 1:
-        die("policy loader anchor 'line = buf;' matched %d times (expected 1)" % text.count(anchor))
+    # Anchor on the end of the read in the policy loader: "line = buf;" alone also
+    # appears elsewhere in susfs.c (CI matched it twice).
+    candidates = (
+        "\tbuf[len] = '\\0';\n",
+        "\tline = buf;\n",
+    )
+    for anchor in candidates:
+        if text.count(anchor) == 1:
+            break
+    else:
+        die("policy loader anchor not unique in fs/susfs.c (buf[len]/line = buf matched %d/%d)"
+            % (text.count(candidates[0]), text.count(candidates[1])))
     text = text.replace(
         anchor,
-        "\tsusfs_uid_clear_managed(); /* ABK " + MARKER + ": set mirrors the current file */\n" + anchor,
+        anchor + "\tsusfs_uid_clear_managed(); /* ABK " + MARKER + ": set mirrors the current file */\n",
         1,
     )
     save(p, text)
