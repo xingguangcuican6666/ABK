@@ -301,10 +301,11 @@ def patch_readdir(path):
         + "\tbuf.dir_dev = f.file->f_inode->i_sb->s_dev; /* ABK " + MARKER + " */\n",
     )
 
-    # readdir.c does not include susfs.h: declare the helper locally
+    # readdir.c does not include susfs.h: declare the helper locally (the predicate
+    # extern is emitted once per file by the SUSFS patch, but tolerate more).
     incl = "extern bool susfs_is_inode_sus_path(struct inode *inode);\n"
-    if text.count(incl) != 1:
-        die("readdir predicate extern anchor matched %d times" % text.count(incl))
+    if text.count(incl) < 1:
+        die("readdir predicate extern anchor not found")
     text = text.replace(
         incl,
         incl + "extern bool susfs_is_dir_masked(u64 ino, u64 dev); /* ABK " + MARKER + " */\n",
@@ -341,10 +342,12 @@ def patch_mntns(path):
     text = load(path)
     if MARKER in text:
         return "skip"
-    # proc_namespace.c does not include susfs.h either: declare the helper locally
+    # proc_namespace.c does not include susfs.h either: declare the helper locally.
+    # The ksu-domain extern can appear more than once (the SUSFS patch and the
+    # mount_app_uid patcher both touch this file), so insert after the first hit.
     extern_anchor = "extern bool susfs_is_current_ksu_domain(void);\n"
-    if text.count(extern_anchor) != 1:
-        die("proc_namespace ksu-domain extern anchor matched %d times" % text.count(extern_anchor))
+    if text.count(extern_anchor) < 1:
+        die("proc_namespace ksu-domain extern anchor not found")
     text = text.replace(
         extern_anchor,
         extern_anchor
@@ -352,8 +355,8 @@ def patch_mntns(path):
         1,
     )
     n = text.count(MNT_COND_OLD)
-    if n != 2:
-        die("mountinfo KSU-mount anchor matched %d times (expected 2)" % n)
+    if n < 1:
+        die("mountinfo KSU-mount anchor matched 0 times")
     text = text.replace(MNT_COND_OLD, MNT_COND_NEW)
     save(path, text)
     return "patch (%d show functions)" % n
