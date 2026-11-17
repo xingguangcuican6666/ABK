@@ -45,6 +45,8 @@ SRC_BLOCK = (
     "#include <linux/mount.h>\n"
     "#include <linux/dcache.h>\n"
     "#include <linux/magic.h>\n"
+    "#include <linux/namei.h>\n"
+    "#include <linux/string.h>\n"
     "\n"
     "static char abk_empty_dirs[192] = \"/data/local/tmp\";\n"
     "static int __init abk_empty_dirs_setup(char *str)\n"
@@ -248,16 +250,22 @@ def patch_hdr(path):
     text = load(path)
     if MARKER in text:
         return "skip"
-    # susfs.h declares it with an extern, the definition does not.
+    # The predicate is declared per-source-file by the SUSFS patch, not in susfs.h, so
+    # anchor on a prototype that is definitely there: the loop entry point that
+    # patch_susfs_readdir_filter.py added earlier in this same run.
     anchor = None
-    for candidate in ("extern bool susfs_is_inode_sus_path(struct inode *inode);\n",
+    for candidate in ("void susfs_add_sus_path_loop(void __user **user_info);\n",
+                      "bool susfs_is_ino_sus_path_hidden(u64 ino, u64 dev);\n",
+                      "extern bool susfs_is_inode_sus_path(struct inode *inode);\n",
                       "bool susfs_is_inode_sus_path(struct inode *inode);\n"):
         if text.count(candidate) == 1:
             anchor = candidate
             break
     if anchor is None:
-        die("susfs.h predicate anchor matched %d/%d times" %
-            (text.count("extern bool susfs_is_inode_sus_path(struct inode *inode);\n"),
+        die("susfs.h prototype anchor not found (loop=%d, ino_hidden=%d, extern=%d, plain=%d)" %
+            (text.count("void susfs_add_sus_path_loop(void __user **user_info);\n"),
+             text.count("bool susfs_is_ino_sus_path_hidden(u64 ino, u64 dev);\n"),
+             text.count("extern bool susfs_is_inode_sus_path(struct inode *inode);\n"),
              text.count("bool susfs_is_inode_sus_path(struct inode *inode);\n")))
     text = text.replace(anchor, anchor + HDR_BLOCK, 1)
     save(path, text)
@@ -307,8 +315,19 @@ def patch_readdir(path):
     n_ilo = text.count(ilo)
     if n_ilo < 3:
         die("readdir ilookup anchor matched %d times (expected >= 3)" % n_ilo)
-    for _ in range(n_ilo):
-        pos = text.index(ilo)
+    # Insert one check per actor: walking the offsets in reverse keeps every position
+    # valid (text.index() would otherwise return the same first hit again).
+    positions = []
+    start = 0
+    while True:
+        pos = text.find(ilo, start)
+        if pos < 0:
+            break
+        positions.append(pos)
+        start = pos + len(ilo)
+    if len(positions) != n_ilo:
+        die("readdir ilookup scan mismatch (%d vs %d)" % (len(positions), n_ilo))
+    for pos in reversed(positions):
         head = text[:pos]
         kind = "true"
         if head.rfind("static int ") > head.rfind("static bool "):
