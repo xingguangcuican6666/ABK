@@ -176,8 +176,13 @@ DEVPTS_RULE = (
     "\t */\n"
     "\tif (inode->i_sb->s_magic == DEVPTS_SUPER_MAGIC &&\n"
     "\t    current_uid().val >= 10000 &&\n"
-    "\t    inode->i_uid.val != current_uid().val)\n"
+    "\t    inode->i_uid.val != current_uid().val) {\n"
+    "\t\t/* /dev/pts/ptmx is the multiplexer every process needs to allocate a\n"
+    "\t\t * pty - it is root-owned on every stock device, so keep it visible. */\n"
+    "\t\tif (S_ISCHR(inode->i_mode) && inode->i_rdev == MKDEV(5, 2))\n"
+    "\t\t\treturn false;\n"
     "\t\treturn true;\n"
+    "\t}\n"
 )
 
 MASK_CALL = (
