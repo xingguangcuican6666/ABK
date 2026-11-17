@@ -6995,6 +6995,7 @@ jobs:
           grep -q 'ABK_APP_VIS' "$KERNEL_ROOT/common/fs/susfs.c" || { echo "::error::app-visibility patches missing from fs/susfs.c"; exit 1; }
           grep -q 'ABK_APP_VIS' "$KERNEL_ROOT/common/fs/readdir.c" || { echo "::error::app-visibility patches missing from fs/readdir.c"; exit 1; }
           grep -q 'ABK_APP_VIS' "$KERNEL_ROOT/common/fs/proc_namespace.c" || { echo "::error::app-visibility patches missing from fs/proc_namespace.c"; exit 1; }
+          grep -q 'ABK_APP_VIS' "$KERNEL_ROOT/common/fs/namei.c" || { echo "::error::app-visibility patches missing from fs/namei.c"; exit 1; }
           echo "[ABK] app visibility OK: masked dirs, devpts ownership, /dev foreign mounts"
       - name: 修复 SUSFS 未使用的 cred 辅助函数 (ABK)
         if: inputs.enable_susfs && inputs.ksu_variant != 'None'

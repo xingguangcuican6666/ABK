@@ -38,6 +38,7 @@ REL = {
     "hdr": os.path.join("include", "linux", "susfs.h"),
     "readdir": os.path.join("fs", "readdir.c"),
     "mntns": os.path.join("fs", "proc_namespace.c"),
+    "namei": os.path.join("fs", "namei.c"),
 }
 
 SRC_BLOCK = (
@@ -367,6 +368,44 @@ def patch_mntns(path):
     return "patch (%d show functions)" % n
 
 
+NAMEI_EXTERN = "extern bool susfs_is_inode_sus_path(struct inode *inode);\n"
+NAMEI_ANCHOR = "\t\tif (dentry->d_inode && susfs_is_inode_sus_path(dentry->d_inode)) {\n"
+NAMEI_ADD = (
+    "\t\t/* ABK " + MARKER + ": nothing below a masked directory exists */\n"
+    "\t\tif (dentry->d_inode &&\n"
+    "\t\t    susfs_is_dir_masked((u64)dentry->d_inode->i_ino,\n"
+    "\t\t\t\t\t(u64)dentry->d_inode->i_sb->s_dev))\n"
+    "\t\t\treturn -ENOENT;\n"
+)
+
+
+def patch_namei(path):
+    """Make the masked directories real: their children resolve to -ENOENT.
+
+    readdir masking alone is not enough - a caller can still stat a known name, and
+    /data/local/tmp is already unlistable for apps because of its 0771 mode.  The walk
+    in link_path_walk() checks the directory it is about to descend into, so the same
+    (ino, dev) table turns every child lookup into ENOENT while the directory itself
+    stays visible.
+    """
+    text = load(path)
+    if MARKER in text:
+        return "skip"
+    if text.count(NAMEI_EXTERN) < 1:
+        die("namei predicate extern anchor not found")
+    text = text.replace(
+        NAMEI_EXTERN,
+        NAMEI_EXTERN
+        + "extern bool susfs_is_dir_masked(u64 ino, u64 dev); /* ABK " + MARKER + " */\n",
+        1,
+    )
+    if text.count(NAMEI_ANCHOR) != 1:
+        die("namei link_path_walk anchor matched %d times" % text.count(NAMEI_ANCHOR))
+    text = text.replace(NAMEI_ANCHOR, NAMEI_ADD + NAMEI_ANCHOR, 1)
+    save(path, text)
+    return "patch"
+
+
 def main():
     if len(sys.argv) != 2:
         die("usage: patch_abk_app_vis.py <kernel_root>")
@@ -376,6 +415,7 @@ def main():
     print("[ABK] " + patch_hdr(os.path.join(base, REL["hdr"])) + ": " + REL["hdr"])
     print("[ABK] " + patch_readdir(os.path.join(base, REL["readdir"])) + ": " + REL["readdir"])
     print("[ABK] " + patch_mntns(os.path.join(base, REL["mntns"])) + ": " + REL["mntns"])
+    print("[ABK] " + patch_namei(os.path.join(base, REL["namei"])) + ": " + REL["namei"])
     return 0
 
 

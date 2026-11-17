@@ -286,6 +286,32 @@ static int susfs_show_vfsstat(struct seq_file *m, struct vfsmount *mnt)
 extern bool susfs_is_current_ksu_domain(void);
 '''
 
+NAMEI = r'''#include <linux/susfs_def.h>
+
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+extern bool susfs_is_inode_sus_path(struct inode *inode);
+extern const struct qstr susfs_fake_qstr_name;
+#endif
+
+static int link_path_walk(const char *name, struct nameidata *nd)
+{
+	for (;;) {
+		const char *link;
+		u64 hash_len;
+		int type;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+		struct dentry *dentry = nd->path.dentry;
+
+		if (dentry->d_inode && susfs_is_inode_sus_path(dentry->d_inode)) {
+			// - No need to dput() here
+			return -ENOENT;
+		}
+#endif
+		return 0;
+	}
+}
+'''
+
 
 def chain():
     """Patchers in the order build.yml runs them."""
@@ -304,6 +330,7 @@ def write_fixtures(root):
         os.path.join("common", "include", "linux", "susfs.h"): HDR,
         os.path.join("common", "fs", "readdir.c"): READDIR,
         os.path.join("common", "fs", "proc_namespace.c"): MNTNS,
+        os.path.join("common", "fs", "namei.c"): NAMEI,
     }
     for rel, text in layout.items():
         path = os.path.join(root, rel)
