@@ -248,9 +248,17 @@ def patch_hdr(path):
     text = load(path)
     if MARKER in text:
         return "skip"
-    anchor = "bool susfs_is_inode_sus_path(struct inode *inode);\n"
-    if text.count(anchor) != 1:
-        die("susfs.h predicate anchor matched %d times" % text.count(anchor))
+    # susfs.h declares it with an extern, the definition does not.
+    anchor = None
+    for candidate in ("extern bool susfs_is_inode_sus_path(struct inode *inode);\n",
+                      "bool susfs_is_inode_sus_path(struct inode *inode);\n"):
+        if text.count(candidate) == 1:
+            anchor = candidate
+            break
+    if anchor is None:
+        die("susfs.h predicate anchor matched %d/%d times" %
+            (text.count("extern bool susfs_is_inode_sus_path(struct inode *inode);\n"),
+             text.count("bool susfs_is_inode_sus_path(struct inode *inode);\n")))
     text = text.replace(anchor, anchor + HDR_BLOCK, 1)
     save(path, text)
     return "patch"
@@ -285,6 +293,16 @@ def patch_readdir(path):
         + "\tbuf.dir_dev = f.file->f_inode->i_sb->s_dev; /* ABK " + MARKER + " */\n",
     )
 
+    # readdir.c does not include susfs.h: declare the helper locally
+    incl = "extern bool susfs_is_inode_sus_path(struct inode *inode);\n"
+    if text.count(incl) != 1:
+        die("readdir predicate extern anchor matched %d times" % text.count(incl))
+    text = text.replace(
+        incl,
+        incl + "extern bool susfs_is_dir_masked(u64 ino, u64 dev); /* ABK " + MARKER + " */\n",
+        1,
+    )
+
     ilo = "\tinode = ilookup(buf->sb, ino);\n"
     n_ilo = text.count(ilo)
     if n_ilo < 3:
@@ -304,6 +322,16 @@ def patch_mntns(path):
     text = load(path)
     if MARKER in text:
         return "skip"
+    # proc_namespace.c does not include susfs.h either: declare the helper locally
+    extern_anchor = "extern bool susfs_is_current_ksu_domain(void);\n"
+    if text.count(extern_anchor) != 1:
+        die("proc_namespace ksu-domain extern anchor matched %d times" % text.count(extern_anchor))
+    text = text.replace(
+        extern_anchor,
+        extern_anchor
+        + "extern bool susfs_is_foreign_dev_mount(struct mount *r); /* ABK " + MARKER + " */\n",
+        1,
+    )
     n = text.count(MNT_COND_OLD)
     if n != 2:
         die("mountinfo KSU-mount anchor matched %d times (expected 2)" % n)
