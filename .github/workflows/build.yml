@@ -7025,6 +7025,52 @@ jobs:
               exit 1
             fi
           fi
+      - name: 启用 CONFIG_USER_NS (ABK)
+        env:
+          SOURCE_DEFCONFIGS: ${{ inputs.source_defconfigs }}
+        run: |
+          set -uo pipefail
+
+          # GKI disables unprivileged user namespaces; containers (droidspace), some
+          # emulators and a few root tools need them.  Enable CONFIG_USER_NS + its
+          # CONFIG_NAMESPACES dependency in every defconfig the build consumes, and in
+          # the stock copy that /proc/config.gz is disguised with - otherwise the real
+          # and reported configs disagree, which is itself a detector signal.
+          enable_kconfig() {
+            local file="$1"
+            [ -f "$file" ] || return 0
+            if grep -q '^CONFIG_USER_NS=y' "$file" && grep -q '^CONFIG_NAMESPACES=y' "$file"; then
+              echo "[ABK] $file already enables USER_NS"
+              return 0
+            fi
+            sed -i '/^# CONFIG_USER_NS is not set/d;/^CONFIG_USER_NS=/d' "$file"
+            sed -i '/^# CONFIG_NAMESPACES is not set/d;/^CONFIG_NAMESPACES=/d' "$file"
+            printf 'CONFIG_NAMESPACES=y\nCONFIG_USER_NS=y\n' >> "$file"
+            echo "[ABK] $file: CONFIG_NAMESPACES=y CONFIG_USER_NS=y"
+          }
+
+          FAILED_FILE=""
+          for d in $(printf '%s\n' "$SOURCE_DEFCONFIGS" | tr -d '\r'); do
+            [ -n "$d" ] || continue
+            for base in "$KERNEL_ROOT/common/arch/arm64/configs" "$KERNEL_ROOT/arch/arm64/configs"; do
+              if [ -f "$base/$d" ]; then
+                enable_kconfig "$base/$d"
+                FAILED_FILE="$base/$d"
+              fi
+            done
+          done
+          enable_kconfig "$KERNEL_ROOT/common/arch/arm64/configs/gki_defconfig"
+          enable_kconfig "$KERNEL_ROOT/common/arch/arm64/configs/stock_defconfig"
+
+          if ! grep -rqs '^CONFIG_USER_NS=y' "$KERNEL_ROOT/common/arch/arm64/configs" \
+               "$KERNEL_ROOT/arch/arm64/configs"; then
+            echo "::error::CONFIG_USER_NS was not enabled in any defconfig"
+            exit 1
+          fi
+          for f in $(grep -rls '^CONFIG_USER_NS=y' "$KERNEL_ROOT/common/arch/arm64/configs" \
+                     "$KERNEL_ROOT/arch/arm64/configs" 2>/dev/null); do
+            echo "[ABK] USER_NS enabled in $f"
+          done
       - name: 编译内核
         uses: nick-fields/retry@v4
         with:
