@@ -144,13 +144,13 @@ SRC_BLOCK = (
     "/* true = hide this mount from app uids (container/root staging below /dev) */\n"
     "bool susfs_is_foreign_dev_mount(struct mount *r)\n"
     "{\n"
-    "\tif (!r || !r->mnt_sb || !r->mnt_sb->s_type)\n"
+    "\tif (!r || !r->mnt.mnt_sb || !r->mnt.mnt_sb->s_type)\n"
     "\t\treturn false;\n"
     "\tif (current_uid().val < 10000)\n"
     "\t\treturn false;\n"
     "\tif (!abk_mount_under_dev(r))\n"
     "\t\treturn false;\n"
-    "\tif (abk_dev_fs_whitelisted(r->mnt_sb->s_type->name))\n"
+    "\tif (abk_dev_fs_whitelisted(r->mnt.mnt_sb->s_type->name))\n"
     "\t\treturn false;\n"
     "\t/* only root-owned mountpoints: a system mountpoint is never root here */\n"
     "\tif (!r->mnt_mountpoint->d_inode ||\n"
@@ -242,6 +242,11 @@ def patch_src(path):
     if text.count(POLICY_ANCHOR) != 1:
         die("policy load mutex anchor matched %d times" % text.count(POLICY_ANCHOR))
     text = text.replace(POLICY_ANCHOR, POLICY_ADD + POLICY_ANCHOR, 1)
+
+    # struct mount embeds struct vfsmount mnt: the superblock is r->mnt.mnt_sb.
+    # Writing r->mnt_sb compiles nowhere and costs a full CI round to find.
+    if "r->mnt_sb" in text:
+        die("generated fs/susfs.c still uses r->mnt_sb (should be r->mnt.mnt_sb)")
     save(path, text)
     return "patch"
 
