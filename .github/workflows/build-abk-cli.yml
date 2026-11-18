@@ -55,76 +55,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare:
+    name: Prepare build matrix
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.matrix.outputs.include }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Select build targets
+        id: matrix
+        env:
+          FORK_PULL_REQUEST: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          from pathlib import Path
+
+          targets = json.loads(Path(".github/cli-build-matrix.json").read_text(encoding="utf-8"))
+          if os.environ.get("FORK_PULL_REQUEST") == "true":
+              # macOS arm64 runners are not allocated to pull requests opened from a
+              # fork: the job is cancelled one second after it starts, without ever
+              # being assigned a runner, and that cancelled check blocks the merge.
+              targets = [t for t in targets if t["target_id"] != "macos-arm64"]
+          print("include=" + json.dumps(targets))
+          PY
+
   build:
     name: ${{ matrix.target_name }}
+    needs: prepare
     runs-on: ${{ matrix.runs_on }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target_name: linux-arm64
-            target_id: linux-arm64
-            runs_on: ubuntu-24.04-arm
-            archive_ext: tar.gz
-            python_arch: arm64
-            binary_name: abk
-
-          - target_name: linux-armhf
-            target_id: linux-armhf
-            runs_on: ubuntu-24.04-arm
-            archive_ext: tar.gz
-            python_arch: arm64
-            binary_name: abk
-
-          - target_name: linux-x86
-            target_id: linux-x86
-            runs_on: ubuntu-24.04
-            archive_ext: tar.gz
-            python_arch: x64
-            binary_name: abk
-
-          - target_name: linux-x64
-            target_id: linux-x64
-            runs_on: ubuntu-24.04
-            archive_ext: tar.gz
-            python_arch: x64
-            binary_name: abk
-
-          - target_name: windows-arm64
-            target_id: windows-arm64
-            runs_on: windows-11-arm
-            archive_ext: zip
-            python_arch: arm64
-            binary_name: abk.exe
-
-          - target_name: windows-x86
-            target_id: windows-x86
-            runs_on: windows-2025
-            archive_ext: zip
-            python_arch: x86
-            binary_name: abk.exe
-
-          - target_name: windows-x64
-            target_id: windows-x64
-            runs_on: windows-2025
-            archive_ext: zip
-            python_arch: x64
-            binary_name: abk.exe
-
-          - target_name: macos-arm64
-            target_id: macos-arm64
-            runs_on: macos-14
-            archive_ext: tar.gz
-            python_arch: arm64
-            binary_name: abk
-
-          - target_name: macos-x64
-            target_id: macos-x64
-            runs_on: macos-15-intel
-            archive_ext: tar.gz
-            python_arch: x64
-            binary_name: abk
-
+        # 由 prepare 产出：fork 的 pull_request 会把 macOS arm64 这条腿去掉，
+        # 因为那类 runner 在 fork PR 上拿不到，job 会在 1 秒内被取消，
+        # 而 cancelled 的必需检查会让 PR 永远合不进去。
+        include: ${{ fromJSON(needs.prepare.outputs.include) }}
     env:
       PYTHON_VERSION: "3.12"
 
