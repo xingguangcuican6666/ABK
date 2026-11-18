@@ -318,5 +318,6 @@
   "build_handoff_run": "Exécution : #{id}",
   "build_handoff_url": "URL : {url}",
   "build_handoff_status": "État : {command}",
-  "build_handoff_download": "Télécharger après la fin du build : {command}"
+  "build_handoff_download": "Télécharger après la fin du build : {command}",
+  "warn_legacy_config": "Un fichier de configuration pouvant provenir d'une version antérieure se trouve dans {path} (avec XDG_CONFIG_HOME vide, il était écrit dans le répertoire courant). Vérifiez qu'il vient bien de votre précédente installation d'ABK avant de le migrer : créez le répertoire de {target} s'il manque, déplacez le fichier vous-même et n'écrasez pas un fichier de configuration existant. La CLI lit désormais {target} ; rien n'est importé ni écrasé automatiquement. Si un fichier de configuration existe déjà à destination (par exemple créé par cette exécution), ne l'écrasez pas : sauvegardez-le et fusionnez à la main l'ancienne configuration vérifiée."
 }

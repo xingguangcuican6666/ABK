@@ -318,5 +318,6 @@
   "build_handoff_run": "运行: #{id}",
   "build_handoff_url": "链接: {url}",
   "build_handoff_status": "查看状态: {command}",
-  "build_handoff_download": "构建完成后下载: {command}"
+  "build_handoff_download": "构建完成后下载: {command}",
+  "warn_legacy_config": "喵，在 {path} 看到一个可能是旧版本写进去的配置文件（XDG_CONFIG_HOME 空着的时候会写进当前目录）。搬之前先确认是你自己以前的 ABK 装的喵：先把 {target} 那个目录建出来，再自己把文件挪进去，别盖掉已经有的目标文件。现在读的是 {target}，不会自动导入也不会覆盖喵～ 要是目标那里已经有配置文件了（比如刚被这次运行建出来的），别盖掉喵：先备份，再手动把确认过的旧配置合并进去。"
 }

@@ -318,5 +318,6 @@
   "build_handoff_run": "Run: #{id}",
   "build_handoff_url": "URL: {url}",
   "build_handoff_status": "Status: {command}",
-  "build_handoff_download": "Download after the build completes: {command}"
+  "build_handoff_download": "Download after the build completes: {command}",
+  "warn_legacy_config": "Found a config file at {path} that may have been written by an older version (an empty XDG_CONFIG_HOME used to write it into the current directory). Confirm it really comes from your own previous ABK install before migrating: create the directory that holds {target} if it is missing, move the file there yourself, and do not overwrite an existing config file. The CLI now reads {target}; nothing is imported or overwritten automatically. If a config file already exists at the target (for example one this run just created), do not overwrite it: back it up and merge the old config you confirmed by hand."
 }

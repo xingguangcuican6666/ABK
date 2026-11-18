@@ -318,5 +318,6 @@
   "build_handoff_run": "実行: #{id}",
   "build_handoff_url": "URL: {url}",
   "build_handoff_status": "状態: {command}",
-  "build_handoff_download": "ビルド完了後にダウンロード: {command}"
+  "build_handoff_download": "ビルド完了後にダウンロード: {command}",
+  "warn_legacy_config": "にゃ、{path} に古いバージョンが書いたかもしれない設定ファイルがあるにゃ（XDG_CONFIG_HOME が空のときカレントに書かれちゃってたの）。移す前に、自分の昔の ABK のものか確認してにゃ。{target} のフォルダが無ければ作って、自分でファイルを移してにゃ。あるファイルは上書きしちゃだめにゃ。いまは {target} を読むけど、自動で取り込んだり上書きしたりしないにゃ〜. 移動先にもう設定ファイルがあるにゃ（この実行で作られたやつとか）？上書きしちゃだめにゃ。バックアップしてから、確認した古い設定を手で統合してにゃ。"
 }

@@ -1400,6 +1400,46 @@ print(json.dumps({"started": started, "finished": finished}))
             intervals[0]["finished"] - 0.01,
         )
 
+    @unittest.skipIf(os.name == "nt", "XDG_CONFIG_HOME is POSIX-specific")
+    def test_empty_xdg_config_home_never_uses_the_working_directory(self):
+        """A set-but-empty $XDG_CONFIG_HOME means unset, not the CWD.
+
+        `os.environ.get("XDG_CONFIG_HOME", default)` only applies the default
+        when the key is absent; when it is set to "" the value is falsy but
+        present, so Path("") resolves to "." and the config file -- including
+        a plaintext GitHub token -- lands in whatever directory the CLI was
+        started from.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            home = Path(temp_dir) / "home"
+            cwd = Path(temp_dir) / "cwd"
+            home.mkdir()
+            cwd.mkdir()
+
+            env = dict(os.environ)
+            env.update({"HOME": str(home), "XDG_CONFIG_HOME": ""})
+            for name in ("GITHUB_TOKEN", "GH_TOKEN", "ABK_REPO", "ABK_LANG"):
+                env.pop(name, None)
+
+            result = subprocess.run(
+                [sys.executable, str(CLI_DIR / "abk.py"), "--lang", "en-US", "list"],
+                cwd=cwd,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertTrue(
+                (home / ".config" / "abk" / "config.json").is_file(),
+                "config did not fall back to $HOME/.config",
+            )
+            self.assertFalse(
+                (cwd / "abk").exists(),
+                "config was written into the working directory",
+            )
+
     @unittest.skipIf(os.name == "nt", "POSIX flock-specific regression")
     def test_config_lock_does_not_retry_permanent_platform_errors(self):
         error = OSError(errno.ENOTSUP, "locking unsupported")

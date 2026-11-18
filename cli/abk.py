@@ -89,7 +89,11 @@ DEFAULT_REPO = f"{SOURCE_REPO_OWNER}/{SOURCE_REPO_NAME}"
 if os.name == "nt" and os.environ.get("APPDATA"):
     CONFIG_DIR = Path(os.environ["APPDATA"]) / "abk"
 else:
-    CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "abk"
+    # XDG_CONFIG_HOME set-but-empty means "unset" (XDG Base Directory spec),
+    # so fall back to ~/.config instead of resolving Path("") to the CWD.
+    CONFIG_DIR = Path(
+        os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")
+    ) / "abk"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 CLIENT_ID_FALLBACK = "Ov23li8skGo6AFPBeSTh"
 SIGNING_SECRET_NAME = "ABK_ARTIFACT_SIGNING_KEY_BASE64"
@@ -691,7 +695,80 @@ def validate_oneplus_build(args, device_info=None):
     return errors, warnings
 
 
+LEGACY_RELATIVE_CONFIG = Path("abk") / "config.json"
+_legacy_config_warned = False
+_legacy_config_pending = None
+_json_capture_active = False
+
+
+def emit_legacy_config_notice(force=False):
+    """Write the buffered migration notice to the real stderr, once.
+
+    _run_json_command() redirects stderr for the duration of a command so that --json
+    keeps stdout to a single document; a notice printed from load_config() would be
+    swallowed there and the caller would only see loggedIn=false. Buffer it and flush
+    right before the JSON is written instead.
+    """
+
+    global _legacy_config_pending
+    if _json_capture_active and not force:
+        # Inside _run_json_command: keep it buffered so it is not captured away.
+        return
+    message, _legacy_config_pending = _legacy_config_pending, None
+    if not message:
+        return
+    try:
+        print(message, file=sys.stderr)
+    except OSError:
+        # A closed stderr pipe must not swallow the JSON payload this command already
+        # produced; the notice is advisory.
+        pass
+
+
+def warn_legacy_relative_config():
+    """Point at a config file left in the working directory by the empty-XDG bug.
+
+    Before this fix, XDG_CONFIG_HOME="" made CONFIG_DIR the relative path abk/, so
+    config.json - including the stored OAuth token and the signing state - was written
+    next to whatever directory the CLI was started from. Now that the path is fixed the
+    CLI reads ~/.config/abk/config.json and would silently ignore the old file: warn,
+    but never import it and never write over the file it found.
+    """
+
+    global _legacy_config_warned, _legacy_config_pending
+    if _legacy_config_warned:
+        return
+
+    candidate = LEGACY_RELATIVE_CONFIG
+    try:
+        # Probing the working directory can fail: `abk/` may not be traversable
+        # (EACCES) and the target may be a looping symlink. None of that should take
+        # credential lookup down with it, so treat a failed probe as "nothing to
+        # migrate from" and let --token / GITHUB_TOKEN work as before.
+        if not candidate.is_file():
+            # Nothing to talk about yet: keep the check armed so a file restored later
+            # (for example while `abk login` waits for the device code) is still noticed.
+            return
+        if candidate.resolve() == CONFIG_FILE.resolve():
+            return
+        if CONFIG_FILE.is_symlink() and not CONFIG_FILE.exists():
+            # Python 3.13 returns the unresolved path from resolve() instead of raising
+            # for a symlink loop, so the comparison above can pass a target that cannot
+            # be written to. Do not point the user at it.
+            return
+    except (OSError, RuntimeError):
+        return
+
+    _legacy_config_warned = True
+    _legacy_config_pending = t(
+        "warn_legacy_config", path=str(candidate), target=str(CONFIG_FILE)
+    )
+    emit_legacy_config_notice()
+
+
 def load_config():
+    if not CONFIG_FILE.exists():
+        warn_legacy_relative_config()
     if CONFIG_FILE.exists():
         try:
             if os.name != "nt":
@@ -5780,8 +5857,10 @@ def _redact_json_secrets(value, secrets, sensitive_context=False):
 
 
 def _run_json_command(args):
+    global _json_capture_active
     captured_stdout = io.StringIO()
     captured_stderr = io.StringIO()
+    _json_capture_active = True
     try:
         with (
             contextlib.redirect_stdout(captured_stdout),
@@ -5836,6 +5915,10 @@ def _run_json_command(args):
         separators=(",", ":"),
         default=str,
     )
+    _json_capture_active = False
+    # Anything the command reported on stderr was captured above; the migration notice
+    # is not command output, so surface it on the real stderr before the JSON payload.
+    emit_legacy_config_notice(force=True)
     sys.stdout.write(
         json_document + "\n"
     )
