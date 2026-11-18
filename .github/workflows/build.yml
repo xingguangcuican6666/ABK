@@ -184,6 +184,9 @@ jobs:
       CCACHE_HARDLINK: "true"
 
     steps:
+      - name: 检出代码仓库
+        uses: actions/checkout@v6
+
       - name: 构建信息摘要
         shell: bash
         env:
@@ -259,9 +262,6 @@ jobs:
           rm_cmd: "rmz"
           rmz_version: "3.1.1"
           testing: false
-
-      - name: 检出代码仓库
-        uses: actions/checkout@v6
 
       - name: 校验类 LineageOS 源码构建参数
         if: inputs.source_mode == 'custom_git'

@@ -29,6 +29,40 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
         cls.ksu_compat = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.ksu_compat)
 
+    def test_checkout_precedes_script_steps(self):
+        # 被 workflow_call 复用的工作流不会隐式 checkout：任何调用
+        # platform-tools/kernel_build 的步骤之前都必须先检出仓库，
+        # 否则脚本不存在，步骤以 127 直接失败。
+        starts = [m.start() for m in re.finditer(r"(?m)^      - name: ", self.workflow)]
+        self.assertTrue(starts, "no steps found in build.yml")
+        kinds = []
+        for index, start in enumerate(starts):
+            end = starts[index + 1] if index + 1 < len(starts) else len(self.workflow)
+            kinds.append(self.workflow[start:end])
+
+        positions = {}
+        for index, block in enumerate(kinds):
+            if re.search(r"(?m)^        uses: actions/checkout@", block):
+                positions.setdefault("checkout", index)
+            if "platform-tools/kernel_build/" in block:
+                positions.setdefault("script", index)
+
+        self.assertIn("checkout", positions, "build.yml lost its checkout step")
+        self.assertIn("script", positions, "build.yml lost its kernel_build script steps")
+        self.assertLess(
+            positions["checkout"],
+            positions["script"],
+            "检出代码仓库 must run before the first platform-tools/kernel_build step",
+        )
+
+    def test_rejects_collection_calls_existing_script(self):
+        step = kernel_scripts.step("收集补丁冲突文件", self.workflow)
+        self.assertEqual("collect-rejects", step.subcommand)
+        self.assertTrue(
+            step.path.is_file(),
+            f"collect-rejects step points at a missing script: {step.path}",
+        )
+
     def test_sukisu_setup_accepts_resolved_bare_sha(self):
         block = self._step_run_block("添加 KernelSU")
         case = block.split('"SukiSU")', 1)[1].split('"BakaSU")', 1)[0]
