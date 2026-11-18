@@ -268,14 +268,19 @@ jobs:
           from collections import Counter
           from pathlib import Path
 
-          build_yml = Path(".github/workflows/build.yml").read_text(encoding="utf-8")
+          # 版本组合表已随内核编译链路迁移到 platform-tools/kernel_build/clean/validate.sh
+          validate_script = Path(
+              "platform-tools/kernel_build/clean/validate.sh"
+          ).read_text(encoding="utf-8")
           match = re.search(
               r"KNOWN_KERNEL_PAIRS=\$\(cat <<'EOF'\n(.*?)\n\s*EOF\n\s*\)",
-              build_yml,
+              validate_script,
               re.S,
           )
           if not match:
-              raise SystemExit("KNOWN_KERNEL_PAIRS block not found in build.yml")
+              raise SystemExit(
+                  "KNOWN_KERNEL_PAIRS block not found in platform-tools/kernel_build/clean/validate.sh"
+              )
 
           latest = {}
           for raw_line in match.group(1).splitlines():
