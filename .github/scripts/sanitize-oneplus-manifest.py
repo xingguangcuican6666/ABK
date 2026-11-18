@@ -30,6 +30,23 @@ EXCLUDED_PATHS = {project["path"] for project in EXCLUDED_PROJECTS}
 EXCLUDED_NAMES = {project["name"] for project in EXCLUDED_PROJECTS}
 
 
+def load_manifest(manifest_path: Path) -> ET.ElementTree:
+    """Parse the manifest while keeping comments and processing instructions.
+
+    A repo manifest carries hand-written notes next to the projects it pins, and the
+    plain `ET.parse` + `tree.write` round-trip deletes every one of them: the rewrite is
+    only supposed to drop two projects, not the surrounding annotations.
+    """
+
+    try:
+        parser = ET.XMLParser(
+            target=ET.TreeBuilder(insert_comments=True, insert_pis=True)
+        )
+    except TypeError:  # pragma: no cover - Python without comment-preserving builders
+        return ET.parse(manifest_path)
+    return ET.parse(manifest_path, parser=parser)
+
+
 def sanitize_manifest(manifest_path: Path) -> list[str]:
     """Remove known optional broken projects from a repo manifest."""
 
@@ -37,7 +54,7 @@ def sanitize_manifest(manifest_path: Path) -> list[str]:
     if not manifest_path.is_file():
         raise FileNotFoundError(f"manifest not found: {manifest_path}")
 
-    tree = ET.parse(manifest_path)
+    tree = load_manifest(manifest_path)
     root = tree.getroot()
     removed: list[str] = []
 
