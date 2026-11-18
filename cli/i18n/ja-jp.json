@@ -318,5 +318,6 @@
   "build_handoff_run": "実行: #{id}",
   "build_handoff_url": "URL: {url}",
   "build_handoff_status": "状態: {command}",
-  "build_handoff_download": "ビルド完了後にダウンロード: {command}"
+  "build_handoff_download": "ビルド完了後にダウンロード: {command}",
+  "warn_legacy_config": "{path} に、古いバージョンが書き込んだ可能性のある設定ファイルがあります（XDG_CONFIG_HOME が空のとき、現在のディレクトリに書き込まれていました）。移行する前に、ご自身が以前使っていた ABK のものか確認してください。{target} のディレクトリが無ければ作成し、ご自身でファイルを移動してください。既存の設定ファイルは上書きしないでください。現在は {target} を読みます。自動での取り込みや上書きは行いません。 移動先に既に設定ファイルがある場合（この実行で作成された場合など）は上書きせず、バックアップしてから、確認済みの古い設定を手動で統合してください。"
 }

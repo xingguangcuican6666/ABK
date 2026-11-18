@@ -318,5 +318,6 @@
   "build_handoff_run": "실행: #{id}",
   "build_handoff_url": "URL: {url}",
   "build_handoff_status": "상태: {command}",
-  "build_handoff_download": "빌드 완료 후 다운로드: {command}"
+  "build_handoff_download": "빌드 완료 후 다운로드: {command}",
+  "warn_legacy_config": "{path} 에 예전 버전이 기록했을 수 있는 설정 파일이 있습니다(XDG_CONFIG_HOME 이 비어 있을 때 현재 디렉터리에 기록되었습니다). 옮기기 전에 이전에 사용하시던 ABK 설치에서 나온 파일인지 먼저 확인하세요. {target} 이 있는 디렉터리가 없으면 만들고, 파일을 직접 옮기며, 이미 있는 설정 파일은 덮어쓰지 마세요. 이제는 {target} 을(를) 읽으며 자동으로 가져오거나 덮어쓰지 않습니다. 대상 위치에 이미 설정 파일이 있다면(방금 이 실행에서 만들어진 경우 등) 덮어쓰지 말고, 백업한 뒤 확인한 이전 설정을 직접 병합하세요."
 }

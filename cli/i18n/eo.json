@@ -318,5 +318,6 @@
   "build_handoff_run": "Rulo: #{id}",
   "build_handoff_url": "URL: {url}",
   "build_handoff_status": "Stato: {command}",
-  "build_handoff_download": "Elŝuti post finiĝo de la konstruo: {command}"
+  "build_handoff_download": "Elŝuti post finiĝo de la konstruo: {command}",
+  "warn_legacy_config": "Ĉe {path} troviĝas agorda dosiero, kiun eble skribis pli malnova versio (kun malplena XDG_CONFIG_HOME ĝi estis skribata en la nuna dosierujo). Antaŭ ol migri, certiĝu, ke ĝi vere venas de via antaŭa ABK-instalaĵo: kreu la dosierujon de {target} se ĝi mankas, mem movu la dosieron, kaj ne anstataŭigu ekzistantan agordan dosieron. La CLI nun legas {target}; nenio estas aŭtomate importita aŭ anstataŭigita. Se ĉe la celo jam ekzistas agorda dosiero (ekzemple unu kreita de ĉi tiu rulo), ne anstataŭigu ĝin: sekurkopiu kaj permane kunfandu la konfirmitan malnovan agordon."
 }

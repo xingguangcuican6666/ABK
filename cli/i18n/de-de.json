@@ -318,5 +318,6 @@
   "build_handoff_run": "Lauf: #{id}",
   "build_handoff_url": "URL: {url}",
   "build_handoff_status": "Status: {command}",
-  "build_handoff_download": "Nach Abschluss des Builds herunterladen: {command}"
+  "build_handoff_download": "Nach Abschluss des Builds herunterladen: {command}",
+  "warn_legacy_config": "Unter {path} liegt eine Konfigurationsdatei, die von einer älteren Version stammen kann (bei leerem XDG_CONFIG_HOME wurde sie im aktuellen Verzeichnis abgelegt). Prüfe vor der Migration, ob sie wirklich aus deiner früheren ABK-Installation stammt: lege das Verzeichnis von {target} an, falls es fehlt, verschiebe die Datei selbst und überschreibe keine vorhandene Konfigurationsdatei. Die CLI liest jetzt {target}; nichts wird automatisch importiert oder überschrieben. Existiert am Ziel bereits eine Konfigurationsdatei (etwa eine, die dieser Lauf gerade angelegt hat), überschreibe sie nicht: sichere sie und führe die geprüfte alte Konfiguration von Hand zusammen."
 }
