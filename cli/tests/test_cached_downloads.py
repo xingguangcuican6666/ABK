@@ -11,6 +11,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from cli.tests import kernel_scripts
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("cached_downloads", ROOT / ".github/scripts/cached-downloads.py")
@@ -163,11 +165,9 @@ class GitDownloadCacheTests(unittest.TestCase):
         branch = "gki-android15-6.6"
         self.git("-C", str(self.remote), "branch", "-m", branch)
         self.commit("new upstream source")
-        text = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
-        step = text.split("- name: 克隆依赖仓库", 1)[1].split("- name: 克隆自定义外部模块", 1)[0]
-        script = textwrap.dedent(step.split("run: |\n", 1)[1])
-        retry = re.search(r"(?ms)^retry_git_clone\(\) \{.*?^\}", script).group()
-        block = script.split('if [ "${{ inputs.enable_susfs }}" == "true" ]; then', 1)[1]
+        script = kernel_scripts.step("克隆依赖仓库").body
+        retry = re.search(r"(?ms)^    retry_git_clone\(\) \{.*?^    \}", script).group()
+        block = script.split('if [ "${ABK_INPUT_ENABLE_SUSFS}" == "true" ]; then', 1)[1]
         block = 'if [ "true" == "true" ]; then' + block.split('echo "准备补丁资源..."', 1)[0]
         block = block.replace('https://gitlab.com/simonpunk/susfs4ksu.git', self.url)
         script = 'set -euo pipefail\n' + retry + '\n' + block

@@ -11,10 +11,11 @@ import time
 import unittest
 from pathlib import Path
 
+from cli.tests import kernel_scripts
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / ".github/scripts/fix_sukisu_susfs.py"
-WORKFLOW = ROOT / ".github/workflows/build.yml"
 
 
 def c_function(text, name):
@@ -35,14 +36,13 @@ class SukiSUExecSessionTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("fix_sukisu_susfs", SCRIPT)
         cls.patcher = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.patcher)
-        workflow = WORKFLOW.read_text(encoding="utf-8")
-        step = workflow.split("- name: 最终修复 SukiSU/BakaSU 源码兼容", 1)[1]
-        code = textwrap.dedent(step.split("python3 - <<'PY'\n", 1)[1].split("\n          PY", 1)[0])
+        step = kernel_scripts.step("最终修复 SukiSU/BakaSU 源码兼容")
+        code = step.python_code()
         functions = [node for node in ast.parse(code).body if isinstance(node, ast.FunctionDef)]
         # Workflow progress messages are not test output; Windows CI may use
         # a console encoding that cannot represent the Chinese messages.
         namespace = {"Path": Path, "re": re, "print": lambda *args, **kwargs: None}
-        exec(compile(ast.Module(body=functions, type_ignores=[]), str(WORKFLOW), "exec"), namespace)
+        exec(compile(ast.Module(body=functions, type_ignores=[]), str(step.path), "exec"), namespace)
         cls.ensure_post = staticmethod(namespace["ensure_post_execveat_wrapper"])
 
     def generated_source(self, path, modern=True):

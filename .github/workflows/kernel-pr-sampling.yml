@@ -39,6 +39,7 @@ on:
       - ".github/workflows/kernel-pr-sampling.yml"
       - ".github/scripts/**"
       - ".github/actions/**"
+      - "platform-tools/kernel_build/**"
       - "ddk/**"
       - "modules/**"
       - "zram/**"
