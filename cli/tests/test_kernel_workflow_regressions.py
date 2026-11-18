@@ -63,6 +63,29 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
             f"collect-rejects step points at a missing script: {step.path}",
         )
 
+    def test_ksuhook_steps_run_in_the_right_order(self):
+        starts = [m.start() for m in re.finditer(r"(?m)^      - name: ", self.workflow)]
+        self.assertTrue(starts, "no steps found in build.yml")
+        order = {}
+        for index, start in enumerate(starts):
+            end = starts[index + 1] if index + 1 < len(starts) else len(self.workflow)
+            block = self.workflow[start:end]
+            name = block.split("\n", 1)[0][len("      - name: "):].strip()
+            order.setdefault(name, index)
+
+        for required in ("检出 NyaSU SDK", "克隆 KernelSU 补丁模块", "应用 KernelSU 补丁模块", "编译内核"):
+            self.assertIn(required, order, f"build.yml 缺少步骤: {required}")
+
+        self.assertLess(order["检出 NyaSU SDK"], order["克隆 KernelSU 补丁模块"])
+        self.assertLess(order["克隆 KernelSU 补丁模块"], order["应用 KernelSU 补丁模块"])
+        self.assertLess(order["应用 KernelSU 补丁模块"], order["编译内核"])
+
+    def test_ksuhook_inputs_are_declared_and_exported(self):
+        self.assertIn("      ksuhook_modules:", self.workflow)
+        self.assertIn("      ksuhook_sdk_ref:", self.workflow)
+        self.assertIn("ABK_INPUT_KSUHOOK_MODULES:", self.workflow)
+        self.assertIn("ABK_INPUT_KSUHOOK_SDK_REF:", self.workflow)
+
     def test_sukisu_setup_accepts_resolved_bare_sha(self):
         block = self._step_run_block("添加 KernelSU")
         case = block.split('"SukiSU")', 1)[1].split('"BakaSU")', 1)[0]

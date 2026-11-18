@@ -40,6 +40,7 @@ on:
       - ".github/scripts/**"
       - ".github/actions/**"
       - "platform-tools/kernel_build/**"
+      - ".github/scripts/kernel-patcher.py"
       - "ddk/**"
       - "modules/**"
       - "zram/**"

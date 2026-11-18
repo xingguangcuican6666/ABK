@@ -172,6 +172,18 @@ on:
         type: boolean
         default: true
 
+      # ==================== KernelSU 补丁模块（NyaSU hook） ====================
+      # `|` 分隔，每项 `repo_url[@ref]`。模块用 module.prop 的 depends 声明依赖，
+      # 构建时按依赖连通分量分组，在同一个 base 上分别打用户补丁后再合并。
+      ksuhook_modules:
+        required: false
+        type: string
+        default: ""
+      ksuhook_sdk_ref:
+        required: false
+        type: string
+        default: "c6473f97ff516f2b3184b6a2d63753c8591a8edb"
+
 jobs:
   build-kernel:
     name: "${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}-${{ inputs.ksu_variant }}"
@@ -240,6 +252,8 @@ jobs:
           ABK_INPUT_MANAGER_CERT_SIZE: ${{ inputs.manager_cert_size }}
           ABK_INPUT_MANAGER_CERT_SHA256: ${{ inputs.manager_cert_sha256 }}
           ABK_INPUT_UPLOAD_AUX_ARTIFACTS: ${{ inputs.upload_aux_artifacts }}
+          ABK_INPUT_KSUHOOK_MODULES: ${{ inputs.ksuhook_modules }}
+          ABK_INPUT_KSUHOOK_SDK_REF: ${{ inputs.ksuhook_sdk_ref }}
         run: bash platform-tools/kernel_build/clean/env.sh summary
 
       - name: 校验自定义内核版本组合
@@ -340,8 +354,23 @@ jobs:
       - name: 配置 Git
         run: bash platform-tools/kernel_build/clean/toolchain.sh git-config
 
+      - name: 检出 NyaSU SDK
+        if: inputs.ksuhook_modules != ''
+        uses: actions/checkout@v6
+        with:
+          repository: xingguangcuican6666/NyaSU
+          ref: ${{ inputs.ksuhook_sdk_ref }}
+          path: ksuhook-sdk
+          persist-credentials: false
+
       - name: 克隆依赖仓库
         run: bash platform-tools/kernel_build/clean/deps.sh deps-clone
+
+      - name: 克隆 KernelSU 补丁模块
+        if: inputs.ksuhook_modules != ''
+        env:
+          ABK_INPUT_KSUHOOK_MODULES: ${{ inputs.ksuhook_modules }}
+        run: bash platform-tools/kernel_build/patch/kernel-patches.sh modules-clone
 
       - name: 克隆自定义外部模块
         if: inputs.custom_external_modules != ''
@@ -595,6 +624,14 @@ jobs:
           ABK_FEATURE_SUPP_OP: ${{ inputs.supp_op }}
           ABK_FEATURE_ZRAM_FULL_ALGO: ${{ inputs.zram_full_algo }}
         run: bash platform-tools/kernel_build/patch/custom.sh after-patch
+
+      - name: 应用 KernelSU 补丁模块
+        if: inputs.ksuhook_modules != ''
+        env:
+          ABK_INPUT_KSUHOOK_MODULES: ${{ inputs.ksuhook_modules }}
+          ABK_INPUT_ANDROID_VERSION: ${{ inputs.android_version }}
+          ABK_INPUT_KERNEL_VERSION: ${{ inputs.kernel_version }}
+        run: bash platform-tools/kernel_build/patch/kernel-patches.sh apply
 
       - name: 配置内核选项
         run: bash platform-tools/kernel_build/patch/kernel_options.sh kernel-options
