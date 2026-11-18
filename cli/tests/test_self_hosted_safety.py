@@ -9,11 +9,16 @@ import tempfile
 import textwrap
 import unittest
 
+from cli.tests import kernel_scripts
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def step_script(workflow, name):
+    if workflow == "build.yml":
+        # build.yml 只保留薄壳调用，正文位于 platform-tools/kernel_build 下的脚本分节。
+        return kernel_scripts.step(name, (ROOT / ".github/workflows" / workflow).read_text(encoding="utf-8")).body
     text = (ROOT / ".github/workflows" / workflow).read_text(encoding="utf-8")
     step = text.split(f"      - name: {name}\n", 1)[1].split("      - name: ", 1)[0]
     return textwrap.dedent(step.split("        run: |\n", 1)[1])
@@ -114,7 +119,14 @@ int main(void) {
     def test_chrome_source_cleanup_only_runs_on_hosted_runners(self):
         for workflow in ("build.yml", "oneplus-build.yml"):
             text = (ROOT / ".github/workflows" / workflow).read_text(encoding="utf-8")
-            function = re.search(r"(?ms)^          disable_broken_chrome_source\(\) \{.*?^          \}", text).group()
+            if workflow == "build.yml":
+                # build.yml 只保留薄壳调用，函数位于 clean/toolchain.sh，运行环境来自 ABK_RUNNER_ENVIRONMENT。
+                script_text = step_script(workflow, "安装编译依赖")
+                function = re.search(r"(?ms)^    disable_broken_chrome_source\(\) \{.*?^    \}", script_text).group()
+                environment_reference = "${ABK_RUNNER_ENVIRONMENT}"
+            else:
+                function = re.search(r"(?ms)^          disable_broken_chrome_source\(\) \{.*?^          \}", text).group()
+                environment_reference = "${{ runner.environment }}"
             function = textwrap.dedent(function)
             for environment in ("self-hosted", "github-hosted"):
                 with self.subTest(workflow=workflow, environment=environment), tempfile.TemporaryDirectory() as temp:
@@ -124,8 +136,8 @@ int main(void) {
   if [ "$1" = grep ]; then printf '/mock/chrome.list\\n'; fi
 }
 '''
-                    script += function.replace("${{ runner.environment }}", environment)
-                    script += "\ndisable_broken_chrome_source\n"
+                    script += function.replace(environment_reference, environment)
+                    script += "\nABK_RUNNER_ENVIRONMENT=%s\ndisable_broken_chrome_source\n" % environment
                     result = subprocess.run([shutil.which("bash"), "-eu", "-c", script],
                                             env={**os.environ, "REVIEW_TRACE": str(trace)},
                                             capture_output=True, text=True, encoding="utf-8")
@@ -247,8 +259,7 @@ git() {
     def test_virtualization_matches_upstream_gki_requirements(self):
         """The v7.1.0 GKI defconfig list must be covered, and its forbidden
         resource-limit options must stay off because no kABI patch covers them."""
-        step = self.workflow.split("      - name: 集成虚拟化支持\n", 1)[1].split(
-            "      - name: ", 1)[0]
+        step = step_script("build.yml", "集成虚拟化支持")
         required = (
             "CONFIG_SYSVIPC", "CONFIG_POSIX_MQUEUE", "CONFIG_IPC_NS", "CONFIG_PID_NS",
             "CONFIG_DEVTMPFS", "CONFIG_USER_NS", "CONFIG_IP6_NF_NAT",
@@ -279,8 +290,7 @@ git() {
         rebuild = next(iter(copies.values()))
         function = rebuild.split("apply_virtualization_support() {", 1)[1].split(
             "\napply_zram_stack() {", 1)[0]
-        step = self.workflow.split("      - name: 集成虚拟化支持\n", 1)[1].split(
-            "      - name: ", 1)[0]
+        step = step_script("build.yml", "集成虚拟化支持")
         for symbol in ("CONFIG_SYSVIPC", "CONFIG_POSIX_MQUEUE", "CONFIG_IPC_NS",
                        "CONFIG_PID_NS", "CONFIG_DEVTMPFS", "CONFIG_USER_NS",
                        "CONFIG_IP6_NF_NAT", "CONFIG_IP6_NF_TARGET_MASQUERADE",
@@ -327,7 +337,7 @@ git() {
         """The in-place SYSVIPC kABI fallback must work for any slot whose reserve
         block is still free, and must refuse a slot that ACK already occupies."""
         step = step_script("build.yml", "集成虚拟化支持")
-        code = step.split("<<'PY'\n", 1)[1].split("\nPY", 1)[0]
+        code = kernel_scripts.step("集成虚拟化支持").python_code()
         self.assertNotIn("${{", code, "fixture contains unresolved workflow inputs")
 
         def sched_header(occupied):

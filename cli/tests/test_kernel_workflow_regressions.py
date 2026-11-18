@@ -11,6 +11,8 @@ import textwrap
 import unittest
 from pathlib import Path
 
+from cli.tests import kernel_scripts
+
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = ROOT / ".github" / "workflows" / "build.yml"
@@ -210,17 +212,15 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
         "Linux kernel build command requires GNU/Linux tools",
     )
     def test_bazel_disk_cache_uses_runner_environment_and_survives_retries(self):
-        step = re.search(
+        step = kernel_scripts.step("编译内核", self.workflow)
+        step_definition = re.search(
             r"(?ms)^      - name: 编译内核\n(?P<body>.*?)(?=^      - name: |\Z)",
             self.workflow,
         )
-        self.assertIsNotNone(step, "kernel build step not found")
-        command = re.search(r"(?ms)^          command: \|\n(?P<body>.*)\Z", step.group("body"))
-        self.assertIsNotNone(command, "retry action command not found")
-        build_script = textwrap.dedent(command.group("body"))
-        inputs = {"android_version": "android15", "kernel_version": "6.6", "sub_level": "77", "ksu_variant": "SukiSU"}
-        for name, value in inputs.items():
-            build_script = build_script.replace("${{ inputs." + name + " }}", value)
+        self.assertIsNotNone(step_definition, "kernel build step not found")
+        self.assertIn("uses: nick-fields/retry@v4", step_definition.group("body"))
+        self.assertEqual(step.subcommand, "compile")
+        build_script = step.body
         self.assertNotIn("${{", build_script, "build fixture contains unresolved workflow inputs")
 
         for use_xdg in (False, True):
@@ -278,6 +278,8 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
                     HOME=str(home), KERNEL_ROOT=str(kernel), DEFCONFIG=str(config),
                     KSU_LATEST_COMMIT_DATE="fixture", SUSFS_LATEST_COMMIT_DATE="fixture",
                     BAZEL_ARGV_LOG=str(argv_log), EXPECTED_BAZEL_CACHE=str(disk_cache),
+                    ABK_INPUT_ANDROID_VERSION="android15", ABK_INPUT_KERNEL_VERSION="6.6",
+                    ABK_INPUT_SUB_LEVEL="77", ABK_INPUT_KSU_VARIANT="SukiSU",
                 )
                 if use_xdg:
                     env["XDG_CACHE_HOME"] = str(cache_base)
@@ -310,10 +312,7 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
                     self.assertFalse((home / ".cache/bazel-disk").exists())
 
     def test_bazel_attribute_cleanup_handles_all_known_forms(self):
-        block = textwrap.dedent(self._step_run_block("配置内核名称"))
-        match = re.search(r"<<'PY'\n(?P<body>.*?)\n^PY$", block, re.S | re.M)
-        self.assertIsNotNone(match, "BUILD.bazel cleanup block not found")
-        script = match.group("body")
+        script = kernel_scripts.step("配置内核名称", self.workflow).python_code()
 
         cases = {
             "quoted-dict": (
@@ -365,13 +364,7 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
                     self.assertIn("kernel_aarch64", rewritten)
 
     def _step_run_block(self, name):
-        match = re.search(
-            rf"(?ms)^      - name: {re.escape(name)}\n.*?^        run: \|\n"
-            rf"(?P<body>.*?)(?=^      - name: |^    [A-Za-z0-9_-]+:|\Z)",
-            self.workflow,
-        )
-        self.assertIsNotNone(match, f"step not found: {name}")
-        return match.group("body")
+        return kernel_scripts.step(name, self.workflow).body
 
 
 if __name__ == "__main__":

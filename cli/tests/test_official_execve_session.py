@@ -10,8 +10,7 @@ import textwrap
 import time
 import unittest
 
-
-WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/build.yml"
+from cli.tests import kernel_scripts
 
 
 def c_function(source, name):
@@ -27,11 +26,11 @@ def c_function(source, name):
 
 class OfficialExecSessionTests(unittest.TestCase):
     def generated_source(self, root):
-        step = WORKFLOW.read_text(encoding="utf-8").split("- name: 修复 Official SUSFS 源码兼容", 1)[1]
-        code = textwrap.dedent(step.split("python3 - <<'PY'\n", 1)[1].split("\n          PY", 1)[0])
+        step = kernel_scripts.step("修复 Official SUSFS 源码兼容")
+        code = step.python_code()
         functions = [n for n in ast.parse(code).body if isinstance(n, ast.FunctionDef)]
         namespace = {"Path": Path, "re": re, "dedent": textwrap.dedent, "print": lambda *a: None}
-        exec(compile(ast.Module(body=functions, type_ignores=[]), str(WORKFLOW), "exec"), namespace)
+        exec(compile(ast.Module(body=functions, type_ignores=[]), str(step.path), "exec"), namespace)
         path = root / "feature/sucompat.c"
         path.parent.mkdir()
         path.write_text(
