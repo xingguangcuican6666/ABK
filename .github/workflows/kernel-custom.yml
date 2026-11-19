@@ -42,12 +42,6 @@ on:
         required: true
         type: string
         default: "2022-01"
-      revision:
-        description: "修订版本 (如 r11, 仅 5.10 需要)"
-        required: false
-        type: string
-        default: "r11"
-
       # ==================== KernelSU 配置 ====================
       kernelsu_variant:
         description: "KernelSU 变体"
@@ -58,6 +52,7 @@ on:
           - Official
           - SukiSU
           - BakaSU
+          - NyaSU
         default: BakaSU
       kernelsu_branch:
         description: "KSU 分支"
@@ -177,19 +172,24 @@ on:
         default: ""
 
       ksuhook_modules:
-        description: "KernelSU 补丁模块仓库（用 | 分隔，每项 repo_url[@ref]，按 module.prop depends 分组）"
-        required: false
-        type: string
-        default: ""
-      ksuhook_sdk_ref:
-        description: "NyaSU SDK 固定 commit（留空=使用 build.yml 默认值）"
+        description: "KernelSU 补丁模块仓库（NyaSU 必填；用 | 分隔，每项 repo_url[@ref]，按 module.prop depends 分组）"
         required: false
         type: string
         default: ""
 
 jobs:
+  validate-custom-kernel:
+    if: inputs.kernelsu_variant == 'NyaSU' && inputs.ksuhook_modules == ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拒绝缺少 NyaSU 补丁模块的构建
+        run: |
+          echo "::error::NyaSU 构建必须提供 ksuhook_modules（至少一个兼容模块仓库）。"
+          exit 1
+
   build-custom-kernel:
     name: "${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}"
+    if: inputs.kernelsu_variant != 'NyaSU' || inputs.ksuhook_modules != ''
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
@@ -197,7 +197,7 @@ jobs:
       kernel_version: ${{ inputs.kernel_version }}
       sub_level: ${{ inputs.sub_level }}
       os_patch_level: ${{ inputs.os_patch_level }}
-      revision: ${{ inputs.revision || '' }}
+      revision: "r11"
       ksu_variant: ${{ inputs.kernelsu_variant }}
       ksu_branch: ${{ inputs.kernelsu_branch }}
       custom_ref: ${{ inputs.custom_ref || '' }}
@@ -211,14 +211,13 @@ jobs:
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
       supp_op: ${{ (inputs.supp_op || false) && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}
-      enable_susfs: ${{ !(inputs.cancel_susfs || (inputs.android_version == 'android17' && inputs.kernel_version == '6.18')) }}
+      enable_susfs: ${{ inputs.kernelsu_variant != 'NyaSU' && !(inputs.cancel_susfs || (inputs.android_version == 'android17' && inputs.kernel_version == '6.18')) }}
       virtualization_support: ${{ inputs.virtualization_support || 'off' }}
       zram_full_algo: ${{ inputs.zram_full_algo || false }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       ksuhook_modules: ${{ inputs.ksuhook_modules || '' }}
-      ksuhook_sdk_ref: ${{ inputs.ksuhook_sdk_ref || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
 
   get-ksu-manager:

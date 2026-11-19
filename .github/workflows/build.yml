@@ -72,6 +72,10 @@ on:
       ksu_branch:
         required: true
         type: string
+      revision:
+        required: false
+        type: string
+        default: ""
 
       # ==================== 可选配置 ====================
       custom_ref:
@@ -80,13 +84,10 @@ on:
       version:
         required: false
         type: string
-      revision:
-        required: false
-        type: string
       build_time:
         required: false
         type: string
-        default: "Sun Dec 01 08:10:00 UTC 2024"
+        default: ""
 
       # ==================== 功能开关 ====================
       use_zram:
@@ -182,7 +183,7 @@ on:
       ksuhook_sdk_ref:
         required: false
         type: string
-        default: "c6473f97ff516f2b3184b6a2d63753c8591a8edb"
+        default: "3f6c0e2efbb75b83feae15578f25d4906a9d9ca2"
 
 jobs:
   build-kernel:

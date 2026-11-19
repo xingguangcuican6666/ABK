@@ -19,6 +19,11 @@ modules-clone() {
 
     abk_env_add KSUHOOK_MODULE_MANIFEST "$GITHUB_WORKSPACE/ksuhook_modules.tsv"
 
+    if [ "${ABK_INPUT_KSU_VARIANT:-}" = "NyaSU" ] \
+      && [ -z "${ABK_INPUT_KSUHOOK_MODULES//[[:space:]|]/}" ]; then
+        abk_die "NyaSU 构建至少需要一个 ksuhook 模块仓库"
+    fi
+
     if [ -z "${ABK_INPUT_KSUHOOK_MODULES:-}" ]; then
         abk_log "未配置 KernelSU 补丁模块，跳过克隆。"
         : > "$KSUHOOK_MODULE_MANIFEST"

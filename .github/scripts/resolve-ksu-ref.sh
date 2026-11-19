@@ -205,6 +205,7 @@ GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 OFFICIAL_STABLE_REF="08a3b087e49227c8a6731c5f1114998b5e25255b"  # tiann/KernelSU main HEAD (2026-09-30)
 SUKISU_STABLE_REF="cf87e3f4ddd3f6e5464d85acf56aaa6950e70841"    # SukiSU-Ultra main HEAD (2026-09-30)
 BAKASU_STABLE_REF="9dbce02e511ea6b6305a238b84e456f6a92e1d0b"  # Baka-SU/BakaSU main HEAD (2026-10-05)
+NYASU_STABLE_REF="c6473f97ff516f2b3184b6a2d63753c8591a8edb"    # xingguangcuican6666/NyaSU main HEAD (2026-11-19)
 
 # Dev = 开发层，同为静态钉版；当前与 Stable 同步钉到最新 commit（"都最新"）。
 # Baka-SU/BakaSU 没有 dev 分支（只有 main 与若干 feature 分支），故 BAKASU_DEV_REF 与
@@ -212,10 +213,12 @@ BAKASU_STABLE_REF="9dbce02e511ea6b6305a238b84e456f6a92e1d0b"  # Baka-SU/BakaSU m
 OFFICIAL_DEV_REF="08a3b087e49227c8a6731c5f1114998b5e25255b"
 SUKISU_DEV_REF="cf87e3f4ddd3f6e5464d85acf56aaa6950e70841"
 BAKASU_DEV_REF="9dbce02e511ea6b6305a238b84e456f6a92e1d0b"
+NYASU_DEV_REF="c6473f97ff516f2b3184b6a2d63753c8591a8edb"
 
 # Latest = 最新层，动态追踪各上游 main 的最新（有成功 build-manager/Release run 的）commit。
 # 解析逻辑见 resolve_tracking / ksu_resolve_branch_sha。
 SUKISU_REPO="SukiSU-Ultra/SukiSU-Ultra"
+NYASU_REPO="xingguangcuican6666/NyaSU"
 
 emit_env() {
   local key="$1"
@@ -259,6 +262,7 @@ ksu_variant_repo() {
     # GKI builds use main; builtin is for OnePlus only (oneplus-build.yml, not resolve-ksu-ref).
     SukiSU) printf '%s\n' "$SUKISU_REPO" ;;
     BakaSU) printf '%s\n' "Baka-SU/BakaSU" ;;
+    NyaSU) printf '%s\n' "$NYASU_REPO" ;;
     *) return 1 ;;
   esac
 }
@@ -282,6 +286,17 @@ resolve_tracking() {
     branch="main"
   fi
 
+  if [ "$KSU_VARIANT" = "NyaSU" ]; then
+    RESOLVED_KSU_REPO="$repo"
+    RESOLVED_KSU_SOURCE_BRANCH="$branch"
+    RESOLVED_KSU_SHA="$(ksu_branch_head_sha "$repo" "$branch")" || {
+      echo "::error::Failed to read ${branch} HEAD for ${repo}" >&2
+      return 1
+    }
+    KSU_LATEST_SOURCE="${branch}-head"
+    return 0
+  fi
+
   if ! ksu_resolve_branch_sha "$repo" "$branch"; then
     return 1
   fi
@@ -294,6 +309,7 @@ resolve_tracking() {
 OFFICIAL_CUSTOM_REF=""
 SUKISU_CUSTOM_REF=""
 BAKASU_CUSTOM_REF=""
+NYASU_CUSTOM_REF=""
 
 if [ "$KSU_BRANCH" = "Custom(自定义)" ]; then
   if [[ "$CUSTOM_REF" =~ ^([A-Za-z0-9._/-]+):([0-9]+)$ ]]; then
@@ -303,16 +319,19 @@ if [ "$KSU_BRANCH" = "Custom(自定义)" ]; then
       Official) OFFICIAL_CUSTOM_REF="$(get_success_action_sha "tiann/KernelSU" "$branch" "$nabe")" ;;
       SukiSU) SUKISU_CUSTOM_REF="$(get_success_action_sha "$SUKISU_REPO" "$branch" "$nabe")" ;;
       BakaSU) BAKASU_CUSTOM_REF="$(get_success_action_sha "Baka-SU/BakaSU" "$branch" "$nabe")" ;;
+      NyaSU) NYASU_CUSTOM_REF="$(get_success_action_sha "$NYASU_REPO" "$branch" "$nabe")" ;;
     esac
   else
     case "$KSU_VARIANT" in
       Official) check_ref "tiann/KernelSU" "$CUSTOM_REF" ;;
       SukiSU) check_ref "$SUKISU_REPO" "$CUSTOM_REF" ;;
       BakaSU) check_ref "Baka-SU/BakaSU" "$CUSTOM_REF" ;;
+      NyaSU) check_ref "$NYASU_REPO" "$CUSTOM_REF" ;;
     esac
     OFFICIAL_CUSTOM_REF="$CUSTOM_REF"
     SUKISU_CUSTOM_REF="$CUSTOM_REF"
     BAKASU_CUSTOM_REF="$CUSTOM_REF"
+    NYASU_CUSTOM_REF="$CUSTOM_REF"
   fi
 fi
 
@@ -321,22 +340,26 @@ case "$KSU_BRANCH" in
     OFFICIAL_REF="$OFFICIAL_STABLE_REF"
     SUKISU_REF="$SUKISU_STABLE_REF"
     BAKASU_REF="$BAKASU_STABLE_REF"
+    NYASU_REF="$NYASU_STABLE_REF"
     ;;
   "Dev(开发)")
     OFFICIAL_REF="$OFFICIAL_DEV_REF"
     SUKISU_REF="$SUKISU_DEV_REF"
     BAKASU_REF="$BAKASU_DEV_REF"
+    NYASU_REF="$NYASU_DEV_REF"
     ;;
   "Latest(最新)")
     resolve_tracking "main"
     OFFICIAL_REF="$RESOLVED_KSU_SHA"
     SUKISU_REF="$RESOLVED_KSU_SHA"
     BAKASU_REF="$RESOLVED_KSU_SHA"
+    NYASU_REF="$RESOLVED_KSU_SHA"
     ;;
   "Custom(自定义)")
     OFFICIAL_REF="$OFFICIAL_CUSTOM_REF"
     SUKISU_REF="$SUKISU_CUSTOM_REF"
     BAKASU_REF="$BAKASU_CUSTOM_REF"
+    NYASU_REF="$NYASU_CUSTOM_REF"
     ;;
   *)
     echo "::error::Unknown KSU branch: ${KSU_BRANCH}" >&2
@@ -356,6 +379,10 @@ case "$KSU_VARIANT" in
   BakaSU)
     BRANCH="${BAKASU_REF}"
     RESOLVED_KSU_REPO="${RESOLVED_KSU_REPO:-Baka-SU/BakaSU}"
+    ;;
+  NyaSU)
+    BRANCH="${NYASU_REF}"
+    RESOLVED_KSU_REPO="${RESOLVED_KSU_REPO:-$NYASU_REPO}"
     ;;
   *)
     echo "::error::Unknown KSU variant: ${KSU_VARIANT}" >&2

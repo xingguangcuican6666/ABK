@@ -27,7 +27,8 @@ on:
 
 jobs:
   get_ksu_manager:
-    if: inputs.kernelsu_variant != 'None'
+    # NyaSU Manager artifact/source is not verified; skip instead of using another variant's APK.
+    if: inputs.kernelsu_variant != 'None' && inputs.kernelsu_variant != 'NyaSU'
     runs-on: ubuntu-latest
     outputs:
       # 输出1: KSU版本号
