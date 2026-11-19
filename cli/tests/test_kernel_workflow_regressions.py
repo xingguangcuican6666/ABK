@@ -95,9 +95,10 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
 
     def test_ksuhook_inputs_are_declared_and_exported(self):
         self.assertIn("      patch_modules:", self.workflow)
-        self.assertIn("      nyasu_sdk_ref:", self.workflow)
         self.assertIn("ABK_INPUT_PATCH_MODULES:", self.workflow)
-        self.assertIn("ABK_INPUT_NYASU_SDK_REF:", self.workflow)
+        # SDK 前向兼容：检出默认分支，不再固定 commit。
+        self.assertNotIn("nyasu_sdk_ref", self.workflow)
+        self.assertNotIn("ABK_INPUT_NYASU_SDK_REF", self.workflow)
 
     def test_sukisu_setup_accepts_resolved_bare_sha(self):
         block = self._step_run_block("添加 KernelSU")
