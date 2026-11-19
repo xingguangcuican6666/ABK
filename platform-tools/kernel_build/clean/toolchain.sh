@@ -75,9 +75,9 @@ cache-configure() {
 # ---- 配置 ccache ----
 ccache() {
     mkdir -p ~/.cache/bazel
-    ccache --version
-    ccache --max-size=2G
-    ccache --set-config=compression=true
+    command ccache --version
+    command ccache --max-size=2G
+    command ccache --set-config=compression=true
     echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
 
 }
