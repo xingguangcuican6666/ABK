@@ -50,6 +50,7 @@ def build_args(**overrides):
         "revision": None,
         "build_scope": None,
         "manager_variants": None,
+        "patch_modules": None,
         "zram": False,
         "bbg": False,
         "ddk": False,
@@ -66,6 +67,7 @@ def build_args(**overrides):
         "zram_full_algo": False,
         "zram_extra_algos": None,
         "custom_modules": None,
+        "patch_modules": None,
         "kernel_options_file": None,
     }
     values.update(overrides)
@@ -863,6 +865,59 @@ class CommandBehaviorTests(unittest.TestCase):
 
         self.assertEqual(2, result, output)
         self.assertEqual([], client.trigger_calls)
+
+    def test_nyasu_custom_dry_run_forwards_required_hook_modules(self):
+        client = RecordingGitHubClient(fork=None)
+        result, output = self._run_build(
+            client,
+            ksu_variant="NyaSU",
+            patch_modules="https://github.com/xingguangcuican6666/ksu-uid-watch",
+            dry_run=True,
+        )
+
+        self.assertEqual(0, result, output)
+        self.assertIn('"kernelsu_variant": "NyaSU"', output)
+        self.assertIn(
+            '"patch_modules": "https://github.com/xingguangcuican6666/ksu-uid-watch"',
+            output,
+        )
+
+    def test_nyasu_custom_requires_hook_modules(self):
+        client = RecordingGitHubClient(fork=None)
+        result, output = self._run_build(
+            client,
+            ksu_variant="NyaSU",
+            dry_run=True,
+        )
+
+        self.assertEqual(2, result, output)
+        self.assertIn("--patch-modules is required", output)
+        self.assertEqual([], client.trigger_calls)
+
+    def test_nyasu_is_restricted_to_custom_workflow(self):
+        for kwargs in (
+            {"matrix": "a14"},
+            {
+                "source_repo": "https://github.com/acme/kernel",
+                "source_ref": "main",
+                "source_defconfigs": ["gki_defconfig"],
+                "android_version": None,
+                "kernel_version": None,
+                "sub_level": None,
+            },
+        ):
+            with self.subTest(kwargs=kwargs):
+                client = RecordingGitHubClient(fork=None)
+                result, output = self._run_build(
+                    client,
+                    ksu_variant="NyaSU",
+                    patch_modules="https://github.com/xingguangcuican6666/ksu-uid-watch",
+                    dry_run=True,
+                    **kwargs,
+                )
+                self.assertEqual(2, result, output)
+                self.assertIn("only by the custom GKI workflow", output)
+                self.assertEqual([], client.trigger_calls)
 
     def test_custom_workflow_forwards_custom_ref(self):
         client = RecordingGitHubClient(fork=None)

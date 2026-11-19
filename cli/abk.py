@@ -168,7 +168,7 @@ WORKFLOW_RUNTIME_NAMES = {
     "all-managers-full-feature-matrix.yml": "全管理器全矩阵编译",
 }
 
-KSU_VARIANTS = ["None", "Official", "SukiSU", "BakaSU"]
+KSU_VARIANTS = ["None", "Official", "SukiSU", "BakaSU", "NyaSU"]
 KSU_BRANCH_MAP = {
     "stable": "Stable(标准)", "Stable": "Stable(标准)",
     "latest": "Latest(最新)", "Latest": "Latest(最新)",
@@ -614,6 +614,10 @@ def invalid_build_argument(args):
     custom_modules = getattr(args, "custom_modules", None)
     if custom_modules and _has_unsafe_workflow_text(custom_modules, 4096):
         return "--custom-modules"
+
+    patch_modules = getattr(args, "patch_modules", None)
+    if patch_modules and _has_unsafe_workflow_text(patch_modules, 4096):
+        return "--patch-modules"
 
     manager_variants = getattr(args, "manager_variants", None)
     if manager_variants:
@@ -4411,6 +4415,8 @@ def _standard_build_inputs(
         "build_time": args.build_time or "",
         "custom_kernel_options": getattr(args, "custom_kernel_options", ""),
     }
+    if variant == "NyaSU":
+        inputs["patch_modules"] = getattr(args, "patch_modules", "") or ""
     # 6.18 工作流没有 cancel_susfs 输入（SUSFS 强制关闭），下发未知输入会被
     # workflow_dispatch 以 422 拒绝，所以只在支持 SUSFS 开关的工作流上带这一项。
     if supports_susfs_toggle:
@@ -4629,6 +4635,16 @@ def cmd_build(args):
         "None" if source_mode else "BakaSU"
     )
     if not args.oneplus:
+        if effective_ksu_variant == "NyaSU" and (args.matrix or source_mode):
+            message = "NyaSU is currently supported only by the custom GKI workflow"
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
+            return 2
+        if effective_ksu_variant == "NyaSU" and not getattr(args, "patch_modules", None):
+            message = "--patch-modules is required with --ksu NyaSU"
+            print(message, file=sys.stderr)
+            _set_build_error(args, message, "invalid_arguments")
+            return 2
         if args.custom_ref and effective_ksu_variant == "None":
             message = "--custom-ref cannot be used with --ksu None"
             print(message, file=sys.stderr)
@@ -6062,6 +6078,10 @@ def main():
     )
     build_parser.add_argument("--zram-extra-algos", help=t("arg_zram_extra_algos"))
     build_parser.add_argument("--custom-modules", help=t("arg_custom_modules"))
+    build_parser.add_argument(
+        "--patch-modules",
+        help="NyaSU kernel patch module repositories (repo_url[@ref], separated by |)",
+    )
     build_parser.add_argument(
         "--kernel-options-file",
         "--custom-kernel-options-file",
