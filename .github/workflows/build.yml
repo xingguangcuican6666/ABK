@@ -314,11 +314,12 @@ jobs:
         run: bash platform-tools/kernel_build/clean/env.sh show
 
       - name: 安装编译依赖
+        env:
+          ABK_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: bash platform-tools/kernel_build/clean/toolchain.sh deps-install
 
       - name: 配置自托管下载缓存
         env:
-          ABK_RUNNER_ENVIRONMENT: ${{ runner.environment }}
           KERNEL_LOCAL_CACHE: ${{ vars.KERNEL_LOCAL_CACHE || 'auto' }}
           KERNEL_LOCAL_CACHE_DIR: ${{ vars.KERNEL_LOCAL_CACHE_DIR }}
         run: bash platform-tools/kernel_build/clean/toolchain.sh cache-configure

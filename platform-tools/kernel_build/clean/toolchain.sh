@@ -12,7 +12,12 @@ source "$SCRIPT_DIR/../lib/common.sh"
 # ---- 安装编译依赖 ----
 deps-install() {
     disable_broken_chrome_source() {
-      if [ "${ABK_RUNNER_ENVIRONMENT}" != "github-hosted" ]; then
+      local runner_environment="${ABK_RUNNER_ENVIRONMENT:-${RUNNER_ENVIRONMENT:-}}"
+      if [ -z "$runner_environment" ]; then
+        # GitHub-hosted runners expose RUNNER_ENVIRONMENT; local runners default to preserve sources.
+        runner_environment="${GITHUB_ACTIONS:+github-hosted}"
+      fi
+      if [ "$runner_environment" != "github-hosted" ]; then
         echo "保留自托管 Runner 的 Chrome APT 源"
         return 0
       fi
@@ -38,9 +43,26 @@ deps-install() {
       return 1
     }
 
+    apt_install_retry() {
+      local attempt
+      local -a packages=("$@")
+      for attempt in 1 2 3; do
+        if sudo apt-get install -y --no-install-recommends "${packages[@]}"; then
+          return 0
+        fi
+        echo "::warning::依赖安装第 ${attempt} 次失败，刷新 APT 索引后重试。"
+        sudo apt-get clean || true
+        sudo rm -rf /var/lib/apt/lists/*
+        apt_update_retry || return 1
+        sleep "$attempt"
+      done
+      echo "::error::依赖安装连续失败。"
+      return 1
+    }
+
     disable_broken_chrome_source
     apt_update_retry
-    sudo apt-get install -y ccache python3 git curl build-essential libssl-dev bison flex libelf-dev dwarves
+    apt_install_retry ccache python3 git curl build-essential libssl-dev bison flex libelf-dev dwarves
 
 }
 
