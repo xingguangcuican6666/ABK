@@ -171,7 +171,7 @@ on:
         type: string
         default: ""
 
-      ksuhook_modules:
+      patch_modules:
         description: "KernelSU 补丁模块仓库（NyaSU 必填；用 | 分隔，每项 repo_url[@ref]，按 module.prop depends 分组）"
         required: false
         type: string
@@ -179,17 +179,17 @@ on:
 
 jobs:
   validate-custom-kernel:
-    if: inputs.kernelsu_variant == 'NyaSU' && inputs.ksuhook_modules == ''
+    if: inputs.kernelsu_variant == 'NyaSU' && inputs.patch_modules == ''
     runs-on: ubuntu-latest
     steps:
       - name: 拒绝缺少 NyaSU 补丁模块的构建
         run: |
-          echo "::error::NyaSU 构建必须提供 ksuhook_modules（至少一个兼容模块仓库）。"
+          echo "::error::NyaSU 构建必须提供 patch_modules（至少一个兼容模块仓库）。"
           exit 1
 
   build-custom-kernel:
     name: "${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}"
-    if: inputs.kernelsu_variant != 'NyaSU' || inputs.ksuhook_modules != ''
+    if: inputs.kernelsu_variant != 'NyaSU' || inputs.patch_modules != ''
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
@@ -217,7 +217,7 @@ jobs:
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
-      ksuhook_modules: ${{ inputs.ksuhook_modules || '' }}
+      patch_modules: ${{ inputs.patch_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
 
   get-ksu-manager:

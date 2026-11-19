@@ -17,23 +17,23 @@ modules-clone() {
 
     abk_require_env GITHUB_WORKSPACE
 
-    abk_env_add KSUHOOK_MODULE_MANIFEST "$GITHUB_WORKSPACE/ksuhook_modules.tsv"
+    abk_env_add PATCH_MODULE_MANIFEST "$GITHUB_WORKSPACE/patch_modules.tsv"
 
     if [ "${ABK_INPUT_KSU_VARIANT:-}" = "NyaSU" ] \
-      && [ -z "${ABK_INPUT_KSUHOOK_MODULES//[[:space:]|]/}" ]; then
-        abk_die "NyaSU 构建至少需要一个 ksuhook 模块仓库"
+      && [ -z "${ABK_INPUT_PATCH_MODULES//[[:space:]|]/}" ]; then
+        abk_die "NyaSU 构建至少需要一个补丁模块仓库"
     fi
 
-    if [ -z "${ABK_INPUT_KSUHOOK_MODULES:-}" ]; then
+    if [ -z "${ABK_INPUT_PATCH_MODULES:-}" ]; then
         abk_log "未配置 KernelSU 补丁模块，跳过克隆。"
-        : > "$KSUHOOK_MODULE_MANIFEST"
+        : > "$PATCH_MODULE_MANIFEST"
         exit 0
     fi
 
-    python3 "$PATCHER" clone \
-        --modules "$ABK_INPUT_KSUHOOK_MODULES" \
+    NYASU_SDK_DIR="$GITHUB_WORKSPACE/nyasu-sdk/sdk" python3 "$PATCHER" clone \
+        --modules "$ABK_INPUT_PATCH_MODULES" \
         --dest "$GITHUB_WORKSPACE" \
-        --manifest "$KSUHOOK_MODULE_MANIFEST"
+        --manifest "$PATCH_MODULE_MANIFEST"
 }
 
 
@@ -44,23 +44,25 @@ apply() {
     abk_require_env GITHUB_WORKSPACE KERNEL_ROOT
     abk_require_input ABK_INPUT_ANDROID_VERSION ABK_INPUT_KERNEL_VERSION
 
-    if [ -z "${ABK_INPUT_KSUHOOK_MODULES:-}" ]; then
+    if [ -z "${ABK_INPUT_PATCH_MODULES:-}" ]; then
         abk_log "未配置 KernelSU 补丁模块，跳过补丁编排。"
         exit 0
     fi
 
-    sdk_dir="$GITHUB_WORKSPACE/ksuhook-sdk/sdk"
+    sdk_dir="$GITHUB_WORKSPACE/nyasu-sdk/sdk"
     if [ ! -d "$sdk_dir/ksuhook" ]; then
         abk_die "未找到 NyaSU SDK: $sdk_dir（检出步骤是否执行？）"
     fi
 
-    python3 "$PATCHER" apply \
-        --manifest "${KSUHOOK_MODULE_MANIFEST:-$GITHUB_WORKSPACE/ksuhook_modules.tsv}" \
+    NYASU_SDK_DIR="$sdk_dir" python3 "$PATCHER" apply \
+        --manifest "${PATCH_MODULE_MANIFEST:-$GITHUB_WORKSPACE/patch_modules.tsv}" \
         --kernel-root "$KERNEL_ROOT" \
         --sdk "$sdk_dir" \
         --android-version "$ABK_INPUT_ANDROID_VERSION" \
         --kernel-version "$ABK_INPUT_KERNEL_VERSION" \
-        --workroot "${KSUHOOK_WORKROOT:-${RUNNER_TEMP:-/tmp}/ksuhook-work}" \
+        --manager-cert-size "${ABK_MANAGER_CERT_SIZE:-1407}" \
+        --manager-cert-sha256 "${ABK_MANAGER_CERT_SHA256:-34e5e843952277759603cd0f949770b24c868530d80d7baeff08776a7e132b16}" \
+        --workroot "${NYASU_WORKROOT:-${RUNNER_TEMP:-/tmp}/nyasu-patch-work}" \
         --summary "${GITHUB_STEP_SUMMARY:-}"
 }
 

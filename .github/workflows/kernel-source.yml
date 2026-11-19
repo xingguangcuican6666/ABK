@@ -135,17 +135,6 @@ on:
         type: string
         default: ""
 
-      ksuhook_modules:
-        description: "KernelSU 补丁模块仓库（用 | 分隔，每项 repo_url[@ref]，按 module.prop depends 分组）"
-        required: false
-        type: string
-        default: ""
-      ksuhook_sdk_ref:
-        description: "NyaSU SDK 固定 commit（留空=使用 build.yml 默认值）"
-        required: false
-        type: string
-        default: ""
-
 jobs:
   preflight:
     name: 预检类 LineageOS 源码
@@ -290,6 +279,4 @@ jobs:
       zram_extra_algos: ${{ inputs.zram_extra_algos }}
       kpm_password: ${{ inputs.kpm_password }}
       custom_external_modules: ${{ inputs.custom_external_modules }}
-      ksuhook_modules: ${{ inputs.ksuhook_modules || '' }}
-      ksuhook_sdk_ref: ${{ inputs.ksuhook_sdk_ref || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options }}

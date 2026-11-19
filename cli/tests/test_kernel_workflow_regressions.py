@@ -63,6 +63,19 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
             f"collect-rejects step points at a missing script: {step.path}",
         )
 
+    def test_nyasu_sdk_orchestrator_is_the_only_patcher_implementation(self):
+        patcher = (ROOT / ".github" / "scripts" / "kernel-patcher.py").read_text(encoding="utf-8")
+        self.assertIn('sdk / "ksuhook" / "orchestrator.py"', patcher)
+        self.assertIn('os.environ.get("NYASU_SDK_DIR")', patcher)
+        # 编排实现只在 NyaSU SDK 里：ABK 侧不得再出现自己的 worktree/分组逻辑。
+        for removed in (
+            "def apply_modules(",
+            "def group_modules(",
+            "def snapshot_base(",
+            "def parse_module_spec(",
+        ):
+            self.assertNotIn(removed, patcher)
+
     def test_ksuhook_steps_run_in_the_right_order(self):
         starts = [m.start() for m in re.finditer(r"(?m)^      - name: ", self.workflow)]
         self.assertTrue(starts, "no steps found in build.yml")
@@ -81,10 +94,10 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
         self.assertLess(order["应用 KernelSU 补丁模块"], order["编译内核"])
 
     def test_ksuhook_inputs_are_declared_and_exported(self):
-        self.assertIn("      ksuhook_modules:", self.workflow)
-        self.assertIn("      ksuhook_sdk_ref:", self.workflow)
-        self.assertIn("ABK_INPUT_KSUHOOK_MODULES:", self.workflow)
-        self.assertIn("ABK_INPUT_KSUHOOK_SDK_REF:", self.workflow)
+        self.assertIn("      patch_modules:", self.workflow)
+        self.assertIn("      nyasu_sdk_ref:", self.workflow)
+        self.assertIn("ABK_INPUT_PATCH_MODULES:", self.workflow)
+        self.assertIn("ABK_INPUT_NYASU_SDK_REF:", self.workflow)
 
     def test_sukisu_setup_accepts_resolved_bare_sha(self):
         block = self._step_run_block("添加 KernelSU")
