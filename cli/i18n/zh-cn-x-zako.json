@@ -136,6 +136,7 @@
   "build_target_a14": "安卓 14 (6.1)",
   "build_target_a15": "安卓 15 (6.6)",
   "build_target_a16": "安卓 16 (6.12)",
+  "build_target_a17": "安卓 17 (6.18)",
   "build_target_custom": "完全自定义内核构建",
   "build_target_oneplus": "一加/欧加专区",
   "build_target_full": "全属性内核构建究极矩阵",

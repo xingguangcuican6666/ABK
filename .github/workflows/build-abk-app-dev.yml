@@ -146,7 +146,7 @@ jobs:
           commit="$(git -C "$source_dir" rev-parse HEAD)"
           python3 .github/scripts/patch-ksud-uapi-compat.py "$source_dir"
           python3 .github/scripts/patch-ksud-script-wait.py "$source_dir"
-          grep -q "ABK legacy uapi=0 compatibility" "$source_dir/userspace/ksud/src/ksucalls.rs"
+          grep -q "ABK backward-compatible uapi check" "$source_dir/userspace/ksud/src/ksucalls.rs"
           mkdir -p "$target_dir" "$jni_target_dir"
 
           setup_rust_build() {

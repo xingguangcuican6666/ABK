@@ -1,0 +1,194 @@
+# ========================================
+# PR 内核抽样编译检查
+# ========================================
+# 当 PR 改动内核编译工作流 / 内核源码补丁 / 补丁脚本时，
+# 从与 kernel-a*.yml matrix 一致的候选池中随机抽取 3~6 个
+# (android_version, kernel_version, sub_level, os_patch_level, revision)
+# 组合，功能参数全关（ZRAM/BBG/DDK/NTsync/Networking/KPM/Re-Kernel/
+# SUSFS/虚拟化/一加 8E 均关闭），root 实现（KernelSU 变体）随机，
+# 走 build.yml 完整编译链路做检查。
+#
+# 随机种子 = PR 号 + head SHA + run_id + run_attempt，
+# 同一 PR 的 re-run 会换一批抽样；同一 attempt 重跑结果可复现。
+# ========================================
+
+name: PR 内核抽样编译检查
+
+permissions:
+  # build.yml（被复用的工作流）声明了 contents: write / actions: write，
+  # 调用方权限必须 >= 被调用方，否则 GitHub 在启动阶段直接拒绝
+  # （startup_failure: "requesting 'actions: write, contents: write',
+  # but is only allowed 'actions: read, contents: read'"）。
+  contents: write
+  actions: write
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/build.yml"
+      - ".github/workflows/main.yml"
+      - ".github/workflows/kernel-a12-5-10.yml"
+      - ".github/workflows/kernel-a13-5-15.yml"
+      - ".github/workflows/kernel-a14-6-1.yml"
+      - ".github/workflows/kernel-a15-6-6.yml"
+      - ".github/workflows/kernel-a16-6-12.yml"
+      - ".github/workflows/kernel-a17-6-18.yml"
+      - ".github/workflows/kernel-custom.yml"
+      - ".github/workflows/kernel-source.yml"
+      - ".github/workflows/kernel-full-feature-matrix.yml"
+      - ".github/workflows/kernel-pr-sampling.yml"
+      - ".github/scripts/**"
+      - ".github/actions/**"
+      - "ddk/**"
+      - "modules/**"
+      - "zram/**"
+      - "scripts/**"
+      - "hmbird_patch.c"
+  workflow_dispatch:
+    inputs:
+      sample_min:
+        description: "最小抽样数量"
+        required: false
+        type: string
+        default: "3"
+      sample_max:
+        description: "最大抽样数量"
+        required: false
+        type: string
+        default: "6"
+      seed:
+        description: "随机种子（留空=run_id+attempt）"
+        required: false
+        type: string
+        default: ""
+      fixed_combos:
+        description: "固定组合（每行一个: android kernel sub patch [revision] [variant]，填写后跳过随机抽样）"
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: kernel-pr-sampling-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==================== 抽样 ====================
+  sample:
+    name: 随机抽取内核版本
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.sample.outputs.matrix }}
+      count: ${{ steps.sample.outputs.count }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 抽取内核版本组合
+        id: sample
+        env:
+          SEED: ${{ inputs.seed || format('{0}-{1}-{2}-{3}', github.event.pull_request.number || 'dispatch', github.sha, github.run_id, github.run_attempt) }}
+          FIXED_COMBOS: ${{ inputs.fixed_combos || '' }}
+        run: |
+          set -euo pipefail
+
+          args=(--seed "$SEED" --count-min "${{ inputs.sample_min || '3' }}" --count-max "${{ inputs.sample_max || '6' }}")
+          if [ -n "$FIXED_COMBOS" ]; then
+            while IFS= read -r line; do
+              [ -n "$line" ] && args+=(--fixed "$line")
+            done <<< "$FIXED_COMBOS"
+          fi
+
+          python3 .github/scripts/sample-kernel-versions.py "${args[@]}" --output sample.json
+
+          {
+            # matrix 轴只允许 include（数组）；count/seed/source 是标量，
+            # 混入 fromJSON(matrix) 会导致 strategy 评估失败（startup 报
+            # "unexpected value" 并跳过整个 build job）。
+            echo "matrix=$(jq -c '{include: .include}' sample.json)"
+            echo "count=$(jq -r '.count' sample.json)"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### PR 内核抽样编译检查"
+            echo
+            echo "- 种子: \`$SEED\`"
+            echo "- 抽样数量: $(jq -r '.count' sample.json) (来源: $(jq -r '.source' sample.json))"
+            echo
+            echo "| Android | 内核 | sub_level | 补丁级别 | revision | root 实现 |"
+            echo "|---|---|---|---|---|---|"
+            jq -r '.include[] | "| \(.android_version) | \(.kernel_version) | \(.sub_level) | \(.os_patch_level) | \(.revision // "-") | \(.ksu_variant) |"' sample.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          jq . sample.json
+
+  # ==================== 编译检查（参数全关，root 实现随机） ====================
+  build:
+    name: "${{ matrix.kernel_version }}.${{ matrix.sub_level }}-${{ matrix.android_version }}-${{ matrix.os_patch_level }}-${{ matrix.ksu_variant }}"
+    needs: sample
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.sample.outputs.matrix) }}
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      android_version: ${{ matrix.android_version }}
+      kernel_version: ${{ matrix.kernel_version }}
+      sub_level: ${{ matrix.sub_level }}
+      os_patch_level: ${{ matrix.os_patch_level }}
+      revision: ${{ matrix.revision }}
+      ksu_variant: ${{ matrix.ksu_variant }}
+      ksu_branch: "Stable(标准)"
+      version: "pr-sample"
+      # ==================== 功能参数全关 ====================
+      use_zram: false
+      use_bbg: false
+      use_ddk: false
+      use_ntsync: false
+      use_networking: false
+      use_kpm: false
+      use_rekernel: false
+      enable_susfs: false
+      supp_op: false
+      virtualization_support: "off"
+      zram_full_algo: false
+      zram_extra_algos: ""
+      kpm_password: ""
+      custom_external_modules: ""
+      custom_kernel_options: ""
+      upload_aux_artifacts: false
+
+  # ==================== 汇总结果 ====================
+  # 任一抽样组合编译失败，或补丁产生 .rej 冲突文件，均判为不通过。
+  result:
+    name: 抽样编译检查结果
+    runs-on: ubuntu-latest
+    needs:
+      - sample
+      - build
+    if: always()
+    steps:
+      - name: 检查编译结果
+        run: |
+          set -euo pipefail
+          if [ "${{ needs.build.result }}" != "success" ]; then
+            echo "::error::抽样编译检查失败 (build result: ${{ needs.build.result }}，抽样数: ${{ needs.sample.outputs.count }})"
+            exit 1
+          fi
+          echo "抽样编译检查通过（${{ needs.sample.outputs.count }} 个组合）"
+
+      - name: 下载补丁冲突文件
+        uses: actions/download-artifact@v8
+        with:
+          path: ./sampled-rejects
+          pattern: "*-Rejects"
+          merge-multiple: false
+
+      - name: 校验无补丁冲突
+        run: |
+          set -euo pipefail
+          if compgen -G "./sampled-rejects/*-Rejects" > /dev/null; then
+            echo "::error::抽样编译中发现补丁冲突 (.rej)，详见 *-Rejects artifact:"
+            find ./sampled-rejects -type f | sed 's/^/  /'
+            exit 1
+          fi
+          echo "未发现补丁冲突文件"

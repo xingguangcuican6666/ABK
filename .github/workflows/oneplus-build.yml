@@ -54,7 +54,7 @@ on:
 jobs:
   build:
     name: "${{ inputs.device_manifest }}-${{ inputs.kernel_version }}-${{ inputs.ksu_variant }}"
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ONEPLUS_SELF_HOSTED == 'false' && 'ubuntu-latest' || (startsWith(vars.ONEPLUS_RUNNER, '[') && fromJSON(vars.ONEPLUS_RUNNER) || vars.ONEPLUS_RUNNER || 'ubuntu-latest') }}
     timeout-minutes: 120
 
     env:
@@ -101,6 +101,7 @@ jobs:
           effective_proxy="$USE_PROXY_OPTIMIZATION"
           if [[ "$CPU" == mt* ]]; then
             effective_proxy="false"
+            effective_kpm="false"
           fi
           case "$DEVICE_MANIFEST" in
             oneplus_15) device_name="OnePlus 15"; system_version="ColorOS/OxygenOS 16" ;;
@@ -204,6 +205,9 @@ jobs:
           if [[ "$CPU" == mt* && "$USE_PROXY_OPTIMIZATION" = "true" ]]; then
             echo "::warning::MTK 分支已强制关闭代理相关网络优化。"
           fi
+          if [[ "$CPU" == mt* && "$USE_KPM" = "true" ]]; then
+            echo "::warning::MTK 分支已强制关闭 KPM，与 App 的机型支持范围保持一致。"
+          fi
           if [ "$USE_KPM" = "true" ] && [ "$KSU_VARIANT" != "SukiSU" ] && [ "$KSU_VARIANT" != "BakaSU" ]; then
             echo "::error::Official / None 变体不支持 KPM，请关闭 KPM 后重试。"
             exit 1
@@ -213,7 +217,7 @@ jobs:
           fi
 
       - name: 最大化构建空间
-        if: ${{ inputs.kernel_version == '5.10' || inputs.kernel_version == '5.15' || inputs.kernel_version == '6.12' }}
+        if: ${{ runner.environment == 'github-hosted' && (inputs.kernel_version == '5.10' || inputs.kernel_version == '5.15' || inputs.kernel_version == '6.12') }}
         uses: easimon/maximize-build-space@master
         with:
           root-reserve-mb: 8192
@@ -231,6 +235,10 @@ jobs:
         run: |
           set -euo pipefail
           disable_broken_chrome_source() {
+            if [ "${{ runner.environment }}" != "github-hosted" ]; then
+              echo "保留自托管 Runner 的 Chrome APT 源"
+              return 0
+            fi
             local source
             while IFS= read -r source; do
               echo "::warning::禁用与构建无关的 Chrome APT 源: $source"
@@ -706,6 +714,10 @@ jobs:
               "                                      void *argv_user, void *envp_user,",
               "                                      int *flags, int *retval)",
               "{",
+              "    if (!retval || *retval < 0 || !filename_ptr || !*filename_ptr ||",
+              "        IS_ERR(*filename_ptr) || !(*filename_ptr)->name ||",
+              "        strcmp((*filename_ptr)->name, KSUD_PATH))",
+              "        return 0;",
               "    if (*retval >= 0)",
               "        (void)ksu_install_su_fd();",
               "    return 0;",
@@ -718,6 +730,156 @@ jobs:
           print(f"patched {path} (SUSFS post-exec su-session fd wrapper)")
           PY
           fi
+
+      - name: 修复 SukiSU builtin priority-uid-filter/preinit/fake_state 兼容
+        if: ${{ inputs.ksu_variant == 'SukiSU' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          KERNEL_ROOT="$GITHUB_WORKSPACE/oneplus_workspace/kernel_workspace/kernel_platform"
+          COMMON_ROOT="$KERNEL_ROOT/common"
+
+          KSU_BUILD_DIR=""
+          for dir in common/drivers/kernelsu drivers/kernelsu KernelSU/kernel; do
+            if [ -d "$KERNEL_ROOT/$dir" ]; then
+              KSU_BUILD_DIR="$KERNEL_ROOT/$dir"
+              break
+            fi
+          done
+
+          if [ -z "$KSU_BUILD_DIR" ]; then
+            echo "::warning::未找到 SukiSU 编译目录，跳过 builtin 兼容修复。"
+            exit 0
+          fi
+
+          # builtin 分支无条件调用 priority-uid-filter API，而 cctv18/susfs4oki
+          # 快照（oki-android14-6.1 / oki-android15-6.6 / oki-android16-6.12）未提供，
+          # 只有 simonpunk/susfs4ksu 提供。探测两个头文件后决定是否剥离。
+          SUSFS_HAS_PRIORITY_API="false"
+          for hdr in include/linux/susfs.h include/linux/susfs_def.h; do
+            if grep -qs 'susfs_parse_priority_app_strings\|CMD_SUSFS_SET_PRIORITY_UID_FILTER' "$COMMON_ROOT/$hdr"; then
+              SUSFS_HAS_PRIORITY_API="true"
+            fi
+          done
+          echo "SUSFS priority-uid-filter API present: $SUSFS_HAS_PRIORITY_API"
+
+          # oki-android14-6.1 的 50_add_susfs 会向 security/selinux/{hooks,selinuxfs}.c
+          # 注入 `extern struct selinux_state fake_state;` 并实际引用它，但 builtin 的
+          # feature/selinux_hide.c 只定义 fake_status/initialize_fake_status，没有
+          # fake_state -> 链接期 undefined symbol（与 GKI build.yml 的注入行为对齐）。
+          # oki 6.6/6.12 自带 my_security_*，不引用 fake_state，探测天然只对 6.1 生效。
+          NEEDS_FAKE_STATE="false"
+          if [ "${EFFECTIVE_ENABLE_SUSFS:-false}" = "true" ] \
+            && grep -qs 'struct selinux_state fake_state;' \
+                 "$COMMON_ROOT/security/selinux/hooks.c" \
+                 "$COMMON_ROOT/security/selinux/selinuxfs.c"; then
+            NEEDS_FAKE_STATE="true"
+          fi
+          echo "kernel needs exported fake_state: $NEEDS_FAKE_STATE"
+
+          python3 - "$KSU_BUILD_DIR" "$SUSFS_HAS_PRIORITY_API" "$NEEDS_FAKE_STATE" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          ksu_dir = Path(sys.argv[1])
+          has_api = sys.argv[2] == "true"
+          needs_fake_state = sys.argv[3] == "true"
+
+          # 1) manager/pkg_observer.c: builtin 无条件调用
+          #    susfs_parse_priority_app_strings();（ksu_main.c unity include，
+          #    与 CONFIG_KSU_SUSFS 无关）。所用 SUSFS 快照没有该 API 时移除调用。
+          pkg_observer = ksu_dir / "manager" / "pkg_observer.c"
+          if pkg_observer.exists():
+              text = pkg_observer.read_text()
+              original = text
+              if not has_api:
+                  text = re.sub(
+                      r"(?m)^([ \t]*)susfs_parse_priority_app_strings\(\);[ \t]*\n",
+                      r"\1/* ABK: priority uid filter API absent in this SUSFS snapshot. */\n",
+                      text,
+                  )
+              if text != original:
+                  pkg_observer.write_text(text)
+                  print(f"patched {pkg_observer}")
+              else:
+                  print(f"no change for {pkg_observer}")
+
+          # 2) supercall/dispatch.c: 移除引用未定义
+          #    CMD_SUSFS_SET_PRIORITY_UID_FILTER 的 case 块。
+          dispatch = ksu_dir / "supercall" / "dispatch.c"
+          if dispatch.exists() and not has_api:
+              text = dispatch.read_text()
+              original = text
+              text = re.sub(
+                  r"(?m)^[ \t]*case CMD_SUSFS_SET_PRIORITY_UID_FILTER:[ \t]*\n"
+                  r"[ \t]*susfs_set_priority_uid_filter\(arg\);[ \t]*\n"
+                  r"[ \t]*return 0;[ \t]*\n",
+                  "",
+                  text,
+              )
+              if text != original:
+                  dispatch.write_text(text)
+                  print(f"patched {dispatch}")
+              else:
+                  print(f"no change for {dispatch}")
+
+          # 3) preinit/common/preinit.h: 头文件 `#define KSU_NO_PREINIT`（空值）
+          #    与 Makefile 在 $(objtree)/usr/include 缺失时传入的
+          #    -DKSU_NO_PREINIT（=1）冲突，触发 -Werror,-Wmacro-redefined。
+          #    该头仅在 CONFIG_KSU_SUSFS 未定义时被 ksu_main.c 包含，
+          #    即 SUSFS 关闭的 5.10/5.15 组合；6.1+ 走 preinit/preinit.h 不受影响。
+          preinit_h = ksu_dir / "preinit" / "common" / "preinit.h"
+          if preinit_h.exists():
+              text = preinit_h.read_text()
+              original = text
+              bare = re.compile(r"(?m)^#define KSU_NO_PREINIT$")
+              guarded = re.compile(
+                  r"(?m)^#(?:ifndef KSU_NO_PREINIT|if !defined\(KSU_NO_PREINIT\))\s*\n"
+                  r"#define KSU_NO_PREINIT$"
+              )
+              if bare.search(text) and not guarded.search(text):
+                  text = bare.sub(
+                      "#ifndef KSU_NO_PREINIT\n#define KSU_NO_PREINIT\n#endif",
+                      text,
+                      count=1,
+                  )
+              if text != original:
+                  preinit_h.write_text(text)
+                  print(f"patched {preinit_h}")
+              else:
+                  print(f"no change for {preinit_h}")
+
+          # 4) feature/selinux_hide.c: 为 oki-android14-6.1 的 SUSFS 补丁补齐
+          #    `struct selinux_state fake_state;` 定义（hooks.c/selinuxfs.c 引用）。
+          selinux_hide = ksu_dir / "feature" / "selinux_hide.c"
+          if needs_fake_state and selinux_hide.exists():
+              text = selinux_hide.read_text()
+              original = text
+              if not re.search(r"(?m)^\s*struct\s+selinux_state\s+fake_state\s*;", text):
+                  # 旧版 SukiSU 可能带 static 定义，先去 static。
+                  text = re.sub(
+                      r"(?m)^\s*(?:static\s+|__maybe_static\s+)*struct\s+selinux_state\s+fake_state\s*;",
+                      "struct selinux_state fake_state;",
+                      text,
+                  )
+              if not re.search(r"(?m)^\s*struct\s+selinux_state\s+fake_state\s*;", text):
+                  anchor = "bool ksu_selinux_hide_running __read_mostly = false;\n"
+                  if anchor not in text:
+                      raise SystemExit(
+                          f"{selinux_hide} 缺少 ksu_selinux_hide_running 锚点，无法插入 fake_state"
+                      )
+                  text = text.replace(
+                      anchor,
+                      anchor + "struct selinux_state fake_state;\n",
+                      1,
+                  )
+              if text != original:
+                  selinux_hide.write_text(text)
+                  print(f"patched {selinux_hide} (exported fake_state for oki SUSFS patch)")
+              else:
+                  print(f"no change for {selinux_hide}")
+          PY
 
       - name: 修复 SukiSU/BakaSU android16-6.12 源码兼容
         if: ${{ (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU') && inputs.android_version == 'android16' && inputs.kernel_version == '6.12' }}
@@ -928,7 +1090,7 @@ jobs:
               kpm_config_supported="true"
             else
               for dir in KernelSU/kernel common/drivers/kernelsu drivers/kernelsu kernel; do
-                if [ -f "$KERNEL_ROOT/$dir/Kconfig" ] && rg -n '^[[:space:]]*config[[:space:]]+KPM\b' "$KERNEL_ROOT/$dir/Kconfig" >/dev/null 2>&1; then
+                if [ -f "$KERNEL_ROOT/$dir/Kconfig" ] && grep -Eq '^[[:space:]]*config[[:space:]]+KPM([[:space:]]|$)' "$KERNEL_ROOT/$dir/Kconfig"; then
                   kpm_config_supported="true"
                   break
                 fi

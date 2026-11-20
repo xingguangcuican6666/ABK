@@ -1004,7 +1004,7 @@ impl LocalBuildManager {
             }
         }
 
-        let updates = local_build_env_updates(build_request);
+        let updates = local_build_env_updates(build_request, &self.repo_root);
         rewrite_exported_env_file(&env_file_path, &updates)?;
 
         let materialized = self.inspect_source_materialized_state(&source_instance);
@@ -1661,7 +1661,10 @@ fn shell_quote(value: &str) -> String {
     format!("'{escaped}'")
 }
 
-fn local_build_env_updates(request: &BuildGkiRequest) -> HashMap<String, String> {
+fn local_build_env_updates(
+    request: &BuildGkiRequest,
+    repo_root: &Path,
+) -> HashMap<String, String> {
     let custom_modules = request
         .custom_modules
         .clone()
@@ -1735,6 +1738,11 @@ fn local_build_env_updates(request: &BuildGkiRequest) -> HashMap<String, String>
             .trim()
             .to_string(),
     );
+    // Keep an already-materialized env.sh on the same upstream pin, so a rebuild
+    // never resolves a different Droidspaces tag than init.sh cloned.
+    let droidspaces_ref = resolve_droidspaces_ref(repo_root);
+    updates.insert("VIRTUALIZATION_REF".into(), droidspaces_ref.clone());
+    updates.insert("ABK_DROIDSPACES_REF".into(), droidspaces_ref);
     updates.insert(
         "VERSION_INPUT".into(),
         request
@@ -2055,6 +2063,9 @@ impl LocalBuildManager {
             "VIRTUALIZATION_SUPPORT".into(),
             build_request.virt.clone().unwrap_or_else(|| "off".into()),
         );
+        let droidspaces_ref = resolve_droidspaces_ref(&self.repo_root);
+        values.insert("VIRTUALIZATION_REF".into(), droidspaces_ref.clone());
+        values.insert("ABK_DROIDSPACES_REF".into(), droidspaces_ref);
         values.insert(
             "VERSION_INPUT".into(),
             build_request.version.clone().unwrap_or_default(),
@@ -2079,6 +2090,41 @@ impl LocalBuildManager {
 
 fn bool_env(value: bool) -> String {
     if value { "true".into() } else { "false".into() }
+}
+
+/// Upstream Droidspaces release the GKI kABI patches and their required defconfig
+/// list together, so the checkout is pinned to a tag instead of tracking HEAD.
+/// Mirrors `.github/workflows/build.yml`: `ABK_DROIDSPACES_REF` wins, then
+/// `droidspaces=` in `config/config`, then the release this tree was bumped to.
+const DEFAULT_DROIDSPACES_REF: &str = "v7.1.0";
+
+fn resolve_droidspaces_ref(repo_root: &Path) -> String {
+    if let Some(value) = env::var_os("ABK_DROIDSPACES_REF") {
+        let trimmed = value.to_string_lossy().trim().to_string();
+        if !trimmed.is_empty() {
+            return trimmed;
+        }
+    }
+    let config_path = repo_root.join("config").join("config");
+    if let Ok(content) = fs::read_to_string(&config_path) {
+        for line in content.lines() {
+            let trimmed = line.trim_start();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            let Some((key, value)) = trimmed.split_once('=') else {
+                continue;
+            };
+            if key.trim() == "droidspaces" {
+                let pinned = value.trim();
+                if !pinned.is_empty() {
+                    return pinned.to_string();
+                }
+                break;
+            }
+        }
+    }
+    DEFAULT_DROIDSPACES_REF.to_string()
 }
 
 fn local_ksu_track_label(value: &str) -> &'static str {
@@ -2733,6 +2779,41 @@ fn now_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn droidspaces_ref_falls_back_through_env_and_config() {
+        // Process-wide env would shadow config/config; tests run in parallel threads,
+        // so skip instead of mutating it.
+        if env::var_os("ABK_DROIDSPACES_REF").is_some_and(|value| !value.is_empty()) {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("abk-droidspaces-{}", Uuid::new_v4()));
+        fs::create_dir_all(dir.join("config")).expect("config dir");
+        let config = dir.join("config").join("config");
+
+        fs::write(&config, "custom=false\ndroidspaces=v6.6.0\n").expect("write pin");
+        assert_eq!(resolve_droidspaces_ref(&dir), "v6.6.0");
+
+        // A commented or empty entry must not silently unpin the checkout.
+        fs::write(&config, "# droidspaces=v6.0.0\ndroidspaces=\n").expect("write empty pin");
+        assert_eq!(resolve_droidspaces_ref(&dir), DEFAULT_DROIDSPACES_REF);
+
+        fs::write(&config, "custom=false\n").expect("write config without pin");
+        assert_eq!(resolve_droidspaces_ref(&dir), DEFAULT_DROIDSPACES_REF);
+
+        let missing = dir.join("missing");
+        assert_eq!(resolve_droidspaces_ref(&missing), DEFAULT_DROIDSPACES_REF);
+
+        // An unpinned commit hash is accepted verbatim.
+        fs::write(&config, "droidspaces=4344dc5fc4ab981f1cf2df54c93bf32a6ebbdc85\n")
+            .expect("write sha pin");
+        assert_eq!(
+            resolve_droidspaces_ref(&dir),
+            "4344dc5fc4ab981f1cf2df54c93bf32a6ebbdc85"
+        );
+
+        fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn docker_network_args_use_host_network_for_loopback_proxy() {

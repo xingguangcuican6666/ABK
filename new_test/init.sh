@@ -32,6 +32,11 @@ SUSFS_REPO_URL="https://gitlab.com/simonpunk/susfs4ksu.git"
 GCC_REPO_URL="https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1.git"
 VIRTUALIZATION_REPO_URL="https://github.com/ravindu644/Droidspaces-OSS.git"
 
+# Upstream Droidspaces releases the GKI kABI patches and their required defconfig
+# list together. Track a tag instead of HEAD so an upstream docs commit cannot
+# change build output; config/config droidspaces= overrides it.
+VIRTUALIZATION_REF_DEFAULT="v7.1.0"
+
 FORCE=0
 SKIP_DEPS=0
 SELECTED_ANDROID_VERSION=""
@@ -99,6 +104,55 @@ clone_or_update() {
         git -C "$dest" fetch --depth 1 origin
         git -C "$dest" reset --hard FETCH_HEAD
     fi
+}
+
+# Clone an immutable ref (tag or commit) into place, or keep the existing checkout
+# when it already carries this ref. rebuild.sh records the same marker, so the two
+# paths agree on whether a re-clone is needed and neither hits the network for it.
+clone_or_update_ref() {
+    local url="$1"
+    local dest="$2"
+    local ref="$3"
+    local marker="$dest/.git/abk-droidspaces-ref"
+    local cached_ref=""
+
+    mkdir -p "$(dirname "$dest")"
+
+    if [[ -f "$marker" ]]; then
+        cached_ref="$(cat "$marker" 2>/dev/null || true)"
+    fi
+    if [[ "$cached_ref" == "$ref" && -d "$dest" ]]; then
+        log_info "$(basename "$dest") already at $ref"
+        return 0
+    fi
+
+    rm -rf "$dest"
+    if [[ "$ref" =~ ^[0-9a-fA-F]{40}$ ]]; then
+        # A commit pin cannot be fetched with --branch; clone then detach onto it.
+        git clone --no-checkout "$url" "$dest"
+        git -C "$dest" checkout --detach "$ref"
+    else
+        git clone --depth 1 --branch "$ref" "$url" "$dest"
+    fi
+    printf '%s\n' "$ref" >"$marker"
+}
+
+# Read the Droidspaces pin the same way build.yml does: an explicit environment
+# override wins, then config/config, then the release tag this tree was bumped to.
+resolve_virtualization_ref() {
+    local ref="${ABK_DROIDSPACES_REF:-}"
+    local config_file="$ABK_SOURCE_LOCAL/config/config"
+
+    if [[ -z "$ref" && -f "$config_file" ]]; then
+        ref="$(awk -F= '
+            /^[[:space:]]*#/ { next }
+            $1 == "droidspaces" {
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
+                print $2
+                exit
+            }' "$config_file")"
+    fi
+    printf '%s\n' "${ref:-$VIRTUALIZATION_REF_DEFAULT}"
 }
 
 parse_args() {
@@ -440,6 +494,9 @@ export SUSFS_SOURCE="$SUSFS_SOURCE"
 export GCC_SOURCE="$GCC_SOURCE"
 export VIRTUALIZATION_SOURCE="$VIRTUALIZATION_SOURCE"
 export VIRTUALIZATION_SUPPORT_PATCHES="\$VIRTUALIZATION_SOURCE/Documentation/resources/kernel-patches/GKI"
+export VIRTUALIZATION_REF="$VIRTUALIZATION_REF"
+# Re-export the resolved pin so rebuild.sh never resolves a different upstream ref.
+export ABK_DROIDSPACES_REF="$VIRTUALIZATION_REF"
 
 export AVBTOOL="\$KERNEL_ROOT/prebuilts/kernel-build-tools/linux-x86/bin/avbtool"
 export MKBOOTIMG="\$KERNEL_ROOT/tools/mkbootimg/mkbootimg.py"
@@ -527,7 +584,7 @@ prepare_dependencies() {
     clone_or_update "$ACTION_BUILD_REPO_URL" "$ACTION_BUILD_SOURCE"
     clone_or_update "$SUSFS_REPO_URL" "$SUSFS_SOURCE" "$susfs_branch"
     clone_or_update "$GCC_REPO_URL" "$GCC_SOURCE"
-    clone_or_update "$VIRTUALIZATION_REPO_URL" "$VIRTUALIZATION_SOURCE"
+    clone_or_update_ref "$VIRTUALIZATION_REPO_URL" "$VIRTUALIZATION_SOURCE" "$VIRTUALIZATION_REF"
 }
 
 resolve_template_selection() {
@@ -542,6 +599,7 @@ main() {
 
     parse_args "$@"
     resolve_template_selection
+    VIRTUALIZATION_REF="$(resolve_virtualization_ref)"
     manifest_branch="$(manifest_branch_for "$SELECTED_ANDROID_VERSION" "$SELECTED_KERNEL_VERSION" "$SELECTED_BRANCH_MONTH")"
     bootstrap_template_checkout "$manifest_branch"
 

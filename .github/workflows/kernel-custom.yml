@@ -18,6 +18,7 @@ on:
           - android14
           - android15
           - android16
+          - android17
         default: android12
       kernel_version:
         description: "内核版本"
@@ -29,6 +30,7 @@ on:
           - "6.1"
           - "6.6"
           - "6.12"
+          - "6.18"
         default: "5.10"
       sub_level:
         description: "子版本号 (如 66, 198, X)"
@@ -85,7 +87,7 @@ on:
 
       # ==================== 虚拟化支持配置 ====================
       virtualization_support:
-        description: "虚拟化支持 (5.10~6.6: 槽位补丁, 6.12: 开/关)"
+        description: "虚拟化支持 (5.10~6.6: 槽位补丁, 6.12/6.18: 开/关)"
         required: false
         type: choice
         options:
@@ -133,7 +135,7 @@ on:
         type: boolean
         default: false
       cancel_susfs:
-        description: "禁用 SUSFS"
+        description: "禁用 SUSFS（android17/6.18 会自动禁用：susfs4ksu 暂无 6.18 分支）"
         required: true
         type: boolean
         default: false
@@ -145,12 +147,12 @@ on:
 
       # ==================== ZRAM 扩展选项 ====================
       zram_full_algo:
-        description: "启用 ZRAM 完整算法支持（6.12 自动跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS）"
+        description: "启用 ZRAM 完整算法支持（6.12/6.18 自动跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS）"
         required: false
         type: boolean
         default: false
       zram_extra_algos:
-        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；6.12 会忽略 lz4k/lz4kd/lz4k_oplus）"
+        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；6.12/6.18 会忽略 lz4k/lz4kd/lz4k_oplus）"
         required: false
         type: string
         default: ""
@@ -191,14 +193,14 @@ jobs:
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
-      use_bbg: ${{ inputs.use_bbg }}
+      use_bbg: ${{ inputs.use_bbg && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync || false }}
       use_networking: ${{ inputs.use_networking || false }}
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
-      supp_op: ${{ inputs.supp_op || false }}
-      enable_susfs: ${{ !inputs.cancel_susfs }}
+      supp_op: ${{ (inputs.supp_op || false) && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}
+      enable_susfs: ${{ !(inputs.cancel_susfs || (inputs.android_version == 'android17' && inputs.kernel_version == '6.18')) }}
       virtualization_support: ${{ inputs.virtualization_support || 'off' }}
       zram_full_algo: ${{ inputs.zram_full_algo || false }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}

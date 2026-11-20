@@ -34,6 +34,29 @@ interface GitHubApiService {
         @Path("repo") repo: String
     ): Response<GitHubSecretPublicKey>
 
+    @GET("repos/{owner}/{repo}/actions/variables")
+    suspend fun listRepositoryVariables(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Query("per_page") perPage: Int = 30,
+        @Query("page") page: Int = 1
+    ): Response<GitHubRepositoryVariablesResponse>
+
+    @POST("repos/{owner}/{repo}/actions/variables")
+    suspend fun createRepositoryVariable(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Body body: RepositoryVariableRequest
+    ): Response<Unit>
+
+    @PATCH("repos/{owner}/{repo}/actions/variables/{name}")
+    suspend fun updateRepositoryVariable(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("name") name: String,
+        @Body body: RepositoryVariableRequest
+    ): Response<Unit>
+
     @GET("repos/{owner}/{repo}/actions/secrets")
     suspend fun listRepositorySecrets(
         @Path("owner") owner: String,

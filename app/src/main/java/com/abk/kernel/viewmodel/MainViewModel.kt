@@ -218,6 +218,7 @@ data class MainUiState(
     val artifactSigningOperationInFlight: Boolean = false,
     val customSourceSecretConfigured: Boolean = false,
     val customSourceSecretOperationInFlight: Boolean = false,
+    val kernelRunnerSettings: KernelRunnerSettingsUiState = KernelRunnerSettingsUiState(),
     val customSourceDetecting: Boolean = false,
     val customSourceDetectError: String? = null,
     val appUpdateStability: String = APP_UPDATE_STABILITY_STABLE,
@@ -340,6 +341,15 @@ class MainViewModel @JvmOverloads constructor(
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
+    private var kernelRunnerAuthIdentity: Pair<String?, String?>? = null
+    private val kernelRunnerSettingsCoordinator = KernelRunnerSettingsCoordinator(
+        scope = viewModelScope,
+        github = github,
+        readContext = { kernelRunnerContext() },
+        readState = { _uiState.value.kernelRunnerSettings },
+        updateState = { settings -> _uiState.update { it.copy(kernelRunnerSettings = settings) } },
+        unexpectedError = { text(R.string.settings_kernel_runner_request_failed) }
+    )
 
     private val _uiSurfaceAlphaPreview = MutableStateFlow(1f)
     val uiSurfaceAlphaPreview: StateFlow<Float> = _uiSurfaceAlphaPreview.asStateFlow()
@@ -504,6 +514,11 @@ class MainViewModel @JvmOverloads constructor(
             str = { resId, args -> text(resId, *args) },
         )
         observePreferences()
+        viewModelScope.launch {
+            uiState.map { kernelRunnerContext(it) }.distinctUntilChanged().collect {
+                kernelRunnerSettingsCoordinator.contextChanged()
+            }
+        }
         migrateBackgroundUriToInternalStorage()
         observeForegroundWorkflowRefresh()
         if (registerStatusBroadcast) {
@@ -542,6 +557,11 @@ class MainViewModel @JvmOverloads constructor(
             ) { token, name, avatar, autoDl, notify ->
                 Quintuple(token, name, avatar, autoDl, notify)
             }.collect { (token, name, avatar, autoDl, notify) ->
+                val identity = token to name
+                if (kernelRunnerAuthIdentity != identity) {
+                    kernelRunnerAuthIdentity = identity
+                    kernelRunnerSettingsCoordinator.contextChanged(force = true)
+                }
                 if (!token.isNullOrBlank()) {
                     github.updateToken(token)
                     _uiState.update {
@@ -993,6 +1013,7 @@ class MainViewModel @JvmOverloads constructor(
     }
 
     fun logout() {
+        kernelRunnerSettingsCoordinator.contextChanged(force = true)
         viewModelScope.launch {
             prefs.clearAuth()
             github.updateToken(null)
@@ -1033,6 +1054,22 @@ class MainViewModel @JvmOverloads constructor(
     }
 
     // ── Fork Management ───────────────────────────────────────────────────
+
+    private fun kernelRunnerContext(state: MainUiState = _uiState.value): KernelRunnerSettingsContext? {
+        if (!state.isLoggedIn) return null
+        val owner = state.user?.login ?: return null
+        val fork = state.forkRepo ?: return null
+        // Never write repository variables to upstream or a previous account's fork.
+        if (!fork.fork || !fork.fullName.equals("$owner/${fork.name}", ignoreCase = true) ||
+            fork.fullName.equals("${BuildConfig.SOURCE_REPO_OWNER}/${BuildConfig.SOURCE_REPO_NAME}", ignoreCase = true)
+        ) return null
+        return KernelRunnerSettingsContext(owner, fork.name, fork.defaultBranch, fork.id)
+    }
+
+    fun refreshKernelRunnerSettings() = kernelRunnerSettingsCoordinator.refresh()
+
+    fun saveKernelRunnerSettings(target: KernelRunnerTarget, labels: String, enabled: Boolean) =
+        kernelRunnerSettingsCoordinator.save(target, labels, enabled)
 
     @VisibleForTesting
     internal fun setTestUser(user: GitHubUser) {
@@ -4706,14 +4743,24 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
-    private fun RootUtils.ManagerRuntimeProbe.isBakaSu(): Boolean {
-        val text = listOf(displayName, variant, version).joinToString(" ").lowercase()
-        return "bakasu" in text
-    }
+    private fun RootUtils.ManagerRuntimeProbe.isBakaSu(): Boolean =
+        runtimeKsuFamily() == KSU_VARIANT_BAKASU
 
-    private fun RootUtils.ManagerRuntimeProbe.isSukiSu(): Boolean {
-        val text = listOf(displayName, variant, version).joinToString(" ").lowercase()
-        return "sukisu" in text && "bakasu" !in text
+    private fun RootUtils.ManagerRuntimeProbe.isSukiSu(): Boolean =
+        runtimeKsuFamily() == KSU_VARIANT_SUKISU
+
+    /**
+     * Classifies the probe against the shared runtime family detector. Checks the
+     * structured [variant] first (control status / ksud inference, already canonical),
+     * then falls back to a combined scan of every string the probe carries. The retired
+     * `ReSukiSU` spelling contains `sukisu`, so a bare substring test would route BakaSU
+     * and legacy ReSukiSU kernels into the SukiSU settings group.
+     */
+    private fun RootUtils.ManagerRuntimeProbe.runtimeKsuFamily(): String? {
+        KernelSupport.inferRuntimeKsuFamily(variant)?.let { return it }
+        return KernelSupport.inferRuntimeKsuFamily(
+            listOf(displayName, version).joinToString(" ")
+        )
     }
 
     private fun RootUtils.ManagerRuntimeProbe.isOfficialKernelSu(): Boolean {
@@ -6681,7 +6728,8 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
             "android_version" to config.androidVersion,
             "kernel_version" to config.kernelVersion,
             "ksu_variant" to config.kernelsuVariant,
-            "enable_susfs" to (!config.cancelSusfs && config.kernelsuVariant != KSU_VARIANT_NONE).toString(),
+            "enable_susfs" to (!config.cancelSusfs && config.kernelsuVariant != KSU_VARIANT_NONE &&
+                KernelSupport.isSusfsSelectable(config.kernelsuVariant)).toString(),
             "use_kpm" to config.useKpm.toString(),
             "use_lz4kd" to config.onePlusUseLz4kd.toString(),
             "use_bbg" to config.useBbg.toString(),

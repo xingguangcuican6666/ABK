@@ -22,12 +22,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
 
-sealed class Result<out T> {
-    data class Success<T>(val data: T) : Result<T>()
-    data class Error(val message: String, val code: Int = -1) : Result<Nothing>()
-    object Loading : Result<Nothing>()
-}
-
 open class GitHubRepository(
     private val authService: GitHubAuthService = NetworkClient.createAuthService(),
     private var apiService: GitHubApiService = NetworkClient.createApiService()
@@ -237,6 +231,22 @@ open class GitHubRepository(
     }
 
     // ── Fork ──────────────────────────────────────────────────────────────
+
+    open suspend fun readKernelRunnerSettings(
+        owner: String,
+        repo: String,
+        ref: String? = null
+    ): Result<KernelRunnerSettings> = KernelRunnerSettingsStore(apiService).read(owner, repo, ref)
+
+    open suspend fun saveKernelRunnerSettings(
+        owner: String,
+        repo: String,
+        target: KernelRunnerTarget,
+        labels: String,
+        enabled: Boolean,
+        ref: String? = null
+    ): Result<KernelRunnerConfig> =
+        KernelRunnerSettingsStore(apiService).save(owner, repo, target, labels, enabled, ref)
 
     open suspend fun getUserFork(sourceOwner: String, sourceRepo: String, username: String): Result<GitHubRepo?> {
         val api = apiService

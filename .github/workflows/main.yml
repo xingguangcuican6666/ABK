@@ -156,6 +156,7 @@ on:
         description: "Android 16 - 6.12"
         type: boolean
         default: false
+
       build_all:
         description: "构建全部版本（忽略上方单独版本选项）"
         type: boolean
@@ -169,7 +170,7 @@ jobs:
     secrets: inherit
     with:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
-      kernelsu_branch: ${{ inputs.kernelsu_branch }}
+      ksu_branch: ${{ inputs.kernelsu_branch }}
 
   # ==================== Android 12 - 5.10 构建 ====================
   build-a12-5-10:
@@ -301,6 +302,31 @@ jobs:
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       called_from_main: true
 
+  # ==================== Android 17 - 6.18 构建 ====================
+  build-a17-6-18:
+    if: inputs.build_all
+    uses: ./.github/workflows/kernel-a17-6-18.yml
+    secrets: inherit
+    with:
+      kernelsu_variant: ${{ inputs.kernelsu_variant }}
+      kernelsu_branch: ${{ inputs.kernelsu_branch }}
+      version: ${{ inputs.version }}
+      build_time: ${{ inputs.build_time || '' }}
+      use_zram: ${{ inputs.use_zram }}
+      use_bbg: false
+      use_ddk: ${{ inputs.use_ddk }}
+      use_ntsync: ${{ inputs.use_ntsync || false }}
+      use_networking: ${{ inputs.use_networking || false }}
+      use_kpm: ${{ inputs.use_kpm }}
+      use_rekernel: ${{ inputs.use_rekernel }}
+      virtualization_support: ${{ inputs.virtualization_support }}
+      zram_full_algo: ${{ inputs.zram_full_algo }}
+      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
+      kpm_password: ${{ inputs.kpm_password || '' }}
+      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
+      custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
+      called_from_main: true
+
   # ==================== 收集补丁冲突文件 ====================
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题
   collect-rejects:
@@ -312,6 +338,7 @@ jobs:
       - build-a14-6-1
       - build-a15-6-6
       - build-a16-6-12
+      - build-a17-6-18
     steps:
       - name: 下载冲突文件
         uses: actions/download-artifact@v8
@@ -356,6 +383,7 @@ jobs:
       - build-a14-6-1
       - build-a15-6-6
       - build-a16-6-12
+      - build-a17-6-18
 
     # ==================== 环境变量 ====================
     env:
@@ -432,6 +460,7 @@ jobs:
           check_build "${{ inputs.build_a14_6_1 || inputs.build_all }}" "build-a14-6-1" "${{ needs.build-a14-6-1.result }}"
           check_build "${{ inputs.build_a15_6_6 || inputs.build_all }}" "build-a15-6-6" "${{ needs.build-a15-6-6.result }}"
           check_build "${{ inputs.build_a16_6_12 || inputs.build_all }}" "build-a16-6-12" "${{ needs.build-a16-6-12.result }}"
+          check_build "${{ inputs.build_all }}" "build-a17-6-18" "${{ needs.build-a17-6-18.result }}"
           [[ "$failed" -ne 0 ]] && exit 1 || true
 
       # ==================== 检出代码 ====================
@@ -551,6 +580,7 @@ jobs:
           append_target "${{ inputs.build_a14_6_1 || inputs.build_all }}" "Android 14 / 6.1"
           append_target "${{ inputs.build_a15_6_6 || inputs.build_all }}" "Android 15 / 6.6"
           append_target "${{ inputs.build_a16_6_12 || inputs.build_all }}" "Android 16 / 6.12"
+          append_target "${{ inputs.build_all }}" "Android 17 / 6.18"
           if [[ -z "$build_targets" ]]; then
             build_targets="未选择"
           fi

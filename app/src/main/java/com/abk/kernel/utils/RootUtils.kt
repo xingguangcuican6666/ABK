@@ -12,6 +12,7 @@ import android.util.Base64
 import android.util.Log
 import com.abk.kernel.data.model.SusfsConfig
 import com.abk.kernel.data.model.SusfsRuntimeStatus
+import com.abk.kernel.data.model.KernelSupport
 import com.abk.kernel.data.model.KernelTcpCongestionControlState
 import com.abk.kernel.data.model.RootGrantApp
 import com.abk.kernel.data.model.ROOT_PROFILE_FLAG_NO_NEW_PRIVS
@@ -442,6 +443,7 @@ object RootUtils {
             "6.1" -> "android14"
             "6.6" -> "android15"
             "6.12" -> "android16"
+            "6.18" -> "android17"
             else -> return null
         }
         return "$android-$kernel"
@@ -2069,7 +2071,13 @@ object RootUtils {
                 }.getOrDefault("")
             }
             .orEmpty()
-        val displayVariant = controlVariant.ifBlank { nativeVariant }
+        // Older kernels embed the retired "ReSukiSU" spelling (or the hyphenated
+        // "Baka-SU" org name) in the control-status variant; fold every SukiSU-family
+        // spelling into the canonical constant so display and settings classification
+        // agree, and a BakaSU kernel is never shown as SukiSU.
+        val canonicalControlVariant = KernelSupport.inferRuntimeKsuFamily(controlVariant)
+            ?: controlVariant
+        val displayVariant = canonicalControlVariant.ifBlank { nativeVariant }
         val diagnostics = buildList {
             if (controlJson == null && !status.isLkmMode) {
                 add(tr(R.string.ru_diag_control_no_response))
@@ -2621,13 +2629,11 @@ object RootUtils {
     }
 
     private fun inferManagerVariant(version: String): String {
-        val lower = version.lowercase()
-        return when {
-            "bakasu" in lower -> "BakaSU"
-            "sukisu" in lower -> "SukiSU"
-            "kernelsu" in lower || version.isNotBlank() -> "KernelSU"
-            else -> ""
-        }
+        // Delegate the SukiSU-family arm to the shared classifier: "ReSukiSU" is a retired
+        // BakaSU spelling that contains "sukisu", so a plain substring test here would label
+        // every legacy BakaSU kernel as SukiSU.
+        KernelSupport.inferRuntimeKsuFamily(version)?.let { return it }
+        return if (version.isNotBlank()) "KernelSU" else ""
     }
 
     private fun sanitizeWebRelativePath(value: String): String? {

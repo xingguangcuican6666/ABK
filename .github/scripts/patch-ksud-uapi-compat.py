@@ -5,7 +5,7 @@ import pathlib
 import sys
 
 
-MARKER = "ABK legacy uapi=0 compatibility"
+MARKER = "ABK backward-compatible uapi check"
 
 ORIGINAL = """pub fn ensure_uapi_version_matched() -> anyhow::Result<()> {
     let kernel_uapi = get_info().uapi_version;
@@ -19,18 +19,23 @@ ORIGINAL = """pub fn ensure_uapi_version_matched() -> anyhow::Result<()> {
 }
 """
 
+# KernelSU's UAPI bumps to date (2 allowlist v4 flags, 3 scoped su-session fd, 4
+# KSU_GET_INFO_FLAG_BUNDLED, 5 EVENT_SERVICES) only ever add new commands/fields;
+# none has changed an existing ioctl number or struct layout. So an older kernel is
+# safe to drive with a newer ksud -- it just won't exercise the newer bits. A kernel
+# newer than this ksud build is the genuinely risky direction (it may expect ksud to
+# know about behavior this build predates), so that case still hard-fails.
 PATCHED = f"""pub fn ensure_uapi_version_matched() -> anyhow::Result<()> {{
     let kernel_uapi = get_info().uapi_version;
     let userspace_uapi = uapi_version();
-    if kernel_uapi == 0 {{
-        eprintln!(
-            "[ABK] {MARKER}: kernel reports legacy uapi=0, continue with userspace uapi={{userspace_uapi}}"
-        );
-        return Ok(());
-    }}
-    if kernel_uapi != userspace_uapi {{
+    if kernel_uapi > userspace_uapi {{
         bail!(
             "UAPI version mismatch: kernel={{kernel_uapi}}, ksud={{userspace_uapi}}. Please update KernelSU!"
+        );
+    }}
+    if kernel_uapi != userspace_uapi {{
+        eprintln!(
+            "[ABK] {MARKER}: kernel uapi={{kernel_uapi}} is older than ksud uapi={{userspace_uapi}}, continuing for backward compatibility"
         );
     }}
     Ok(())
@@ -59,7 +64,7 @@ def main() -> int:
         return 1
 
     target.write_text(text.replace(ORIGINAL, PATCHED), encoding="utf-8")
-    print(f"patched ksud legacy uapi compatibility: {target}")
+    print(f"patched ksud backward-compatible uapi check: {target}")
     return 0
 
 

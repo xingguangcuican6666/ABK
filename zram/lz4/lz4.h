@@ -225,8 +225,8 @@ LZ4LIB_API const char *LZ4_versionString(
  *                or 0 if compression fails
  * Note : This function is protected against buffer overflow scenarios (never writes outside 'dst' buffer, nor read outside 'source' buffer).
  */
-LZ4LIB_API int LZ4_compress_default(const char *src, char *dst, int srcSize,
-				    int dstCapacity, void *wrkmem);
+int LZ4_compress_default(const char *source, char *dest, int inputSize,
+			 int maxOutputSize, void *wrkmem);
 
 /*! LZ4_decompress_safe() :
  * @compressedSize : is the exact complete size of the compressed block.
@@ -243,8 +243,8 @@ LZ4LIB_API int LZ4_compress_default(const char *src, char *dst, int srcSize,
  *          The implementation is free to send / store / derive this information in whichever way is most beneficial.
  *          If there is a need for a different format which bundles together both compressed data and its metadata, consider looking at lz4frame.h instead.
  */
-LZ4LIB_API int LZ4_decompress_safe(const char *src, char *dst,
-				   int compressedSize, int dstCapacity);
+int LZ4_decompress_safe(const char *source, char *dest,
+			int compressedSize, int maxDecompressedSize);
 
 /*-************************************
 *  Advanced Functions
