@@ -49,34 +49,28 @@ jobs:
       - name: 添加 KernelSU
         run: |
           if [ "${{ inputs.kernelsu_variant }}" == "Next" ]; then
-            echo "KernelSU Next..."
             REPO="KernelSU-Next/KernelSU-Next"
             FILENAME="build-manager-ci.yml"
-          elif [ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]; then
-            echo "SukiSU..."
-            REPO="SukiSU-Ultra/SukiSU-Ultra"
-            FILENAME="build-manager.yml"
-          fi
-
-          # 获取最新成功构建的 ID
-          BUILD_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          "https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?status=success" | \
-          jq -r '.workflow_runs[0].id')
-          echo 'BUILD_ID=$BUILD_ID'
-          # 获取该构建的 Artifacts
-          ARTIFACTS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/$REPO/actions/runs/$BUILD_ID/artifacts")
-          echo 'ARTIFACTS=$ARTIFACTS'
-          # 获取 Manager 文件的下载链接
-          if [ "${{ inputs.kernelsu_variant }}" == "Next" ]; then
+            BUILD_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?status=success" | \
+              jq -r '.workflow_runs[0].id')
+            ARTIFACTS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/$REPO/actions/runs/$BUILD_ID/artifacts")
             DOWNLOAD_URL=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select(.name | contains("Manager")) | .archive_download_url')
           elif [ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]; then
-            DOWNLOAD_URL=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select(.name | contains("Manager")) | .archive_download_url')
+            # 从 manager-ci Release 直接获取最新的 APK
+            RELEASE_JSON=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/SukiSU-Nova/SukiSU-Nova/releases/tags/manager-ci")
+            DOWNLOAD_URL=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | endswith(".apk")) | .browser_download_url' | head -1)
+            if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" == "null" ]; then
+              echo "::error::无法在 manager-ci Release 中找到 APK 文件"
+              exit 1
+            fi
           fi
 
-          # 下载 Manager 文件
-          curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o "${{ inputs.kernelsu_variant }}-管理器(${{ env.KSU_VERSION }}).zip" "$DOWNLOAD_URL"
-          echo "Manager 文件已下载为：${{ inputs.kernelsu_variant }}-管理器(${{ env.KSU_VERSION }}).zip"
+          curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -o "${{ inputs.kernelsu_variant }}-管理器(${{ env.KSU_VERSION }}).zip" \
+            "$DOWNLOAD_URL"
           unzip *.zip
 
       - name: 上传编译资产
