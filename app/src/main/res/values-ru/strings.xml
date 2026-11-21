@@ -887,6 +887,7 @@
     <string name="workflow_unlinked">Workflow не привязан</string>
 
     <!-- Root authorization -->
+    <string name="root_auth_profile_title">Профиль приложения</string>
     <string name="root_auth_title">Суперпользователь</string>
     <string name="root_auth_refresh_list">Обновить список авторизации</string>
     <string name="root_auth_back_to_list">Назад к списку авторизации</string>

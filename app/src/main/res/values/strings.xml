@@ -922,6 +922,7 @@
     <string name="workflow_unlinked">未关联工作流</string>
 
     <!-- Root authorization -->
+    <string name="root_auth_profile_title">应用权限配置</string>
     <string name="root_auth_title">超级用户</string>
     <string name="root_auth_refresh_list">刷新授权列表</string>
     <string name="root_auth_back_to_list">返回授权列表</string>

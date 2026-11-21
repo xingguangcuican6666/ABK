@@ -9,15 +9,12 @@ import android.graphics.drawable.Drawable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,36 +22,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
@@ -62,7 +34,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -71,30 +42,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.abk.kernel.R
-import com.abk.kernel.data.model.RootGrantApp
-import com.abk.kernel.data.model.RootGrantProfile
 import com.abk.kernel.ui.blur.BlurScreenScaffold
-import com.abk.kernel.ui.blur.blurredCardBackground
-import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.components.AbkCenteredLoadingTransition
 import com.abk.kernel.ui.components.AbkInlineLoadingPill
 import com.abk.kernel.ui.components.AbkLoadingPill
-import com.abk.kernel.ui.components.ExpressiveSwitchItem
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AppPageBackground
+import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.ui.components.ObserveChildPageVisibility
 import com.abk.kernel.ui.components.childPageOverlayEnterTransition
 import com.abk.kernel.ui.components.childPageOverlayExitTransition
@@ -102,13 +64,13 @@ import com.abk.kernel.ui.components.childPageScrimExitTransition
 import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
 import com.abk.kernel.ui.components.rememberChildPageBackController
 import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
-import com.abk.kernel.ui.components.ExpressiveSectionCard
-import com.abk.kernel.ui.components.ExpressiveStatusChip
-import com.abk.kernel.ui.components.ExpressiveSwitch
-import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.viewmodel.MainViewModel
+import io.github.xingguangcuican6666.abk.ui.components.AbkEmptyState
+import io.github.xingguangcuican6666.abk.ui.components.AbkIconButton
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcon
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -197,19 +159,15 @@ fun RootAuthorizationScreen(
                     scrollBehavior = scrollBehavior,
                     enableBlur = state.blurEnabled,
                     actions = {
-                        IconButton(
+                        AbkIconButton(
+                            icon = AbkIcons.Refresh,
+                            contentDescription = stringResource(R.string.root_auth_refresh_list),
                             onClick = {
                                 refreshPresentation.beginRefresh()
                                 vm.refreshRootGrantApps(force = true)
                             },
                             enabled = !state.rootGrantLoading
-                        ) {
-                            if (state.rootGrantLoading) {
-                                LoadingIndicator(Modifier.size(22.dp))
-                            } else {
-                                Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.root_auth_refresh_list))
-                            }
-                        }
+                        )
                     }
                 )
             }
@@ -281,15 +239,13 @@ fun RootAuthorizationScreen(
 
                                     if (!state.rootGrantLoading && apps.isEmpty()) {
                                         item(key = "empty") {
-                                            Text(
-                                                text = if (query.isBlank()) {
-                                                    stringResource(R.string.root_auth_no_apps)
-                                                } else {
-                                                    stringResource(R.string.root_auth_no_matching_apps)
-                                                },
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.padding(vertical = 24.dp)
+                                            AbkEmptyState(
+                                                title = stringResource(R.string.root_auth_title),
+                                                description = stringResource(
+                                                    if (query.isBlank()) R.string.root_auth_no_apps
+                                                    else R.string.root_auth_no_matching_apps
+                                                ),
+                                                icon = AbkIcons.Controls,
                                             )
                                         }
                                     }
@@ -307,7 +263,10 @@ fun RootAuthorizationScreen(
                                                 childPageBack.resetProgress()
                                                 selectedPackage = app.packageName
                                                 vm.openRootGrantProfile(app.packageName)
-                                            }
+                                            },
+                                            icon = {
+                                                AppIcon(app.packageName, app.label)
+                                            },
                                         )
                                     }
                                 }
@@ -355,12 +314,12 @@ fun RootAuthorizationScreen(
                             ExpressiveTopBar(
                                 title = headerApp?.label?.ifBlank { packageName } ?: packageName,
                                 navigationIcon = {
-                                    IconButton(
+                                    AbkIconButton(
+                                        icon = AbkIcons.Back,
+                                        contentDescription = stringResource(R.string.root_auth_back_to_list),
                                         enabled = canLeaveDetail,
-                                        onClick = childPageBack::requestDismiss
-                                    ) {
-                                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.root_auth_back_to_list))
-                                    }
+                                        onClick = childPageBack::requestDismiss,
+                                    )
                                 },
                                 enableBlur = state.blurEnabled
                             )
@@ -375,7 +334,10 @@ fun RootAuthorizationScreen(
                                 warning = state.rootGrantDetailWarning,
                                 onSave = { profile ->
                                     vm.saveRootGrantProfile(profile)
-                                }
+                                },
+                                icon = {
+                                    AppIcon(selectedDetailApp.packageName, selectedDetailApp.label, Modifier.size(64.dp), 16.dp)
+                                },
                             )
                             else -> RootGrantDetailMessagePage(
                                 topBarHeight = topBarHeight,
@@ -426,41 +388,6 @@ private fun RootGrantInitialLoadingScreen(
         ) {
             RootGrantInitialLoading()
         }
-    }
-}
-
-@Composable
-private fun RootGrantSearchField(
-    query: String,
-    onQueryChange: (String) -> Unit
-) {
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChange,
-        modifier = Modifier.fillMaxWidth(),
-        leadingIcon = { Icon(Icons.Default.Search, null) },
-        placeholder = { Text(stringResource(R.string.root_auth_search_apps)) },
-        singleLine = true,
-        shape = RoundedCornerShape(14.dp)
-    )
-}
-
-@Composable
-private fun RootGrantControlsCard(
-    showSystemApps: Boolean,
-    onShowSystemAppsChange: (Boolean) -> Unit
-) {
-    ExpressiveSectionCard(
-        title = stringResource(R.string.root_auth_section_title),
-        subtitle = stringResource(R.string.root_auth_section_desc),
-        icon = Icons.Default.AdminPanelSettings
-    ) {
-        ExpressiveSwitchItem(
-            title = stringResource(R.string.root_auth_show_system_apps),
-            icon = Icons.Default.Apps,
-            checked = showSystemApps,
-            onCheckedChange = onShowSystemAppsChange
-        )
     }
 }
 
@@ -532,103 +459,6 @@ private fun RootGrantDetailPageBackground(
 }
 
 @Composable
-private fun RootGrantAppCard(
-    app: RootGrantApp,
-    saving: Boolean,
-    anySaving: Boolean,
-    onToggle: (Boolean) -> Unit,
-    onOpen: () -> Unit
-) {
-    val shape = RoundedCornerShape(8.dp)
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .blurredCardBackground(shape),
-        shape = shape,
-        colors = CardDefaults.cardColors(
-            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        onClick = onOpen
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.Top) {
-                AppIcon(
-                    packageName = app.packageName,
-                    label = app.label,
-                    modifier = Modifier.size(56.dp)
-                )
-                Spacer(Modifier.width(10.dp))
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Text(
-                        text = app.label.ifBlank { app.packageName },
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = app.packageName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = listOf("UID ${app.uid}", app.userName).filter { it.isNotBlank() }.joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                if (saving) {
-                    CircularProgressIndicator(modifier = Modifier.size(26.dp), strokeWidth = 2.dp)
-                } else {
-                    ExpressiveSwitch(
-                        checked = app.profile.allowSu,
-                        label = stringResource(R.string.root_auth_title) + ": " + app.packageName,
-                        enabled = !anySaving,
-                        onCheckedChange = onToggle
-                    )
-                }
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 4.dp, top = 10.dp).size(24.dp)
-                )
-            }
-
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                RootGrantChip(if (app.profile.allowSu) stringResource(R.string.root_auth_allow) else stringResource(R.string.root_auth_deny))
-                if (app.isSystemApp) RootGrantChip(stringResource(R.string.root_auth_system_app))
-                if (app.profileLoaded) {
-                    RootGrantChip(
-                        if (app.profile.rootUseDefault) {
-                            stringResource(R.string.root_auth_default_profile)
-                        } else {
-                            stringResource(R.string.root_auth_custom_profile)
-                        }
-                    )
-                    if (app.profile.umountModules) {
-                        RootGrantChip(stringResource(R.string.root_auth_umount_modules))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun AppIcon(
     packageName: String,
     label: String,
@@ -655,285 +485,7 @@ private fun AppIcon(
             modifier = iconModifier.background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Default.Apps,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
-            )
+            AbkIcon(AbkIcons.Modules, null, size = 28.dp)
         }
     }
 }
-
-@Composable
-private fun RootGrantProfilePage(
-    app: RootGrantApp,
-    topBarHeight: Dp,
-    saving: Boolean,
-    warning: String?,
-    onSave: (RootGrantProfile) -> Unit
-) {
-    val profile = app.profile
-    var allowSu by rememberSaveable(app.packageName) { mutableStateOf(profile.allowSu) }
-    var rootUseDefault by rememberSaveable(app.packageName) { mutableStateOf(profile.rootUseDefault) }
-    var rootTemplate by rememberSaveable(app.packageName) { mutableStateOf(profile.rootTemplate) }
-    var uidText by rememberSaveable(app.packageName) { mutableStateOf(profile.uid.toString()) }
-    var gidText by rememberSaveable(app.packageName) { mutableStateOf(profile.gid.toString()) }
-    var groupsText by rememberSaveable(app.packageName) { mutableStateOf(profile.groups.joinToString(",")) }
-    var capabilitiesText by rememberSaveable(app.packageName) { mutableStateOf(profile.capabilities.joinToString(",")) }
-    var contextText by rememberSaveable(app.packageName) { mutableStateOf(profile.context) }
-    var namespaceText by rememberSaveable(app.packageName) { mutableStateOf(profile.namespace.toString()) }
-    var nonRootUseDefault by rememberSaveable(app.packageName) { mutableStateOf(profile.nonRootUseDefault) }
-    var umountModules by rememberSaveable(app.packageName) { mutableStateOf(profile.umountModules) }
-    var rulesText by rememberSaveable(app.packageName) { mutableStateOf(profile.rules) }
-
-    fun saveProfile() {
-        onSave(
-            profile.copy(
-                name = app.packageName,
-                currentUid = app.uid,
-                allowSu = allowSu,
-                rootUseDefault = rootUseDefault,
-                rootTemplate = rootTemplate.trim(),
-                uid = uidText.toIntOrNull() ?: 0,
-                gid = gidText.toIntOrNull() ?: 0,
-                groups = parseIntList(groupsText),
-                capabilities = parseIntList(capabilitiesText),
-                context = contextText.trim().ifBlank { "u:r:ksu:s0" },
-                namespace = namespaceText.toIntOrNull() ?: 0,
-                nonRootUseDefault = nonRootUseDefault,
-                umountModules = umountModules,
-                rules = rulesText
-            )
-        )
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = AbkScreenHorizontalPadding),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Spacer(Modifier.height(topBarHeight + 16.dp))
-        if (!warning.isNullOrBlank()) {
-            ExpressiveSectionCard(
-                title = stringResource(R.string.root_auth_profile_read_disabled_title),
-                subtitle = warning,
-                icon = Icons.Default.AdminPanelSettings
-            ) {}
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AppIcon(
-                packageName = app.packageName,
-                label = app.label,
-                modifier = Modifier.size(64.dp),
-                cornerSize = 16.dp
-            )
-            Spacer(Modifier.width(14.dp))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                Text(
-                    text = app.label.ifBlank { app.packageName },
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = app.packageName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        ExpressiveSectionCard(
-            title = stringResource(R.string.root_auth_title),
-            subtitle = if (allowSu) stringResource(R.string.root_auth_allow_request) else stringResource(R.string.root_auth_deny_request),
-            icon = Icons.Default.Security
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (allowSu) stringResource(R.string.root_auth_allowed) else stringResource(R.string.root_auth_not_allowed),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                ExpressiveSwitch(
-                    checked = allowSu,
-                    label = stringResource(R.string.root_auth_title),
-                    enabled = !saving,
-                    onCheckedChange = { allowSu = it }
-                )
-            }
-        }
-
-        ExpressiveSectionCard(
-            title = "App Profile",
-            subtitle = if (allowSu) {
-                if (rootUseDefault) stringResource(R.string.root_auth_default) else stringResource(R.string.root_auth_custom)
-            } else {
-                if (nonRootUseDefault) {
-                    stringResource(R.string.root_auth_default_non_root)
-                } else {
-                    stringResource(R.string.root_auth_custom_non_root)
-                }
-            },
-            icon = Icons.Default.AccountCircle
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (allowSu) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = rootUseDefault,
-                            onClick = { rootUseDefault = true },
-                            label = { Text(stringResource(R.string.root_auth_default)) }
-                        )
-                        FilterChip(
-                            selected = !rootUseDefault && rootTemplate.isNotBlank(),
-                            onClick = {
-                                rootUseDefault = false
-                                if (rootTemplate.isBlank()) rootTemplate = "default"
-                            },
-                            label = { Text(stringResource(R.string.root_auth_template)) }
-                        )
-                        FilterChip(
-                            selected = !rootUseDefault && rootTemplate.isBlank(),
-                            onClick = {
-                                rootUseDefault = false
-                                rootTemplate = ""
-                            },
-                            label = { Text(stringResource(R.string.root_auth_custom)) }
-                        )
-                    }
-                    if (!rootUseDefault && rootTemplate.isNotBlank()) {
-                        RootGrantTextField(
-                            stringResource(R.string.root_auth_template),
-                            rootTemplate,
-                            { rootTemplate = it },
-                            stringResource(R.string.root_auth_template_name)
-                        )
-                    }
-                    if (!rootUseDefault) {
-                        RootGrantTextField("UID", uidText, { uidText = it })
-                        RootGrantTextField("GID", gidText, { gidText = it })
-                        RootGrantTextField("Groups", groupsText, { groupsText = it }, stringResource(R.string.root_auth_comma_separated))
-                        RootGrantTextField("Capabilities", capabilitiesText, { capabilitiesText = it }, stringResource(R.string.root_auth_comma_separated))
-                        RootGrantTextField("SELinux Context", contextText, { contextText = it })
-                        RootGrantTextField("Namespace", namespaceText, { namespaceText = it }, stringResource(R.string.root_auth_namespace_hint))
-                        RootGrantTextField("SEPolicy Rules", rulesText, { rulesText = it }, stringResource(R.string.root_auth_optional_empty), singleLine = false)
-                    }
-                } else {
-                    RootGrantSwitchRow(stringResource(R.string.root_auth_use_default_non_root), nonRootUseDefault) { nonRootUseDefault = it }
-                    RootGrantSwitchRow(stringResource(R.string.root_auth_umount_modules), umountModules) { umountModules = it }
-                }
-            }
-        }
-
-        Button(
-            onClick = ::saveProfile,
-            enabled = !saving,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (saving) {
-                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-            } else {
-                Icon(Icons.Default.Done, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.save))
-            }
-        }
-
-        Spacer(Modifier.height(80.dp))
-    }
-}
-
-@Composable
-private fun RootGrantSwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Switch(checked = checked, onCheckedChange = onChange)
-    }
-}
-
-@Composable
-private fun RootGrantTextField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String = "",
-    singleLine: Boolean = true
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(label) },
-        placeholder = if (placeholder.isNotBlank()) {
-            { Text(placeholder) }
-        } else {
-            null
-        },
-        singleLine = singleLine,
-        minLines = if (singleLine) 1 else 4
-    )
-}
-
-@Composable
-private fun RootGrantChip(label: String) {
-    ExpressiveStatusChip(
-        label = label,
-        icon = Icons.Default.Tune,
-        color = MaterialTheme.colorScheme.primary
-    )
-}
-
-@Composable
-private fun RootGrantMessageCard(message: String, onRefresh: () -> Unit) {
-    val shape = RoundedCornerShape(8.dp)
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .blurredCardBackground(shape),
-        shape = shape,
-        colors = CardDefaults.cardColors(
-            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.errorContainer)
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
-            TextButton(onClick = onRefresh) {
-                Text(stringResource(R.string.runtime_recheck))
-            }
-        }
-    }
-}
-
-private fun parseIntList(value: String): List<Int> =
-    value.split(',', ' ', '\n', '\t')
-        .mapNotNull { it.trim().toIntOrNull() }
-        .distinct()

@@ -30,10 +30,10 @@
 | 参数摘要、来源提示、刷写/槽位确认、执行日志、安装/删除/取消弹层 | 已重铺 | 假回调测试覆盖执行期关闭/重启限制、槽位选择与确认分离、能力相关操作；设备未执行 |
 | 本地安装/修补：文件、直接安装、OTA、AnyKernel3 四模式 | 已重铺；两版目标 CI 成功 | 执行、签名校验、文件暂存、KMI 策略保持原样；受控假回调 UI 测试已在目标环境编译，未在设备执行 |
 | 本地安装：分区/槽位、内置/本地 LKM、变体/KMI、高级选项、来源确认、结果/日志 | 已重铺；两版目标 CI 成功 | 模式能力与执行期禁用、高级项单次回调、结果操作、提示/确认分离测试已编译；标准主机测试通过，原生渲染仍待验收 |
-| 运行态首页：状态、管理器、构建参数、功能/能力摘要 | 已重铺；本批目标 CI 待验证 | 普通卡面、纵向技术字段和换行能力徽标；非空状态不等于原生管理权限，修补入口为显式操作 |
-| 已安装模块：搜索/分组/开关/更新/WebUI/action/卸载 | 已重铺；本批目标 CI 待验证 | 保留类型、只读、卸载及 WebUI/action 能力边界；4 项纯展示逻辑单测直接 JUnit 执行通过 |
-| 运行态模块文件权限、安装/更新/卸载确认、变更日志、执行弹层 | 已重铺；本批目标 CI 待验证 | 7 项假回调 UI 测试在缓存环境编译；安装进行中不可关闭，成功结束才可重启；独立 action 输出仍可关闭且不会取消后台任务 |
-| Root 授权：列表、搜索、加载/刷新、应用详情与 profile | 待页面重铺 | 授权作用域/时长、应用图标、模板及编辑校验保持原边界 |
+| 运行态首页：状态、管理器、构建参数、功能/能力摘要 | 已重铺；两版目标 CI 成功 | 普通卡面、纵向技术字段和换行能力徽标；非空状态不等于原生管理权限，修补入口为显式操作 |
+| 已安装模块：搜索/分组/开关/更新/WebUI/action/卸载 | 已重铺；两版目标 CI 成功 | 保留类型、只读、卸载及 WebUI/action 能力边界；4 项纯展示逻辑单测直接 JUnit 执行通过，标准 CI 主机测试通过 |
+| 运行态模块文件权限、安装/更新/卸载确认、变更日志、执行弹层 | 已重铺；两版目标 CI 成功 | 7 项假回调 UI 测试已在目标环境编译，未在设备执行；安装进行中不可关闭，成功结束才可重启；独立 action 输出仍可关闭且不会取消后台任务 |
+| Root 授权：列表、搜索、加载/刷新、应用详情与 profile | 已重铺；本批目标 CI 待验证 | 详情入口与授权开关分离，纵向配置选项、外置字段和换行徽标；应用图标加载、模板、保存 payload、隐藏 flags 和既有解析回退保持原边界；6 项假回调 UI 测试有界编译通过，设备未执行 |
 | SUSFS 控制：能力、各控制表单及执行反馈 | 待页面重铺 | 不改变后端探测或控制执行器 |
 | 设置主页面、账号/退出、下载目录、镜像、语言、更新、诊断导出 | 待页面重铺 | 保留文本草稿提交时机与偏好；不展示或记录凭据 |
 | 设置子页：主题/背景/透明度/模糊、管理器工具、内核能力、profile 模板 | 待页面重铺 | 保留能力决定的入口与预测返回 |
@@ -54,10 +54,11 @@
 | 构建页批次 `ad1a4120` | [44901000092](https://github.com/xingguangcuican6666/ABK/actions/runs/44901000092) 成功 | [44901000054](https://github.com/xingguangcuican6666/ABK/actions/runs/44901000054) 成功 | 标准主机测试、两版 instrumentation 编译及 APK 构建 |
 | 产物/刷写批次 `083de40e` | [44904030939](https://github.com/xingguangcuican6666/ABK/actions/runs/44904030939) 成功 | [44904030963](https://github.com/xingguangcuican6666/ABK/actions/runs/44904030963) 成功 | 标准测试步骤、两版 instrumentation 编译、Debug/Release APK 构建及签名验证步骤均成功；两版整条运行已结束 |
 | 本地安装/修补批次 `5bbfe961` | [44906681144](https://github.com/xingguangcuican6666/ABK/actions/runs/44906681144) 成功 | [44906681048](https://github.com/xingguangcuican6666/ABK/actions/runs/44906681048) 成功 | 标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
+| 运行态批次 `6e7a94b4` | [44910178872](https://github.com/xingguangcuican6666/ABK/actions/runs/44910178872) 成功 | [44910178821](https://github.com/xingguangcuican6666/ABK/actions/runs/44910178821) 成功 | 标准主机测试、两版完整 App 与 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
 
 标准测试步骤运行 `:app:compileDebugAndroidTestKotlin :app:testDebugUnitTest :abk-ui:testDebugUnitTest`。Dev 的测试步骤只编译 instrumentation，不能写成 Dev 主机测试已通过。上述步骤均未执行设备端 UI 测试。其他自动内核工作流的状态不混入 App CI 结论，也未手工触发内核构建。
 
-运行态批次尚未获得新的目标 CI 结果；以上成功不覆盖之后的运行态修改。
+运行态批次两版运行均已确认 `headSha=6e7a94b4e1f7c65d895ad9056b89c697512dd136` 且 `completed/success`；以上成功不覆盖之后的 Root 授权页修改，授权批次目标 CI 尚待验证。
 
 ## 本地检查与构建命令
 
@@ -85,7 +86,17 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk gradle :abk-ui:lintDebug :app:lintDebug
 - 4 项纯展示逻辑测试通过 Java/JUnitCore 实际执行，覆盖卸载能力、搜索字段、名称回退和稳定分组；7 项 UI 测试尚未设备执行，覆盖 320dp/2×字体/RTL、只读与 action 能力、确认回调、安装关闭/重启限制、独立 action 可关闭及原生权限边界。
 - 与批次起点逐字比对，安装、更新下载及 SHA256 校验、文件权限/选择器、URI 暂存、确认回调和变更日志网络解析块未变。Markdown 解析器经同一 Kotlin formatter 规范化后全文相同，仅调整排版。
 - 当前运行态组件及测试引用的字符串在中英俄均存在，无重复 key；补齐原缺少的英文/俄文刷新状态。Lucide 角色检查和 `git diff --check` 通过。`ClickableText` 弃用警告保留，不改原链接行为。
-- 目标 Gradle 离线重试仍在根项目配置阶段失败：缺少 AGP 9.1.1 和 analytics protos 32.1.1 工件；没有执行到目标 instrumentation 编译或主机测试。临时脚本、替身、编译目录及日志均在仓库外。
+- 本机目标 Gradle 离线重试仍在根项目配置阶段失败：缺少 AGP 9.1.1 和 analytics protos 32.1.1 工件；本机没有执行到目标 instrumentation 编译或主机测试。随后两版目标 CI 已完成完整宿主及 instrumentation 编译，标准 CI 主机测试通过。临时脚本、替身、编译目录及日志均在仓库外。
+
+Root 授权批次已完成：
+
+- 列表卡拆开详情点击区和授权开关，保留系统应用过滤、应用名/包名/UID 搜索与列表 key。实际应用图标仍由宿主通过 PackageManager/Coil 加载，再以 slot 注入；不替换为示例图标。
+- profile 的 default/template/custom 改为纵向选项，技术字段使用等宽字体与外置标签，保存期间禁用编辑及保存。既有 `rememberSaveable(app.packageName)` 草稿初始化和显式保存 payload 经同一 Kotlin formatter 规范化后全文一致，保留未显式覆盖的 flags、整数回退、列表去重及默认 SELinux context；不新增模型没有的作用域或时长配置。
+- 宿主过滤、刷新副作用、生命周期及返回 gate、图标加载块与批次起点逐字一致，四个核心 ViewModel 调用各保留一次；完整宿主临时副本通过 Kotlin formatter 语法解析。此项不等于目标依赖编译。
+- 全 App 资源经 AAPT2 编译并用临时最小 manifest 链接，`javac --release 11` 生成资源类；新 profile 标题及组件/测试引用在默认中文、英文、俄文均存在，key 无重复。临时资源包不是正式 manifest 合并或可安装 App。
+- 真实库源码、受控授权组件和 6 项 `RootAuthorizationUiTest` 在缓存 Kotlin/Compose 2.2.21、JVM 11 环境有界编译通过；模型取自真实定义，blur、间距及 `RootUtils` 枚举使用仅编译用替身。不覆盖完整授权宿主、正式 blur/Coil 集成、目标 Kotlin/Material3 或 APK。
+- 6 项假回调 UI 测试覆盖详情/授权分离、320dp/2×字体/RTL、显式保存及 flags、模板与原解析回退、非 Root 配置、保存期禁用和草稿状态恢复；尚未设备执行，不能写成 UI 测试通过。
+- Lucide 角色引用与 `git diff --check` 通过；所有检查脚本、替身、资源包与日志留在仓库外。本批完整目标编译和 CI 仍待验证。
 
 ## 未完成的验收
 
