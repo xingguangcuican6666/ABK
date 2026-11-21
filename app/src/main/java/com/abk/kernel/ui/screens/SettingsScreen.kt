@@ -665,10 +665,13 @@ fun SettingsScreen(
                             },
                             enableBlur = state.blurEnabled,
                             actions = {
-                                IconButton(onClick = {
-                                    refreshPresentation.beginRefresh()
-                                    vm.refreshSusfsState(force = true)
-                                }) {
+                                IconButton(
+                                    enabled = !state.susfsSaving,
+                                    onClick = {
+                                        refreshPresentation.beginRefresh()
+                                        vm.refreshSusfsState(force = true)
+                                    }
+                                ) {
                                     Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
                                 }
                             }

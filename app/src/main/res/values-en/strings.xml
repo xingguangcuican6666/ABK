@@ -1278,6 +1278,10 @@
     <string name="ru_diag_compat_shell_only">Currently working only through the ksud/root shell compatibility layer. ABK is not yet recognized by the kernel as the native manager and cannot manage root authorization policies.</string>
     <string name="ru_diag_generic_su_only">Only a generic su shell is available; no KernelSU/BakaSU native manager interface was detected.</string>
     <string name="ru_diag_native_not_manager">The KernelSU/BakaSU native interface is reachable, but the current ABK APK is not recognized as the manager. Make sure the installed app is the officially signed com.abk.kernel APK whose signature matches ABK_MANAGER_CERT_SHA256 used at kernel build time.</string>
+    <string name="susfs_status_error_title">Status error</string>
+    <string name="susfs_status_error_desc">SUSFS detection or configuration application returned an error.</string>
+    <string name="susfs_form_error_title">Configuration format error</string>
+    <string name="susfs_form_error_desc">Correct the configuration format before applying it again.</string>
     <string name="susfs_title">SUSFS Control</string>
     <string name="susfs_unavailable">No usable SUSFS capability was detected in the current kernel.</string>
     <string name="susfs_load_failed">Failed to load SUSFS status.</string>

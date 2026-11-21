@@ -1330,6 +1330,10 @@
     <string name="ru_diag_compat_shell_only">当前仅通过 ksud/root shell 兼容层工作，ABK 尚未被内核识别为原生管理器，无法管理 Root 授权策略。</string>
     <string name="ru_diag_generic_su_only">当前仅有通用 su shell 可用，未检测到 KernelSU/BakaSU 原生管理器接口。</string>
     <string name="ru_diag_native_not_manager">KernelSU/BakaSU native 接口可访问，但当前 ABK APK 未被识别为管理器。请确认安装的是与内核构建时 ABK_MANAGER_CERT_SHA256 匹配的 com.abk.kernel 正式签名 APK。</string>
+    <string name="susfs_status_error_title">状态错误</string>
+    <string name="susfs_status_error_desc">SUSFS 探测或应用过程返回了错误。</string>
+    <string name="susfs_form_error_title">表单错误</string>
+    <string name="susfs_form_error_desc">请先修正配置格式，再重新应用。</string>
     <string name="susfs_title">SUSFS 控制</string>
     <string name="susfs_unavailable">当前内核未探测到可用的 SUSFS 能力。</string>
     <string name="susfs_load_failed">读取 SUSFS 状态失败。</string>

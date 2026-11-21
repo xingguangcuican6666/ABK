@@ -33,8 +33,8 @@
 | 运行态首页：状态、管理器、构建参数、功能/能力摘要 | 已重铺；两版目标 CI 成功 | 普通卡面、纵向技术字段和换行能力徽标；非空状态不等于原生管理权限，修补入口为显式操作 |
 | 已安装模块：搜索/分组/开关/更新/WebUI/action/卸载 | 已重铺；两版目标 CI 成功 | 保留类型、只读、卸载及 WebUI/action 能力边界；4 项纯展示逻辑单测直接 JUnit 执行通过，标准 CI 主机测试通过 |
 | 运行态模块文件权限、安装/更新/卸载确认、变更日志、执行弹层 | 已重铺；两版目标 CI 成功 | 7 项假回调 UI 测试已在目标环境编译，未在设备执行；安装进行中不可关闭，成功结束才可重启；独立 action 输出仍可关闭且不会取消后台任务 |
-| Root 授权：列表、搜索、加载/刷新、应用详情与 profile | 已重铺；本批目标 CI 待验证 | 详情入口与授权开关分离，纵向配置选项、外置字段和换行徽标；应用图标加载、模板、保存 payload、隐藏 flags 和既有解析回退保持原边界；6 项假回调 UI 测试有界编译通过，设备未执行 |
-| SUSFS 控制：能力、各控制表单及执行反馈 | 待页面重铺 | 不改变后端探测或控制执行器 |
+| Root 授权：列表、搜索、加载/刷新、应用详情与 profile | 已重铺；两版目标 CI 成功 | 详情入口与授权开关分离，纵向配置选项、外置字段和换行徽标；应用图标加载、模板、保存 payload、隐藏 flags 和既有解析回退保持原边界；6 项假回调 UI 测试已在目标环境编译，设备未执行 |
+| SUSFS 控制：能力、各控制表单及执行反馈 | 已重铺；本批目标 CI 待验证 | 能力条件和配置同步/解析不变，保存期间禁用编辑与操作；5 项纯配置测试实际通过，7 项假回调 UI 测试有界编译通过，设备未执行 |
 | 设置主页面、账号/退出、下载目录、镜像、语言、更新、诊断导出 | 待页面重铺 | 保留文本草稿提交时机与偏好；不展示或记录凭据 |
 | 设置子页：主题/背景/透明度/模糊、管理器工具、内核能力、profile 模板 | 待页面重铺 | 保留能力决定的入口与预测返回 |
 | 设置子页：扩展管理、关于仓库、贡献者、开源许可 | 待页面重铺 | 第三方头像、许可证及链接不替换为示例数据 |
@@ -55,10 +55,11 @@
 | 产物/刷写批次 `083de40e` | [44904030939](https://github.com/xingguangcuican6666/ABK/actions/runs/44904030939) 成功 | [44904030963](https://github.com/xingguangcuican6666/ABK/actions/runs/44904030963) 成功 | 标准测试步骤、两版 instrumentation 编译、Debug/Release APK 构建及签名验证步骤均成功；两版整条运行已结束 |
 | 本地安装/修补批次 `5bbfe961` | [44906681144](https://github.com/xingguangcuican6666/ABK/actions/runs/44906681144) 成功 | [44906681048](https://github.com/xingguangcuican6666/ABK/actions/runs/44906681048) 成功 | 标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
 | 运行态批次 `6e7a94b4` | [44910178872](https://github.com/xingguangcuican6666/ABK/actions/runs/44910178872) 成功 | [44910178821](https://github.com/xingguangcuican6666/ABK/actions/runs/44910178821) 成功 | 标准主机测试、两版完整 App 与 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
+| Root 授权批次 `fb95a93b` | [44912344483](https://github.com/xingguangcuican6666/ABK/actions/runs/44912344483) 成功 | [44912344479](https://github.com/xingguangcuican6666/ABK/actions/runs/44912344479) 成功 | 标准主机测试、两版完整 App 与 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
 
 标准测试步骤运行 `:app:compileDebugAndroidTestKotlin :app:testDebugUnitTest :abk-ui:testDebugUnitTest`。Dev 的测试步骤只编译 instrumentation，不能写成 Dev 主机测试已通过。上述步骤均未执行设备端 UI 测试。其他自动内核工作流的状态不混入 App CI 结论，也未手工触发内核构建。
 
-运行态批次两版运行均已确认 `headSha=6e7a94b4e1f7c65d895ad9056b89c697512dd136` 且 `completed/success`；以上成功不覆盖之后的 Root 授权页修改，授权批次目标 CI 尚待验证。
+运行态和 Root 授权的两版运行均已核对提交 SHA 与 `completed/success` 终态；这些运行不覆盖之后的 SUSFS 修改。
 
 ## 本地检查与构建命令
 
@@ -96,7 +97,15 @@ Root 授权批次已完成：
 - 全 App 资源经 AAPT2 编译并用临时最小 manifest 链接，`javac --release 11` 生成资源类；新 profile 标题及组件/测试引用在默认中文、英文、俄文均存在，key 无重复。临时资源包不是正式 manifest 合并或可安装 App。
 - 真实库源码、受控授权组件和 6 项 `RootAuthorizationUiTest` 在缓存 Kotlin/Compose 2.2.21、JVM 11 环境有界编译通过；模型取自真实定义，blur、间距及 `RootUtils` 枚举使用仅编译用替身。不覆盖完整授权宿主、正式 blur/Coil 集成、目标 Kotlin/Material3 或 APK。
 - 6 项假回调 UI 测试覆盖详情/授权分离、320dp/2×字体/RTL、显式保存及 flags、模板与原解析回退、非 Root 配置、保存期禁用和草稿状态恢复；尚未设备执行，不能写成 UI 测试通过。
-- Lucide 角色引用与 `git diff --check` 通过；所有检查脚本、替身、资源包与日志留在仓库外。本批完整目标编译和 CI 仍待验证。
+- Lucide 角色引用与 `git diff --check` 通过；所有检查脚本、替身、资源包与日志留在仓库外。随后两版目标 CI 均完成完整编译和 APK 构建，标准主机测试通过；6 项设备端测试仍仅编译。
+
+SUSFS 控制批次已完成以下本地检查：
+
+- 保留草稿初始化、与已保存配置同步、能力条件和显式提交 payload，包括不显示的配置字段。迁移前后的草稿/同步/提交代码经同一 Kotlin formatter 规范化后核对；探测、执行器和 ViewModel 不变。保存期间禁用表单与动作，设置宿主的顶栏刷新也使用同一禁用条件。
+- 纵向选项、外置字段标签、可选取的等宽技术值和输出、带文字的刷新提示，以及独立的状态/格式错误。AAPT2 全 App 资源编译和临时最小 manifest 链接通过；中英俄引用、唯一 key 和格式化占位符通过检查。底层解析器的原异常文本不变。
+- 真实库、页面适配器、表单和测试在缓存 Kotlin/Compose 2.2.21、JVM 11 下有界编译通过。编译用 blur、间距、状态模型及槽位枚举替身，不覆盖完整设置宿主、正式 blur、目标 Kotlin/Material3、manifest 合并或 APK。
+- 5 项 `SusfsFormParsingTest` 已用 JUnitCore 执行通过，检查规则读写、重复项及原有回退。7 项 `SusfsControlUiTest` 使用假状态和回调，覆盖 320dp/2×/RTL、显式操作、格式错误和修正、不支持字段、保存期禁用与配置同步；只验证了源码编译，未在设备执行。
+- `git diff --check` 通过；检查脚本、替身和临时编译产物均留在仓库外。
 
 ## 未完成的验收
 
