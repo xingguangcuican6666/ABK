@@ -790,6 +790,8 @@
 
     <!-- Runtime / modules -->
     <string name="runtime_refresh">Refresh runtime info</string>
+    <string name="runtime_refreshing_status">Refreshing runtime information</string>
+    <string name="runtime_refreshing_modules">Refreshing installed modules</string>
     <string name="runtime_installed_modules_title">Installed Modules</string>
     <string name="runtime_refresh_installed_modules">Refresh installed modules</string>
     <string name="runtime_install_module">Install module</string>

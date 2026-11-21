@@ -788,6 +788,8 @@
 
     <!-- Runtime / modules -->
     <string name="runtime_refresh">Обновить runtime-информацию</string>
+    <string name="runtime_refreshing_status">Обновление runtime-информации</string>
+    <string name="runtime_refreshing_modules">Обновление установленных модулей</string>
     <string name="runtime_installed_modules_title">Модули</string>
     <string name="runtime_refresh_installed_modules">Обновить установленные модули</string>
     <string name="runtime_install_module">Установить модуль</string>
