@@ -57,7 +57,7 @@
 
 | 源码提交 | 标准 App | Dev App | 能证明什么 |
 | --- | --- | --- | --- |
-| 设置关于/许可子页批次 `6f5e0e26` | [44935807024](https://github.com/xingguangcuican6666/ABK/actions/runs/44935807024) 成功 | [44935807039](https://github.com/xingguangcuican6666/ABK/actions/runs/44935807039) 成功 | 核对了两版均对应完整提交 `6f5e0e26158b341de4307d3b7d3a0aa3ea0f29ce` 且 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证及工件上传均成功；不覆盖后续扩展管理修改 |
+| 构建页批次 `ad1a4120` | [44901000092](https://github.com/xingguangcuican6666/ABK/actions/runs/44901000092) 成功 | [44901000054](https://github.com/xingguangcuican6666/ABK/actions/runs/44901000054) 成功 | 标准主机测试、两版 instrumentation 编译及 APK 构建 |
 | 产物/刷写批次 `083de40e` | [44904030939](https://github.com/xingguangcuican6666/ABK/actions/runs/44904030939) 成功 | [44904030963](https://github.com/xingguangcuican6666/ABK/actions/runs/44904030963) 成功 | 标准测试步骤、两版 instrumentation 编译、Debug/Release APK 构建及签名验证步骤均成功；两版整条运行已结束 |
 | 本地安装/修补批次 `5bbfe961` | [44906681144](https://github.com/xingguangcuican6666/ABK/actions/runs/44906681144) 成功 | [44906681048](https://github.com/xingguangcuican6666/ABK/actions/runs/44906681048) 成功 | 标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
 | 运行态批次 `6e7a94b4` | [44910178872](https://github.com/xingguangcuican6666/ABK/actions/runs/44910178872) 成功 | [44910178821](https://github.com/xingguangcuican6666/ABK/actions/runs/44910178821) 成功 | 标准主机测试、两版完整 App 与 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
@@ -71,6 +71,7 @@
 | 设置外观子页批次 `3b1a2d90` | [44929574298](https://github.com/xingguangcuican6666/ABK/actions/runs/44929574298) 成功 | [44929574242](https://github.com/xingguangcuican6666/ABK/actions/runs/44929574242) 成功 | 核对了两版完整提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后的修改 |
 | 设置工具/内核能力批次 `391ed263` | [44931628038](https://github.com/xingguangcuican6666/ABK/actions/runs/44931628038) 成功 | [44931627979](https://github.com/xingguangcuican6666/ABK/actions/runs/44931627979) 成功 | 核对了两版完整提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后的模板页修改 |
 | 设置 profile 模板子页批次 `b5648d1e` | [44934125478](https://github.com/xingguangcuican6666/ABK/actions/runs/44934125478) 成功 | [44934125236](https://github.com/xingguangcuican6666/ABK/actions/runs/44934125236) 成功 | 核对了两版完整提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后关于页修改 |
+| 设置关于/许可子页批次 `6f5e0e26` | [44935807024](https://github.com/xingguangcuican6666/ABK/actions/runs/44935807024) 成功 | [44935807039](https://github.com/xingguangcuican6666/ABK/actions/runs/44935807039) 成功 | 核对了两版均对应完整提交 `6f5e0e26158b341de4307d3b7d3a0aa3ea0f29ce` 且 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证及工件上传均成功；不覆盖后续扩展管理修改 |
 | 扩展管理页批次 `7a555654` | [44940717365](https://github.com/xingguangcuican6666/ABK/actions/runs/44940717365) 成功 | [44940717441](https://github.com/xingguangcuican6666/ABK/actions/runs/44940717441) 成功 | 核对两版均对应完整提交 `7a555654ca07b7756a4245e74ce69885eb8dc81d` 且 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证及工件上传均成功；不代表设备端 UI 已执行 |
 
 标准测试步骤运行 `:app:compileDebugAndroidTestKotlin :app:testDebugUnitTest :abk-ui:testDebugUnitTest`。Dev 的测试步骤只编译 instrumentation，不能写成 Dev 主机测试已通过。上述步骤均未执行设备端 UI 测试。其他自动内核工作流的状态不混入 App CI 结论，也未手工触发内核构建。
