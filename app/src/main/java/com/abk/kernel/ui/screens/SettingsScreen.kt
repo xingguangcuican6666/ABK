@@ -1281,7 +1281,7 @@ private fun selinuxModeLabel(mode: String): String =
     }
 
 @Composable
-private fun AppProfileTemplateSettingsScreen(
+internal fun AppProfileTemplateSettingsScreen(
     topBarHeight: Dp,
     state: MainUiState,
     showRefreshLoading: Boolean,
@@ -1302,130 +1302,30 @@ private fun AppProfileTemplateSettingsScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = AbkScreenHorizontalPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Spacer(Modifier.height(topBarHeight + 16.dp))
-        Crossfade(targetState = showRefreshLoading, label = "template-refresh") { refreshing ->
-            if (refreshing) {
-                AbkInlineLoadingPill(
-                    text = stringResource(R.string.settings_templates_loading),
-                    modifier = Modifier.fillMaxWidth(),
-                    compact = false
-                )
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SettingsGroup(title = stringResource(R.string.settings_local_templates)) {
-                        when {
-                            state.appProfileTemplatesLoading -> AbkInlineLoadingPill(
-                                text = stringResource(R.string.settings_templates_loading),
-                                modifier = Modifier.fillMaxWidth(),
-                                compact = false
-                            )
-                            state.appProfileTemplates.isEmpty() -> ExpressiveListItem(
-                                title = stringResource(R.string.settings_templates_empty),
-                                subtitle = stringResource(R.string.settings_templates_empty_desc),
-                                leadingIcon = Icons.Default.Description
-                            )
-                        }
-                        state.appProfileTemplates.forEach { template ->
-                            ExpressiveListItem(
-                                title = template.id,
-                                subtitle = if (state.selectedAppProfileTemplateId == template.id) {
-                                    stringResource(R.string.settings_template_editing)
-                                } else {
-                                    stringResource(R.string.settings_app_profile_templates)
-                                },
-                                leadingIcon = Icons.Default.Description,
-                                selected = state.selectedAppProfileTemplateId == template.id,
-                                trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_edit)) },
-                                onClick = { onSelect(template.id) }
-                            )
-                        }
-                        ExpressiveListItem(
-                            title = stringResource(R.string.settings_new_template),
-                            subtitle = stringResource(R.string.settings_new_template_desc),
-                            leadingIcon = Icons.Default.Add,
-                            onClick = {
-                                creating = true
-                                editingId = ""
-                                editingContent = defaultAppProfileTemplateJson()
-                                onSelect(null)
-                            }
-                        )
-                    }
-
-                    if (state.appProfileTemplatesError != null) {
-                        SettingsGroup(title = stringResource(R.string.settings_status)) {
-                            ExpressiveListItem(
-                                title = stringResource(R.string.settings_operation_incomplete),
-                                subtitle = state.appProfileTemplatesError,
-                                leadingIcon = Icons.Default.Error,
-                                trailingContent = {
-                                    IconButton(onClick = onRefresh) {
-                                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
-                                    }
-                                }
-                            )
-                        }
-                    }
-
-                    val hasEditor = creating || !state.selectedAppProfileTemplateId.isNullOrBlank()
-                    if (hasEditor) {
-                        SettingsGroup(title = stringResource(R.string.settings_edit_template)) {
-                            OutlinedTextField(
-                                value = editingId,
-                                onValueChange = { editingId = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text(stringResource(R.string.settings_template_name)) },
-                                singleLine = true,
-                                enabled = state.selectedAppProfileTemplateId.isNullOrBlank()
-                            )
-                            OutlinedTextField(
-                                value = editingContent,
-                                onValueChange = { editingContent = it },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 220.dp),
-                                label = { Text(stringResource(R.string.settings_template_json)) },
-                                minLines = 10
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (state.appProfileTemplateSaving) {
-                                    LoadingIndicator(Modifier.size(22.dp))
-                                }
-                                if (!state.selectedAppProfileTemplateId.isNullOrBlank()) {
-                                    TextButton(
-                                        onClick = { onDelete(state.selectedAppProfileTemplateId.orEmpty()) },
-                                        enabled = !state.appProfileTemplateSaving,
-                                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                                    ) {
-                                        Text(stringResource(R.string.delete))
-                                    }
-                                }
-                                Button(
-                                    onClick = { onSave(editingId, editingContent) },
-                                    enabled = !state.appProfileTemplateSaving && editingId.isNotBlank()
-                                ) {
-                                    Text(stringResource(R.string.save))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(80.dp))
-    }
+    SettingsProfileTemplatesContent(
+        topBarHeight = topBarHeight,
+        templates = state.appProfileTemplates,
+        loading = state.appProfileTemplatesLoading,
+        showRefreshLoading = showRefreshLoading,
+        selectedId = state.selectedAppProfileTemplateId,
+        error = state.appProfileTemplatesError,
+        saving = state.appProfileTemplateSaving,
+        hasEditor = creating || !state.selectedAppProfileTemplateId.isNullOrBlank(),
+        editingId = editingId,
+        editingContent = editingContent,
+        onSelect = onSelect,
+        onNew = {
+            creating = true
+            editingId = ""
+            editingContent = defaultAppProfileTemplateJson()
+            onSelect(null)
+        },
+        onIdChange = { editingId = it },
+        onContentChange = { editingContent = it },
+        onRefresh = onRefresh,
+        onSave = { onSave(editingId, editingContent) },
+        onDelete = { onDelete(state.selectedAppProfileTemplateId.orEmpty()) },
+    )
 }
 
 private fun defaultAppProfileTemplateJson(): String =
