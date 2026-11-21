@@ -1,7 +1,4 @@
-@file:OptIn(
-    androidx.compose.material3.ExperimentalMaterial3Api::class,
-    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class
-)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.abk.kernel.ui.screens
 
@@ -18,60 +15,19 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -80,52 +36,52 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.abk.kernel.R
-import com.abk.kernel.ui.blur.BlurConfig
-import com.abk.kernel.ui.blur.BlurScreenScaffold
-import com.abk.kernel.ui.blur.blurredCardBackground
-import com.abk.kernel.ui.blur.blurredCardSurfaceColor
-import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
-import com.abk.kernel.ui.components.AppPageBackground
-import com.abk.kernel.ui.components.ExpressiveListItem
-import com.abk.kernel.ui.components.ExpressiveTopBar
-import com.abk.kernel.utils.RootUtils
 import com.abk.kernel.data.model.ArtifactType
 import com.abk.kernel.data.model.KSU_VARIANT_BAKASU
 import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
 import com.abk.kernel.data.model.KernelSupport
 import com.abk.kernel.data.repository.PreferencesRepository
+import com.abk.kernel.ui.blur.BlurConfig
+import com.abk.kernel.ui.blur.BlurScreenScaffold
+import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.components.AppPageBackground
+import com.abk.kernel.ui.components.ExpressiveTopBar
+import com.abk.kernel.ui.screens.flash.FlashAction
 import com.abk.kernel.utils.ArtifactVerification
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.ForkSigningManager
+import com.abk.kernel.utils.RootUtils
 import com.abk.kernel.utils.SignedBundleManifest
+import io.github.xingguangcuican6666.abk.ui.components.AbkButtonStyle
+import io.github.xingguangcuican6666.abk.ui.components.AbkCluster
+import io.github.xingguangcuican6666.abk.ui.components.AbkHeading
+import io.github.xingguangcuican6666.abk.ui.components.AbkIconButton
+import io.github.xingguangcuican6666.abk.ui.components.AbkOption
+import io.github.xingguangcuican6666.abk.ui.components.AbkSelect
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcon
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
+import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
 import java.io.File
 import java.io.FileOutputStream
+import java.util.zip.ZipFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.zip.ZipFile
 
-private enum class LkmPatchInstallMode {
+internal enum class LkmPatchInstallMode {
     SelectFile,
     DirectInstall,
     OtaInstall,
-    AnyKernel3
+    AnyKernel3,
 }
 
 @Composable
@@ -191,10 +147,8 @@ fun AbkRootPatchScreen(
     var selectedAnyKernelSlotTargetName by rememberSaveable {
         mutableStateOf(RootUtils.Ak3SlotTarget.CURRENT.name)
     }
-    var showAnyKernelSlotMenu by remember { mutableStateOf(false) }
     var selectedPartition by rememberSaveable { mutableStateOf(defaultPartition) }
     var hasCustomPartitionSelection by rememberSaveable { mutableStateOf(false) }
-    var showPartitionMenu by remember { mutableStateOf(false) }
     var showAdvancedOptions by rememberSaveable { mutableStateOf(false) }
     var allowShell by rememberSaveable { mutableStateOf(false) }
     var enableAdb by rememberSaveable { mutableStateOf(false) }
@@ -233,8 +187,6 @@ fun AbkRootPatchScreen(
     val actionOtaInstall = stringResource(R.string.root_patch_action_ota_install)
     val actionFlashAnyKernel = stringResource(R.string.root_patch_action_flash_anykernel)
     val actionFlashPatchedImage = stringResource(R.string.root_patch_action_flash_patched_image)
-    val selectFileDesc = stringResource(R.string.root_patch_select_file_desc)
-    val anyKernelDesc = stringResource(R.string.root_patch_anykernel_desc)
     val anyKernelSlotTitle = stringResource(R.string.root_patch_ak3_slot_title)
     val anyKernelSlotDesc = stringResource(R.string.root_patch_ak3_slot_desc)
     val anyKernelCurrentSlotLabel = stringResource(R.string.root_patch_ak3_slot_current)
@@ -535,451 +487,313 @@ fun AbkRootPatchScreen(
         }
     }
 
-    selectedAnyKernelManifest?.takeIf { it.clientNotice != null }?.let { manifest ->
-        val source = manifest.kernelSource
-        val feature = manifest.featureStatus
-        if (showAnyKernelManifestNotice || showAnyKernelFlashConfirm) {
-            AlertDialog(
-                onDismissRequest = {
+    selectedAnyKernelManifest
+        ?.takeIf { it.clientNotice != null }
+        ?.let { manifest ->
+            if (showAnyKernelManifestNotice || showAnyKernelFlashConfirm) {
+                val dismissNotice = {
                     showAnyKernelManifestNotice = false
                     showAnyKernelFlashConfirm = false
-                },
-                icon = {
-                    Icon(
-                        Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                },
-                title = {
-                    Text(
-                        if (showAnyKernelFlashConfirm) {
-                            stringResource(R.string.flash_custom_source_review_before_flash)
-                        } else {
-                            stringResource(R.string.flash_custom_source_notice_title)
-                        }
-                    )
-                },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        source?.url?.let { Text(stringResource(R.string.flash_custom_source_url, it)) }
-                        if (source?.access == "github_private") {
-                            Text(
-                                stringResource(R.string.flash_custom_source_private_warning),
-                                color = MaterialTheme.colorScheme.error,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        source?.access?.let { Text(stringResource(R.string.flash_custom_source_access, it)) }
-                        source?.requestedRef?.let { Text(stringResource(R.string.flash_custom_source_ref, it)) }
-                        source?.resolvedCommit?.let { Text(stringResource(R.string.flash_custom_source_commit, it)) }
-                        source?.kernelVersion?.let { kernel ->
-                            Text(stringResource(R.string.flash_custom_source_kernel, source.androidVersion.orEmpty(), kernel))
-                        }
-                        source?.toolchainPatchLevel?.let {
-                            Text(stringResource(R.string.flash_custom_source_toolchain, it))
-                        }
-                        source?.deviceLabel?.takeIf { it.isNotBlank() }?.let {
-                            Text(stringResource(R.string.flash_custom_source_device, it))
-                        }
-                        source?.defconfigs?.takeIf { it.isNotEmpty() }?.let { defconfigs ->
-                            Text(stringResource(R.string.flash_custom_source_defconfigs, defconfigs.joinToString(" -> ")))
-                        }
-                        feature?.requested?.takeIf { it.isNotEmpty() }?.let {
-                            Text(stringResource(R.string.flash_custom_source_requested, formatFeatureMap(it)))
-                        }
-                        feature?.effective?.takeIf { it.isNotEmpty() }?.let {
-                            Text(stringResource(R.string.flash_custom_source_effective, formatFeatureMap(it)))
-                        }
-                        feature?.skipped?.takeIf { it.isNotEmpty() }?.let { skippedFeatures ->
-                            Text(
-                                stringResource(R.string.flash_custom_source_skipped_title),
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            skippedFeatures.forEach { skipped ->
-                                Text(
-                                    "• ${skipped.id}: ${skipped.message}",
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                        Text(
-                            stringResource(R.string.flash_custom_source_old_client_warning),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            val confirmFlash = showAnyKernelFlashConfirm
-                            showAnyKernelManifestNotice = false
-                            showAnyKernelFlashConfirm = false
-                            if (confirmFlash) performAnyKernel3Flash()
-                        }
-                    ) {
-                        Text(stringResource(if (showAnyKernelFlashConfirm) R.string.flash_confirm else R.string.confirm))
-                    }
                 }
-            )
+                RootPatchManifestDialog(
+                    manifest = manifest,
+                    confirmFlash = showAnyKernelFlashConfirm,
+                    onDismiss = dismissNotice,
+                    onConfirm = {
+                        val confirmFlash = showAnyKernelFlashConfirm
+                        dismissNotice()
+                        if (confirmFlash) performAnyKernel3Flash()
+                    },
+                )
+            }
         }
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LkmPatchPageBackground(
             backgroundUri = backgroundUri,
-            backgroundImageEnabled = backgroundImageEnabled
+            backgroundImageEnabled = backgroundImageEnabled,
         )
         BlurScreenScaffold(
-            blurConfig = BlurConfig(
-                blurEnabled = blurEnabled,
-                backgroundExpEnabled = blurBackgroundExpEnabled,
-                backgroundUri = backgroundUri,
-                backgroundImageEnabled = backgroundImageEnabled,
-            ),
+            blurConfig =
+                BlurConfig(
+                    blurEnabled = blurEnabled,
+                    backgroundExpEnabled = blurBackgroundExpEnabled,
+                    backgroundUri = backgroundUri,
+                    backgroundImageEnabled = backgroundImageEnabled,
+                ),
             containerColor = Color.Transparent,
             topBar = {
                 ExpressiveTopBar(
                     title = stringResource(R.string.root_patch_title),
                     navigationIcon = {
-                        IconButton(onClick = onBack, enabled = !running) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
-                        }
+                        AbkIconButton(
+                            AbkIcons.Back,
+                            stringResource(R.string.back),
+                            onBack,
+                            enabled = !running,
+                        )
                     },
-                    enableBlur = blurEnabled
+                    enableBlur = blurEnabled,
                 )
-            }
+            },
         ) { topBarHeight ->
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = AbkScreenHorizontalPadding),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier =
+                    Modifier.fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = AbkScreenHorizontalPadding),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-            Spacer(Modifier.height(topBarHeight + 16.dp))
-            PatchGroupCard {
-                PatchModeRow(
-                    title = stringResource(R.string.root_patch_select_file),
-                    subtitle = selectedBootName.ifBlank { selectFileDesc },
-                    selected = selectedMode == LkmPatchInstallMode.SelectFile,
-                    enabled = !running,
-                    onClick = {
-                        selectedMode = LkmPatchInstallMode.SelectFile
-                        bootPicker.launch(arrayOf("application/octet-stream", "image/*", "*/*"))
-                    }
-                )
-                if (showRootInstallModes) {
-                    PatchDivider()
-                    PatchModeRow(
-                        title = stringResource(R.string.root_patch_direct_install),
-                        subtitle = stringResource(R.string.root_patch_direct_install_desc),
-                        selected = selectedMode == LkmPatchInstallMode.DirectInstall,
-                        enabled = !running,
-                        onClick = {
-                            selectedMode = LkmPatchInstallMode.DirectInstall
-                            patchedImagePath = ""
-                            success = null
-                            currentAction = ""
-                            logLines = emptyList()
-                        }
-                    )
-                    PatchDivider()
-                    PatchModeRow(
-                        title = stringResource(R.string.root_patch_ota_install),
-                        subtitle = stringResource(R.string.root_patch_ota_install_desc),
-                        selected = selectedMode == LkmPatchInstallMode.OtaInstall,
-                        enabled = !running,
-                        onClick = {
-                            selectedMode = LkmPatchInstallMode.OtaInstall
-                            patchedImagePath = ""
-                            success = null
-                            currentAction = ""
-                            logLines = emptyList()
-                        }
-                    )
-                    PatchDivider()
-                    PatchModeRow(
-                        title = stringResource(R.string.root_patch_anykernel),
-                        subtitle = selectedAnyKernelName.ifBlank { anyKernelDesc },
-                        selected = selectedMode == LkmPatchInstallMode.AnyKernel3,
-                        enabled = !running,
-                        onClick = {
-                            selectedMode = LkmPatchInstallMode.AnyKernel3
-                            patchedImagePath = ""
-                            success = null
-                            currentAction = ""
-                            logLines = emptyList()
-                            anyKernelPicker.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
-                        }
-                    )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = selectedMode == LkmPatchInstallMode.AnyKernel3 && supportsAnyKernelInactiveSlot,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                PatchGroupCard {
-                    androidx.compose.foundation.layout.Box {
-                        ExpressiveListItem(
-                            title = anyKernelSlotTitle,
-                            subtitle = anyKernelSlotDesc,
-                            leadingIcon = Icons.Default.Edit,
-                            enabled = !running,
-                            trailingContent = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        text = when (selectedAnyKernelSlotTarget) {
-                                            RootUtils.Ak3SlotTarget.INACTIVE -> anyKernelInactiveSlotLabel
-                                            RootUtils.Ak3SlotTarget.CURRENT -> anyKernelCurrentSlotLabel
-                                        },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        textAlign = TextAlign.End,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
+                Spacer(Modifier.height(topBarHeight + 16.dp))
+                RootPatchGroupCard {
+                    RootPatchModeOptions(
+                        selected = selectedMode,
+                        rootGranted = showRootInstallModes,
+                        running = running,
+                        selectedBootName = selectedBootName,
+                        selectedAnyKernelName = selectedAnyKernelName,
+                        onSelect = { mode ->
+                            selectedMode = mode
+                            when (mode) {
+                                LkmPatchInstallMode.SelectFile ->
+                                    bootPicker.launch(
+                                        arrayOf("application/octet-stream", "image/*", "*/*")
                                     )
-                                    Icon(
-                                        Icons.Default.ChevronRight,
-                                        contentDescription = anyKernelSlotTitle
-                                    )
+                                else -> {
+                                    patchedImagePath = ""
+                                    success = null
+                                    currentAction = ""
+                                    logLines = emptyList()
+                                    if (mode == LkmPatchInstallMode.AnyKernel3) {
+                                        anyKernelPicker.launch(
+                                            arrayOf(
+                                                "application/zip",
+                                                "application/octet-stream",
+                                                "*/*",
+                                            )
+                                        )
+                                    }
                                 }
-                            },
-                            onClick = { showAnyKernelSlotMenu = true }
-                        )
-                        DropdownMenu(
-                            expanded = showAnyKernelSlotMenu,
-                            onDismissRequest = { showAnyKernelSlotMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(anyKernelCurrentSlotLabel) },
-                                onClick = {
-                                    selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.CURRENT.name
-                                    showAnyKernelSlotMenu = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(anyKernelInactiveSlotLabel) },
-                                onClick = {
-                                    selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.INACTIVE.name
-                                    showAnyKernelSlotMenu = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            PatchGroupCard {
-                androidx.compose.foundation.layout.Box {
-                    ExpressiveListItem(
-                        title = stringResource(R.string.root_patch_select_partition),
-                        subtitle = stringResource(R.string.root_patch_partition_desc),
-                        leadingIcon = Icons.Default.Edit,
-                        enabled = !running && selectedMode != LkmPatchInstallMode.AnyKernel3,
-                        trailingContent = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = partitionLabel(selectedPartition, defaultPartition, defaultPartitionLabel, context),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    textAlign = TextAlign.End,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.root_patch_select_partition))
                             }
                         },
-                        onClick = { showPartitionMenu = true }
                     )
-                    DropdownMenu(
-                        expanded = showPartitionMenu,
-                        onDismissRequest = { showPartitionMenu = false }
-                    ) {
-                        partitionOptions.forEach { partition ->
-                            DropdownMenuItem(
-                                text = { Text(partitionMenuLabel(partition, defaultPartition, defaultPartitionLabel, context)) },
-                                onClick = {
-                                    hasCustomPartitionSelection = true
-                                    selectedPartition = partition
-                                    showPartitionMenu = false
-                                }
-                            )
-                        }
+                }
+
+                AnimatedVisibility(
+                    visible =
+                        selectedMode == LkmPatchInstallMode.AnyKernel3 &&
+                            supportsAnyKernelInactiveSlot,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    RootPatchGroupCard {
+                        AbkSelect(
+                            options =
+                                listOf(
+                                    AbkOption(
+                                        RootUtils.Ak3SlotTarget.CURRENT.name,
+                                        anyKernelCurrentSlotLabel,
+                                    ),
+                                    AbkOption(
+                                        RootUtils.Ak3SlotTarget.INACTIVE.name,
+                                        anyKernelInactiveSlotLabel,
+                                    ),
+                                ),
+                            selectedId = selectedAnyKernelSlotTarget.name,
+                            onSelect = { selectedAnyKernelSlotTargetName = it },
+                            label = anyKernelSlotTitle,
+                            hint = anyKernelSlotDesc,
+                            enabled = !running,
+                        )
                     }
                 }
-            }
 
-            PatchGroupCard {
-                ExpressiveListItem(
-                    title = stringResource(R.string.root_patch_use_local_lkm),
-                    subtitle = localLkmSubtitle,
-                    leadingIcon = Icons.Default.FolderOpen,
-                    enabled = !running,
-                    trailingContent = {
-                        if (selectedLocalLkmPath.isNotBlank()) {
-                            IconButton(
+                RootPatchGroupCard {
+                    AbkSelect(
+                        options =
+                            partitionOptions.distinct().map {
+                                AbkOption(
+                                    it,
+                                    partitionMenuLabel(
+                                        it,
+                                        defaultPartition,
+                                        defaultPartitionLabel,
+                                        context,
+                                    ),
+                                )
+                            },
+                        selectedId = selectedPartition,
+                        onSelect = {
+                            hasCustomPartitionSelection = true
+                            selectedPartition = it
+                        },
+                        label = stringResource(R.string.root_patch_select_partition),
+                        placeholder =
+                            partitionMenuLabel(
+                                selectedPartition,
+                                defaultPartition,
+                                defaultPartitionLabel,
+                                context,
+                            ),
+                        hint = stringResource(R.string.root_patch_partition_desc),
+                        enabled =
+                            !running &&
+                                selectedMode != LkmPatchInstallMode.AnyKernel3 &&
+                                partitionOptions.isNotEmpty(),
+                    )
+                }
+
+                RootPatchGroupCard {
+                    AbkHeading(stringResource(R.string.root_patch_use_local_lkm))
+                    Text(
+                        localLkmSubtitle,
+                        color = AbkTheme.colors.inkMuted,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    AbkCluster(Modifier.fillMaxWidth()) {
+                        FlashAction(
+                            label = stringResource(R.string.root_patch_select_local_lkm),
+                            icon = AbkIcons.Upload,
+                            enabled = !running,
+                            onClick = {
+                                localLkmPicker.launch(arrayOf("application/octet-stream", "*/*"))
+                            },
+                        )
+                        if (hasLocalLkm) {
+                            FlashAction(
+                                label = stringResource(R.string.root_patch_clear_local_lkm),
+                                icon = AbkIcons.Close,
+                                enabled = !running,
                                 onClick = {
                                     selectedLocalLkmPath = ""
                                     selectedLocalLkmName = ""
                                 },
-                                enabled = !running
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.root_patch_clear_local_lkm))
-                            }
-                        } else {
-                            Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.root_patch_select_local_lkm))
+                            )
                         }
-                    },
-                    onClick = { localLkmPicker.launch(arrayOf("application/octet-stream", "*/*")) }
-                )
-                AnimatedVisibility(
-                    visible = selectedLocalLkmPath.isBlank(),
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    }
+                    AnimatedVisibility(
+                        visible = selectedLocalLkmPath.isBlank(),
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut(),
                     ) {
-                        Row(
-                            modifier = Modifier.horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            RootUtils.ABK_LKM_VARIANTS.forEach { variant ->
-                                FilterChip(
-                                    selected = selectedVariant == variant.id,
-                                    onClick = {
-                                        selectedVariant = variant.id
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            AbkSelect(
+                                options =
+                                    RootUtils.ABK_LKM_VARIANTS.map { AbkOption(it.id, it.label) },
+                                selectedId = selectedVariant,
+                                label = stringResource(R.string.build_kernelsu_variant),
+                                placeholder = selectedVariant,
+                                enabled = !running,
+                                onSelect = { variant ->
+                                    if (variant != selectedVariant) {
+                                        selectedVariant = variant
                                         selectedKmi = ""
                                         hasCustomKmiSelection = false
                                         patchedImagePath = ""
                                         success = null
                                         currentAction = ""
                                         logLines = emptyList()
+                                    }
+                                },
+                            )
+                            AbkSelect(
+                                options =
+                                    kmiOptions.map {
+                                        AbkOption(
+                                            it,
+                                            it +
+                                                if (it == currentKmi)
+                                                    stringResource(
+                                                        R.string.build_recommended_suffix
+                                                    )
+                                                else "",
+                                        )
                                     },
-                                    enabled = !running,
-                                    label = { Text(variant.label) }
-                                )
-                            }
+                                selectedId = selectedKmi,
+                                label = "KMI",
+                                placeholder = selectedKmi.ifBlank { noLkmAvailable },
+                                enabled = !running && kmiOptions.isNotEmpty(),
+                                onSelect = {
+                                    if (it in kmiOptions) {
+                                        selectedKmi = it
+                                        hasCustomKmiSelection = true
+                                        patchedImagePath = ""
+                                        success = null
+                                        currentAction = ""
+                                        logLines = emptyList()
+                                    }
+                                },
+                            )
                         }
-                        DropdownField(
-                            label = "KMI",
-                            value = selectedKmi.ifBlank { noLkmAvailable },
-                            options = kmiOptions.ifEmpty { listOf(noLkmAvailable) },
-                            recommendedValue = currentKmi?.takeIf { it in kmiOptions },
-                            onSelect = {
-                                if (it in kmiOptions) {
-                                    selectedKmi = it
-                                    hasCustomKmiSelection = true
-                                    patchedImagePath = ""
-                                    success = null
-                                    currentAction = ""
-                                    logLines = emptyList()
-                                }
-                            }
-                        )
                     }
                 }
-            }
 
-            PatchGroupCard {
-                ExpressiveListItem(
-                    title = stringResource(R.string.root_patch_advanced_options),
-                    leadingIcon = Icons.Default.Tune,
-                    trailingContent = {
-                        Icon(
-                            if (showAdvancedOptions) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = stringResource(R.string.root_patch_expand_advanced_options)
-                        )
-                    },
-                    onClick = { showAdvancedOptions = !showAdvancedOptions }
-                )
-                AnimatedVisibility(
-                    visible = showAdvancedOptions,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
-                    Column {
-                        Text(
-                            text = stringResource(R.string.root_patch_advanced_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                        )
-                        PatchDivider()
-                        PatchCheckboxItem(
-                            title = stringResource(R.string.root_patch_allow_shell_root),
-                            subtitle = stringResource(R.string.root_patch_allow_shell_root_desc),
-                            checked = allowShell,
-                            enabled = !running,
-                            onCheckedChange = { allowShell = it }
-                        )
-                        PatchDivider()
-                        PatchCheckboxItem(
-                            title = stringResource(R.string.root_patch_enable_adb_debug),
-                            subtitle = stringResource(R.string.root_patch_enable_adb_debug_desc),
-                            checked = enableAdb,
-                            enabled = !running,
-                            onCheckedChange = { enableAdb = it }
-                        )
-                    }
-                }
-            }
-
-            if (!hasLkmSource && selectedMode != LkmPatchInstallMode.AnyKernel3) {
-                InlineWarning(stringResource(R.string.root_patch_warn_no_lkm))
-            }
-            if (selectedMode == LkmPatchInstallMode.SelectFile && !rootGranted && !hasUserlandKsud) {
-                InlineWarning(stringResource(R.string.root_patch_warn_no_ksud))
-            }
-
-            Button(
-                onClick = ::startNext,
-                enabled = canProceed,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (running) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(17.dp),
-                        strokeWidth = 2.dp
+                RootPatchGroupCard {
+                    RootPatchAdvancedOptions(
+                        expanded = showAdvancedOptions,
+                        running = running,
+                        allowShell = allowShell,
+                        enableAdb = enableAdb,
+                        onExpandedChange = { showAdvancedOptions = it },
+                        onAllowShellChange = { allowShell = it },
+                        onEnableAdbChange = { enableAdb = it },
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.root_patch_processing))
-                } else {
-                    Text(stringResource(R.string.root_patch_next))
                 }
-            }
 
-            if (patchedImagePath.isNotBlank()) {
-                PatchedImageCard(
-                    path = patchedImagePath,
-                    canFlash = selectedMode == LkmPatchInstallMode.SelectFile && rootGranted && !running,
-                    onCopy = { copyText(context.getString(R.string.root_patch_clip_label_patched_boot), patchedImagePath) },
-                    onFlash = ::startFlashPatchedImage
-                )
-            }
+                if (!hasLkmSource && selectedMode != LkmPatchInstallMode.AnyKernel3) {
+                    InlineWarning(stringResource(R.string.root_patch_warn_no_lkm))
+                }
+                if (
+                    selectedMode == LkmPatchInstallMode.SelectFile &&
+                        !rootGranted &&
+                        !hasUserlandKsud
+                ) {
+                    InlineWarning(stringResource(R.string.root_patch_warn_no_ksud))
+                }
 
-            if (running || success != null || logLines.isNotEmpty()) {
-                PatchLogCard(
-                    running = running,
-                    success = success,
-                    action = currentAction,
-                    lines = logLines,
-                    canReboot = success == true && currentAction != actionPatchImage,
-                    onReboot = {
-                        if (!running) scope.launch(Dispatchers.IO) { RootUtils.reboot() }
-                    }
+                FlashAction(
+                    label =
+                        stringResource(
+                            if (running) R.string.root_patch_processing
+                            else R.string.root_patch_next
+                        ),
+                    icon = AbkIcons.Forward,
+                    onClick = ::startNext,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = canProceed,
+                    loading = running,
+                    style = AbkButtonStyle.Primary,
                 )
-            }
+
+                if (patchedImagePath.isNotBlank()) {
+                    RootPatchedImageCard(
+                        path = patchedImagePath,
+                        canFlash =
+                            selectedMode == LkmPatchInstallMode.SelectFile &&
+                                rootGranted &&
+                                !running,
+                        onCopy = {
+                            copyText(
+                                context.getString(R.string.root_patch_clip_label_patched_boot),
+                                patchedImagePath,
+                            )
+                        },
+                        onFlash = ::startFlashPatchedImage,
+                    )
+                }
+
+                if (running || success != null || logLines.isNotEmpty()) {
+                    RootPatchLogCard(
+                        running = running,
+                        success = success,
+                        action = currentAction,
+                        lines = logLines,
+                        canReboot = success == true && currentAction != actionPatchImage,
+                        onReboot = {
+                            if (!running) scope.launch(Dispatchers.IO) { RootUtils.reboot() }
+                        },
+                    )
+                }
 
                 Spacer(Modifier.height(80.dp))
             }
@@ -988,215 +802,23 @@ fun AbkRootPatchScreen(
 }
 
 @Composable
-private fun LkmPatchPageBackground(
-    backgroundUri: String?,
-    backgroundImageEnabled: Boolean
-) {
+private fun LkmPatchPageBackground(backgroundUri: String?, backgroundImageEnabled: Boolean) {
     AppPageBackground(
         backgroundUri = backgroundUri,
-        backgroundImageEnabled = backgroundImageEnabled
-    )
-}
-
-@Composable
-private fun PatchGroupCard(content: @Composable ColumnScope.() -> Unit) {
-    val shape = MaterialTheme.shapes.medium
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .blurredCardBackground(shape),
-        shape = shape,
-        colors = CardDefaults.cardColors(
-            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(content = content)
-    }
-}
-
-@Composable
-private fun PatchModeRow(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
-    ExpressiveListItem(
-        title = title,
-        subtitle = subtitle,
-        enabled = enabled,
-        selected = selected,
-        leadingContent = {
-            RadioButton(
-                selected = selected,
-                onClick = null,
-                enabled = enabled
-            )
-        },
-        onClick = onClick
-    )
-}
-
-@Composable
-private fun PatchCheckboxItem(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    enabled: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    ExpressiveListItem(
-        title = title,
-        subtitle = subtitle,
-        enabled = enabled,
-        leadingContent = {
-            Checkbox(
-                checked = checked,
-                onCheckedChange = null,
-                enabled = enabled
-            )
-        },
-        onClick = { onCheckedChange(!checked) }
-    )
-}
-
-@Composable
-private fun PatchDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 14.dp),
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+        backgroundImageEnabled = backgroundImageEnabled,
     )
 }
 
 @Composable
 private fun InlineWarning(text: String) {
     Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(
-            Icons.Default.Warning,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.error,
-            modifier = Modifier
-                .padding(top = 2.dp)
-                .size(18.dp)
+        AbkIcon(AbkIcons.Warning, null, tint = AbkTheme.colors.warning.color, size = 18.dp)
+        Text(
+            text,
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = AbkTheme.colors.warning.color,
         )
-        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-    }
-}
-
-@Composable
-private fun PatchedImageCard(
-    path: String,
-    canFlash: Boolean,
-    onCopy: () -> Unit,
-    onFlash: () -> Unit
-) {
-    val shape = MaterialTheme.shapes.medium
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .blurredCardBackground(shape),
-        shape = shape
-    ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(20.dp))
-                Text(
-                    text = stringResource(R.string.root_patch_result),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = onCopy) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.root_patch_copy_path))
-                }
-                if (canFlash) {
-                    AssistChip(
-                        onClick = onFlash,
-                        label = { Text(stringResource(R.string.root_patch_flash)) },
-                        leadingIcon = { Icon(Icons.Default.FlashOn, null, modifier = Modifier.size(16.dp)) }
-                    )
-                }
-            }
-            Text(
-                path,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun PatchLogCard(
-    running: Boolean,
-    success: Boolean?,
-    action: String,
-    lines: List<String>,
-    canReboot: Boolean,
-    onReboot: () -> Unit
-) {
-    val shape = MaterialTheme.shapes.medium
-    Card(
-        colors = CardDefaults.cardColors(containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .blurredCardBackground(shape),
-        shape = shape
-    ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val icon = when {
-                    running -> Icons.Default.Terminal
-                    success == true -> Icons.Default.CheckCircle
-                    success == false -> Icons.Default.Error
-                    else -> Icons.Default.Info
-                }
-                Icon(icon, null, modifier = Modifier.size(20.dp))
-                Text(
-                    action.ifBlank { stringResource(R.string.root_patch_logs) },
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.weight(1f))
-                if (canReboot) {
-                    AssistChip(
-                        onClick = onReboot,
-                        label = { Text(stringResource(R.string.root_patch_reboot)) },
-                        leadingIcon = { Icon(Icons.Default.RestartAlt, null, modifier = Modifier.size(16.dp)) }
-                    )
-                }
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 84.dp, max = 280.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                val displayLines = lines.ifEmpty { listOf(stringResource(R.string.root_patch_waiting_operation)) }
-                displayLines.forEach { line ->
-                    Text(
-                        text = line,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = if (line.firstOrNull() == '$') {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        }
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -1251,11 +873,6 @@ private fun prepareLocalAnyKernelSelection(
 private fun safeLocalFileName(value: String): String =
     value.replace(Regex("""[^A-Za-z0-9._-]"""), "_").ifBlank { "payload.zip" }
 
-private fun formatFeatureMap(values: Map<String, Any?>): String =
-    values.entries
-        .sortedBy { it.key }
-        .joinToString(", ") { (key, value) -> "$key=${value ?: "null"}" }
-
 private suspend fun stageContentUri(
     context: Context,
     uri: Uri,
@@ -1296,18 +913,6 @@ private fun isZipFile(context: Context, uri: Uri): Boolean {
     return uri.lastPathSegment.orEmpty().endsWith(".zip", ignoreCase = true) ||
         name.endsWith(".zip", ignoreCase = true)
 }
-
-private fun partitionLabel(
-    partition: String,
-    defaultPartition: String,
-    defaultLabel: String,
-    context: Context
-): String =
-    if (partition == defaultPartition) {
-        context.getString(R.string.root_patch_partition_default_multiline, partition, defaultLabel)
-    } else {
-        partition
-    }
 
 private fun partitionMenuLabel(
     partition: String,

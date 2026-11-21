@@ -36,6 +36,10 @@ ABK 的目标是把手动 fork、启用 Actions、填写 GKI 或 OnePlus/Oplus �
 - Pages：https://xingguangcuican6666.github.io/ABK/
 - ABK App CI：https://github.com/xingguangcuican6666/ABK/actions/workflows/build-abk-app.yml
 
+## App 界面迁移进度
+
+App 正在接入仓库内自包含的 `:abk-ui` Compose 组件库，使用动态色、固定种子回退、霞鹜文楷和 Lucide 图标。源码来源、工具链适配、逐页迁移状态、CI 结果和未完成的设备验收记录见 [UI 重设计覆盖与验收](docs/ui-redesign-coverage.md)。目前仍有运行态、授权、设置及独立宿主界面待迁移，不代表全量重设计已经完成。
+
 ## 支持范围
 
 - Android 12 / 13 / 14 / 15 / 16 GKI 构建流程，以及 OnePlus/Oplus 机型构建流程。

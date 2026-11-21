@@ -1111,6 +1111,8 @@
     <string name="root_patch_no_lkm_available">无可用 LKM</string>
     <string name="root_patch_advanced_options">高级选项</string>
     <string name="root_patch_expand_advanced_options">展开高级选项</string>
+    <string name="root_patch_advanced_expanded">高级选项已展开</string>
+    <string name="root_patch_advanced_collapsed">高级选项已收起</string>
     <string name="root_patch_advanced_desc">高级参数会直接透传给当前 APK 内置 ksud，不再做兼容探测。</string>
     <string name="root_patch_allow_shell_root">总是给 shell 授予 root 权限</string>
     <string name="root_patch_allow_shell_root_desc">总是允许 adb shell 调用 su，非必要请勿开启。</string>
