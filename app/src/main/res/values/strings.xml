@@ -1073,6 +1073,7 @@
     <string name="settings_security_signing_enabled">签名校验已重新开启，并已生成新的密钥对。</string>
     <string name="settings_security_keys_reset_done">新的签名密钥对已生成并发布。</string>
     <string name="settings_security_operation_running">正在处理安全设置…</string>
+    <string name="settings_security_confirm_countdown">%1$s（%2$d 秒）</string>
     <string name="settings_local_templates">本地模板</string>
     <string name="settings_templates_loading">正在读取模板</string>
     <string name="settings_templates_loading_desc">从 BakaSU profile 存储加载</string>

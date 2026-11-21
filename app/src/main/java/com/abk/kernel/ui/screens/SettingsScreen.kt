@@ -46,7 +46,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
@@ -97,7 +96,6 @@ import io.github.xingguangcuican6666.abk.ui.components.AbkSettingSwitch
 import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
 import java.io.File
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -1123,89 +1121,32 @@ private fun SecuritySettingsGroup(
     LaunchedEffect(canManageKeys) {
         if (canManageKeys) vm.refreshCustomSourceSecretStatus()
     }
-    SettingsGroup(title = stringResource(R.string.settings_security)) {
-        SwitchSettingsItem(
-            icon = Icons.Default.VerifiedUser,
-            title = stringResource(R.string.settings_security_signing_title),
-            subtitle = when {
-                !canManageKeys -> stringResource(R.string.settings_security_requires_fork)
-                state.artifactSigningVerificationEnabled && state.artifactSigningConfigured ->
-                    stringResource(R.string.settings_security_status_enabled_configured)
-                state.artifactSigningVerificationEnabled ->
-                    stringResource(R.string.settings_security_status_enabled_pending)
-                else ->
-                    stringResource(R.string.settings_security_status_disabled)
-            },
-            checked = state.artifactSigningVerificationEnabled,
-            enabled = !state.artifactSigningOperationInFlight && canManageKeys,
-            onCheckedChange = { enabled ->
-                when {
-                    enabled -> vm.enableArtifactSigningVerification()
-                    else -> showDisableConfirm1 = true
-                }
+    SettingsSecurityCard(
+        canManageKeys = canManageKeys,
+        signingEnabled = state.artifactSigningVerificationEnabled,
+        signingConfigured = state.artifactSigningConfigured,
+        signingBusy = state.artifactSigningOperationInFlight,
+        secretConfigured = state.customSourceSecretConfigured,
+        secretBusy = state.customSourceSecretOperationInFlight,
+        onSigningChange = { enabled ->
+            when {
+                enabled -> vm.enableArtifactSigningVerification()
+                else -> showDisableConfirm1 = true
             }
-        )
-        ExpressiveListItem(
-            title = stringResource(R.string.settings_security_import_keys),
-            subtitle = when {
-                !canManageKeys -> stringResource(R.string.settings_security_requires_fork)
-                !state.artifactSigningVerificationEnabled -> stringResource(R.string.settings_security_import_requires_enabled)
-                else -> stringResource(R.string.settings_security_import_keys_desc)
-            },
-            leadingIcon = Icons.Default.UploadFile,
-            enabled = !state.artifactSigningOperationInFlight && canManageKeys && state.artifactSigningVerificationEnabled,
-            onClick = {
-                importPublicKeyText = ""
-                importPrivateKeyText = ""
-                importError = null
-                showImportDialog = true
-            }
-        )
-        ExpressiveListItem(
-            title = stringResource(R.string.settings_security_reset_keys),
-            subtitle = stringResource(R.string.settings_security_reset_keys_desc),
-            leadingIcon = Icons.Default.Key,
-            enabled = !state.artifactSigningOperationInFlight && state.artifactSigningVerificationEnabled && canManageKeys,
-            onClick = { showResetConfirm = true }
-        )
-        ExpressiveListItem(
-            title = stringResource(R.string.settings_custom_source_secret_title),
-            subtitle = when {
-                !canManageKeys -> stringResource(R.string.settings_security_requires_fork)
-                state.customSourceSecretConfigured -> stringResource(R.string.settings_custom_source_secret_configured)
-                else -> stringResource(R.string.settings_custom_source_secret_missing)
-            },
-            leadingIcon = Icons.Default.Password,
-            enabled = canManageKeys && !state.customSourceSecretOperationInFlight,
-            onClick = {
-                customSourcePat = ""
-                showCustomSourceSecretDialog = true
-            }
-        )
-        if (state.customSourceSecretConfigured) {
-            ExpressiveListItem(
-                title = stringResource(R.string.settings_custom_source_secret_delete),
-                subtitle = stringResource(R.string.settings_custom_source_secret_delete_desc),
-                leadingIcon = Icons.Default.Delete,
-                enabled = canManageKeys && !state.customSourceSecretOperationInFlight,
-                onClick = { showDeleteCustomSourceSecretConfirm = true }
-            )
-        }
-        if (state.customSourceSecretOperationInFlight) {
-            AbkInlineLoadingPill(
-                text = stringResource(R.string.settings_custom_source_secret_operation),
-                modifier = Modifier.fillMaxWidth(),
-                compact = false
-            )
-        }
-        if (state.artifactSigningOperationInFlight) {
-            AbkInlineLoadingPill(
-                text = stringResource(R.string.settings_security_operation_running),
-                modifier = Modifier.fillMaxWidth(),
-                compact = false
-            )
-        }
-    }
+        },
+        onImportKeys = {
+            importPublicKeyText = ""
+            importPrivateKeyText = ""
+            importError = null
+            showImportDialog = true
+        },
+        onResetKeys = { showResetConfirm = true },
+        onEditSecret = {
+            customSourcePat = ""
+            showCustomSourceSecretDialog = true
+        },
+        onDeleteSecret = { showDeleteCustomSourceSecretConfirm = true },
+    )
 
     if (showImportDialog) {
         ImportArtifactSigningKeysDialog(
@@ -1291,107 +1232,31 @@ private fun SecuritySettingsGroup(
     }
 
     if (showCustomSourceSecretDialog) {
-        AlertDialog(
-            onDismissRequest = {
+        SettingsSourceSecretDialog(
+            value = customSourcePat,
+            busy = state.customSourceSecretOperationInFlight,
+            onValueChange = { customSourcePat = it },
+            onSave = {
+                vm.updateCustomSourceSecret(customSourcePat)
+                customSourcePat = ""
+                showCustomSourceSecretDialog = false
+            },
+            onDismiss = {
                 if (!state.customSourceSecretOperationInFlight) showCustomSourceSecretDialog = false
             },
-            icon = { Icon(Icons.Default.Password, contentDescription = null) },
-            title = { Text(stringResource(R.string.settings_custom_source_secret_dialog_title)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.settings_custom_source_secret_dialog_desc))
-                    OutlinedTextField(
-                        value = customSourcePat,
-                        onValueChange = { customSourcePat = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.build_source_pat)) },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        vm.updateCustomSourceSecret(customSourcePat)
-                        customSourcePat = ""
-                        showCustomSourceSecretDialog = false
-                    },
-                    enabled = customSourcePat.isNotBlank() && !state.customSourceSecretOperationInFlight
-                ) { Text(stringResource(R.string.save)) }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showCustomSourceSecretDialog = false },
-                    enabled = !state.customSourceSecretOperationInFlight
-                ) { Text(stringResource(android.R.string.cancel)) }
-            }
         )
     }
 
     if (showDeleteCustomSourceSecretConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteCustomSourceSecretConfirm = false },
-            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-            title = { Text(stringResource(R.string.settings_custom_source_secret_delete)) },
-            text = { Text(stringResource(R.string.settings_custom_source_secret_delete_confirm)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.deleteCustomSourceSecret()
-                    showDeleteCustomSourceSecretConfirm = false
-                }) { Text(stringResource(R.string.delete)) }
+        SettingsDeleteSourceSecretDialog(
+            busy = state.customSourceSecretOperationInFlight,
+            onConfirm = {
+                vm.deleteCustomSourceSecret()
+                showDeleteCustomSourceSecretConfirm = false
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteCustomSourceSecretConfirm = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            }
+            onDismiss = { showDeleteCustomSourceSecretConfirm = false },
         )
     }
-}
-
-@Composable
-private fun TimedConfirmationDialog(
-    title: String,
-    message: String,
-    confirmLabel: String,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-    delaySeconds: Int = 5,
-) {
-    var remainingSeconds by remember { mutableStateOf(delaySeconds) }
-    LaunchedEffect(Unit) {
-        while (remainingSeconds > 0) {
-            delay(1_000)
-            remainingSeconds -= 1
-        }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Warning, null) },
-        title = { Text(title) },
-        text = { Text(message) },
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
-                enabled = remainingSeconds <= 0,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-            ) {
-                Text(
-                    if (remainingSeconds > 0) {
-                        "$confirmLabel (${remainingSeconds}s)"
-                    } else {
-                        confirmLabel
-                    }
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        }
-    )
 }
 
 private enum class SecurityKeyImportTarget {
@@ -1500,95 +1365,6 @@ private fun KernelCapabilitiesSettingsScreen(
 
         Spacer(Modifier.height(80.dp))
     }
-}
-
-@Composable
-private fun ImportArtifactSigningKeysDialog(
-    publicKeyText: String,
-    privateKeyText: String,
-    error: String?,
-    importing: Boolean,
-    onPublicKeyTextChange: (String) -> Unit,
-    onPrivateKeyTextChange: (String) -> Unit,
-    onPickPublicKey: () -> Unit,
-    onPickPrivateKey: () -> Unit,
-    onImport: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Key, null) },
-        title = { Text(stringResource(R.string.settings_security_import_dialog_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = stringResource(R.string.settings_security_import_keys_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedTextField(
-                    value = publicKeyText,
-                    onValueChange = onPublicKeyTextChange,
-                    label = { Text(stringResource(R.string.settings_security_import_public_key)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 4,
-                    maxLines = 8,
-                    enabled = !importing
-                )
-                OutlinedButton(
-                    onClick = onPickPublicKey,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !importing
-                ) {
-                    Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(17.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.settings_security_import_pick_public_key))
-                }
-                OutlinedTextField(
-                    value = privateKeyText,
-                    onValueChange = onPrivateKeyTextChange,
-                    label = { Text(stringResource(R.string.settings_security_import_private_key)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 4,
-                    maxLines = 8,
-                    enabled = !importing
-                )
-                OutlinedButton(
-                    onClick = onPickPrivateKey,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !importing
-                ) {
-                    Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(17.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.settings_security_import_pick_private_key))
-                }
-                error?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onImport,
-                enabled = !importing && publicKeyText.isNotBlank() && privateKeyText.isNotBlank()
-            ) {
-                if (importing) {
-                    LoadingIndicator(Modifier.size(18.dp))
-                } else {
-                    Text(stringResource(R.string.settings_import))
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !importing) {
-                Text(stringResource(R.string.cancel))
-            }
-        }
-    )
 }
 
 private suspend fun readTextFromUri(context: Context, uri: Uri): String = withContext(Dispatchers.IO) {
