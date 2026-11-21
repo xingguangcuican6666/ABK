@@ -708,6 +708,8 @@
     <string name="settings_license_group_upstream">Upstream projects and workflow references</string>
     <string name="settings_license_group_embedded">Embedded source, binaries, and download sources</string>
     <string name="settings_license_group_android">Android/Gradle dependencies</string>
+    <string name="settings_license_group_expanded">Expanded</string>
+    <string name="settings_license_group_collapsed">Collapsed</string>
     <string name="settings_license_group_web">Web npm dependencies</string>
     <string name="settings_acknowledgements">Acknowledgements</string>
     <string name="settings_acknowledgements_desc">ABK continues development on top of the following projects, repositories, and community work.</string>

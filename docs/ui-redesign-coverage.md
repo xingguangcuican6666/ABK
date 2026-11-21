@@ -41,8 +41,9 @@
 | 设置主页：能力注入管理器分组 | 已重铺；两版目标 CI 成功 | 普通卡面、独立导航/开关、外置模式选择；8 项假回调 UI 测试在两版 instrumentation 中编译，标准主机测试通过，设备未执行 |
 | 设置子页：主题/背景/透明度/模糊、预测返回偏好 | 已重铺；两版目标 CI 成功 | 普通卡面、纵向主题/颜色选项、受控开关和透明度滑杆；9 项假回调 UI 测试在两版 instrumentation 中编译，标准主机测试通过，设备未执行；图片选择器、权限与离页同步留在宿主 |
 | 设置子页：管理器工具、内核能力 | 已重铺；两版目标 CI 成功 | 普通卡面、受控 SELinux 开关、全宽备份/恢复、纵向 TCP 选择；10 项假回调 UI 测试在两版 instrumentation 中编译，标准主机测试通过，设备未执行；文件选择器、权限与 Root 操作留在原宿主/后端 |
-| 设置子页：profile 模板 | 已重铺；本批目标 CI 待验证 | 普通卡面、带选中语义的模板列表、外置等宽字段与全宽操作；11 项假回调 UI 测试有界编译，设备未执行；原宿主继续持有草稿、内容同步及显式保存/删除 |
-| 设置子页：扩展管理、关于仓库、贡献者、开源许可 | 待页面重铺 | 第三方头像、许可证及链接不替换为示例数据 |
+| 设置子页：profile 模板 | 已重铺；两版目标 CI 成功 | 普通卡面、带选中语义的模板列表、外置等宽字段与全宽操作；11 项假回调 UI 测试有界编译，设备未执行；原宿主继续持有草稿、内容同步及显式保存/删除 |
+| 设置子页：关于仓库、贡献者、开源许可 | 已重铺；本批目标 CI 待验证 | 普通卡面与 Lucide 图标；6 条仓库链接（后四条字面英文、README 固定 `blob/main`）、28 位贡献者顺序与 `@name`/profile 链接、5 组全部 notice 名称/许可/来源/可空链接及 `" · "` 副标题规则逐字保留；许可分组可折叠但默认收起、可恢复展开状态、无任何条目被删减；6 项假回调 UI 测试有界编译，设备未执行 |
+| 设置子页：扩展管理 | 待页面重铺 | 扩展生命周期、能力授权与缺失伴随应用弹层保持不变 |
 | 设置弹层：签名密钥导入、计时安全确认、源码凭据编辑/删除 | 已重铺；两版目标 CI 成功 | 两次独立 5 秒关闭确认及重置计时不变；私钥/PAT 掩码显示，导入/凭据操作中限制编辑与关闭 |
 | 设置弹层：Runner 设置 | 已重铺；两版目标 CI 成功 | 保留 fork/配置快照与保存版本隔离草稿、标签 trim、支持/忙碌门控及显式保存；13 项假回调 UI 测试在两版 instrumentation 中编译，标准主机测试通过，设备未执行 |
 | 设置选择器：主题模式/颜色、下载目录 | 主题选择已在外观页重铺；下载目录使用原系统流程 | 主题/颜色为页内纵向选择，不新增弹层；系统图片和目录选择器不是 App 自有 UI，继续保留 ActivityResult 与 URI 权限流程 |
@@ -71,10 +72,11 @@
 | 设置 Runner 弹层批次 `ab338923` | [44928063393](https://github.com/xingguangcuican6666/ABK/actions/runs/44928063393) 成功 | [44928063452](https://github.com/xingguangcuican6666/ABK/actions/runs/44928063452) 成功 | 核对了两版完整提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后的外观设置修改 |
 | 设置外观子页批次 `3b1a2d90` | [44929574298](https://github.com/xingguangcuican6666/ABK/actions/runs/44929574298) 成功 | [44929574242](https://github.com/xingguangcuican6666/ABK/actions/runs/44929574242) 成功 | 核对了两版完整提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后的修改 |
 | 设置工具/内核能力批次 `391ed263` | [44931628038](https://github.com/xingguangcuican6666/ABK/actions/runs/44931628038) 成功 | [44931627979](https://github.com/xingguangcuican6666/ABK/actions/runs/44931627979) 成功 | 核对了两版完整提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后的模板页修改 |
+| 设置 profile 模板子页批次 `b5648d1e` | [44934125478](https://github.com/xingguangcuican6666/ABK/actions/runs/44934125478) 成功 | [44934125236](https://github.com/xingguangcuican6666/ABK/actions/runs/44934125236) 成功 | 核对了两版完整提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后关于页修改 |
 
 标准测试步骤运行 `:app:compileDebugAndroidTestKotlin :app:testDebugUnitTest :abk-ui:testDebugUnitTest`。Dev 的测试步骤只编译 instrumentation，不能写成 Dev 主机测试已通过。上述步骤均未执行设备端 UI 测试。其他自动内核工作流的状态不混入 App CI 结论，也未手工触发内核构建。
 
-- 上表每次 CI 结论仅覆盖对应提交，不覆盖之后的修改。管理器工具/内核能力已在 `391ed263` 两版目标 CI 验证；之后的 profile 模板页修改另行验证，不能沿用该结论。所有设备端 UI 测试均未执行。
+- 上表每次 CI 结论仅覆盖对应提交，不覆盖之后的修改。管理器工具/内核能力已在 `391ed263`、profile 模板页已在 `b5648d1e` 两版目标 CI 验证；之后的关于页修改另行验证，不能沿用该结论。所有设备端 UI 测试均未执行。
 
 ## 本地检查与构建命令
 
@@ -195,6 +197,14 @@ SUSFS 控制批次已完成以下本地检查：
 - 全 App 资源经 AAPT2 编译、临时最小 manifest 链接和 `javac --release 11` 资源类生成；组件、测试和真实模板宿主摘录的中英俄引用、唯一 key 与占位符检查通过，本批未修改字符串资源。临时资源包不是正式 manifest 合并或可安装 App。
 - 真实库、模板/工具/外观宿主摘录、新增 11 项 `SettingsProfileTemplateUiTest` 与既有 61 项设置 UI 测试，在缓存 Kotlin/Compose 2.2.21、JVM 11 下有界编译通过。模型与宿主字段取真实源码摘录，blur、Root 槽位类型及页面间距使用仅编译替身；不覆盖完整设置宿主、正式 blur、目标 Kotlin/Material3 或 APK。完整设置临时副本通过 Kotlin formatter 语法解析；原 4 项文本状态测试通过 JUnitCore 实际执行。
 - 11 项假回调 UI 测试使用 320dp/2×字体/RTL，覆盖空态无自动操作、原默认 JSON、新建重置、未裁剪保存、空白名禁用、宿主选择与内容同步、普通更新保留草稿、显式删除不伪造成功、忙碌条件、加载/刷新分支、错误刷新与草稿分离及原宿主 saveable 恢复。仅验证源码编译，未在设备执行。Lucide 引用与 `git diff --check` 通过；本机已知目标 Gradle 缓存阻断仍未解决，目标 CI 待验证。检查脚本、替身、日志与产物均留在仓库外。
+
+设置关于/贡献者/开源许可子页批次已完成以下本地检查：
+
+- 新建受控呈现组件 `SettingsAboutComponents.kt`：关于页由应用卡、仓库链接卡（6 条链接 + 开源许可入口）和贡献者卡组成，许可页由说明卡与 5 个 `AbkAccordion` 分组组成；全部使用普通卡面、分隔线和 Lucide 语义图标，不再使用 Hero、`SettingsGroup` 或 Material 默认图标。
+- 与模板提交 `b5648d1e` 逐字比对，设置宿主中除关于/许可切片和一处失效 import 外完全一致，权限/导航/预测返回/选择器/草稿逻辑与数据未动；链接、贡献者 28 人字母序、`@name` 与 `https://github.com/<username>` 链接、`sourceRepoUrl()`、`BuildConfig.UPSTREAM_REPO_URL`/`TOP_LEVEL_REPO_URL` 作为名称与链接、5 组全部 notice 顺序与数量均与基线相同；副标题仍按 `listOfNotNull(license, source)` 以 `" · "` 拼接，可空或空白链接不可点击且无尾部图标。
+- 许可分组折叠是纯界面状态，宿主用 `rememberSaveable` 保存已展开索引集合；默认全部收起以减少约 180 个条目的长列表噪音，展开/收起带中英俄 `stateDescription`，没有任何 notice 被省略或改写。这不改变任何业务或后端行为。
+- 全 App 资源经 AAPT2 编译、临时最小 manifest 链接和 `javac --release 11` 资源类生成；新组件、测试和真实宿主切片的中英俄引用、唯一 key 与占位符通过，新增两个折叠状态描述字符串已同步三种语言。临时资源包不是正式 manifest 合并或可安装 App。
+- 真实库、关于/模板/工具/外观宿主摘录、新增 6 项 `SettingsAboutUiTest` 与既有 72 项设置 UI 测试在缓存 Kotlin/Compose 2.2.21、JVM 11 下有界编译通过；原 4 项文本状态测试由 JUnitCore 实际执行通过。6 项假回调测试覆盖版本/链接/贡献者顺序与回调、许可入口不误触 URL、折叠隐藏并保留全部条目、可空链接不可点、`" · "` 规则及展开状态恢复，仅验证源码编译，未在设备执行。完整设置临时副本通过 formatter 语法解析；本机已知目标 Gradle 缓存阻断未解决，未把有界检查当成目标构建。检查脚本、替身、日志与产物均留在仓库外。
 
 ## 未完成的验收
 

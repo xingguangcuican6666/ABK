@@ -736,6 +736,8 @@
     <string name="settings_license_group_upstream">上游项目与工作流引用</string>
     <string name="settings_license_group_embedded">内嵌源码、二进制和下载来源</string>
     <string name="settings_license_group_android">Android/Gradle 依赖</string>
+    <string name="settings_license_group_expanded">已展开</string>
+    <string name="settings_license_group_collapsed">已收起</string>
     <string name="settings_license_group_web">Web npm 依赖</string>
     <string name="settings_acknowledgements">致谢</string>
     <string name="settings_acknowledgements_desc">ABK 基于以下项目、仓库和社区工作继续开发。</string>

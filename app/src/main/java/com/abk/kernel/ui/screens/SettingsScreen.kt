@@ -64,7 +64,6 @@ import com.abk.kernel.ui.components.childPageScrimExitTransition
 import com.abk.kernel.ui.components.rememberChildPageBackController
 import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
 import com.abk.kernel.ui.components.ExpressiveHeroCard
-import com.abk.kernel.ui.components.ExpressiveListItem
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveSwitchItem
@@ -1432,406 +1431,294 @@ private fun isDynamicColorAvailable(): Boolean =
     Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
 @Composable
-private fun AboutRepositoryScreen(
+internal fun AboutRepositoryScreen(
     topBarHeight: Dp,
     onOpenUrl: (String) -> Unit,
     onOpenSourceLicenses: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = AbkScreenHorizontalPadding)
-            .padding(bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Spacer(Modifier.height(topBarHeight + 16.dp))
-        ExpressiveHeroCard(
-            title = stringResource(R.string.app_full_name),
-            subtitle = stringResource(R.string.settings_about_intro),
-            icon = Icons.Default.Info
-        ) {
-            Text(
-                text = stringResource(R.string.settings_about_version, BuildConfig.VERSION_NAME),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-            )
-        }
-
-        SettingsGroup(title = stringResource(R.string.settings_repository_info)) {
-            repositoryLinks().forEach { link ->
-                AboutLinkRow(link, onOpenUrl)
-            }
-            ExpressiveListItem(
-                title = stringResource(R.string.settings_open_source_licenses),
-                subtitle = stringResource(R.string.settings_open_source_licenses_desc),
-                leadingIcon = Icons.Default.Article,
-                trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                onClick = onOpenSourceLicenses
-            )
-        }
-
-        SettingsGroup(title = stringResource(R.string.settings_contributors)) {
-            Text(
-                text = stringResource(R.string.settings_contributors_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-            )
-            contributors().forEach { contributor ->
-                val profileUrl = "https://github.com/${contributor.username}"
-                ExpressiveListItem(
-                    title = "@${contributor.username}",
-                    leadingIcon = Icons.Default.Person,
-                    trailingContent = { Icon(Icons.Default.OpenInBrowser, null) },
-                    onClick = { onOpenUrl(profileUrl) }
-                )
-            }
-        }
-        Spacer(Modifier.height(80.dp))
-    }
+    SettingsAboutContent(
+        topBarHeight = topBarHeight,
+        appName = stringResource(R.string.app_full_name),
+        intro = stringResource(R.string.settings_about_intro),
+        versionLabel = stringResource(R.string.settings_about_version, BuildConfig.VERSION_NAME),
+        repositoryLinks = repositoryLinks(),
+        onOpenLicenses = onOpenSourceLicenses,
+        contributors = contributors(),
+        onOpenUrl = onOpenUrl
+    )
 }
 
 @Composable
-private fun OpenSourceLicensesScreen(
+internal fun OpenSourceLicensesScreen(
     topBarHeight: Dp,
     onOpenUrl: (String) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = AbkScreenHorizontalPadding)
-            .padding(bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Spacer(Modifier.height(topBarHeight + 16.dp))
-        ExpressiveHeroCard(
-            title = stringResource(R.string.settings_open_source_licenses),
-            subtitle = stringResource(R.string.settings_open_source_licenses_intro),
-            icon = Icons.Default.Gavel
-        )
-
-        openSourceNoticeGroups().forEach { group ->
-            SettingsGroup(title = stringResource(group.titleRes)) {
-                group.items.forEach { notice ->
-                    OpenSourceNoticeRow(notice, onOpenUrl)
-                }
-            }
-        }
-        Spacer(Modifier.height(80.dp))
-    }
-}
-
-@Composable
-private fun AboutLinkRow(
-    link: AboutLink,
-    onOpenUrl: (String) -> Unit
-) {
-    ExpressiveListItem(
-        title = link.title,
-        subtitle = link.url,
-        leadingIcon = Icons.Default.Code,
-        trailingContent = { Icon(Icons.Default.OpenInBrowser, null) },
-        onClick = { onOpenUrl(link.url) }
-    )
-}
-
-@Composable
-private fun OpenSourceNoticeRow(
-    notice: OpenSourceNotice,
-    onOpenUrl: (String) -> Unit
-) {
-    val subtitle = listOfNotNull(
-        notice.license,
-        notice.source.takeIf { it.isNotBlank() }
-    ).joinToString(" · ")
-    ExpressiveListItem(
-        title = notice.name,
-        subtitle = subtitle,
-        leadingIcon = Icons.Default.Source,
-        trailingContent = {
-            if (!notice.url.isNullOrBlank()) {
-                Icon(Icons.Default.OpenInBrowser, null)
-            }
+    // Pure view state: an opened group starts collapsed to keep this long list scannable.
+    var expandedGroups by rememberSaveable { mutableStateOf(emptySet<Int>()) }
+    SettingsLicensesContent(
+        topBarHeight = topBarHeight,
+        intro = stringResource(R.string.settings_open_source_licenses_intro),
+        groups = openSourceNoticeGroups(),
+        expanded = expandedGroups,
+        onExpandedChange = { index, open ->
+            expandedGroups = if (open) expandedGroups + index else expandedGroups - index
         },
-        onClick = notice.url?.let { url -> { onOpenUrl(url) } }
+        onOpenUrl = onOpenUrl
     )
 }
 
-private data class AboutLink(
-    val title: String,
-    val url: String
-)
-
-private data class AboutContributor(
-    val username: String
-)
-
-private data class OpenSourceNotice(
-    val name: String,
-    val license: String,
-    val source: String,
-    val url: String? = null
-)
-
-private data class OpenSourceNoticeGroup(
-    val titleRes: Int,
-    val items: List<OpenSourceNotice>
-)
-
 @Composable
-private fun repositoryLinks(): List<AboutLink> = listOf(
-    AboutLink(stringResource(R.string.settings_source_repository), sourceRepoUrl()),
-    AboutLink("Releases", "${sourceRepoUrl()}/releases"),
-    AboutLink("Actions", "${sourceRepoUrl()}/actions"),
-    AboutLink("Pages", "https://${BuildConfig.SOURCE_REPO_OWNER}.github.io/${BuildConfig.SOURCE_REPO_NAME}/"),
-    AboutLink("README", "${sourceRepoUrl()}/blob/main/README.md"),
-    AboutLink(stringResource(R.string.settings_third_party_notices), "${sourceRepoUrl()}/blob/main/THIRD_PARTY_NOTICES.md")
+private fun repositoryLinks(): List<SettingsAboutLink> = listOf(
+    SettingsAboutLink(stringResource(R.string.settings_source_repository), sourceRepoUrl()),
+    SettingsAboutLink("Releases", "${sourceRepoUrl()}/releases"),
+    SettingsAboutLink("Actions", "${sourceRepoUrl()}/actions"),
+    SettingsAboutLink("Pages", "https://${BuildConfig.SOURCE_REPO_OWNER}.github.io/${BuildConfig.SOURCE_REPO_NAME}/"),
+    SettingsAboutLink("README", "${sourceRepoUrl()}/blob/main/README.md"),
+    SettingsAboutLink(stringResource(R.string.settings_third_party_notices), "${sourceRepoUrl()}/blob/main/THIRD_PARTY_NOTICES.md")
 )
 
-private fun contributors(): List<AboutContributor> = listOf(
-    AboutContributor("Akuma-Noko"),
-    AboutContributor("DebugBoard"),
-    AboutContributor("DreamFerry"),
-    AboutContributor("elysias123"),
-    AboutContributor("fanziyun"),
-    AboutContributor("Fede2782"),
-    AboutContributor("FixeQyt"),
-    AboutContributor("FunLay123"),
-    AboutContributor("gsf114"),
-    AboutContributor("guruji-byte"),
-    AboutContributor("huime180"),
-    AboutContributor("liqideqq"),
-    AboutContributor("LX200944"),
-    AboutContributor("Mazha0309"),
-    AboutContributor("MiRinChan"),
-    AboutContributor("prpjzz"),
-    AboutContributor("ReeViiS69"),
-    AboutContributor("ShirkNeko"),
-    AboutContributor("Starsun"),
-    AboutContributor("TheSillyOk"),
-    AboutContributor("TheWildJames"),
-    AboutContributor("Tools-cx-app"),
-    AboutContributor("ukriu"),
-    AboutContributor("wrnxr233"),
-    AboutContributor("Xiaomichael"),
-    AboutContributor("xingguangcuican6666"),
-    AboutContributor("yx1234587"),
-    AboutContributor("zzh20188")
+private fun contributors(): List<SettingsContributor> = listOf(
+    SettingsContributor("Akuma-Noko"),
+    SettingsContributor("DebugBoard"),
+    SettingsContributor("DreamFerry"),
+    SettingsContributor("elysias123"),
+    SettingsContributor("fanziyun"),
+    SettingsContributor("Fede2782"),
+    SettingsContributor("FixeQyt"),
+    SettingsContributor("FunLay123"),
+    SettingsContributor("gsf114"),
+    SettingsContributor("guruji-byte"),
+    SettingsContributor("huime180"),
+    SettingsContributor("liqideqq"),
+    SettingsContributor("LX200944"),
+    SettingsContributor("Mazha0309"),
+    SettingsContributor("MiRinChan"),
+    SettingsContributor("prpjzz"),
+    SettingsContributor("ReeViiS69"),
+    SettingsContributor("ShirkNeko"),
+    SettingsContributor("Starsun"),
+    SettingsContributor("TheSillyOk"),
+    SettingsContributor("TheWildJames"),
+    SettingsContributor("Tools-cx-app"),
+    SettingsContributor("ukriu"),
+    SettingsContributor("wrnxr233"),
+    SettingsContributor("Xiaomichael"),
+    SettingsContributor("xingguangcuican6666"),
+    SettingsContributor("yx1234587"),
+    SettingsContributor("zzh20188")
 )
 
-private fun openSourceNoticeGroups(): List<OpenSourceNoticeGroup> = listOf(
-    OpenSourceNoticeGroup(
+private fun openSourceNoticeGroups(): List<SettingsLicenseGroup> = listOf(
+    SettingsLicenseGroup(
         R.string.settings_license_group_repository,
         listOf(
-            OpenSourceNotice("AnyBase Kernel", "GPL-3.0", "LICENSE", sourceRepoUrl()),
-            OpenSourceNotice("ABK Control native bridge", "GPL-2.0", "app/src/main/cpp/uapi/abk_control.h"),
-            OpenSourceNotice("xingguang DDK module", "GPL", "ddk/xingguang-ddk/xingguang_ddk.c"),
-            OpenSourceNotice("DDK kernel API patch", "GPL-2.0", "ddk/patches/xingguang-ddk/0001-xingguang-ddk-api.patch"),
-            OpenSourceNotice("ZRAM LZ4 kernel glue", "GPL-2.0-only", "zram/lz4/Makefile")
+            SettingsLicenseNotice("AnyBase Kernel", "GPL-3.0", "LICENSE", sourceRepoUrl()),
+            SettingsLicenseNotice("ABK Control native bridge", "GPL-2.0", "app/src/main/cpp/uapi/abk_control.h"),
+            SettingsLicenseNotice("xingguang DDK module", "GPL", "ddk/xingguang-ddk/xingguang_ddk.c"),
+            SettingsLicenseNotice("DDK kernel API patch", "GPL-2.0", "ddk/patches/xingguang-ddk/0001-xingguang-ddk-api.patch"),
+            SettingsLicenseNotice("ZRAM LZ4 kernel glue", "GPL-2.0-only", "zram/lz4/Makefile")
         )
     ),
-    OpenSourceNoticeGroup(
+    SettingsLicenseGroup(
         R.string.settings_license_group_upstream,
         listOf(
-            OpenSourceNotice("zzh20188/GKI_KernelSU_SUSFS", "Upstream repository license", "BuildConfig.UPSTREAM_REPO_URL", BuildConfig.UPSTREAM_REPO_URL),
-            OpenSourceNotice("WildKernels/GKI_KernelSU_SUSFS", "Upstream repository license", "BuildConfig.TOP_LEVEL_REPO_URL", BuildConfig.TOP_LEVEL_REPO_URL),
-            OpenSourceNotice("CodeLinaro CLO LA", "Top-level upstream project licenses", "OnePlus manifest upstream", "https://git.codelinaro.org/clo/la"),
-            OpenSourceNotice("OnePlusOSS/kernel_manifest", "Upstream repository license / no SPDX detected", "OnePlus manifest parent", "https://github.com/OnePlusOSS/kernel_manifest"),
-            OpenSourceNotice("Xiaomichael/kernel_manifest", "Upstream repository license / no SPDX detected", "OnePlus manifest branch source", "https://github.com/Xiaomichael/kernel_manifest"),
-            OpenSourceNotice("Xiaomichael/kernel_patches", "Upstream repository license / no SPDX detected", "OnePlus patch source", "https://github.com/Xiaomichael/kernel_patches"),
-            OpenSourceNotice("KernelSU", "GPL-3.0", "workflow setup.sh source", "https://github.com/tiann/KernelSU"),
-            OpenSourceNotice("KernelSU Next", "GPL-3.0", "workflow setup.sh source", "https://github.com/KernelSU-Next/KernelSU-Next"),
-            OpenSourceNotice("SukiSU Ultra", "GPL-3.0", "kernel setup, ksud, android_bootimg", "https://github.com/SukiSU-Ultra/SukiSU-Ultra"),
-            OpenSourceNotice("BakaSU", "GPL-3.0", "workflow setup.sh source", "https://github.com/Baka-SU/BakaSU"),
-            OpenSourceNotice("SUSFS", "GPL-2.0", "kernel patches and module integration", "https://gitlab.com/simonpunk/susfs4ksu"),
-            OpenSourceNotice("ShirkNeko/susfs4ksu", "GPL-2.0", "GitHub mirror / patch source", "https://github.com/ShirkNeko/susfs4ksu"),
-            OpenSourceNotice("SukiSU_patch", "GPL-2.0", "workflow patch source", "https://github.com/ShirkNeko/SukiSU_patch"),
-            OpenSourceNotice("AnyKernel3", "GPL-2.0", "flashable kernel packaging", "https://github.com/WildKernels/AnyKernel3"),
-            OpenSourceNotice("Xiaomichael/AnyKernel3", "Upstream repository license / NOASSERTION", "OnePlus flashable packaging source", "https://github.com/Xiaomichael/AnyKernel3"),
-            OpenSourceNotice("WildKernels/kernel_patches", "GPL-2.0", "NTsync, IPSet, BBR and related patches", "https://github.com/WildKernels/kernel_patches"),
-            OpenSourceNotice("cctv18/susfs4oki", "GPL-3.0", "OnePlus/OPPO/Realme SUSFS patch source", "https://github.com/cctv18/susfs4oki"),
-            OpenSourceNotice("SukiSU_KernelPatch_patch", "Upstream repository license", "KPM patch source", "https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch"),
-            OpenSourceNotice("Action-Build", "Upstream repository license", "workflow integration", "https://github.com/Numbersf/Action-Build"),
-            OpenSourceNotice("sidex15/susfs4ksu-module", "Upstream repository license", "SUSFS module build source", "https://github.com/sidex15/susfs4ksu-module"),
-            OpenSourceNotice("LineageOS GCC prebuilts", "GPL-family toolchain notices", "workflow toolchain source", "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1"),
-            OpenSourceNotice("Baseband Guard", "Upstream repository license", "workflow setup source", "https://github.com/vc-teahouse/Baseband-guard"),
-            OpenSourceNotice("Re-Kernel", "Upstream repository license", "workflow patch source", "https://github.com/Sakion-Team/Re-Kernel"),
-            OpenSourceNotice("Droidspaces-OSS", "Upstream repository license", "virtualization support patches", "https://github.com/ravindu644/Droidspaces-OSS"),
-            OpenSourceNotice("ABK_repo module catalog", "Upstream repository license", "official module catalog", "https://github.com/xingguangcuican6666/ABK_repo")
+            SettingsLicenseNotice("zzh20188/GKI_KernelSU_SUSFS", "Upstream repository license", "BuildConfig.UPSTREAM_REPO_URL", BuildConfig.UPSTREAM_REPO_URL),
+            SettingsLicenseNotice("WildKernels/GKI_KernelSU_SUSFS", "Upstream repository license", "BuildConfig.TOP_LEVEL_REPO_URL", BuildConfig.TOP_LEVEL_REPO_URL),
+            SettingsLicenseNotice("CodeLinaro CLO LA", "Top-level upstream project licenses", "OnePlus manifest upstream", "https://git.codelinaro.org/clo/la"),
+            SettingsLicenseNotice("OnePlusOSS/kernel_manifest", "Upstream repository license / no SPDX detected", "OnePlus manifest parent", "https://github.com/OnePlusOSS/kernel_manifest"),
+            SettingsLicenseNotice("Xiaomichael/kernel_manifest", "Upstream repository license / no SPDX detected", "OnePlus manifest branch source", "https://github.com/Xiaomichael/kernel_manifest"),
+            SettingsLicenseNotice("Xiaomichael/kernel_patches", "Upstream repository license / no SPDX detected", "OnePlus patch source", "https://github.com/Xiaomichael/kernel_patches"),
+            SettingsLicenseNotice("KernelSU", "GPL-3.0", "workflow setup.sh source", "https://github.com/tiann/KernelSU"),
+            SettingsLicenseNotice("KernelSU Next", "GPL-3.0", "workflow setup.sh source", "https://github.com/KernelSU-Next/KernelSU-Next"),
+            SettingsLicenseNotice("SukiSU Ultra", "GPL-3.0", "kernel setup, ksud, android_bootimg", "https://github.com/SukiSU-Ultra/SukiSU-Ultra"),
+            SettingsLicenseNotice("BakaSU", "GPL-3.0", "workflow setup.sh source", "https://github.com/Baka-SU/BakaSU"),
+            SettingsLicenseNotice("SUSFS", "GPL-2.0", "kernel patches and module integration", "https://gitlab.com/simonpunk/susfs4ksu"),
+            SettingsLicenseNotice("ShirkNeko/susfs4ksu", "GPL-2.0", "GitHub mirror / patch source", "https://github.com/ShirkNeko/susfs4ksu"),
+            SettingsLicenseNotice("SukiSU_patch", "GPL-2.0", "workflow patch source", "https://github.com/ShirkNeko/SukiSU_patch"),
+            SettingsLicenseNotice("AnyKernel3", "GPL-2.0", "flashable kernel packaging", "https://github.com/WildKernels/AnyKernel3"),
+            SettingsLicenseNotice("Xiaomichael/AnyKernel3", "Upstream repository license / NOASSERTION", "OnePlus flashable packaging source", "https://github.com/Xiaomichael/AnyKernel3"),
+            SettingsLicenseNotice("WildKernels/kernel_patches", "GPL-2.0", "NTsync, IPSet, BBR and related patches", "https://github.com/WildKernels/kernel_patches"),
+            SettingsLicenseNotice("cctv18/susfs4oki", "GPL-3.0", "OnePlus/OPPO/Realme SUSFS patch source", "https://github.com/cctv18/susfs4oki"),
+            SettingsLicenseNotice("SukiSU_KernelPatch_patch", "Upstream repository license", "KPM patch source", "https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch"),
+            SettingsLicenseNotice("Action-Build", "Upstream repository license", "workflow integration", "https://github.com/Numbersf/Action-Build"),
+            SettingsLicenseNotice("sidex15/susfs4ksu-module", "Upstream repository license", "SUSFS module build source", "https://github.com/sidex15/susfs4ksu-module"),
+            SettingsLicenseNotice("LineageOS GCC prebuilts", "GPL-family toolchain notices", "workflow toolchain source", "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-6.4.1"),
+            SettingsLicenseNotice("Baseband Guard", "Upstream repository license", "workflow setup source", "https://github.com/vc-teahouse/Baseband-guard"),
+            SettingsLicenseNotice("Re-Kernel", "Upstream repository license", "workflow patch source", "https://github.com/Sakion-Team/Re-Kernel"),
+            SettingsLicenseNotice("Droidspaces-OSS", "Upstream repository license", "virtualization support patches", "https://github.com/ravindu644/Droidspaces-OSS"),
+            SettingsLicenseNotice("ABK_repo module catalog", "Upstream repository license", "official module catalog", "https://github.com/xingguangcuican6666/ABK_repo")
         )
     ),
-    OpenSourceNoticeGroup(
+    SettingsLicenseGroup(
         R.string.settings_license_group_embedded,
         listOf(
-            OpenSourceNotice("LZ4", "BSD-2-Clause", "zram/lz4 and zram/include/linux/lz4.h", "https://github.com/lz4/lz4"),
-            OpenSourceNotice("AOSP kernel/common", "GPL-2.0 WITH Linux-syscall-note and AOSP notices", "android.googlesource.com/kernel/common", "https://android.googlesource.com/kernel/common"),
-            OpenSourceNotice("AOSP kernel manifest", "AOSP project notices", "android.googlesource.com/kernel/manifest", "https://android.googlesource.com/kernel/manifest"),
-            OpenSourceNotice("AOSP mkbootimg", "Apache-2.0", "android.googlesource.com/platform/system/tools/mkbootimg", "https://android.googlesource.com/platform/system/tools/mkbootimg"),
-            OpenSourceNotice("AOSP kernel build-tools", "AOSP project notices", "android.googlesource.com/kernel/prebuilts/build-tools", "https://android.googlesource.com/kernel/prebuilts/build-tools"),
-            OpenSourceNotice("Android GKI certified boot images", "Android image distribution terms", "dl.google.com/android/gki"),
-            OpenSourceNotice("Android command line tools", "Android SDK License", "Dockerfile.test", "https://developer.android.com/studio")
+            SettingsLicenseNotice("LZ4", "BSD-2-Clause", "zram/lz4 and zram/include/linux/lz4.h", "https://github.com/lz4/lz4"),
+            SettingsLicenseNotice("AOSP kernel/common", "GPL-2.0 WITH Linux-syscall-note and AOSP notices", "android.googlesource.com/kernel/common", "https://android.googlesource.com/kernel/common"),
+            SettingsLicenseNotice("AOSP kernel manifest", "AOSP project notices", "android.googlesource.com/kernel/manifest", "https://android.googlesource.com/kernel/manifest"),
+            SettingsLicenseNotice("AOSP mkbootimg", "Apache-2.0", "android.googlesource.com/platform/system/tools/mkbootimg", "https://android.googlesource.com/platform/system/tools/mkbootimg"),
+            SettingsLicenseNotice("AOSP kernel build-tools", "AOSP project notices", "android.googlesource.com/kernel/prebuilts/build-tools", "https://android.googlesource.com/kernel/prebuilts/build-tools"),
+            SettingsLicenseNotice("Android GKI certified boot images", "Android image distribution terms", "dl.google.com/android/gki"),
+            SettingsLicenseNotice("Android command line tools", "Android SDK License", "Dockerfile.test", "https://developer.android.com/studio")
         )
     ),
-    OpenSourceNoticeGroup(
+    SettingsLicenseGroup(
         R.string.settings_license_group_android,
         androidDependencyNotices()
     ),
-    OpenSourceNoticeGroup(
+    SettingsLicenseGroup(
         R.string.settings_license_group_web,
         webDependencyNotices()
     )
 )
 
-private fun androidDependencyNotices(): List<OpenSourceNotice> = listOf(
-    OpenSourceNotice("Android Gradle Plugin 9.1.1", "Apache-2.0", "com.android.application"),
-    OpenSourceNotice("Kotlin Gradle/Compose plugin 2.3.21", "Apache-2.0", "org.jetbrains.kotlin.plugin.compose"),
-    OpenSourceNotice("androidx.core:core-ktx 1.15.0", "Apache-2.0", "Gradle direct dependency"),
-    OpenSourceNotice("androidx.lifecycle:lifecycle-runtime-ktx 2.8.7", "Apache-2.0", "Gradle direct dependency"),
-    OpenSourceNotice("androidx.lifecycle:lifecycle-viewmodel-compose 2.8.7", "Apache-2.0", "Gradle direct dependency"),
-    OpenSourceNotice("androidx.activity:activity-compose 1.9.3", "Apache-2.0", "Gradle direct dependency"),
-    OpenSourceNotice("androidx.compose:compose-bom 2026.05.00", "Apache-2.0", "Gradle direct dependency"),
-    OpenSourceNotice("androidx.compose.ui:ui", "Apache-2.0", "Gradle direct dependency"),
-    OpenSourceNotice("androidx.compose.ui:ui-graphics", "Apache-2.0", "Gradle direct dependency"),
-    OpenSourceNotice("androidx.compose.ui:ui-tooling-preview", "Apache-2.0", "Gradle direct dependency"),
-    OpenSourceNotice("androidx.compose.material3:material3 1.5.0-alpha19", "Apache-2.0", "Gradle direct dependency"),
-    OpenSourceNotice("androidx.compose.material:material-icons-extended", "Apache-2.0", "Gradle direct dependency"),
-    OpenSourceNotice("com.google.android.material:material 1.12.0", "Apache-2.0", "Gradle direct dependency"),
-    OpenSourceNotice("androidx.navigation:navigation-compose 2.8.5", "Apache-2.0", "Gradle direct dependency"),
-    OpenSourceNotice("Retrofit 2.11.0", "Apache-2.0", "com.squareup.retrofit2:retrofit"),
-    OpenSourceNotice("Retrofit Gson converter 2.11.0", "Apache-2.0", "com.squareup.retrofit2:converter-gson"),
-    OpenSourceNotice("OkHttp 4.12.0", "Apache-2.0", "com.squareup.okhttp3:okhttp"),
-    OpenSourceNotice("OkHttp logging-interceptor 4.12.0", "Apache-2.0", "com.squareup.okhttp3:logging-interceptor"),
-    OpenSourceNotice("Gson 2.11.0", "Apache-2.0", "com.google.code.gson:gson"),
-    OpenSourceNotice("kotlinx-serialization-json 1.7.3", "Apache-2.0", "org.jetbrains.kotlinx:kotlinx-serialization-json"),
-    OpenSourceNotice("libsu core 5.2.2", "Apache-2.0", "com.github.topjohnwu.libsu:core"),
-    OpenSourceNotice("libsu io 5.2.2", "Apache-2.0", "com.github.topjohnwu.libsu:io"),
-    OpenSourceNotice("Coil Compose 2.7.0", "Apache-2.0", "io.coil-kt:coil-compose"),
-    OpenSourceNotice("WorkManager runtime-ktx 2.10.0", "Apache-2.0", "androidx.work:work-runtime-ktx"),
-    OpenSourceNotice("DataStore preferences 1.1.2", "Apache-2.0", "androidx.datastore:datastore-preferences"),
-    OpenSourceNotice("JUnit 4.13.2", "EPL-1.0", "testImplementation"),
-    OpenSourceNotice("AndroidX Test JUnit 1.2.1", "Apache-2.0", "androidTestImplementation"),
-    OpenSourceNotice("Espresso Core 3.6.1", "Apache-2.0", "androidTestImplementation")
+private fun androidDependencyNotices(): List<SettingsLicenseNotice> = listOf(
+    SettingsLicenseNotice("Android Gradle Plugin 9.1.1", "Apache-2.0", "com.android.application"),
+    SettingsLicenseNotice("Kotlin Gradle/Compose plugin 2.3.21", "Apache-2.0", "org.jetbrains.kotlin.plugin.compose"),
+    SettingsLicenseNotice("androidx.core:core-ktx 1.15.0", "Apache-2.0", "Gradle direct dependency"),
+    SettingsLicenseNotice("androidx.lifecycle:lifecycle-runtime-ktx 2.8.7", "Apache-2.0", "Gradle direct dependency"),
+    SettingsLicenseNotice("androidx.lifecycle:lifecycle-viewmodel-compose 2.8.7", "Apache-2.0", "Gradle direct dependency"),
+    SettingsLicenseNotice("androidx.activity:activity-compose 1.9.3", "Apache-2.0", "Gradle direct dependency"),
+    SettingsLicenseNotice("androidx.compose:compose-bom 2026.05.00", "Apache-2.0", "Gradle direct dependency"),
+    SettingsLicenseNotice("androidx.compose.ui:ui", "Apache-2.0", "Gradle direct dependency"),
+    SettingsLicenseNotice("androidx.compose.ui:ui-graphics", "Apache-2.0", "Gradle direct dependency"),
+    SettingsLicenseNotice("androidx.compose.ui:ui-tooling-preview", "Apache-2.0", "Gradle direct dependency"),
+    SettingsLicenseNotice("androidx.compose.material3:material3 1.5.0-alpha19", "Apache-2.0", "Gradle direct dependency"),
+    SettingsLicenseNotice("androidx.compose.material:material-icons-extended", "Apache-2.0", "Gradle direct dependency"),
+    SettingsLicenseNotice("com.google.android.material:material 1.12.0", "Apache-2.0", "Gradle direct dependency"),
+    SettingsLicenseNotice("androidx.navigation:navigation-compose 2.8.5", "Apache-2.0", "Gradle direct dependency"),
+    SettingsLicenseNotice("Retrofit 2.11.0", "Apache-2.0", "com.squareup.retrofit2:retrofit"),
+    SettingsLicenseNotice("Retrofit Gson converter 2.11.0", "Apache-2.0", "com.squareup.retrofit2:converter-gson"),
+    SettingsLicenseNotice("OkHttp 4.12.0", "Apache-2.0", "com.squareup.okhttp3:okhttp"),
+    SettingsLicenseNotice("OkHttp logging-interceptor 4.12.0", "Apache-2.0", "com.squareup.okhttp3:logging-interceptor"),
+    SettingsLicenseNotice("Gson 2.11.0", "Apache-2.0", "com.google.code.gson:gson"),
+    SettingsLicenseNotice("kotlinx-serialization-json 1.7.3", "Apache-2.0", "org.jetbrains.kotlinx:kotlinx-serialization-json"),
+    SettingsLicenseNotice("libsu core 5.2.2", "Apache-2.0", "com.github.topjohnwu.libsu:core"),
+    SettingsLicenseNotice("libsu io 5.2.2", "Apache-2.0", "com.github.topjohnwu.libsu:io"),
+    SettingsLicenseNotice("Coil Compose 2.7.0", "Apache-2.0", "io.coil-kt:coil-compose"),
+    SettingsLicenseNotice("WorkManager runtime-ktx 2.10.0", "Apache-2.0", "androidx.work:work-runtime-ktx"),
+    SettingsLicenseNotice("DataStore preferences 1.1.2", "Apache-2.0", "androidx.datastore:datastore-preferences"),
+    SettingsLicenseNotice("JUnit 4.13.2", "EPL-1.0", "testImplementation"),
+    SettingsLicenseNotice("AndroidX Test JUnit 1.2.1", "Apache-2.0", "androidTestImplementation"),
+    SettingsLicenseNotice("Espresso Core 3.6.1", "Apache-2.0", "androidTestImplementation")
 )
 
-private fun webDependencyNotices(): List<OpenSourceNotice> = listOf(
-    OpenSourceNotice("@discoveryjs/json-ext 0.6.3", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("@jridgewell/gen-mapping 0.3.13", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("@jridgewell/resolve-uri 3.1.2", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("@jridgewell/source-map 0.3.11", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("@jridgewell/sourcemap-codec 1.5.5", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("@jridgewell/trace-mapping 0.3.31", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("@parcel/watcher 2.5.6 and platform packages", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("@types/eslint 9.6.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("@types/eslint-scope 3.7.7", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("@types/estree 1.0.8", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("@types/json-schema 7.0.15", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("@types/node 25.3.3", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("@webassemblyjs/* 1.13.2-1.14.1", "MIT / Apache-2.0", "web/package-lock.json"),
-    OpenSourceNotice("@webpack-cli/* 3.0.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("@xtuc/ieee754 1.2.0", "BSD-3-Clause", "web/package-lock.json"),
-    OpenSourceNotice("@xtuc/long 4.2.2", "Apache-2.0", "web/package-lock.json"),
-    OpenSourceNotice("acorn 8.16.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("acorn-import-phases 1.0.4", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("ajv 8.18.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("ajv-formats 2.1.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("ajv-keywords 5.1.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("baseline-browser-mapping 2.10.0", "Apache-2.0", "web/package-lock.json"),
-    OpenSourceNotice("browserslist 4.28.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("buffer-from 1.1.2", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("caniuse-lite 1.0.30001776", "CC-BY-4.0", "web/package-lock.json"),
-    OpenSourceNotice("chokidar 4.0.3", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("chrome-trace-event 1.0.4", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("clone-deep 4.0.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("colorette 2.0.20", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("commander 2.20.3 / 12.1.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("cross-spawn 7.0.6", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("css-loader 7.1.4", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("cssesc 3.0.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("detect-libc 2.1.2", "Apache-2.0", "web/package-lock.json"),
-    OpenSourceNotice("electron-to-chromium 1.5.307", "ISC", "web/package-lock.json"),
-    OpenSourceNotice("enhanced-resolve 5.20.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("envinfo 7.21.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("es-module-lexer 2.0.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("escalade 3.2.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("eslint-scope 5.1.1", "BSD-2-Clause", "web/package-lock.json"),
-    OpenSourceNotice("esrecurse 4.3.0", "BSD-2-Clause", "web/package-lock.json"),
-    OpenSourceNotice("estraverse 4.3.0 / 5.3.0", "BSD-2-Clause", "web/package-lock.json"),
-    OpenSourceNotice("events 3.3.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("fast-deep-equal 3.1.3", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("fast-uri 3.1.0", "BSD-3-Clause", "web/package-lock.json"),
-    OpenSourceNotice("fastest-levenshtein 1.0.16", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("find-up 4.1.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("flat 5.0.2", "BSD-3-Clause", "web/package-lock.json"),
-    OpenSourceNotice("function-bind 1.1.2", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("glob-to-regexp 0.4.1", "BSD-2-Clause", "web/package-lock.json"),
-    OpenSourceNotice("graceful-fs 4.2.11", "ISC", "web/package-lock.json"),
-    OpenSourceNotice("has-flag 4.0.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("hasown 2.0.2", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("icss-utils 5.1.0", "ISC", "web/package-lock.json"),
-    OpenSourceNotice("immutable 5.1.5", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("import-local 3.2.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("interpret 3.1.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("is-core-module 2.16.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("is-extglob 2.1.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("is-glob 4.0.3", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("is-plain-object 2.0.4", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("isexe 2.0.0", "ISC", "web/package-lock.json"),
-    OpenSourceNotice("isobject 3.0.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("jest-worker 27.5.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("json-parse-even-better-errors 2.3.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("json-schema-traverse 1.0.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("kind-of 6.0.3", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("loader-runner 4.3.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("locate-path 5.0.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("merge-stream 2.0.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("mime-db 1.52.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("mime-types 2.1.35", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("mini-css-extract-plugin 2.10.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("nanoid 3.3.11", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("neo-async 2.6.2", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("node-addon-api 7.1.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("node-releases 2.0.36", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("p-limit / p-locate / p-try", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("path-exists / path-key / path-parse", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("picocolors 1.1.1", "ISC", "web/package-lock.json"),
-    OpenSourceNotice("picomatch 4.0.3", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("pkg-dir 4.2.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("postcss 8.5.8", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("postcss-modules-*", "ISC / MIT", "web/package-lock.json"),
-    OpenSourceNotice("postcss-selector-parser 7.1.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("postcss-value-parser 4.2.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("readdirp 4.1.2", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("rechoir 0.8.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("require-from-string 2.0.2", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("resolve 1.22.11", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("resolve-cwd 3.0.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("resolve-from 5.0.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("sass 1.97.3", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("sass-loader 16.0.7", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("schema-utils 4.3.3", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("semver 7.7.4", "ISC", "web/package-lock.json"),
-    OpenSourceNotice("shallow-clone 3.0.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("shebang-command / shebang-regex", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("source-map 0.6.1", "BSD-3-Clause", "web/package-lock.json"),
-    OpenSourceNotice("source-map-js 1.2.1", "BSD-3-Clause", "web/package-lock.json"),
-    OpenSourceNotice("source-map-support 0.5.21", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("supports-color 8.1.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("supports-preserve-symlinks-flag 1.0.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("tapable 2.3.0", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("terser 5.46.0", "BSD-2-Clause", "web/package-lock.json"),
-    OpenSourceNotice("terser-webpack-plugin 5.3.17", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("undici-types 7.18.2", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("update-browserslist-db 1.2.3", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("util-deprecate 1.0.2", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("watchpack 2.5.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("webpack 5.105.4", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("webpack-cli 6.0.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("webpack-merge 6.0.1", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("webpack-sources 3.3.4", "MIT", "web/package-lock.json"),
-    OpenSourceNotice("which 2.0.2", "ISC", "web/package-lock.json"),
-    OpenSourceNotice("wildcard 2.0.1", "MIT", "web/package-lock.json")
+private fun webDependencyNotices(): List<SettingsLicenseNotice> = listOf(
+    SettingsLicenseNotice("@discoveryjs/json-ext 0.6.3", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("@jridgewell/gen-mapping 0.3.13", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("@jridgewell/resolve-uri 3.1.2", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("@jridgewell/source-map 0.3.11", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("@jridgewell/sourcemap-codec 1.5.5", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("@jridgewell/trace-mapping 0.3.31", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("@parcel/watcher 2.5.6 and platform packages", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("@types/eslint 9.6.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("@types/eslint-scope 3.7.7", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("@types/estree 1.0.8", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("@types/json-schema 7.0.15", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("@types/node 25.3.3", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("@webassemblyjs/* 1.13.2-1.14.1", "MIT / Apache-2.0", "web/package-lock.json"),
+    SettingsLicenseNotice("@webpack-cli/* 3.0.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("@xtuc/ieee754 1.2.0", "BSD-3-Clause", "web/package-lock.json"),
+    SettingsLicenseNotice("@xtuc/long 4.2.2", "Apache-2.0", "web/package-lock.json"),
+    SettingsLicenseNotice("acorn 8.16.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("acorn-import-phases 1.0.4", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("ajv 8.18.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("ajv-formats 2.1.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("ajv-keywords 5.1.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("baseline-browser-mapping 2.10.0", "Apache-2.0", "web/package-lock.json"),
+    SettingsLicenseNotice("browserslist 4.28.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("buffer-from 1.1.2", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("caniuse-lite 1.0.30001776", "CC-BY-4.0", "web/package-lock.json"),
+    SettingsLicenseNotice("chokidar 4.0.3", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("chrome-trace-event 1.0.4", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("clone-deep 4.0.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("colorette 2.0.20", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("commander 2.20.3 / 12.1.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("cross-spawn 7.0.6", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("css-loader 7.1.4", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("cssesc 3.0.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("detect-libc 2.1.2", "Apache-2.0", "web/package-lock.json"),
+    SettingsLicenseNotice("electron-to-chromium 1.5.307", "ISC", "web/package-lock.json"),
+    SettingsLicenseNotice("enhanced-resolve 5.20.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("envinfo 7.21.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("es-module-lexer 2.0.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("escalade 3.2.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("eslint-scope 5.1.1", "BSD-2-Clause", "web/package-lock.json"),
+    SettingsLicenseNotice("esrecurse 4.3.0", "BSD-2-Clause", "web/package-lock.json"),
+    SettingsLicenseNotice("estraverse 4.3.0 / 5.3.0", "BSD-2-Clause", "web/package-lock.json"),
+    SettingsLicenseNotice("events 3.3.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("fast-deep-equal 3.1.3", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("fast-uri 3.1.0", "BSD-3-Clause", "web/package-lock.json"),
+    SettingsLicenseNotice("fastest-levenshtein 1.0.16", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("find-up 4.1.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("flat 5.0.2", "BSD-3-Clause", "web/package-lock.json"),
+    SettingsLicenseNotice("function-bind 1.1.2", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("glob-to-regexp 0.4.1", "BSD-2-Clause", "web/package-lock.json"),
+    SettingsLicenseNotice("graceful-fs 4.2.11", "ISC", "web/package-lock.json"),
+    SettingsLicenseNotice("has-flag 4.0.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("hasown 2.0.2", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("icss-utils 5.1.0", "ISC", "web/package-lock.json"),
+    SettingsLicenseNotice("immutable 5.1.5", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("import-local 3.2.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("interpret 3.1.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("is-core-module 2.16.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("is-extglob 2.1.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("is-glob 4.0.3", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("is-plain-object 2.0.4", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("isexe 2.0.0", "ISC", "web/package-lock.json"),
+    SettingsLicenseNotice("isobject 3.0.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("jest-worker 27.5.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("json-parse-even-better-errors 2.3.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("json-schema-traverse 1.0.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("kind-of 6.0.3", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("loader-runner 4.3.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("locate-path 5.0.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("merge-stream 2.0.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("mime-db 1.52.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("mime-types 2.1.35", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("mini-css-extract-plugin 2.10.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("nanoid 3.3.11", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("neo-async 2.6.2", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("node-addon-api 7.1.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("node-releases 2.0.36", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("p-limit / p-locate / p-try", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("path-exists / path-key / path-parse", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("picocolors 1.1.1", "ISC", "web/package-lock.json"),
+    SettingsLicenseNotice("picomatch 4.0.3", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("pkg-dir 4.2.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("postcss 8.5.8", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("postcss-modules-*", "ISC / MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("postcss-selector-parser 7.1.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("postcss-value-parser 4.2.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("readdirp 4.1.2", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("rechoir 0.8.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("require-from-string 2.0.2", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("resolve 1.22.11", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("resolve-cwd 3.0.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("resolve-from 5.0.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("sass 1.97.3", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("sass-loader 16.0.7", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("schema-utils 4.3.3", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("semver 7.7.4", "ISC", "web/package-lock.json"),
+    SettingsLicenseNotice("shallow-clone 3.0.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("shebang-command / shebang-regex", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("source-map 0.6.1", "BSD-3-Clause", "web/package-lock.json"),
+    SettingsLicenseNotice("source-map-js 1.2.1", "BSD-3-Clause", "web/package-lock.json"),
+    SettingsLicenseNotice("source-map-support 0.5.21", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("supports-color 8.1.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("supports-preserve-symlinks-flag 1.0.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("tapable 2.3.0", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("terser 5.46.0", "BSD-2-Clause", "web/package-lock.json"),
+    SettingsLicenseNotice("terser-webpack-plugin 5.3.17", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("undici-types 7.18.2", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("update-browserslist-db 1.2.3", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("util-deprecate 1.0.2", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("watchpack 2.5.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("webpack 5.105.4", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("webpack-cli 6.0.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("webpack-merge 6.0.1", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("webpack-sources 3.3.4", "MIT", "web/package-lock.json"),
+    SettingsLicenseNotice("which 2.0.2", "ISC", "web/package-lock.json"),
+    SettingsLicenseNotice("wildcard 2.0.1", "MIT", "web/package-lock.json")
 )
 
 private fun sourceRepoUrl(): String =

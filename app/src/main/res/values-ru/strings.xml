@@ -706,6 +706,8 @@
     <string name="settings_license_group_upstream">Upstream-проекты и ссылки workflow</string>
     <string name="settings_license_group_embedded">Встроенный код, бинарные файлы и источники загрузки</string>
     <string name="settings_license_group_android">Зависимости Android/Gradle</string>
+    <string name="settings_license_group_expanded">Развёрнуто</string>
+    <string name="settings_license_group_collapsed">Свёрнуто</string>
     <string name="settings_license_group_web">Зависимости Web npm</string>
     <string name="settings_acknowledgements">Благодарности</string>
     <string name="settings_acknowledgements_desc">ABK развивается на основе следующих проектов, репозиториев и работ сообщества.</string>
