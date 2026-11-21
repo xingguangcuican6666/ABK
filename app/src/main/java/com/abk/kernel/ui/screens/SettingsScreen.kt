@@ -93,6 +93,8 @@ import com.abk.kernel.viewmodel.MainUiState
 import com.abk.kernel.viewmodel.MainViewModel
 import com.abk.kernel.viewmodel.exportDiagnosticBundle
 import io.github.xingguangcuican6666.abk.ui.components.AbkOption
+import io.github.xingguangcuican6666.abk.ui.components.AbkSettingSwitch
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -302,20 +304,9 @@ fun SettingsScreen(
     }
 
     if (showLogoutDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            icon = { Icon(Icons.Default.Logout, null) },
-            title = { Text(stringResource(R.string.settings_logout_title)) },
-            text = { Text(stringResource(R.string.settings_logout_message)) },
-            confirmButton = {
-                Button(
-                    onClick = { showLogoutDialog = false; vm.logout() },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text(stringResource(R.string.confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) { Text(stringResource(R.string.cancel)) }
-            }
+        SettingsLogoutDialog(
+            onDismiss = { showLogoutDialog = false },
+            onConfirm = { showLogoutDialog = false; vm.logout() },
         )
     }
 
@@ -809,68 +800,34 @@ private fun SettingsMainContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Spacer(Modifier.height(topBarHeight + 16.dp))
-        SettingsGroup(title = stringResource(R.string.settings_account)) {
-            state.user?.let { user ->
-                ExpressiveListItem(
-                    title = user.login,
-                    subtitle = user.name ?: user.htmlUrl,
-                    leadingContent = {
-                        AsyncImage(
-                            model = user.avatarUrl,
-                            contentDescription = null,
-                            modifier = Modifier.size(42.dp)
-                                .clip(CircleShape)
-                        )
-                    },
-                    trailingContent = {
-                        IconButton(onClick = onLogout) {
-                            Icon(
-                                Icons.Default.Logout,
-                                contentDescription = stringResource(R.string.settings_logout_desc),
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                )
-                val forkUrl = state.forkRepo?.let { repo ->
-                    repo.htmlUrl.takeIf { it.isNotBlank() } ?: "https://github.com/${repo.fullName}"
-                }
-                val openCtx = LocalContext.current
-                val onForkClick: (() -> Unit)? = if (forkUrl != null) {
-                    { openUrl(openCtx, forkUrl) }
-                } else null
-                ExpressiveListItem(
-                    title = stringResource(R.string.settings_fork_repo),
-                    subtitle = state.forkRepo?.fullName ?: stringResource(R.string.settings_waiting_fork),
-                    leadingIcon = Icons.Default.ForkRight,
-                    onClick = onForkClick
-                )
-            } ?: ExpressiveListItem(
-                title = stringResource(R.string.settings_not_logged_in),
-                subtitle = stringResource(R.string.settings_login_hint),
-                leadingIcon = Icons.Default.AccountCircle,
-                trailingContent = {
-                    Icon(
-                        Icons.Default.ChevronRight,
-                        contentDescription = stringResource(R.string.settings_login_hint)
-                    )
-                },
-                onClick = { vm.openLoginOobe() }
-            )
-            ExpressiveListItem(
-                title = stringResource(R.string.settings_kernel_runner_title),
-                subtitle = stringResource(R.string.settings_kernel_runner_desc),
-                leadingIcon = Icons.Default.Computer,
-                onClick = onOpenKernelRunnerSettings,
-                trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
-            )
+        val user = state.user
+        val forkUrl = state.forkRepo?.let { repo ->
+            repo.htmlUrl.takeIf { it.isNotBlank() } ?: "https://github.com/${repo.fullName}"
         }
+        SettingsAccountCard(
+            login = user?.login,
+            description = user?.let { it.name ?: it.htmlUrl },
+            forkName = state.forkRepo?.fullName,
+            canOpenFork = forkUrl != null,
+            onLogin = { vm.openLoginOobe() },
+            onLogout = onLogout,
+            onOpenFork = { forkUrl?.let { openUrl(context, it) } },
+            onOpenRunner = onOpenKernelRunnerSettings,
+            avatar = user?.let { account ->
+                {
+                    AsyncImage(
+                        model = account.avatarUrl,
+                        contentDescription = null,
+                        modifier = Modifier.size(42.dp).clip(CircleShape),
+                    )
+                }
+            },
+        )
 
-        SettingsGroup(title = stringResource(R.string.settings_build)) {
-            SwitchSettingsItem(
-                icon = Icons.Default.Sync,
+        SettingsMainCard(title = stringResource(R.string.settings_build)) {
+            AbkSettingSwitch(
                 title = stringResource(R.string.settings_workflow_foreground_refresh),
-                subtitle = stringResource(R.string.settings_workflow_foreground_refresh_desc),
+                description = stringResource(R.string.settings_workflow_foreground_refresh_desc),
                 checked = state.workflowForegroundRefreshEnabled,
                 onCheckedChange = { vm.setWorkflowForegroundRefreshEnabled(it) }
             )
@@ -884,17 +841,15 @@ private fun SettingsMainContent(
                     onSelect = { vm.setWorkflowForegroundRefreshIntervalSec(it) }
                 )
             }
-            SwitchSettingsItem(
-                icon = Icons.Default.Download,
+            AbkSettingSwitch(
                 title = stringResource(R.string.settings_auto_download),
-                subtitle = stringResource(R.string.settings_auto_download_desc),
+                description = stringResource(R.string.settings_auto_download_desc),
                 checked = state.autoDownload,
                 onCheckedChange = { vm.setAutoDownload(it) }
             )
-            SwitchSettingsItem(
-                icon = Icons.Default.CloudDownload,
+            AbkSettingSwitch(
                 title = stringResource(R.string.settings_prebuilt_gki),
-                subtitle = stringResource(R.string.settings_prebuilt_gki_desc),
+                description = stringResource(R.string.settings_prebuilt_gki_desc),
                 checked = state.prebuiltGkiEnabled,
                 onCheckedChange = { vm.setPrebuiltGkiEnabled(it) }
             )
@@ -915,18 +870,18 @@ private fun SettingsMainContent(
             Spacer(Modifier.height(10.dp))
             val hasArtifacts = state.downloadedArtifacts.isNotEmpty()
             var showClearArtifactsDialog by remember { mutableStateOf(false) }
-            ExpressiveListItem(
+            SettingsMainDestination(
                 title = stringResource(R.string.settings_clear_artifacts),
-                subtitle = if (hasArtifacts) {
+                description = if (hasArtifacts) {
                     val count = state.downloadedArtifacts.size
                     val totalBytes = state.downloadedArtifacts.sumOf { it.sizeBytes }
                     "$count ${stringResource(R.string.settings_clear_artifacts_files)} · ${DownloadUtils.formatSize(totalBytes)}"
                 } else {
                     stringResource(R.string.settings_clear_artifacts_empty)
                 },
-                leadingIcon = Icons.Default.Delete,
+                icon = AbkIcons.Trash,
                 enabled = hasArtifacts,
-                onClick = if (hasArtifacts) {{ showClearArtifactsDialog = true }} else null
+                onClick = { showClearArtifactsDialog = true },
             )
             if (showClearArtifactsDialog) {
                 SettingsClearDownloadsDialog(
@@ -944,7 +899,7 @@ private fun SettingsMainContent(
             vm = vm,
         )
 
-        SettingsGroup(title = stringResource(R.string.settings_app_update)) {
+        SettingsMainCard(title = stringResource(R.string.settings_app_update)) {
             AppUpdateStabilityPicker(
                 selected = state.appUpdateStability,
                 onSelect = vm::setAppUpdateStability
@@ -953,61 +908,17 @@ private fun SettingsMainContent(
                 selected = state.appUpdateLine,
                 onSelect = vm::setAppUpdateLine
             )
-            ExpressiveListItem(
-                title = stringResource(R.string.settings_check_app_update),
-                subtitle = appUpdateCheckSubtitle(state),
-                leadingIcon = Icons.Default.Download,
-                trailingContent = {
-                    if (state.appUpdateChecking) {
-                        LoadingIndicator(Modifier.size(22.dp))
-                    } else {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.settings_check_app_update))
-                    }
-                },
-                onClick = vm::checkAppUpdate
+            SettingsAppUpdateFeedback(
+                checking = state.appUpdateChecking,
+                downloading = state.appUpdateDownloading,
+                downloadProgress = state.appUpdateDownloadProgress,
+                info = state.appUpdateInfo,
+                checkSubtitle = appUpdateCheckSubtitle(state),
+                resultSubtitle = state.appUpdateInfo?.let { appUpdateResultSubtitle(it) },
+                error = state.appUpdateError,
+                onCheck = vm::checkAppUpdate,
+                onDownload = vm::downloadAndInstallAppUpdate,
             )
-            state.appUpdateInfo?.let { info ->
-                ExpressiveListItem(
-                    title = if (info.hasUpdate) {
-                        stringResource(R.string.settings_app_update_available)
-                    } else {
-                        stringResource(R.string.settings_app_update_latest)
-                    },
-                    subtitle = appUpdateResultSubtitle(info),
-                    leadingIcon = if (info.hasUpdate) Icons.Default.Download else Icons.Default.Verified
-                )
-                if (info.hasUpdate) {
-                    val downloadUrl = info.remote.downloadUrl
-                    ExpressiveListItem(
-                        title = stringResource(R.string.settings_download_install_update),
-                        subtitle = when {
-                            state.appUpdateDownloading -> stringResource(
-                                R.string.settings_app_update_downloading_progress,
-                                state.appUpdateDownloadProgress
-                            )
-                            downloadUrl.isBlank() -> stringResource(R.string.settings_app_update_link_missing)
-                            else -> downloadUrl
-                        },
-                        leadingIcon = Icons.Default.InstallMobile,
-                        enabled = downloadUrl.isNotBlank(),
-                        trailingContent = {
-                            if (state.appUpdateDownloading) {
-                                LoadingIndicator(Modifier.size(22.dp))
-                            } else if (downloadUrl.isNotBlank()) {
-                                Icon(Icons.Default.Download, contentDescription = stringResource(R.string.settings_download_install_update))
-                            }
-                        },
-                        onClick = downloadUrl.takeIf { it.isNotBlank() }?.let { { vm.downloadAndInstallAppUpdate() } }
-                    )
-                }
-            }
-            state.appUpdateError?.takeIf { it.isNotBlank() }?.let { error ->
-                ExpressiveListItem(
-                    title = stringResource(R.string.settings_app_update_error),
-                    subtitle = error,
-                    leadingIcon = Icons.Default.Error
-                )
-            }
         }
 
         ManagerInjectedSettingsGroup(
@@ -1020,17 +931,16 @@ private fun SettingsMainContent(
             onOpenInstalledModules = onOpenInstalledModules
         )
 
-        SettingsGroup(title = stringResource(R.string.settings_notification)) {
-            SwitchSettingsItem(
-                icon = Icons.Default.Notifications,
+        SettingsMainCard(title = stringResource(R.string.settings_notification)) {
+            AbkSettingSwitch(
                 title = stringResource(R.string.settings_notify_build),
-                subtitle = stringResource(R.string.settings_notify_build_desc),
+                description = stringResource(R.string.settings_notify_build_desc),
                 checked = state.notifyBuild,
                 onCheckedChange = { vm.setNotifyBuild(it) }
             )
         }
 
-        SettingsGroup(title = stringResource(R.string.settings_language)) {
+        SettingsMainCard(title = stringResource(R.string.settings_language)) {
             val ctx = LocalContext.current
             val currentLang = LocaleHelper.getLanguage(ctx)
             val activity = ctx as? Activity
@@ -1044,76 +954,42 @@ private fun SettingsMainContent(
             )
         }
 
-        SettingsGroup(title = stringResource(R.string.settings_theme)) {
-            ExpressiveListItem(
+        SettingsMainCard(title = stringResource(R.string.settings_theme)) {
+            SettingsMainDestination(
                 title = stringResource(R.string.settings_color_appearance),
-                subtitle = "${themeModeLabel(state.themeMode)} · ${dynamicColorLabel(state.dynamicColorEnabled)}",
-                leadingIcon = Icons.Default.Palette,
-                trailingContent = {
-                    Icon(
-                        Icons.Default.ChevronRight,
-                        contentDescription = stringResource(R.string.settings_enter_color_appearance)
-                    )
-                },
-                onClick = onOpenThemeSettings
+                description = "${themeModeLabel(state.themeMode)} · ${dynamicColorLabel(state.dynamicColorEnabled)}",
+                icon = AbkIcons.Controls,
+                onClick = onOpenThemeSettings,
             )
         }
 
-        SettingsGroup(title = stringResource(R.string.settings_extensions_title)) {
-            ExpressiveListItem(
+        SettingsMainCard(title = stringResource(R.string.settings_extensions_title)) {
+            SettingsMainDestination(
                 title = stringResource(R.string.settings_extensions_manage),
-                subtitle = stringResource(R.string.settings_extensions_manage_desc),
-                leadingIcon = Icons.Default.Extension,
-                trailingContent = {
-                    Icon(Icons.Default.ChevronRight, contentDescription = null)
-                },
-                onClick = onOpenExtensionManager
+                description = stringResource(R.string.settings_extensions_manage_desc),
+                icon = AbkIcons.Modules,
+                onClick = onOpenExtensionManager,
             )
         }
 
-        SettingsGroup(title = stringResource(R.string.settings_about)) {
-            ExpressiveListItem(
-                title = stringResource(R.string.app_full_name),
-                subtitle = "AnyBase Kernel v${BuildConfig.VERSION_NAME}",
-                leadingIcon = Icons.Default.Info
-            )
-            ExpressiveListItem(
+        SettingsMainCard(title = stringResource(R.string.settings_about)) {
+            Text(stringResource(R.string.app_full_name), style = MaterialTheme.typography.titleMedium)
+            Text("AnyBase Kernel v${BuildConfig.VERSION_NAME}")
+            SettingsMainDestination(
                 title = stringResource(R.string.settings_about),
-                subtitle = stringResource(R.string.settings_about_desc),
-                leadingIcon = Icons.Default.AutoAwesome,
-                trailingContent = {
-                    Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_enter_about))
-                },
-                onClick = onAbout
+                description = stringResource(R.string.settings_about_desc),
+                icon = AbkIcons.Info,
+                onClick = onAbout,
             )
-            ExpressiveListItem(
+            SettingsMainDestination(
                 title = stringResource(R.string.settings_open_source_licenses),
-                subtitle = stringResource(R.string.settings_open_source_licenses_desc),
-                leadingIcon = Icons.Default.Article,
-                trailingContent = {
-                    Icon(
-                        Icons.Default.ChevronRight,
-                        contentDescription = stringResource(R.string.settings_enter_open_source_licenses)
-                    )
-                },
-                onClick = onOpenSourceLicenses
+                description = stringResource(R.string.settings_open_source_licenses_desc),
+                icon = AbkIcons.InfoMark,
+                onClick = onOpenSourceLicenses,
             )
-            ExpressiveListItem(
-                title = stringResource(R.string.settings_export_diagnostics),
-                subtitle = stringResource(R.string.settings_export_diagnostics_desc),
-                leadingIcon = Icons.Default.BugReport,
-                enabled = !exportingDiagnostics,
-                trailingContent = {
-                    if (exportingDiagnostics) {
-                        LoadingIndicator(Modifier.size(20.dp))
-                    } else {
-                        Icon(
-                            Icons.Default.Share,
-                            contentDescription = stringResource(R.string.settings_export)
-                        )
-                    }
-                },
-                onClick = onExportDiagnostics
+            SettingsDiagnosticsAction(
+                exporting = exportingDiagnostics,
+                onExport = onExportDiagnostics,
             )
         }
 

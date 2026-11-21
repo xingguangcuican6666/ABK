@@ -35,8 +35,9 @@
 | 运行态模块文件权限、安装/更新/卸载确认、变更日志、执行弹层 | 已重铺；两版目标 CI 成功 | 7 项假回调 UI 测试已在目标环境编译，未在设备执行；安装进行中不可关闭，成功结束才可重启；独立 action 输出仍可关闭且不会取消后台任务 |
 | Root 授权：列表、搜索、加载/刷新、应用详情与 profile | 已重铺；两版目标 CI 成功 | 详情入口与授权开关分离，纵向配置选项、外置字段和换行徽标；应用图标加载、模板、保存 payload、隐藏 flags 和既有解析回退保持原边界；6 项假回调 UI 测试已在目标环境编译，设备未执行 |
 | SUSFS 控制：能力、各控制表单及执行反馈 | 已重铺；两版目标 CI 成功 | 能力条件和配置同步/解析不变，保存期间禁用编辑与操作；5 项纯配置测试实际通过，7 项假回调 UI 测试已在目标环境编译，设备未执行 |
-| 设置偏好：下载目录/镜像、下载线程、清理确认、更新线路/稳定性、前台刷新间隔、语言 | 控件已重铺；目标 CI 待验证 | 保留目录选择器与权限、失焦/IME Done 提交及宿主语言切换；4 项纯文本状态测试已执行通过，6 项假回调 UI 测试仅有界编译，设备未执行 |
-| 设置主页面剩余账号/退出、更新反馈、诊断导出及其他分组 | 待页面重铺 | 本批控件迁移不等于设置主页完成；不展示或记录凭据 |
+| 设置偏好：下载目录/镜像、下载线程、清理确认、更新线路/稳定性、前台刷新间隔、语言 | 控件已重铺；两版目标 CI 成功 | 保留目录选择器与权限、失焦/IME Done 提交及宿主语言切换；标准主机测试通过，6 项假回调 UI 测试已在目标环境编译，设备未执行 |
+| 设置主页：账号/退出、更新反馈、诊断导出及主要分组 | 已重铺；目标 CI 待验证 | 账号头像仍由宿主 Coil 加载，登录/退出/Fork/Runner/下载/分享保持真实入口；7 项假回调 UI 测试仅有界编译，设备未执行 |
+| 设置主页：签名/源码凭据安全区、能力注入管理器分组 | 待页面重铺 | 本批主布局迁移不等于设置主页全部完成；不展示或记录凭据，保留操作中禁用与能力边界 |
 | 设置子页：主题/背景/透明度/模糊、管理器工具、内核能力、profile 模板 | 待页面重铺 | 保留能力决定的入口与预测返回 |
 | 设置子页：扩展管理、关于仓库、贡献者、开源许可 | 待页面重铺 | 第三方头像、许可证及链接不替换为示例数据 |
 | 设置弹层：Runner、签名密钥导入、计时安全确认及其他设置选择器 | 待迁移 | 保留敏感输入、计时、授权及关闭限制 |
@@ -58,6 +59,7 @@
 | 运行态批次 `6e7a94b4` | [44910178872](https://github.com/xingguangcuican6666/ABK/actions/runs/44910178872) 成功 | [44910178821](https://github.com/xingguangcuican6666/ABK/actions/runs/44910178821) 成功 | 标准主机测试、两版完整 App 与 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
 | Root 授权批次 `fb95a93b` | [44912344483](https://github.com/xingguangcuican6666/ABK/actions/runs/44912344483) 成功 | [44912344479](https://github.com/xingguangcuican6666/ABK/actions/runs/44912344479) 成功 | 标准主机测试、两版完整 App 与 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
 | SUSFS 控制批次 `c2415cee` | [44915201214](https://github.com/xingguangcuican6666/ABK/actions/runs/44915201214) 成功 | [44915201208](https://github.com/xingguangcuican6666/ABK/actions/runs/44915201208) 成功 | 核对了两版提交 SHA；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
+| 设置偏好批次 `498a2de8` | [44917628141](https://github.com/xingguangcuican6666/ABK/actions/runs/44917628141) 成功 | [44917628210](https://github.com/xingguangcuican6666/ABK/actions/runs/44917628210) 成功 | 核对了两版提交 SHA 与终态；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后的设置主页修改 |
 
 标准测试步骤运行 `:app:compileDebugAndroidTestKotlin :app:testDebugUnitTest :abk-ui:testDebugUnitTest`。Dev 的测试步骤只编译 instrumentation，不能写成 Dev 主机测试已通过。上述步骤均未执行设备端 UI 测试。其他自动内核工作流的状态不混入 App CI 结论，也未手工触发内核构建。
 
@@ -116,8 +118,17 @@ SUSFS 控制批次已完成以下本地检查：
 - 全 App 资源经 AAPT2 编译并用临时最小 manifest 链接，`javac --release 11` 生成资源类；组件/测试在中英俄的引用、唯一 key 和格式化占位符通过检查，补齐了下载线程标题及说明的俄文。临时资源包不是可安装 App。
 - 真实库、偏好组件、下载目录/语言工具及 6 项 `SettingsPreferenceUiTest` 在缓存 Kotlin/Compose 2.2.21、JVM 11 下有界编译通过；槽位枚举使用仅编译替身。原有 4 项 `SettingsScreenTextFieldStateTest` 已用 JUnitCore 实际执行通过。6 项 UI 测试覆盖失焦/IME Done、320dp/2×/RTL、目录入口和显式提交、线程语义/范围/回调、受控语言选择以及取消/关闭/确认分离，未在设备执行。
 - 完整设置文件的临时副本通过 Kotlin formatter 语法解析；抽取当前目录宿主、镜像及选项函数，使用真实 Android/Compose API 和库进行额外有界编译。模型 helper 和偏好间隔取自源码的有限摘录，此项不覆盖完整设置宿主、目标依赖、ActivityResult 往返或实际 IME。
-- 本机重试目标 Gradle 的 instrumentation 编译与两模块主机测试，仍在根项目依赖解析阶段失败：离线缓存缺少 AGP 9.1.1 与 analytics protos 32.1.1，未执行到编译或测试任务。目标 App CI 尚未验证此批次；不能沿用前一批 SUSFS 的成功结论。
+- 本机重试目标 Gradle 的 instrumentation 编译与两模块主机测试，仍在根项目依赖解析阶段失败：离线缓存缺少 AGP 9.1.1 与 analytics protos 32.1.1，未执行到编译或测试任务。随后此批次两版目标 App CI 均完成完整编译和 APK 构建，标准主机测试通过；设备端测试仍未执行。
 - `git diff --check` 通过；临时检查脚本、日志、替身和编译输出留在仓库外。
+
+设置主页批次已完成以下本地检查：
+
+- 账号、构建偏好、更新、通知、语言、外观入口、扩展入口和关于入口使用普通卡面、纵向说明及全宽操作；账号头像仍由宿主 Coil 注入，不替换为示例图标。退出只在确认后调用；更新检查、下载和诊断导出只走显式操作，加载中禁用重复点击，下载仍要求有更新及非空链接。
+- 与设置偏好提交逐字比对，除主布局、退出弹层及两条导入外，设置文件其余部分保持不变，包括生命周期/返回与子页导航、安装 launcher、诊断导出/分享、目录权限、语言回调、安全组及管理器组；主页面相关 ViewModel 入口仍各保留一次。未修改 ViewModel、模型、偏好仓库、工具或工作流。
+- 全 App 资源经 AAPT2 编译和临时最小 manifest 链接；组件与测试引用在中英俄均存在，key 唯一、格式化占位符一致。临时资源包不是正式 manifest 合并或可安装 App。
+- 真实库、主页/偏好组件及其共 13 项 UI 测试在缓存 Kotlin/Compose 2.2.21、JVM 11 环境有界编译通过；blur 和槽位枚举使用仅编译替身。原 4 项纯文本状态测试再次由 JUnitCore 实际执行通过。新增 7 项 `SettingsMainUiTest` 覆盖 320dp/2×/RTL、账号操作分离、退出确认、更新缺链接/无更新/加载/进度、错误语义、导出和禁用入口，未在设备执行。
+- 完整设置文件的临时副本通过 Kotlin formatter 语法解析；主页面宿主摘录使用真实 Android/Compose/库 API、账号模型及源码字段类型完成额外有界编译。Coil、ViewModel、未改动的其他分组和产物大小模型仅为编译用替身，不证明完整设置宿主、正式 Coil/blur、目标依赖或 APK 已通过。
+- 本机目标 Gradle 重试仍因缺少 AGP 9.1.1 和 analytics protos 32.1.1 缓存失败，未执行到 instrumentation 编译或主机测试；本批次目标 CI 待验证，不能沿用设置偏好的成功结论。`git diff --check` 通过，临时脚本、日志、替身和产物均留仓库外。
 
 ## 未完成的验收
 
