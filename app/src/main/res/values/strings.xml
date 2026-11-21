@@ -1511,4 +1511,26 @@
     <string name="settings_kernel_runner_saved">已保存到 GitHub</string>
     <string name="settings_kernel_runner_saving">正在保存…</string>
     <string name="settings_kernel_runner_request_failed">未能完成 GitHub 仓库变量请求，请刷新后重试。</string>
+
+    <!-- Build patch modules and module repositories -->
+    <string name="build_patch_title">KernelSU 补丁模块</string>
+    <string name="build_patch_description">构建期读取 module.prop，按依赖分组应用并合并补丁，再生成 NyaSU 补丁。这不是运行态 ZIP 模块，也不是 module.conf 外部模块。</string>
+    <string name="build_patch_count">已配置 %1$d 个仓库</string>
+    <string name="build_patch_repo">补丁仓库 URL[@ref]</string>
+    <string name="build_patch_repo_hint">支持 HTTPS、SSH 和 git@host:path。可选 ref 不能包含 /、: 或 @；不在 App 内下载或执行。</string>
+    <string name="build_patch_sdk">NyaSU SDK commit（可选）</string>
+    <string name="build_patch_sdk_hint">留空使用工作流固定的默认 commit；自定义值必须是完整 40 位 SHA。</string>
+    <string name="build_patch_invalid_repo">仓库格式无效或数量超过 32。请检查 URL 与可选 ref；每项只能填写一个仓库。</string>
+    <string name="build_patch_invalid_sdk">SDK commit 必须为完整 40 位十六进制 SHA。</string>
+    <string name="build_patch_unavailable">补丁模块仅适用于启用 KernelSU 的 GKI / 自定义源码构建。当前目标不适用；草稿仍保留，请切换目标或移除补丁配置后再提交。</string>
+    <string name="build_patch_sync_required">未能确认此 Fork 在实际构建分支支持补丁配置。请手动同步包含模块封套协议的工作流和解析脚本，刷新后重试；未提交构建。</string>
+    <string name="build_patch_edit">编辑补丁仓库</string>
+    <string name="build_patch_add">添加补丁仓库</string>
+    <string name="build_patch_remove">移除补丁仓库 %1$s</string>
+    <string name="build_patch_empty">尚未配置补丁仓库；原有构建流程不变。</string>
+    <string name="ui_module_build_protocol">这是构建期外部 module.conf 模块或模块集，可按阶段加入内核构建。它不会作为运行态 ZIP 安装，也不是 KernelSU module.prop 补丁模块。</string>
+    <string name="ui_module_runtime_protocol">这是运行态 ZIP 模块仓库。确认后由当前系统的安装器处理，通常需要重启后生效。构建期 module.conf 外部模块和 KernelSU module.prop 补丁不在这里安装。</string>
+    <string name="ui_module_install_success">模块安装完成</string>
+    <string name="ui_module_install_failure">模块安装失败</string>
+    <string name="ui_module_source_error">无法加载此仓库</string>
 </resources>

@@ -1374,4 +1374,27 @@
     <string name="settings_kernel_runner_saved">Saved to GitHub</string>
     <string name="settings_kernel_runner_saving">Saving…</string>
     <string name="settings_kernel_runner_request_failed">The GitHub repository variables request did not complete. Refresh and try again.</string>
+
+    <!-- Build patch modules and module repositories -->
+    <string name="build_patch_title">KernelSU patch modules</string>
+    <string name="build_patch_description">At build time, module.prop dependencies group patches before merging and generating NyaSU patches. These are not runtime ZIP modules or module.conf external modules.</string>
+    <string name="build_patch_count">%1$d repositories configured</string>
+    <string name="build_patch_repo">Patch repository URL[@ref]</string>
+    <string name="build_patch_repo_hint">HTTPS, SSH and git@host:path are supported. Optional refs cannot contain /, : or @. The app does not download or execute module code.</string>
+    <string name="build_patch_sdk">NyaSU SDK commit (optional)</string>
+    <string name="build_patch_sdk_hint">Leave blank for the workflow’s pinned default commit. Custom values must be full 40-character SHAs.</string>
+    <string name="build_patch_invalid_repo">Invalid repository or more than 32 entries. Check the URL and optional ref; enter one repository per entry.</string>
+    <string name="build_patch_invalid_sdk">The SDK commit must be a full 40-character hexadecimal SHA.</string>
+    <string name="build_patch_unavailable">Patch modules require KernelSU on GKI / custom source builds. The current target is not supported. Your draft is kept; change targets or remove patch entries before submitting.</string>
+    <string name="build_patch_sync_required">Patch support could not be confirmed at this fork’s dispatch ref. Manually sync the module-envelope workflows and parser, then refresh and retry. No build was submitted.</string>
+    <string name="build_patch_edit">Edit patch repository</string>
+    <string name="build_patch_add">Add patch repository</string>
+    <string name="build_patch_remove">Remove patch repository %1$s</string>
+    <string name="build_patch_empty">No patch repositories configured; the existing build flow is unchanged.</string>
+    <string name="ui_module_build_protocol">These are build-time module.conf repositories or module sets that can be added by stage. They are not runtime ZIP installs or KernelSU module.prop patch modules.</string>
+    <string name="ui_module_runtime_protocol">This repository lists runtime ZIP modules. After confirmation, installation uses the current system installer and usually requires a reboot. Build-time module.conf modules and KernelSU module.prop patches are not installed here.</string>
+    <string name="ui_module_install_success">Module installed</string>
+    <string name="ui_module_install_failure">Module installation failed</string>
+    <string name="ui_module_source_error">Could not load this repository</string>
+    <string name="module_repo_refreshing_repository">Refreshing repositories</string>
 </resources>

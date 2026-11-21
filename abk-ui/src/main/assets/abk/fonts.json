@@ -1,0 +1,20 @@
+{
+  "version": "v1.250",
+  "files": {
+    "abk_wenkai_regular.ttf": {
+      "url": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.250/fonts/TTF/LXGWWenKai-Regular.ttf",
+      "sha256": "67bf3eba16f89862dc8f7e7b7c8ccf8d6477a479af1b72d0cf8b4fcb27336910",
+      "bytes": 15898198
+    },
+    "abk_wenkai_bold.ttf": {
+      "url": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.250/fonts/TTF/LXGWWenKai-Bold.ttf",
+      "sha256": "19578bd6975cd7183066aaebe86da21c95928d4c9786ae6974f237a660dca62d",
+      "bytes": 15900266
+    },
+    "abk_wenkai_mono_regular.ttf": {
+      "url": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/v1.250/fonts/TTF/LXGWWenKaiMono-Regular.ttf",
+      "sha256": "7a9d97b76828462d02151900de4bb4f8e5a062027e2759adb349e8a31a8a3cbc",
+      "bytes": 15913318
+    }
+  }
+}

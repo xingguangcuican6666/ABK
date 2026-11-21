@@ -1051,6 +1051,7 @@ private fun InstalledRuntimeModuleCard(
                 if (module.controllable && !module.readonly) {
                     ExpressiveSwitch(
                         checked = module.enabled,
+                        label = module.name,
                         enabled = !actionInFlight && !module.update,
                         onCheckedChange = onSetEnabled
                     )

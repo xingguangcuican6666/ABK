@@ -2064,6 +2064,20 @@ class MainViewModel @JvmOverloads constructor(
         buildQueueJob = viewModelScope.launch {
             try {
                 _uiState.update { it.copy(buildQueueProcessing = true, isLoading = true, error = null) }
+                com.abk.kernel.data.model.KernelPatchModules.validationError(next.config)?.let { error ->
+                    markBuildQueueItemFailed(next.id, text(error))
+                    _uiState.update { it.copy(error = text(error)) }
+                    return@launch
+                }
+                if (next.config.ksuhookModules.orEmpty().isNotEmpty()) {
+                    val support = github.supportsBuildModuleOptions(username, repoName, workflowFile, ref)
+                    if (support !is Result.Success || !support.data) {
+                        val message = text(R.string.build_patch_sync_required)
+                        markBuildQueueItemFailed(next.id, message)
+                        _uiState.update { it.copy(error = message) }
+                        return@launch
+                    }
+                }
                 val wfId = ensureBuildWorkflowEnabled(username, repoName, workflowFile, reportError = true)
                 if (wfId == null) {
                     markBuildQueueItemFailed(next.id, text(R.string.build_workflow_required))
@@ -5930,6 +5944,10 @@ internal fun encodeBuildPlanPayload(
         writer.writeString(module.groupRole.trim())
         writer.writeString(module.groupDescription.trim())
     }
+    require(config.ksuhookModules.orEmpty().size <= com.abk.kernel.data.model.KernelPatchModules.MAX_MODULES) { messages.tooManyModules }
+    writer.writeVarInt(config.ksuhookModules.orEmpty().size)
+    config.ksuhookModules.orEmpty().forEach(writer::writeString)
+    writer.writeString(config.ksuhookSdkRef.orEmpty())
     return writer.toByteArray()
 }
 
@@ -6060,6 +6078,12 @@ internal fun decodeBuildPlanPayload(
             )
         }
     }.filter { it.url.isNotBlank() }
+    val patchModules = if (version >= 9) {
+        val count = reader.readVarInt()
+        require(count in 0..com.abk.kernel.data.model.KernelPatchModules.MAX_MODULES) { messages.tooManyModules }
+        List(count) { reader.readString() }
+    } else emptyList()
+    val patchSdkRef = if (version >= 9) reader.readString() else ""
     reader.requireFullyRead()
     val merged = versionBase.copy(
         kernelsuVariant = ksuVariant,
@@ -6083,6 +6107,8 @@ internal fun decodeBuildPlanPayload(
         customKernelOptions = kernelOptions,
         useCustomExternalModules = featureMask.hasBuildPlanFlag(10),
         customExternalModules = modules,
+        ksuhookModules = patchModules,
+        ksuhookSdkRef = patchSdkRef,
         onePlusUseLz4kd = featureMask.hasBuildPlanFlag(11),
         onePlusUseBbr = featureMask.hasBuildPlanFlag(12),
         onePlusUseProxyOptimization = featureMask.hasBuildPlanFlag(13),
@@ -6379,7 +6405,7 @@ private const val LATE_FAILED_ARTIFACT_POLL_INTERVAL_MS = 5_000L
 
 private const val BUILD_PLAN_CODE_PREFIX = "ABKP2:"
 private const val BUILD_PLAN_LEGACY_CODE_PREFIX = "ABKP1:"
-private const val BUILD_PLAN_CODE_VERSION = 8
+private const val BUILD_PLAN_CODE_VERSION = 9
 private const val BUILD_PLAN_MIN_SUPPORTED_VERSION = 2
 private const val BUILD_PLAN_CUSTOM_REF_VERSION = 3
 private const val BUILD_PLAN_ONEPLUS_FIELDS_VERSION = 4
@@ -6717,7 +6743,7 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
             "zram_full_algo" to config.zramFullAlgo.toString(),
             "zram_extra_algos" to config.zramExtraAlgos,
             "kpm_password" to config.kpmPassword,
-            "custom_external_modules" to if (config.useCustomExternalModules) config.customExternalModules.toWorkflowInput() else "",
+            "custom_external_modules" to config.buildModuleOptionsInput(),
             "custom_kernel_options" to config.customKernelOptions.mapNotNull { it.toWorkflowLine() }.joinToString("\n"),
         )
     }
@@ -6769,12 +6795,19 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
         } else {
             ""
         },
-        "custom_external_modules" to if (config.useCustomExternalModules) {
-            config.customExternalModules.toWorkflowInput()
-        } else {
-            ""
-        }
+        "custom_external_modules" to config.buildModuleOptionsInput()
     )
+}
+
+private fun KernelBuildConfig.buildModuleOptionsInput(): String {
+    val external = if (useCustomExternalModules) customExternalModules.toWorkflowInput() else ""
+    if (ksuhookModules.orEmpty().isEmpty() || buildTarget == BUILD_TARGET_ONEPLUS || kernelsuVariant == KSU_VARIANT_NONE) return external
+    return Gson().toJson(mapOf(
+        "schema_version" to 1,
+        "external_modules" to external,
+        "ksuhook_modules" to ksuhookModules.joinToString("|"),
+        "ksuhook_sdk_ref" to ksuhookSdkRef.orEmpty(),
+    ))
 }
 
 private fun List<CustomExternalModule>?.toWorkflowInput(): String = this.orEmpty()

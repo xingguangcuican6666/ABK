@@ -25,6 +25,8 @@ coroutines = "1.10.2"
 androidxTestCore = "1.6.1"
 miuix = "0.9.2"
 nanohttpd = "2.3.1"
+materialkolor = "4.0.2"
+robolectricUi = "4.16"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -63,7 +65,11 @@ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
 miuix-blur = { group = "top.yukonga.miuix.kmp", name = "miuix-blur-android", version.ref = "miuix" }
 nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
+androidx-compose-foundation = { module = "androidx.compose.foundation:foundation" }
+material-color-utilities = { module = "com.materialkolor:material-color-utilities", version.ref = "materialkolor" }
+robolectric-ui = { module = "org.robolectric:robolectric", version.ref = "robolectricUi" }
 
 [plugins]
+android-library = { id = "com.android.library", version.ref = "agp" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

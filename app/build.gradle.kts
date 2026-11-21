@@ -165,6 +165,7 @@ tasks.matching { it.name.startsWith("configureCMake") || it.name.startsWith("bui
 }
 
 dependencies {
+    implementation(project(":abk-ui"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.process)

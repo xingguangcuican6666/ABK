@@ -62,7 +62,8 @@ fun AbkSnackbarHost(
             Snackbar(
                 snackbarData = data,
                 modifier = Modifier.padding(vertical = 4.dp),
-                containerColor = colors.surfaceContainerHigh,
+                containerColor = io.github.xingguangcuican6666.abk.ui.theme.AbkTheme.colors.raised,
+                shape = io.github.xingguangcuican6666.abk.ui.theme.AbkShapes.Large,
                 contentColor = colors.onSurface,
                 actionContentColor = colors.primary,
                 dismissActionContentColor = colors.onSurfaceVariant,

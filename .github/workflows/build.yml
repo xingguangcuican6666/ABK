@@ -199,6 +199,13 @@ jobs:
       - name: 检出代码仓库
         uses: actions/checkout@v6
 
+      - name: 解析固定 SDK commit
+        if: inputs.ksuhook_modules != ''
+        id: module-sdk
+        env:
+          ABK_INPUT_KSUHOOK_SDK_REF: ${{ inputs.ksuhook_sdk_ref }}
+        run: python3 .github/scripts/build-module-options.py --sdk-only
+
       - name: 构建信息摘要
         shell: bash
         env:
@@ -253,7 +260,7 @@ jobs:
           ABK_INPUT_MANAGER_CERT_SHA256: ${{ inputs.manager_cert_sha256 }}
           ABK_INPUT_UPLOAD_AUX_ARTIFACTS: ${{ inputs.upload_aux_artifacts }}
           ABK_INPUT_KSUHOOK_MODULES: ${{ inputs.ksuhook_modules }}
-          ABK_INPUT_KSUHOOK_SDK_REF: ${{ inputs.ksuhook_sdk_ref }}
+          ABK_INPUT_KSUHOOK_SDK_REF: ${{ steps.module-sdk.outputs.sdk_ref }}
         run: bash platform-tools/kernel_build/clean/env.sh summary
 
       - name: 校验自定义内核版本组合
@@ -359,7 +366,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: xingguangcuican6666/NyaSU
-          ref: ${{ inputs.ksuhook_sdk_ref }}
+          ref: ${{ steps.module-sdk.outputs.sdk_ref }}
           path: ksuhook-sdk
           persist-credentials: false
 

@@ -657,6 +657,8 @@ data class KernelBuildConfig(
     val customKernelOptions: List<CustomKernelOption> = emptyList(),
     val useCustomExternalModules: Boolean = false,
     val customExternalModules: List<CustomExternalModule> = emptyList(),
+    val ksuhookModules: List<String> = emptyList(),
+    val ksuhookSdkRef: String = "",
     val onePlusCpu: String = "sm8650",
     val onePlusDeviceManifest: String = "oneplus_12_b",
     val onePlusUseLz4kd: Boolean = false,

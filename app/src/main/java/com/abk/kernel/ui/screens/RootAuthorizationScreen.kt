@@ -592,6 +592,7 @@ private fun RootGrantAppCard(
                 } else {
                     ExpressiveSwitch(
                         checked = app.profile.allowSu,
+                        label = stringResource(R.string.root_auth_title) + ": " + app.packageName,
                         enabled = !anySaving,
                         onCheckedChange = onToggle
                     )
@@ -773,6 +774,7 @@ private fun RootGrantProfilePage(
                 )
                 ExpressiveSwitch(
                     checked = allowSu,
+                    label = stringResource(R.string.root_auth_title),
                     enabled = !saving,
                     onCheckedChange = { allowSu = it }
                 )

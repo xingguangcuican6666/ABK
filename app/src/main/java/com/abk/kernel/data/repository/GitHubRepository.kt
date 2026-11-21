@@ -38,6 +38,9 @@ open class GitHubRepository(
         apiService = NetworkClient.createApiService(token)
     }
 
+    open suspend fun supportsBuildModuleOptions(owner: String, repo: String, workflow: String, ref: String): Result<Boolean> =
+        BuildModuleOptionsSupport(apiService).supports(owner, repo, workflow, ref)
+
     // ── Auth ──────────────────────────────────────────────────────────────
 
     open suspend fun requestDeviceCode(): Result<DeviceCodeResponse> = runCatching {

@@ -391,6 +391,9 @@ object KernelSupport {
                         )
                     }
             },
+            // Preserve drafts when switching targets; dispatch validates applicability.
+            ksuhookModules = config.ksuhookModules.orEmpty().map(String::trim).filter(String::isNotEmpty).distinct(),
+            ksuhookSdkRef = config.ksuhookSdkRef.orEmpty().trim(),
             onePlusCpu = if (isOnePlus) onePlusCpu else "sm8650",
             onePlusDeviceManifest = if (isOnePlus) onePlusDeviceManifest else "oneplus_12_b",
             onePlusUseLz4kd = if (isOnePlus) onePlusLz4kdEnabled && config.onePlusUseLz4kd else false,

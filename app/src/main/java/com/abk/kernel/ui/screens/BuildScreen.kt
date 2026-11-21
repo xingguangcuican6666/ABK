@@ -177,6 +177,7 @@ fun BuildScreen(
     var showBuildQueuePage by rememberSaveable { mutableStateOf(false) }
     var showKernelOptionsPage by rememberSaveable { mutableStateOf(false) }
     var showDefconfigEditorPage by rememberSaveable { mutableStateOf(false) }
+    var showPatchModulesPage by rememberSaveable { mutableStateOf(false) }
     var planToolsExpanded by rememberSaveable { mutableStateOf(false) }
     var savePlanName by remember { mutableStateOf("") }
     var importPlanCode by remember { mutableStateOf("") }
@@ -255,7 +256,7 @@ fun BuildScreen(
     val canToggleKernelOptionClearAll = kernelOptionSearchQuery.isNotBlank() &&
         filteredKernelOptions.size != config.customKernelOptions.size
     val clearAllKernelOptionsTarget = !canToggleKernelOptionClearAll || clearAllKernelOptions
-    val childPageVisible = showPlanLibraryPage || showBuildQueuePage || showKernelOptionsPage || showDefconfigEditorPage
+    val childPageVisible = showPlanLibraryPage || showBuildQueuePage || showKernelOptionsPage || showDefconfigEditorPage || showPatchModulesPage
     val childPageTransition = rememberChildPageOverlayTransition(
         visible = childPageVisible,
         label = "build-child-page"
@@ -285,6 +286,7 @@ fun BuildScreen(
         showBuildQueuePage = false
         showKernelOptionsPage = false
         showDefconfigEditorPage = false
+        showPatchModulesPage = false
         kernelOptionSearchQuery = ""
         showKernelOptionActionMenu = false
         showClearKernelOptionsDialog = false
@@ -302,6 +304,7 @@ fun BuildScreen(
         showBuildQueuePage = false
         showKernelOptionsPage = false
         showDefconfigEditorPage = false
+        showPatchModulesPage = false
         showPlanLibraryPage = true
     }
 
@@ -310,6 +313,7 @@ fun BuildScreen(
         showPlanLibraryPage = false
         showKernelOptionsPage = false
         showDefconfigEditorPage = false
+        showPatchModulesPage = false
         kernelOptionSearchQuery = ""
         showBuildQueuePage = true
     }
@@ -319,6 +323,7 @@ fun BuildScreen(
         showPlanLibraryPage = false
         showBuildQueuePage = false
         showDefconfigEditorPage = false
+        showPatchModulesPage = false
         kernelOptionSearchQuery = ""
         showKernelOptionsPage = true
     }
@@ -328,6 +333,7 @@ fun BuildScreen(
         showPlanLibraryPage = false
         showBuildQueuePage = false
         showKernelOptionsPage = false
+        showPatchModulesPage = false
         showDefconfigEditorPage = true
     }
 
@@ -573,6 +579,12 @@ fun BuildScreen(
                                 )
                             )
                         )
+                    }
+                    if (config.ksuhookModules.isNotEmpty()) {
+                        Text(stringResource(R.string.build_patch_title), fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.build_patch_count, config.ksuhookModules.size))
+                        config.ksuhookModules.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                        if (config.ksuhookSdkRef.isNotBlank()) Text("SDK: ${config.ksuhookSdkRef}", style = MaterialTheme.typography.bodySmall)
                     }
                     if (activeBuild || activeQueueCount > 0) {
                         Text(
@@ -2168,10 +2180,31 @@ fun BuildScreen(
             }
             }
 
+            if (!isOnePlusBuild || config.ksuhookModules.isNotEmpty()) {
+                ExpressiveSectionCard(
+                    title = stringResource(R.string.build_patch_title),
+                    subtitle = stringResource(R.string.build_patch_count, config.ksuhookModules.size),
+                    icon = io.github.xingguangcuican6666.abk.ui.icons.AbkIcons.Modules,
+                ) {
+                    Text(stringResource(R.string.build_patch_description), style = MaterialTheme.typography.bodySmall)
+                    com.abk.kernel.data.model.KernelPatchModules.validationError(config)?.let {
+                        Text(stringResource(it), color = MaterialTheme.colorScheme.error)
+                    }
+                    io.github.xingguangcuican6666.abk.ui.components.AbkButton(onClick = {
+                        closeChildPage()
+                        childPageBack.resetProgress()
+                        showPatchModulesPage = true
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.build_patch_edit))
+                    }
+                }
+            }
+
             // Submit button
             Button(
                 onClick = {
                     val validationError = KernelSupport.validateCustomSource(config)
+                        ?: com.abk.kernel.data.model.KernelPatchModules.validationError(config)?.let(context::getString)
                     if (validationError != null) {
                         Toast.makeText(context, validationError, Toast.LENGTH_LONG).show()
                     } else {
@@ -2230,6 +2263,7 @@ fun BuildScreen(
                     topBar = {
                         ExpressiveTopBar(
                             title = when {
+                                showPatchModulesPage -> stringResource(R.string.build_patch_title)
                                 showBuildQueuePage -> stringResource(R.string.build_queue_title)
                                 showKernelOptionsPage -> stringResource(R.string.build_kernel_options_title)
                                 showDefconfigEditorPage -> stringResource(R.string.build_source_defconfigs)
@@ -2293,7 +2327,9 @@ fun BuildScreen(
                         )
                     }
                 ) { topBarHeight ->
-                    if (showBuildQueuePage) {
+                    if (showPatchModulesPage) {
+                        BuildPatchModulesPage(config, vm::updateBuildConfig, topBarHeight, outerPadding.calculateBottomPadding())
+                    } else if (showBuildQueuePage) {
                         BuildQueuePage(
                             topBarHeight = topBarHeight,
                             queue = state.buildQueue,
@@ -3535,12 +3571,15 @@ private fun copyTextToClipboard(context: Context, label: String, text: String) {
 
 @Composable
 private fun buildPlanSummary(config: KernelBuildConfig): String {
+    val patchSummary = if (config.ksuhookModules.isNotEmpty()) {
+        " · " + stringResource(R.string.build_patch_count, config.ksuhookModules.size)
+    } else ""
     if (config.buildTarget == BUILD_TARGET_CUSTOM_SOURCE) {
         val sourceName = config.sourceUrl.substringAfterLast('/').removeSuffix(".git").ifBlank {
             stringResource(R.string.build_target_custom_source)
         }
         return "${buildTargetLabel(config.buildTarget)} · $sourceName · ${config.sourceRef}\n" +
-            "${config.osPatchLevel} · ${config.sourceDefconfigs.joinToString(" -> ")} · ${ksuVariantDisplayName(config.kernelsuVariant)}"
+            "${config.osPatchLevel} · ${config.sourceDefconfigs.joinToString(" -> ")} · ${ksuVariantDisplayName(config.kernelsuVariant)}$patchSummary"
     }
     if (config.buildTarget == BUILD_TARGET_ONEPLUS) {
         val enabled = mutableListOf<String>()
@@ -3553,7 +3592,7 @@ private fun buildPlanSummary(config: KernelBuildConfig): String {
         if (config.onePlusUseUnicodeBypass) enabled += stringResource(R.string.build_oneplus_unicode_short)
         val featureSummary = enabled.ifEmpty { listOf(stringResource(R.string.build_base_config)) }.joinToString("、")
         return "${buildTargetLabel(config.buildTarget)} · ${KernelSupport.onePlusDeviceLabel(config.onePlusDeviceManifest)}\n" +
-            "${config.kernelVersion} · ${config.androidVersion} · ${ksuVariantDisplayName(config.kernelsuVariant)} · $featureSummary"
+            "${config.kernelVersion} · ${config.androidVersion} · ${ksuVariantDisplayName(config.kernelsuVariant)} · $featureSummary$patchSummary"
     }
     val android = config.androidVersion.removePrefix("android").ifBlank { config.androidVersion }
     val enabled = mutableListOf<String>()
@@ -3578,7 +3617,7 @@ private fun buildPlanSummary(config: KernelBuildConfig): String {
         else -> "${config.kernelsuVariant} / ${config.kernelsuBranch}"
     }
     return "${config.kernelVersion}.${config.subLevel} · Android $android · ${config.osPatchLevel}\n" +
-        "$ksuSummary · $featureSummary · ${stringResource(R.string.build_summary_external_modules, externalModuleCount)} · ${stringResource(R.string.build_summary_kernel_options, kernelOptionCount)}"
+        "$ksuSummary · $featureSummary · ${stringResource(R.string.build_summary_external_modules, externalModuleCount)} · ${stringResource(R.string.build_summary_kernel_options, kernelOptionCount)}$patchSummary"
 }
 
 @Composable

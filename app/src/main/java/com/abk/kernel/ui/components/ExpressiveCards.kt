@@ -1,122 +1,69 @@
 package com.abk.kernel.ui.components
 
-import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.abk.kernel.R
-import com.abk.kernel.ui.blur.LocalBlurredCardBackgroundEnabled
 import com.abk.kernel.ui.blur.blurredCardBackground
 import com.abk.kernel.ui.blur.blurredCardSurfaceColor
-import com.abk.kernel.ui.theme.uiSurfaceColor
+import io.github.xingguangcuican6666.abk.ui.components.AbkCard
+import io.github.xingguangcuican6666.abk.ui.components.AbkEmptyState
+import io.github.xingguangcuican6666.abk.ui.components.AbkListItem
+import io.github.xingguangcuican6666.abk.ui.components.AbkSwitch
+import io.github.xingguangcuican6666.abk.ui.components.AbkSettingSwitch
+import io.github.xingguangcuican6666.abk.ui.theme.AbkShapes
+import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
 
+/** Host adapters keep backgrounds and business slots outside the reusable library. */
 @Composable
 fun ExpressiveHeroCard(
     title: String,
     subtitle: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
-    contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
+    containerColor: Color = AbkTheme.colors.raised,
+    contentColor: Color = AbkTheme.colors.ink,
     badge: (@Composable RowScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .blurredCardBackground(
-                shape = MaterialTheme.shapes.medium,
-                enabled = true,
-            ),
-        colors = CardDefaults.cardColors(
-            containerColor = blurredCardSurfaceColor(containerColor),
-            contentColor = contentColor
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    AbkCard(
+        modifier = modifier.fillMaxWidth().blurredCardBackground(AbkShapes.Large),
+        containerColor = blurredCardSurfaceColor(AbkTheme.colors.raised),
+        contentColor = AbkTheme.colors.ink,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .animateContentSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(22.dp)
-                )
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = contentColor,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = contentColor.copy(alpha = 0.76f)
-                    )
-                }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(icon, null, Modifier.size(24.dp), tint = AbkTheme.colors.inkMuted)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(title, Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
+                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = AbkTheme.colors.inkMuted)
             }
-            if (badge != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    content = badge
-                )
-            }
-            content()
         }
+        if (badge != null) FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            content = badge,
+        )
+        content()
     }
 }
 
@@ -127,59 +74,22 @@ fun ExpressiveSectionCard(
     subtitle: String? = null,
     icon: ImageVector? = null,
     trailingContent: (@Composable () -> Unit)? = null,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
+    containerColor: Color = AbkTheme.colors.raised,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .blurredCardBackground(
-                shape = MaterialTheme.shapes.large,
-                enabled = true,
-            ),
-        colors = CardDefaults.cardColors(containerColor = blurredCardSurfaceColor(containerColor)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    AbkCard(
+        modifier = modifier.fillMaxWidth().blurredCardBackground(AbkShapes.Large),
+        containerColor = blurredCardSurfaceColor(AbkTheme.colors.raised),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp)
-                .animateContentSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                if (icon != null) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    if (subtitle != null) {
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                if (trailingContent != null) {
-                    trailingContent()
-                }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (icon != null) Icon(icon, null, Modifier.size(20.dp), tint = AbkTheme.colors.inkMuted)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+                if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AbkTheme.colors.inkMuted)
             }
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp), content = content)
+            trailingContent?.invoke()
         }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
 }
 
@@ -195,90 +105,16 @@ fun ExpressiveListItem(
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null
 ) {
-    val colors = MaterialTheme.colorScheme
-    // Follow the synchronous "feature enabled" signal, not the async bitmap readiness, so
-    // rows keep a surface tint from the first frame and don't flash transparent→tinted
-    // while the pre-blurred background loads.
-    val drawsOwnBlurSurface = LocalBlurredCardBackgroundEnabled.current
-    val containerColor = when {
-        selected -> blurredCardSurfaceColor(colors.primaryContainer)
-        drawsOwnBlurSurface -> blurredCardSurfaceColor(colors.surfaceContainer)
-        else -> Color.Transparent
-    }
-    val titleColor = when {
-        !enabled -> colors.onSurface.copy(alpha = 0.38f)
-        selected -> colors.onPrimaryContainer
-        else -> colors.onSurface
-    }
-    val subtitleColor = when {
-        !enabled -> colors.onSurface.copy(alpha = 0.38f)
-        selected -> colors.onPrimaryContainer.copy(alpha = 0.72f)
-        else -> colors.onSurfaceVariant
-    }
-    val clickableModifier = if (onClick != null) {
-        Modifier.clickable(
-            enabled = enabled,
-            role = Role.Button,
-            onClick = onClick
-        )
-    } else {
-        Modifier
-    }
-
-    ListItem(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.large)
-            .blurredCardBackground(
-                shape = MaterialTheme.shapes.large,
-                enabled = true,
-            )
-            .then(clickableModifier),
-        headlineContent = {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+    AbkListItem(
+        title = title,
+        description = subtitle,
+        modifier = modifier.semantics { this.selected = selected },
+        onClick = onClick,
+        enabled = enabled,
+        leading = leadingContent ?: leadingIcon?.let { vector ->
+            { Icon(vector, null, Modifier.size(22.dp), tint = AbkTheme.colors.inkMuted) }
         },
-        supportingContent = subtitle?.let {
-            {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        },
-        leadingContent = when {
-            leadingContent != null -> leadingContent
-            leadingIcon != null -> {
-                {
-                    Icon(
-                        imageVector = leadingIcon,
-                        contentDescription = null,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
-            else -> null
-        },
-        trailingContent = trailingContent,
-        colors = ListItemDefaults.colors(
-            containerColor = containerColor,
-            contentColor = titleColor,
-            supportingContentColor = subtitleColor,
-            leadingContentColor = titleColor,
-            trailingContentColor = titleColor,
-            disabledContentColor = colors.onSurface.copy(alpha = 0.38f),
-            disabledLeadingContentColor = colors.onSurface.copy(alpha = 0.38f),
-            disabledTrailingContentColor = colors.onSurface.copy(alpha = 0.38f)
-        ),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
+        trailing = trailingContent,
     )
 }
 
@@ -287,21 +123,10 @@ fun ExpressiveSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    label: String
 ) {
-    Switch(
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        modifier = modifier,
-        enabled = enabled,
-        thumbContent = {
-            Icon(
-                imageVector = if (checked) Icons.Filled.Check else Icons.Filled.Close,
-                contentDescription = null,
-                modifier = Modifier.size(SwitchDefaults.IconSize)
-            )
-        }
-    )
+    AbkSwitch(checked, onCheckedChange, label = label, modifier = modifier, enabled = enabled, showLabel = false)
 }
 
 @Composable
@@ -314,21 +139,11 @@ fun ExpressiveSwitchItem(
     icon: ImageVector? = null,
     enabled: Boolean = true
 ) {
-    ExpressiveListItem(
-        title = title,
-        subtitle = subtitle,
-        leadingIcon = icon,
-        enabled = enabled,
-        trailingContent = {
-            ExpressiveSwitch(
-                checked = checked,
-                enabled = enabled,
-                onCheckedChange = onCheckedChange
-            )
-        },
-        onClick = { onCheckedChange(!checked) },
-        modifier = modifier
-    )
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (icon != null) Icon(icon, null, Modifier.size(22.dp), tint = AbkTheme.colors.inkMuted)
+        AbkSettingSwitch(title, subtitle, checked, onCheckedChange, Modifier.weight(1f), enabled)
+    }
 }
 
 @Composable
@@ -336,36 +151,16 @@ fun ExpressiveStatusChip(
     label: String,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
-    color: Color = MaterialTheme.colorScheme.primary
+    color: Color = AbkTheme.colors.inkMuted
 ) {
-    AssistChip(
-        onClick = {},
-        label = {
-            Text(
-                text = label,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        modifier = modifier.wrapContentHeight(),
-        enabled = false,
-        leadingIcon = icon?.let {
-            {
-                Icon(
-                    imageVector = it,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        },
-        colors = AssistChipDefaults.assistChipColors(
-            disabledContainerColor = uiSurfaceColor(color.copy(alpha = 0.14f)),
-            disabledLabelColor = color,
-            disabledLeadingIconContentColor = color
-        ),
-        elevation = null,
-        border = null
-    )
+    Surface(modifier, shape = AbkShapes.Pill, color = color.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))) {
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) Icon(icon, null, Modifier.size(14.dp), tint = color)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = color)
+        }
+    }
 }
 
 @Composable
@@ -375,16 +170,5 @@ fun ExpressiveEmptyState(
     icon: ImageVector,
     modifier: Modifier = Modifier
 ) {
-    ExpressiveSectionCard(
-        title = title,
-        subtitle = subtitle,
-        icon = icon,
-        modifier = modifier
-    ) {
-        Text(
-            text = stringResource(R.string.empty_state_build_artifacts_hint),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+    AbkEmptyState(title = title, description = subtitle, icon = icon, modifier = modifier.fillMaxWidth())
 }

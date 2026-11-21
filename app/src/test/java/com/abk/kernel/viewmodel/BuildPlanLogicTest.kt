@@ -21,6 +21,54 @@ import org.junit.Test
 
 class BuildPlanLogicTest {
 
+    @Test fun patchEnvelopeKeepsInputCountAndLegacyExternalModules() {
+        for (target in listOf(BUILD_TARGET_GKI, BUILD_TARGET_CUSTOM_SOURCE)) {
+            val config = KernelBuildConfig(buildTarget = target, ksuhookModules = listOf("git@host:org/repo@v1"),
+                ksuhookSdkRef = "a".repeat(40), useCustomExternalModules = true,
+                customExternalModules = listOf(CustomExternalModule("https://host/legacy")))
+            val inputs = config.toInputMap()
+            assertEquals(25, inputs.size)
+            assertEquals(false, inputs.containsKey("ksuhook_modules"))
+            val payload = com.google.gson.JsonParser.parseString(inputs.getValue("custom_external_modules")).asJsonObject
+            assertEquals(1, payload["schema_version"].asInt)
+            assertEquals("git@host:org/repo@v1", payload["ksuhook_modules"].asString)
+            assertEquals("a".repeat(40), payload["ksuhook_sdk_ref"].asString)
+            assertEquals("module:https://host/legacy;after_patch", payload["external_modules"].asString)
+        }
+    }
+
+    @Test fun patchOptionsRoundTripInBothShareScopesAndQueueJson() {
+        val config = KernelBuildConfig(ksuhookModules = listOf("https://host/a@v1", "git@host:org/b"), ksuhookSdkRef = "a".repeat(40))
+        for (scope in BuildPlanShareScope.entries) {
+            val decoded = decodeBuildPlanPayload(encodeBuildPlanPayload(config, "patches", scope), KernelBuildConfig())
+            assertEquals(config.ksuhookModules, decoded.config.ksuhookModules)
+            assertEquals(config.ksuhookSdkRef, decoded.config.ksuhookSdkRef)
+        }
+        val item = com.abk.kernel.data.model.BuildQueueItem(id = "test", name = "patches", config = config, createdAt = 1L)
+        val gson = com.google.gson.Gson()
+        val restored = gson.fromJson(gson.toJson(item), com.abk.kernel.data.model.BuildQueueItem::class.java)
+        assertEquals(config.ksuhookModules, restored.config.ksuhookModules)
+        assertEquals(config.ksuhookSdkRef, restored.config.ksuhookSdkRef)
+    }
+
+    @Test fun versionEightPlanClearsMissingPatchFields() {
+        val versionNine = encodeBuildPlanPayload(KernelBuildConfig(), "old", BuildPlanShareScope.FULL)
+        // v9 appends an empty count and an empty SDK string, each encoded in one byte.
+        val versionEight = versionNine.copyOf(versionNine.size - 2).apply { this[0] = 8 }
+        val decoded = decodeBuildPlanPayload(versionEight, KernelBuildConfig(ksuhookModules = listOf("https://host/base")))
+        assertEquals(emptyList<String>(), decoded.config.ksuhookModules)
+        assertEquals("", decoded.config.ksuhookSdkRef)
+    }
+
+    @Test fun unsupportedTargetsNeverSendPatchEnvelope() {
+        for (config in listOf(KernelBuildConfig(buildTarget = BUILD_TARGET_ONEPLUS), KernelBuildConfig(kernelsuVariant = KSU_VARIANT_NONE))) {
+            val inputs = config.copy(ksuhookModules = listOf("https://host/r")).toInputMap()
+            assertEquals(false, inputs.keys.any { it.startsWith("ksuhook") })
+            assertEquals(false, inputs["custom_external_modules"].orEmpty().startsWith("{"))
+        }
+    }
+
+
     @Test
     fun fullBuildPlanPayloadRoundTripsConfigAndModules() {
         val config = KernelSupport.normalize(

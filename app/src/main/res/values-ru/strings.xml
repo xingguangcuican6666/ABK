@@ -1301,4 +1301,27 @@
     <string name="settings_kernel_runner_saved">Сохранено в GitHub</string>
     <string name="settings_kernel_runner_saving">Сохранение…</string>
     <string name="settings_kernel_runner_request_failed">Не удалось завершить запрос переменных GitHub. Обновите данные и повторите попытку.</string>
+
+    <!-- Build patch modules and module repositories -->
+    <string name="build_patch_title">Модули патчей KernelSU</string>
+    <string name="build_patch_description">При сборке зависимости module.prop группируют патчи перед объединением и генерацией патчей NyaSU. Это не ZIP-модули среды выполнения и не внешние модули module.conf.</string>
+    <string name="build_patch_count">Репозиториев настроено: %1$d</string>
+    <string name="build_patch_repo">URL репозитория патчей[@ref]</string>
+    <string name="build_patch_repo_hint">Поддерживаются HTTPS, SSH и git@host:path. Необязательный ref не может содержать /, : или @. Приложение не загружает и не выполняет код модулей.</string>
+    <string name="build_patch_sdk">Коммит NyaSU SDK (необязательно)</string>
+    <string name="build_patch_sdk_hint">Пустое поле использует закреплённый коммит рабочего процесса. Укажите полный SHA из 40 символов для другого коммита.</string>
+    <string name="build_patch_invalid_repo">Неверный репозиторий или более 32 записей. Проверьте URL и ref; одна запись должна содержать один репозиторий.</string>
+    <string name="build_patch_invalid_sdk">Коммит SDK должен быть полным шестнадцатеричным SHA из 40 символов.</string>
+    <string name="build_patch_unavailable">Модули патчей требуют KernelSU в сборках GKI / из своего исходного кода. Текущая цель не поддерживается. Черновик сохранён; смените цель или удалите записи перед отправкой.</string>
+    <string name="build_patch_sync_required">Не удалось подтвердить поддержку патчей в ветке запуска этого форка. Вручную синхронизируйте рабочие процессы и парсер формата модулей, обновите данные и повторите попытку. Сборка не отправлена.</string>
+    <string name="build_patch_edit">Изменить репозиторий патчей</string>
+    <string name="build_patch_add">Добавить репозиторий патчей</string>
+    <string name="build_patch_remove">Удалить репозиторий патчей %1$s</string>
+    <string name="build_patch_empty">Репозитории патчей не настроены; существующий процесс сборки не изменяется.</string>
+    <string name="ui_module_build_protocol">Это репозитории внешних модулей module.conf или наборов для включения в сборку по этапам. Это не устанавливаемые ZIP-модули и не патчи KernelSU module.prop.</string>
+    <string name="ui_module_runtime_protocol">В этом репозитории доступны ZIP-модули для работающей системы. После подтверждения используется системный установщик; обычно требуется перезагрузка. Модули сборки module.conf и патчи KernelSU module.prop здесь не устанавливаются.</string>
+    <string name="ui_module_install_success">Модуль установлен</string>
+    <string name="ui_module_install_failure">Не удалось установить модуль</string>
+    <string name="ui_module_source_error">Не удалось загрузить этот репозиторий</string>
+    <string name="module_repo_refreshing_repository">Обновление репозиториев</string>
 </resources>

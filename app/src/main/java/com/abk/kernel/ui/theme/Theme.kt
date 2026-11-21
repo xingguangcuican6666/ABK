@@ -2,28 +2,35 @@
 
 package com.abk.kernel.ui.theme
 
+import android.database.ContentObserver
 import android.os.Build
-import com.abk.kernel.utils.findActivity
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialExpressiveTheme
-import androidx.compose.material3.MotionScheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import com.google.android.material.color.utilities.CorePalette
-import com.google.android.material.color.utilities.TonalPalette
+import com.abk.kernel.utils.findActivity
+import io.github.xingguangcuican6666.abk.ui.theme.AbkColors
+import io.github.xingguangcuican6666.abk.ui.theme.AbkDefaultSeed
+import io.github.xingguangcuican6666.abk.ui.theme.abkColorsFromMaterial
+import io.github.xingguangcuican6666.abk.ui.theme.abkSeedColors
+import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme as ComponentTheme
 
 val LocalUiSurfaceAlpha = staticCompositionLocalOf { 1f }
 val LocalAppBackgroundEnabled = staticCompositionLocalOf { false }
@@ -38,6 +45,7 @@ fun uiSurfaceColor(color: Color): Color {
 fun appPageBackgroundColor(color: Color): Color =
     if (LocalAppBackgroundEnabled.current) Color.Transparent else color
 
+/** Preferences and window integration stay in the host, not in the component library. */
 @Composable
 fun AbkTheme(
     themeMode: String = "system",
@@ -51,164 +59,71 @@ fun AbkTheme(
         "light" -> false
         else -> isSystemInDarkTheme()
     }
-
     val context = LocalContext.current
-    val useDynamicColor = dynamicColorEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val colorScheme = when {
-        useDynamicColor -> {
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    val colors = remember(context, darkTheme, dynamicColorEnabled, customThemeColorArgb, customAccentColorArgb) {
+        if (dynamicColorEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            abkColorsFromMaterial(
+                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context),
+                darkTheme
+            )
+        } else {
+            appSeedColors(darkTheme, customThemeColorArgb, customAccentColorArgb)
         }
-        else -> customExpressiveColorScheme(
-            darkTheme = darkTheme,
-            themeColorArgb = customThemeColorArgb,
-            accentColorArgb = customAccentColorArgb
-        )
     }
-
     val view = LocalView.current
     val activity = context.findActivity()
     if (activity != null && !view.isInEditMode) {
         SideEffect {
             val window = activity.window
-            window.statusBarColor = colorScheme.surface.toArgb()
-            window.navigationBarColor = colorScheme.surface.toArgb()
+            window.statusBarColor = colors.background.toArgb()
+            window.navigationBarColor = colors.raised.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
             WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
         }
     }
 
-    MaterialExpressiveTheme(
-        colorScheme = colorScheme,
-        motionScheme = MotionScheme.expressive(),
-        content = {
-            CompositionLocalProvider(
-                LocalContentColor provides colorScheme.onSurface,
-                content = content
-            )
-        }
-    )
-}
-
-private fun customExpressiveColorScheme(
-    darkTheme: Boolean,
-    themeColorArgb: Int?,
-    accentColorArgb: Int?
-): ColorScheme {
-    val base = if (darkTheme) darkColorScheme() else expressiveLightColorScheme()
-    val themeSeed = themeColorArgb ?: base.primary.toArgb()
-    val primaryCore = CorePalette.of(themeSeed)
-    val accentCore = accentColorArgb?.let { CorePalette.contentOf(it) }
-
-    val primary = primaryCore.a1
-    val secondary = accentCore?.a1 ?: primaryCore.a2
-    val tertiary = accentCore?.a3 ?: primaryCore.a3
-    val neutral = primaryCore.n1
-    val neutralVariant = primaryCore.n2
-    val error = primaryCore.error
-
-    return if (darkTheme) {
-        darkSeedColorScheme(base, primary, secondary, tertiary, neutral, neutralVariant, error)
-    } else {
-        lightSeedColorScheme(base, primary, secondary, tertiary, neutral, neutralVariant, error)
+    ComponentTheme(
+        darkTheme = darkTheme,
+        colorsOverride = colors,
+        reduceMotion = rememberReducedMotion(),
+    ) {
+        CompositionLocalProvider(LocalContentColor provides colors.ink, content = content)
     }
 }
 
-private fun lightSeedColorScheme(
-    base: ColorScheme,
-    primary: TonalPalette,
-    secondary: TonalPalette,
-    tertiary: TonalPalette,
-    neutral: TonalPalette,
-    neutralVariant: TonalPalette,
-    error: TonalPalette
-): ColorScheme {
-    return base.copy(
-        primary = primary.toneColor(40),
-        onPrimary = primary.toneColor(100),
-        primaryContainer = primary.toneColor(90),
-        onPrimaryContainer = primary.toneColor(10),
-        inversePrimary = primary.toneColor(80),
-        secondary = secondary.toneColor(40),
-        onSecondary = secondary.toneColor(100),
-        secondaryContainer = secondary.toneColor(90),
-        onSecondaryContainer = secondary.toneColor(10),
-        tertiary = tertiary.toneColor(40),
-        onTertiary = tertiary.toneColor(100),
-        tertiaryContainer = tertiary.toneColor(90),
-        onTertiaryContainer = tertiary.toneColor(10),
-        background = neutral.toneColor(99),
-        onBackground = neutral.toneColor(10),
-        surface = neutral.toneColor(99),
-        onSurface = neutral.toneColor(10),
-        surfaceVariant = neutralVariant.toneColor(90),
-        onSurfaceVariant = neutralVariant.toneColor(30),
-        surfaceTint = primary.toneColor(40),
-        inverseSurface = neutral.toneColor(20),
-        inverseOnSurface = neutral.toneColor(95),
-        error = error.toneColor(40),
-        onError = error.toneColor(100),
-        errorContainer = error.toneColor(90),
-        onErrorContainer = error.toneColor(10),
-        outline = neutralVariant.toneColor(50),
-        outlineVariant = neutralVariant.toneColor(80),
-        scrim = neutral.toneColor(0),
-        surfaceDim = neutral.toneColor(87),
-        surfaceBright = neutral.toneColor(98),
-        surfaceContainerLowest = neutral.toneColor(100),
-        surfaceContainerLow = neutral.toneColor(96),
-        surfaceContainer = neutral.toneColor(94),
-        surfaceContainerHigh = neutral.toneColor(92),
-        surfaceContainerHighest = neutral.toneColor(90)
+internal fun appSeedColors(dark: Boolean, themeArgb: Int?, accentArgb: Int?): AbkColors {
+    val base = abkSeedColors(themeArgb?.let(::Color) ?: AbkDefaultSeed, dark)
+    if (accentArgb == null) return base
+    val accent = abkSeedColors(Color(accentArgb), dark).material
+    // Retain the existing secondary-accent preference without replacing neutral surfaces.
+    val material = base.material.copy(
+        secondary = accent.primary,
+        onSecondary = accent.onPrimary,
+        secondaryContainer = accent.primaryContainer,
+        onSecondaryContainer = accent.onPrimaryContainer,
+        tertiary = accent.tertiary,
+        onTertiary = accent.onTertiary,
+        tertiaryContainer = accent.tertiaryContainer,
+        onTertiaryContainer = accent.onTertiaryContainer,
     )
+    return abkColorsFromMaterial(material, dark).copy(inkMuted = base.inkMuted, inkFaint = base.inkFaint)
 }
 
-private fun darkSeedColorScheme(
-    base: ColorScheme,
-    primary: TonalPalette,
-    secondary: TonalPalette,
-    tertiary: TonalPalette,
-    neutral: TonalPalette,
-    neutralVariant: TonalPalette,
-    error: TonalPalette
-): ColorScheme {
-    return base.copy(
-        primary = primary.toneColor(80),
-        onPrimary = primary.toneColor(20),
-        primaryContainer = primary.toneColor(30),
-        onPrimaryContainer = primary.toneColor(90),
-        inversePrimary = primary.toneColor(40),
-        secondary = secondary.toneColor(80),
-        onSecondary = secondary.toneColor(20),
-        secondaryContainer = secondary.toneColor(30),
-        onSecondaryContainer = secondary.toneColor(90),
-        tertiary = tertiary.toneColor(80),
-        onTertiary = tertiary.toneColor(20),
-        tertiaryContainer = tertiary.toneColor(30),
-        onTertiaryContainer = tertiary.toneColor(90),
-        background = neutral.toneColor(10),
-        onBackground = neutral.toneColor(90),
-        surface = neutral.toneColor(10),
-        onSurface = neutral.toneColor(90),
-        surfaceVariant = neutralVariant.toneColor(30),
-        onSurfaceVariant = neutralVariant.toneColor(80),
-        surfaceTint = primary.toneColor(80),
-        inverseSurface = neutral.toneColor(90),
-        inverseOnSurface = neutral.toneColor(20),
-        error = error.toneColor(80),
-        onError = error.toneColor(20),
-        errorContainer = error.toneColor(30),
-        onErrorContainer = error.toneColor(90),
-        outline = neutralVariant.toneColor(60),
-        outlineVariant = neutralVariant.toneColor(30),
-        scrim = neutral.toneColor(0),
-        surfaceDim = neutral.toneColor(6),
-        surfaceBright = neutral.toneColor(24),
-        surfaceContainerLowest = neutral.toneColor(4),
-        surfaceContainerLow = neutral.toneColor(10),
-        surfaceContainer = neutral.toneColor(12),
-        surfaceContainerHigh = neutral.toneColor(17),
-        surfaceContainerHighest = neutral.toneColor(22)
-    )
+@Composable
+private fun rememberReducedMotion(): Boolean {
+    val resolver = LocalContext.current.contentResolver
+    fun disabled() = runCatching {
+        Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    }.getOrDefault(false)
+    var reduced by remember(resolver) { mutableStateOf(disabled()) }
+    DisposableEffect(resolver) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) { reduced = disabled() }
+        }
+        resolver.registerContentObserver(
+            Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, observer
+        )
+        onDispose { resolver.unregisterContentObserver(observer) }
+    }
+    return reduced
 }
-
-private fun TonalPalette.toneColor(tone: Int): Color = Color(this.tone(tone))

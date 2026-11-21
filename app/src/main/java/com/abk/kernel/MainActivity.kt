@@ -112,6 +112,10 @@ import com.abk.kernel.ui.theme.AbkTheme
 import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
 import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
+import io.github.xingguangcuican6666.abk.ui.components.AbkBottomNavigation
+import io.github.xingguangcuican6666.abk.ui.components.AbkNavigationItem
+import io.github.xingguangcuican6666.abk.ui.components.AbkNavigationRail
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
 import com.abk.kernel.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 
@@ -658,51 +662,27 @@ private fun AbkMainScaffold(
                     },
                 contentAlignment = Alignment.Center
             ) {
-                NavigationRail(
-                    modifier = Modifier
-                        .fillMaxSize()
+                AbkNavigationRail(
+                    items = visibleTabs.map { tab ->
+                        AbkNavigationItem(tab.name, tab.displayLabel(state.rootGranted),
+                            tab.icon(state.rootGranted), enabled = !childPageVisible)
+                    },
+                    selectedId = activeTab.name,
+                    onSelect = { id -> selectedTab = visibleTabs.first { it.name == id } },
+                    modifier = Modifier.fillMaxSize()
                         .then(if (blurActive) Modifier.blurEffect() else Modifier),
-                    containerColor = if (blurActive) {
-                        Color.Transparent
-                    } else {
-                        uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
-                    }
-                ) {
-                    visibleTabs.forEach { tab ->
-                        NavigationRailItem(
-                            selected = activeTab == tab,
-                            onClick = { selectedTab = tab },
-                            enabled = !childPageVisible,
-                            alwaysShowLabel = false,
-                            colors = NavigationRailItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            icon = {
-                                Icon(
-                                    imageVector = tab.icon(rootGranted = state.rootGranted),
-                                    contentDescription = tab.displayLabel(state.rootGranted)
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = tab.displayLabel(state.rootGranted),
-                                    maxLines = 2,
-                                    softWrap = true,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
-                        )
-                    }
-                }
+                    containerColor = if (blurActive) Color.Transparent else
+                        uiSurfaceColor(io.github.xingguangcuican6666.abk.ui.theme.AbkTheme.colors.raised),
+                )
             }
         } else {
-            NavigationBar(
+            AbkBottomNavigation(
+                items = visibleTabs.map { tab ->
+                    AbkNavigationItem(tab.name, tab.displayLabel(state.rootGranted),
+                        tab.icon(state.rootGranted), enabled = !childPageVisible)
+                },
+                selectedId = activeTab.name,
+                onSelect = { id -> selectedTab = visibleTabs.first { it.name == id } },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
@@ -714,45 +694,9 @@ private fun AbkMainScaffold(
                         alpha = 1f - (hidden * 0.15f)
                     }
                     .then(if (blurActive) Modifier.blurEffect() else Modifier),
-                containerColor = if (blurActive) {
-                    Color.Transparent
-                } else {
-                    uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
-                },
-                tonalElevation = 0.dp
-            ) {
-                visibleTabs.forEach { tab ->
-                    NavigationBarItem(
-                        selected = activeTab == tab,
-                        onClick = { selectedTab = tab },
-                        enabled = !childPageVisible,
-                        alwaysShowLabel = false,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        icon = {
-                            Icon(
-                                imageVector = tab.icon(rootGranted = state.rootGranted),
-                                contentDescription = tab.displayLabel(state.rootGranted)
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = tab.displayLabel(state.rootGranted),
-                                maxLines = 2,
-                                softWrap = true,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    )
-                }
-            }
+                containerColor = if (blurActive) Color.Transparent else
+                    uiSurfaceColor(io.github.xingguangcuican6666.abk.ui.theme.AbkTheme.colors.raised),
+            )
         }
         Box(
             modifier = Modifier
@@ -866,14 +810,14 @@ private fun AbkTab.displayLabel(rootGranted: Boolean): String = when (this) {
 }
 
 private fun AbkTab.icon(rootGranted: Boolean) = when (this) {
-    AbkTab.Status -> Icons.Default.Home
-    AbkTab.Build -> Icons.Default.RocketLaunch
-    AbkTab.Modules -> Icons.Default.LibraryBooks
-    AbkTab.Flash -> if (rootGranted) Icons.Default.FlashOn else Icons.Default.FolderOpen
-    AbkTab.RuntimeHome -> Icons.Default.Memory
-    AbkTab.InstalledModules -> Icons.Default.Extension
-    AbkTab.RootAuth -> Icons.Default.AdminPanelSettings
-    AbkTab.Settings -> Icons.Default.Settings
+    AbkTab.Status -> AbkIcons.Home
+    AbkTab.Build -> AbkIcons.Build
+    AbkTab.Modules -> AbkIcons.Modules
+    AbkTab.Flash -> if (rootGranted) AbkIcons.Upload else AbkIcons.Download
+    AbkTab.RuntimeHome -> AbkIcons.Cpu
+    AbkTab.InstalledModules -> AbkIcons.Modules
+    AbkTab.RootAuth -> AbkIcons.Controls
+    AbkTab.Settings -> AbkIcons.Settings
 }
 
 private fun extractModuleInstallUri(intent: Intent?): Uri? {

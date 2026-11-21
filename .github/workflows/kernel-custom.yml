@@ -176,19 +176,25 @@ on:
         type: string
         default: ""
 
-      ksuhook_modules:
-        description: "KernelSU 补丁模块仓库（用 | 分隔，每项 repo_url[@ref]，按 module.prop depends 分组）"
-        required: false
-        type: string
-        default: ""
-      ksuhook_sdk_ref:
-        description: "NyaSU SDK 固定 commit（留空=使用 build.yml 默认值）"
-        required: false
-        type: string
-        default: ""
-
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      external_modules: ${{ steps.module-options.outputs.external_modules }}
+      ksuhook_modules: ${{ steps.module-options.outputs.ksuhook_modules }}
+      ksuhook_sdk_ref: ${{ steps.module-options.outputs.ksuhook_sdk_ref }}
+    steps:
+      - uses: actions/checkout@v6
+      # ABK_BUILD_MODULE_OPTIONS_SCHEMA: 1
+      - name: 解析构建模块配置
+        id: module-options
+        env:
+          ABK_BUILD_MODULE_OPTIONS: ${{ inputs.custom_external_modules }}
+          ABK_KSU_VARIANT: ${{ inputs.kernelsu_variant }}
+        run: python3 .github/scripts/build-module-options.py
+
   build-custom-kernel:
+    needs: preflight
     name: "${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}"
     uses: ./.github/workflows/build.yml
     secrets: inherit
@@ -216,9 +222,9 @@ jobs:
       zram_full_algo: ${{ inputs.zram_full_algo || false }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
-      custom_external_modules: ${{ inputs.custom_external_modules || '' }}
-      ksuhook_modules: ${{ inputs.ksuhook_modules || '' }}
-      ksuhook_sdk_ref: ${{ inputs.ksuhook_sdk_ref || '' }}
+      custom_external_modules: ${{ needs.preflight.outputs.external_modules }}
+      ksuhook_modules: ${{ needs.preflight.outputs.ksuhook_modules }}
+      ksuhook_sdk_ref: ${{ needs.preflight.outputs.ksuhook_sdk_ref }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
 
   get-ksu-manager:

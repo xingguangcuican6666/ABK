@@ -1,49 +1,53 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.abk.kernel.ui.screens
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.abk.kernel.BuildConfig
 import com.abk.kernel.R
+import com.abk.kernel.data.model.BuildProgress
 import com.abk.kernel.data.model.BuildStatus
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.ui.blur.BlurScreenScaffold
 import com.abk.kernel.ui.blur.blurredCardBackground
 import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
-import com.abk.kernel.ui.components.ExpressiveHeroCard
 import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveTopBar
-import com.abk.kernel.ui.components.ShimmerLinearProgress
 import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.utils.RootUtils
+import com.abk.kernel.viewmodel.MainUiState
 import com.abk.kernel.viewmodel.MainViewModel
+import io.github.xingguangcuican6666.abk.ui.components.*
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcon
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
+import io.github.xingguangcuican6666.abk.ui.theme.AbkShapes
+import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
+import io.github.xingguangcuican6666.abk.ui.theme.AbkTone
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun StatusScreen(
     vm: MainViewModel,
@@ -53,13 +57,45 @@ fun StatusScreen(
 ) {
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-
+    val ksuVersion = remember(state.rootGranted) {
+        if (state.rootGranted) RootUtils.getKsuVersion() else "N/A"
+    }
+    val kernelVersion = remember(state.rootGranted) { RootUtils.getKernelVersion() }
     LaunchedEffect(Unit) { vm.loadRecentRuns() }
+    StatusScreenContent(
+        state = state,
+        kernelVersion = kernelVersion,
+        ksuVersion = ksuVersion,
+        outerPadding = outerPadding,
+        runtimeNavigationEnabled = runtimeNavigationEnabled,
+        onToggleRuntimeNavigation = onToggleRuntimeNavigation,
+        onRefresh = { vm.loadRecentRuns() },
+        onRequestRoot = { vm.requestRoot() },
+        onOpenRun = { run ->
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(run.htmlUrl))) }
+        },
+        onCancelRun = vm::cancelWorkflowRun
+    )
+}
 
+/** State and callbacks are supplied by the host; previews and UI tests perform no device operations. */
+@Composable
+internal fun StatusScreenContent(
+    state: MainUiState,
+    kernelVersion: String,
+    ksuVersion: String,
+    outerPadding: PaddingValues = PaddingValues(0.dp),
+    runtimeNavigationEnabled: Boolean = false,
+    onToggleRuntimeNavigation: () -> Unit = {},
+    onRefresh: () -> Unit,
+    onRequestRoot: () -> Unit,
+    onOpenRun: (WorkflowRun) -> Unit,
+    onCancelRun: (Long) -> Unit
+) {
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     BlurScreenScaffold(
         blurConfig = state.blurConfig,
-        containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
+        containerColor = appPageBackgroundColor(uiSurfaceColor(AbkTheme.colors.background)),
         topBar = {
             ExpressiveTopBar(
                 title = stringResource(R.string.app_name),
@@ -67,573 +103,264 @@ fun StatusScreen(
                 scrollBehavior = scrollBehavior,
                 enableBlur = state.blurEnabled,
                 actions = {
-                    IconButton(onClick = onToggleRuntimeNavigation) {
-                        Icon(
-                            imageVector = if (runtimeNavigationEnabled) Icons.Default.SwapHoriz else Icons.Default.Home,
-                            contentDescription = if (runtimeNavigationEnabled) {
-                                stringResource(R.string.nav_status)
-                            } else {
-                                stringResource(R.string.nav_home)
-                            }
-                        )
-                    }
+                    AbkIconButton(AbkIcons.Refresh, stringResource(R.string.refresh), onRefresh,
+                        enabled = !state.isRefreshingRecentRuns && state.user != null && state.forkRepo != null)
+                    AbkIconButton(
+                        if (runtimeNavigationEnabled) AbkIcons.Home else AbkIcons.Cpu,
+                        stringResource(if (runtimeNavigationEnabled) R.string.nav_status else R.string.nav_home),
+                        onToggleRuntimeNavigation
+                    )
                 }
             )
         }
     ) { topBarHeight ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = AbkScreenHorizontalPadding),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection)
+                .verticalScroll(rememberScrollState()).padding(horizontal = AbkScreenHorizontalPadding),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Spacer(Modifier.height(topBarHeight + 16.dp))
-            val ksuVersion = remember(state.rootGranted) {
-                if (state.rootGranted) RootUtils.getKsuVersion() else "N/A"
-            }
-            val kernelVersion = remember(state.rootGranted) {
-                RootUtils.getKernelVersion()
-            }
-
-            ExpressiveHeroCard(
-                title = if (state.rootGranted) stringResource(R.string.status_working) else stringResource(R.string.status_partially_active),
-                subtitle = if (state.rootGranted) {
-                    when {
-                        state.activeBuildRuns.size > 1 -> stringResource(R.string.status_parallel_build_number, state.activeBuildRuns.size)
-                        state.currentRun != null -> state.currentRun?.let { stringResource(R.string.status_build_number, it.runNumber) }.orEmpty()
-                        else -> stringResource(R.string.status_version, BuildConfig.VERSION_NAME)
-                    }
-                } else {
-                    stringResource(R.string.status_version_build_download, BuildConfig.VERSION_NAME)
-                },
-                icon = if (state.rootGranted) Icons.Default.CheckCircleOutline else Icons.Default.Info,
-                containerColor = if (state.rootGranted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = if (state.rootGranted) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                badge = {
-                    ExpressiveStatusChip(
-                        label = if (state.rootGranted) stringResource(R.string.status_root_authorized) else stringResource(R.string.status_root_unauthorized),
-                        icon = if (state.rootGranted) Icons.Default.Lock else Icons.Default.LockOpen,
-                        color = if (state.rootGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                    )
-                    ExpressiveStatusChip(
-                        label = state.forkRepo?.name ?: stringResource(R.string.status_no_fork_detected),
-                        icon = Icons.Default.ForkRight,
-                        color = if (state.forkRepo != null) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
-                    )
+            Spacer(Modifier.height(topBarHeight + 8.dp))
+            AbkHero(
+                title = stringResource(if (state.rootGranted) R.string.status_working else R.string.status_partially_active),
+                eyebrow = stringResource(R.string.status_version, BuildConfig.VERSION_NAME),
+                description = when {
+                    state.activeBuildRuns.size > 1 -> stringResource(R.string.status_parallel_build_number, state.activeBuildRuns.size)
+                    state.currentRun != null -> stringResource(R.string.status_build_number, state.currentRun.runNumber)
+                    !state.rootGranted -> stringResource(R.string.status_version_build_download, BuildConfig.VERSION_NAME)
+                    else -> stringResource(R.string.status_no_running_build)
                 }
-            ) {
-                if (!state.rootGranted) {
-                    OutlinedButton(
-                        onClick = { vm.requestRoot() },
-                        enabled = !state.isLoading,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (state.isLoading) {
-                            LoadingIndicator(Modifier.size(24.dp))
-                        } else {
-                            Icon(Icons.Default.Lock, null, modifier = Modifier.size(17.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.grant_root))
-                        }
-                    }
-                }
-            }
-
-            StatusMetricGrid(
-                rootGranted = state.rootGranted,
-                forkReady = state.forkRepo != null && state.behindBy <= 0,
-                ksuVersion = ksuVersion,
-                buildStatus = state.buildStatus
             )
-
-            ExpressiveSectionCard(
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ExpressiveStatusChip(
+                    stringResource(if (state.rootGranted) R.string.status_root_authorized else R.string.status_root_unauthorized),
+                    icon = if (state.rootGranted) AbkIcons.Check else AbkIcons.Warning,
+                    color = if (state.rootGranted) AbkTheme.colors.success.color else AbkTheme.colors.warning.color
+                )
+                ExpressiveStatusChip(state.forkRepo?.name ?: stringResource(R.string.status_no_fork_detected),
+                    icon = AbkIcons.Build, color = AbkTheme.colors.inkMuted)
+            }
+            if (!state.rootGranted) {
+                AbkButton(onRequestRoot, Modifier.fillMaxWidth(), style = AbkButtonStyle.Outline,
+                    enabled = !state.isLoading, loading = state.isLoading,
+                    loadingDescription = stringResource(R.string.loading)) {
+                    AbkIcon(AbkIcons.Controls, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.grant_root))
+                }
+            }
+            StatusMetricGrid(state.rootGranted, state.forkRepo != null && state.behindBy <= 0,
+                ksuVersion, state.buildStatus)
+            StatusWorkflowCard(
                 title = stringResource(R.string.status_build),
                 subtitle = stringResource(R.string.status_progress_sync),
-                icon = Icons.Default.RunCircle,
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                when (state.kernelBuildStatus) {
-                    BuildStatus.IDLE -> StatusRow(Icons.Default.HourglassEmpty, stringResource(R.string.status_no_running_build), false)
-                    BuildStatus.QUEUED -> StatusRow(
-                        Icons.Default.Queue,
-                        if (state.kernelActiveBuildRuns.size > 1) {
-                            stringResource(R.string.status_parallel_build_waiting_runner, state.kernelActiveBuildRuns.size)
-                        } else {
-                            stringResource(R.string.status_build_waiting_runner)
-                        },
-                        false
-                    )
-                    BuildStatus.IN_PROGRESS -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        LoadingIndicator(Modifier.size(24.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("${state.kernelBuildProgress.percent}% · ${state.kernelBuildProgress.currentStep}")
-                    }
-                    BuildStatus.SUCCESS -> StatusRow(Icons.Default.CheckCircle, stringResource(R.string.status_recent_build_success), false)
-                    BuildStatus.FAILURE -> StatusRow(Icons.Default.Error, stringResource(R.string.status_recent_build_failed), true)
-                    BuildStatus.CANCELLED -> StatusRow(Icons.Default.Cancel, stringResource(R.string.status_build_cancelled), true)
-                }
-                val kernelRun = state.kernelCurrentRun
-                if (kernelRun != null && state.kernelBuildProgress.totalSteps > 0) {
-                    Spacer(Modifier.height(8.dp))
-                    val animatedProgress by animateFloatAsState(
-                        targetValue = (state.kernelBuildProgress.percent / 100f).coerceIn(0f, 1f),
-                        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                        label = "status-progress"
-                    )
-                    ShimmerLinearProgress(
-                        progress = { animatedProgress },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text(
-                        stringResource(
-                            R.string.status_steps_complete,
-                            state.kernelBuildProgress.completedSteps,
-                            state.kernelBuildProgress.totalSteps
-                        ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                val showSingleRunAction = state.kernelActiveBuildRuns.size <= 1
-                state.kernelCurrentRun?.takeIf { showSingleRunAction }?.let { run ->
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TextButton(
-                            onClick = {
-                                runCatching {
-                                    context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse(run.htmlUrl))
-                                    )
-                                }
-                            },
-                            contentPadding = PaddingValues(0.dp)
-                        ) {
-                            Icon(Icons.Default.OpenInBrowser, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(stringResource(R.string.status_view_details, run.runNumber), style = MaterialTheme.typography.labelMedium)
-                        }
-                        if (run.isActiveStatusRun()) {
-                            TextButton(
-                                onClick = { vm.cancelWorkflowRun(run.id) },
-                                enabled = run.id !in state.cancellingWorkflowRunIds,
-                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                            ) {
-                                if (run.id in state.cancellingWorkflowRunIds) {
-                                    LoadingIndicator(Modifier.size(16.dp))
-                                } else {
-                                    Icon(Icons.Default.Cancel, null, modifier = Modifier.size(16.dp))
-                                }
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    if (run.id in state.cancellingWorkflowRunIds) {
-                                        stringResource(R.string.status_cancelling)
-                                    } else {
-                                        stringResource(R.string.status_cancel)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-                if (state.kernelActiveBuildRuns.size > 1) {
-                    Text(
-                        stringResource(R.string.status_parallel_workflows_desc, state.kernelActiveBuildRuns.size),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // Manager-app build mirror. Rendered only when a manager build is
-            // actually happening / has happened — otherwise the screen would
-            // grow a permanent "No manager build" tile that's just noise.
+                status = state.kernelBuildStatus,
+                progress = state.kernelBuildProgress,
+                run = state.kernelCurrentRun,
+                activeRunCount = state.kernelActiveBuildRuns.size,
+                cancellingIds = state.cancellingWorkflowRunIds,
+                onOpenRun = onOpenRun,
+                onCancelRun = onCancelRun
+            )
             if (state.managerBuildStatus != BuildStatus.IDLE || state.managerCurrentRun != null) {
-                ExpressiveSectionCard(
+                StatusWorkflowCard(
                     title = stringResource(R.string.status_manager_build),
                     subtitle = stringResource(R.string.status_manager_progress_sync),
-                    icon = Icons.Default.Shield,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    val managerProgress = state.managerBuildProgress
-                    when (state.managerBuildStatus) {
-                        BuildStatus.IDLE -> StatusRow(Icons.Default.HourglassEmpty, stringResource(R.string.status_no_running_build), false)
-                        BuildStatus.QUEUED -> StatusRow(
-                            Icons.Default.Queue,
-                            if (state.managerActiveBuildRuns.size > 1) {
-                                stringResource(R.string.status_parallel_build_waiting_runner, state.managerActiveBuildRuns.size)
-                            } else {
-                                stringResource(R.string.status_build_waiting_runner)
-                            },
-                            false
-                        )
-                        BuildStatus.IN_PROGRESS -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            LoadingIndicator(Modifier.size(24.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("${managerProgress.percent}% · ${managerProgress.currentStep}")
-                        }
-                        BuildStatus.SUCCESS -> StatusRow(Icons.Default.CheckCircle, stringResource(R.string.status_recent_build_success), false)
-                        BuildStatus.FAILURE -> StatusRow(Icons.Default.Error, stringResource(R.string.status_recent_build_failed), true)
-                        BuildStatus.CANCELLED -> StatusRow(Icons.Default.Cancel, stringResource(R.string.status_build_cancelled), true)
-                    }
-                    val managerRun = state.managerCurrentRun
-                    if (managerRun != null && managerProgress.totalSteps > 0) {
-                        Spacer(Modifier.height(8.dp))
-                        val animatedProgress by animateFloatAsState(
-                            targetValue = (managerProgress.percent / 100f).coerceIn(0f, 1f),
-                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                            label = "status-manager-progress"
-                        )
-                        ShimmerLinearProgress(
-                            progress = { animatedProgress },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Text(
-                            stringResource(R.string.status_steps_complete, managerProgress.completedSteps, managerProgress.totalSteps),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    val showSingleManagerAction = state.managerActiveBuildRuns.size <= 1
-                    state.managerCurrentRun?.takeIf { showSingleManagerAction }?.let { run ->
-                        Spacer(Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            TextButton(
-                                onClick = {
-                                    runCatching {
-                                        context.startActivity(
-                                            Intent(Intent.ACTION_VIEW, Uri.parse(run.htmlUrl))
-                                        )
-                                    }
-                                },
-                                contentPadding = PaddingValues(0.dp)
-                            ) {
-                                Icon(Icons.Default.OpenInBrowser, null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(stringResource(R.string.status_view_details, run.runNumber), style = MaterialTheme.typography.labelMedium)
-                            }
-                            if (run.isActiveStatusRun()) {
-                                TextButton(
-                                    onClick = { vm.cancelWorkflowRun(run.id) },
-                                    enabled = run.id !in state.cancellingWorkflowRunIds,
-                                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                                ) {
-                                    if (run.id in state.cancellingWorkflowRunIds) {
-                                        LoadingIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    } else {
-                                        Icon(Icons.Default.Cancel, null, modifier = Modifier.size(16.dp))
-                                    }
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        if (run.id in state.cancellingWorkflowRunIds) {
-                                            stringResource(R.string.status_cancelling)
-                                        } else {
-                                            stringResource(R.string.status_cancel)
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    if (state.managerActiveBuildRuns.size > 1) {
-                        Text(
-                            stringResource(R.string.status_parallel_workflows_desc, state.managerActiveBuildRuns.size),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                    status = state.managerBuildStatus,
+                    progress = state.managerBuildProgress,
+                    run = state.managerCurrentRun,
+                    activeRunCount = state.managerActiveBuildRuns.size,
+                    cancellingIds = state.cancellingWorkflowRunIds,
+                    onOpenRun = onOpenRun,
+                    onCancelRun = onCancelRun
+                )
             }
-
             ExpressiveSectionCard(
                 title = stringResource(R.string.status_device_repo_title),
-                subtitle = stringResource(R.string.status_device_repo_subtitle),
-                icon = Icons.Default.Memory
+                subtitle = stringResource(R.string.status_device_repo_subtitle), icon = AbkIcons.Cpu
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DeviceInfoRow(
-                        icon = Icons.Default.Memory,
-                        label = stringResource(R.string.status_kernel),
-                        value = kernelVersion,
-                        isError = false
-                    )
-                    DeviceInfoRow(
-                        icon = Icons.Default.Shield,
-                        label = "KSU",
-                        value = ksuVersion,
-                        isError = ksuVersion == "N/A"
-                    )
-                }
+                DeviceInfoRow(AbkIcons.Cpu, stringResource(R.string.status_kernel), kernelVersion, false)
+                AbkDivider()
+                DeviceInfoRow(AbkIcons.Controls, "KernelSU", ksuVersion, ksuVersion == "N/A")
+                AbkDivider()
                 state.user?.let { user ->
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 6.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
-                    )
-                    AccountRepositoryRow(
-                        avatarUrl = user.avatarUrl,
-                        login = user.login,
-                        repository = state.forkRepo?.fullName ?: stringResource(R.string.status_no_fork)
-                    )
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        AsyncImage(user.avatarUrl, null, Modifier.size(40.dp).clip(CircleShape))
+                        Column(Modifier.weight(1f)) {
+                            Text(user.login, style = MaterialTheme.typography.titleSmall)
+                            Text(state.forkRepo?.fullName ?: stringResource(R.string.status_no_fork),
+                                style = MaterialTheme.typography.bodySmall, color = AbkTheme.colors.inkMuted)
+                        }
+                    }
+                } ?: DeviceInfoRow(AbkIcons.Info, stringResource(R.string.status_login),
+                    stringResource(R.string.status_not_login), false)
+                if (state.behindBy > 0) StatusRow(AbkIcons.Warning,
+                    stringResource(R.string.status_fork_behind, state.behindBy), AbkTheme.colors.warning.color)
+            }
+            ExpressiveSectionCard(
+                title = stringResource(R.string.status_recent_runs_title),
+                subtitle = stringResource(R.string.status_recent_runs_subtitle), icon = AbkIcons.Pending,
+                trailingContent = {
+                    if (state.isRefreshingRecentRuns) AbkSpinner(size = AbkSize.Small, label = stringResource(R.string.loading))
                 }
-                if (state.behindBy > 0) {
-                    StatusRow(Icons.Default.Warning, stringResource(R.string.status_fork_behind, state.behindBy), true)
+            ) {
+                if (state.recentRuns.isEmpty()) {
+                    AbkEmptyState(stringResource(R.string.status_no_build), stringResource(R.string.empty_state_build_artifacts_hint),
+                        icon = AbkIcons.Build)
+                } else state.recentRuns.take(5).forEachIndexed { index, run ->
+                    if (index > 0) AbkDivider()
+                    RunListItem(run, run.id in state.cancellingWorkflowRunIds,
+                        onOpen = { onOpenRun(run) }, onCancel = { onCancelRun(run.id) })
                 }
             }
+            Spacer(Modifier.height(24.dp + outerPadding.calculateBottomPadding()))
+        }
+    }
+}
 
-            if (state.recentRuns.isNotEmpty()) {
-                ExpressiveSectionCard(
-                    title = stringResource(R.string.status_recent_runs_title),
-                    subtitle = stringResource(R.string.status_recent_runs_subtitle),
-                    icon = Icons.Default.History
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val visibleRuns = state.recentRuns.take(5)
-                        visibleRuns.forEach { run ->
-                            RunListItem(
-                                run = run,
-                                cancelling = run.id in state.cancellingWorkflowRunIds,
-                                onCancel = { vm.cancelWorkflowRun(run.id) }
-                            )
-                        }
+@Composable
+private fun StatusWorkflowCard(
+    title: String,
+    subtitle: String,
+    status: BuildStatus,
+    progress: BuildProgress,
+    run: WorkflowRun?,
+    activeRunCount: Int,
+    cancellingIds: Set<Long>,
+    onOpenRun: (WorkflowRun) -> Unit,
+    onCancelRun: (Long) -> Unit
+) {
+    ExpressiveSectionCard(title, subtitle = subtitle, icon = AbkIcons.Build) {
+        val message = when (status) {
+            BuildStatus.IDLE -> stringResource(R.string.status_no_running_build)
+            BuildStatus.QUEUED -> if (activeRunCount > 1) {
+                stringResource(R.string.status_parallel_build_waiting_runner, activeRunCount)
+            } else stringResource(R.string.status_build_waiting_runner)
+            BuildStatus.IN_PROGRESS -> "${progress.percent}% · ${progress.currentStep}"
+            BuildStatus.SUCCESS -> stringResource(R.string.status_recent_build_success)
+            BuildStatus.FAILURE -> stringResource(R.string.status_recent_build_failed)
+            BuildStatus.CANCELLED -> stringResource(R.string.status_build_cancelled)
+        }
+        StatusRow(buildStatusIcon(status), message, buildStatusColor(status))
+        if (run != null && progress.totalSteps > 0) {
+            AbkLinearProgress(progress.percent / 100f, label = title,
+                tone = when (status) {
+                    BuildStatus.SUCCESS -> AbkTone.Success
+                    BuildStatus.FAILURE -> AbkTone.Danger
+                    else -> AbkTone.Accent
+                })
+            Text(stringResource(R.string.status_steps_complete, progress.completedSteps, progress.totalSteps),
+                style = MaterialTheme.typography.bodySmall, color = AbkTheme.colors.inkMuted)
+        } else if (status == BuildStatus.QUEUED || status == BuildStatus.IN_PROGRESS) {
+            AbkLinearProgress(null, label = title)
+        }
+        if (run != null && activeRunCount <= 1) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AbkButton({ onOpenRun(run) }, style = AbkButtonStyle.Outline) {
+                    AbkIcon(AbkIcons.ArrowRight, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.status_view_details, run.runNumber))
+                }
+                if (run.isActiveStatusRun()) {
+                    val cancelling = run.id in cancellingIds
+                    AbkButton({ onCancelRun(run.id) }, style = AbkButtonStyle.Ghost,
+                        enabled = !cancelling, loading = cancelling,
+                        loadingDescription = stringResource(R.string.status_cancelling)) {
+                        AbkIcon(AbkIcons.Close, null, tint = AbkTheme.colors.danger.color)
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(if (cancelling) R.string.status_cancelling else R.string.status_cancel),
+                            color = AbkTheme.colors.danger.color)
                     }
                 }
             }
-            Spacer(Modifier.height(80.dp + outerPadding.calculateBottomPadding()))
+        }
+        if (activeRunCount > 1) Text(stringResource(R.string.status_parallel_workflows_desc, activeRunCount),
+            style = MaterialTheme.typography.bodySmall, color = AbkTheme.colors.inkMuted)
+    }
+}
+
+@Composable
+private fun DeviceInfoRow(icon: ImageVector, label: String, value: String, isError: Boolean) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        AbkIcon(if (isError) AbkIcons.Warning else icon, null,
+            tint = if (isError) AbkTheme.colors.warning.color else AbkTheme.colors.inkMuted)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = AbkTheme.colors.inkMuted)
+            Text(value, style = MaterialTheme.typography.bodyMedium,
+                fontFamily = if (label == stringResource(R.string.status_kernel)) AbkTheme.monoFont else null)
         }
     }
 }
 
 @Composable
-private fun DeviceInfoRow(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    isError: Boolean
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .padding(top = 2.dp)
-                .size(18.dp)
-        )
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun AccountRepositoryRow(
-    avatarUrl: String,
-    login: String,
-    repository: String
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        AsyncImage(
-            model = avatarUrl,
-            contentDescription = null,
-            modifier = Modifier
-                .size(38.dp)
-                .clip(CircleShape)
-        )
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(1.dp)
-        ) {
-            Text(
-                text = login,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = repository,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatusMetricGrid(
-    rootGranted: Boolean,
-    forkReady: Boolean,
-    ksuVersion: String,
-    buildStatus: BuildStatus
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            StatusMetricCard(
-                label = "Root",
-                value = if (rootGranted) stringResource(R.string.status_authorized) else stringResource(R.string.status_partially_active),
-                icon = if (rootGranted) Icons.Default.Lock else Icons.Default.LockOpen,
-                color = if (rootGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.weight(1f)
-            )
-            StatusMetricCard(
-                label = "Fork",
-                value = if (forkReady) stringResource(R.string.status_synced) else stringResource(R.string.status_pending_check),
-                icon = Icons.Default.ForkRight,
-                color = if (forkReady) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            StatusMetricCard(
-                label = "KernelSU",
-                value = if (ksuVersion == "N/A") stringResource(R.string.status_not_detected) else stringResource(R.string.status_detected),
-                icon = Icons.Default.Shield,
-                color = if (ksuVersion == "N/A") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f)
-            )
-            StatusMetricCard(
-                label = "Build",
-                value = buildStatusDisplay(buildStatus),
-                icon = Icons.Default.RunCircle,
-                color = buildStatusColor(buildStatus),
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatusMetricCard(
-    label: String,
-    value: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    color: androidx.compose.ui.graphics.Color,
-    modifier: Modifier = Modifier
-) {
-    val animatedColor by animateColorAsState(
-        color,
-        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-        label = "metric-color"
+private fun StatusMetricGrid(rootGranted: Boolean, forkReady: Boolean, ksuVersion: String, buildStatus: BuildStatus) {
+    val labels = listOf(stringResource(R.string.status_root), stringResource(R.string.status_fork), "KernelSU", stringResource(R.string.status_build))
+    val values = listOf(
+        stringResource(if (rootGranted) R.string.status_authorized else R.string.status_partially_active),
+        stringResource(if (forkReady) R.string.status_synced else R.string.status_pending_check),
+        stringResource(if (ksuVersion == "N/A") R.string.status_not_detected else R.string.status_detected),
+        buildStatusDisplay(buildStatus)
     )
-    val shape = MaterialTheme.shapes.medium
-    Card(
-        modifier = modifier.blurredCardBackground(shape = shape, enabled = true),
-        shape = shape,
-        colors = CardDefaults.cardColors(
-            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(icon, null, tint = animatedColor, modifier = Modifier.size(22.dp))
-            Column {
-                Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val icons = listOf(if (rootGranted) AbkIcons.Check else AbkIcons.Warning, AbkIcons.Refresh,
+        if (ksuVersion == "N/A") AbkIcons.Info else AbkIcons.Controls, buildStatusIcon(buildStatus))
+    val fontScale = LocalDensity.current.fontScale
+    BoxWithConstraints {
+        if (maxWidth < 340.dp || fontScale >= 1.5f) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                labels.indices.forEach { StatusMetricCard(labels[it], values[it], icons[it], Modifier.fillMaxWidth()) }
+            }
+        } else Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            labels.indices.chunked(2).forEach { pair ->
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    pair.forEach { StatusMetricCard(labels[it], values[it], icons[it], Modifier.weight(1f)) }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun StatusRow(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, isError: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(
-            icon, null,
-            tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(20.dp)
-        )
+private fun StatusMetricCard(label: String, value: String, icon: ImageVector, modifier: Modifier = Modifier) {
+    AbkCard(modifier.blurredCardBackground(AbkShapes.Large), containerColor = blurredCardSurfaceColor(AbkTheme.colors.raised)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            AbkIcon(icon, null, tint = AbkTheme.colors.inkMuted)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(label, style = MaterialTheme.typography.labelSmall, color = AbkTheme.colors.inkMuted)
+                Text(value, style = MaterialTheme.typography.titleSmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusRow(icon: ImageVector, text: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        AbkIcon(icon, null, tint = color)
         Text(text, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
 @Composable
-private fun RunListItem(
-    run: WorkflowRun,
-    cancelling: Boolean,
-    onCancel: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                run.displayTitle ?: run.name ?: "#${run.runNumber}",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1
-            )
-            Text(
-                run.createdAt.take(10),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        val (color, label) = when {
-            run.status == "completed" && run.conclusion == "success" ->
-                MaterialTheme.colorScheme.primary to stringResource(R.string.status_success)
-            run.status == "completed" && run.conclusion == "cancelled" ->
-                MaterialTheme.colorScheme.outline to stringResource(R.string.status_cancelled_label)
-            run.status == "completed" ->
-                MaterialTheme.colorScheme.error to stringResource(R.string.status_failure)
-            run.status == "in_progress" ->
-                MaterialTheme.colorScheme.tertiary to stringResource(R.string.status_in_progress)
-            else -> MaterialTheme.colorScheme.outline to run.status
-        }
-        Badge(containerColor = color.copy(alpha = 0.15f)) {
-            Text(label, color = color, style = MaterialTheme.typography.labelSmall)
-        }
-        if (run.isActiveStatusRun()) {
-            IconButton(onClick = onCancel, enabled = !cancelling) {
-                if (cancelling) {
-                    LoadingIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                } else {
-                    Icon(
-                        Icons.Default.Cancel,
-                        contentDescription = stringResource(R.string.status_cancel_workflow),
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
+private fun RunListItem(run: WorkflowRun, cancelling: Boolean, onOpen: () -> Unit, onCancel: () -> Unit) {
+    val status = when {
+        run.status == "completed" && run.conclusion == "success" -> BuildStatus.SUCCESS
+        run.status == "completed" && run.conclusion == "cancelled" -> BuildStatus.CANCELLED
+        run.status == "completed" -> BuildStatus.FAILURE
+        run.status == "in_progress" -> BuildStatus.IN_PROGRESS
+        else -> BuildStatus.QUEUED
+    }
+    Column {
+        AbkListItem(title = run.displayTitle ?: run.name ?: "#${run.runNumber}",
+            description = "#${run.runNumber} · ${run.createdAt.take(10)}", onClick = onOpen,
+            trailing = { AbkIcon(AbkIcons.Forward, null) })
+        FlowRow(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ExpressiveStatusChip(buildStatusDisplay(status), icon = buildStatusIcon(status), color = buildStatusColor(status))
+            if (run.isActiveStatusRun()) AbkButton(onCancel, style = AbkButtonStyle.Ghost,
+                loading = cancelling, enabled = !cancelling, loadingDescription = stringResource(R.string.status_cancelling)) {
+                AbkIcon(AbkIcons.Close, null, tint = AbkTheme.colors.danger.color)
+                Text(stringResource(if (cancelling) R.string.status_cancelling else R.string.status_cancel_workflow),
+                    color = AbkTheme.colors.danger.color)
             }
         }
     }
@@ -643,21 +370,28 @@ private fun WorkflowRun.isActiveStatusRun(): Boolean =
     status in setOf("queued", "waiting", "requested", "pending", "in_progress")
 
 @Composable
-private fun buildStatusDisplay(status: BuildStatus): String = when (status) {
-    BuildStatus.IDLE -> stringResource(R.string.status_idle)
-    BuildStatus.QUEUED -> stringResource(R.string.status_queued)
-    BuildStatus.IN_PROGRESS -> stringResource(R.string.status_in_progress)
-    BuildStatus.SUCCESS -> stringResource(R.string.status_success)
-    BuildStatus.FAILURE -> stringResource(R.string.status_failure)
-    BuildStatus.CANCELLED -> stringResource(R.string.status_stopped)
+private fun buildStatusDisplay(status: BuildStatus): String = stringResource(when (status) {
+    BuildStatus.IDLE -> R.string.status_idle
+    BuildStatus.QUEUED -> R.string.status_queued
+    BuildStatus.IN_PROGRESS -> R.string.status_in_progress
+    BuildStatus.SUCCESS -> R.string.status_success
+    BuildStatus.FAILURE -> R.string.status_failure
+    BuildStatus.CANCELLED -> R.string.status_stopped
+})
+
+private fun buildStatusIcon(status: BuildStatus): ImageVector = when (status) {
+    BuildStatus.IDLE, BuildStatus.QUEUED -> AbkIcons.Pending
+    BuildStatus.IN_PROGRESS -> AbkIcons.Build
+    BuildStatus.SUCCESS -> AbkIcons.Check
+    BuildStatus.FAILURE -> AbkIcons.Warning
+    BuildStatus.CANCELLED -> AbkIcons.Close
 }
 
 @Composable
-private fun buildStatusColor(status: BuildStatus) = when (status) {
-    BuildStatus.IDLE -> MaterialTheme.colorScheme.outline
-    BuildStatus.QUEUED -> MaterialTheme.colorScheme.tertiary
-    BuildStatus.IN_PROGRESS -> MaterialTheme.colorScheme.secondary
-    BuildStatus.SUCCESS -> MaterialTheme.colorScheme.primary
-    BuildStatus.FAILURE -> MaterialTheme.colorScheme.error
-    BuildStatus.CANCELLED -> MaterialTheme.colorScheme.outline
+private fun buildStatusColor(status: BuildStatus): Color = when (status) {
+    BuildStatus.SUCCESS -> AbkTheme.colors.success.color
+    BuildStatus.FAILURE -> AbkTheme.colors.danger.color
+    BuildStatus.QUEUED -> AbkTheme.colors.warning.color
+    BuildStatus.IN_PROGRESS -> AbkTheme.colors.accent.color
+    else -> AbkTheme.colors.inkMuted
 }

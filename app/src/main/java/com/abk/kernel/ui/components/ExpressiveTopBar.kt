@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -27,6 +28,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -37,10 +41,7 @@ import com.abk.kernel.ui.blur.isBlurActive
 import com.abk.kernel.ui.theme.uiSurfaceColor
 
 val AbkScreenHorizontalPadding: Dp = 24.dp
-private val ExpressiveTopBarActionHeight: Dp = 40.dp
-private val ExpressiveTopBarCompactTitleHeight: Dp = 62.dp
-private val ExpressiveTopBarExpandedTitleHeight: Dp = 60.dp
-private val ExpressiveTopBarLift: Dp = 8.dp
+private val ExpressiveTopBarActionHeight: Dp = 56.dp
 
 @Composable
 fun ExpressiveFlexibleTopBar(
@@ -79,11 +80,8 @@ fun ExpressiveTopBar(
     val useLargeTitle = largeTitle || !hasNavigation
     val behavior = scrollBehavior
     val density = LocalDensity.current
-    val expandedTitleHeight = if (compactTitle) {
-        ExpressiveTopBarCompactTitleHeight
-    } else {
-        ExpressiveTopBarExpandedTitleHeight
-    }
+    val largeTitleStyle = if (compactTitle) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineLarge
+    val expandedTitleHeight = with(density) { largeTitleStyle.lineHeight.toDp() } + 24.dp
     val canCollapse = collapsing && useLargeTitle && behavior != null
     val collapseRange = if (canCollapse) expandedTitleHeight else 0.dp
 
@@ -108,28 +106,7 @@ fun ExpressiveTopBar(
     }
     val expandedFraction = 1f - collapsedFraction
     val titleCollapseOffsetPx = with(density) { 16.dp.toPx() }
-    val topBarLiftPx = with(density) { ExpressiveTopBarLift.toPx() }
-
-    val largeTitleStyle = if (compactTitle) {
-        MaterialTheme.typography.headlineLarge.copy(
-            fontSize = 32.sp,
-            lineHeight = 36.sp,
-            fontWeight = FontWeight.Normal,
-            letterSpacing = 0.sp
-        )
-    } else {
-        MaterialTheme.typography.headlineLarge.copy(
-            fontSize = 38.sp,
-            lineHeight = 44.sp,
-            fontWeight = FontWeight.Normal,
-            letterSpacing = 0.sp
-        )
-    }
-    val collapsedTitleStyle =
-        MaterialTheme.typography.titleLarge.copy(
-            fontWeight = FontWeight.Normal,
-            letterSpacing = 0.sp
-        )
+    val collapsedTitleStyle = MaterialTheme.typography.titleLarge
     val blurActive = isBlurActive(enableBlur)
 
     Surface(
@@ -143,14 +120,11 @@ fun ExpressiveTopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .graphicsLayer {
-                    translationY = -topBarLiftPx
-                }
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(ExpressiveTopBarActionHeight)
+                    .heightIn(min = ExpressiveTopBarActionHeight)
                     .padding(
                         start = if (hasNavigation) 4.dp else AbkScreenHorizontalPadding,
                         end = AbkScreenHorizontalPadding
@@ -173,9 +147,9 @@ fun ExpressiveTopBar(
                 ) {
                     Text(
                         text = title,
-                        modifier = Modifier.graphicsLayer {
-                            alpha = if (useLargeTitle) collapsedFraction else 1f
-                        },
+                        modifier = Modifier
+                            .graphicsLayer { alpha = if (useLargeTitle) collapsedFraction else 1f }
+                            .then(if (useLargeTitle && collapsedFraction < 0.5f) Modifier.clearAndSetSemantics {} else Modifier.semantics { heading() }),
                         style = collapsedTitleStyle,
                         maxLines = 1,
                         softWrap = false,
@@ -203,6 +177,7 @@ fun ExpressiveTopBar(
                 ) {
                     Text(
                         text = title,
+                        modifier = if (collapsedFraction >= 0.5f) Modifier.clearAndSetSemantics {} else Modifier.semantics { heading() },
                         style = largeTitleStyle,
                         maxLines = 1,
                         softWrap = false,
