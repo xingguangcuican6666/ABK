@@ -84,8 +84,6 @@ import com.abk.kernel.data.model.APP_UPDATE_STABILITY_UNSTABLE
 import com.abk.kernel.data.model.AppUpdateCheckResult
 import com.abk.kernel.data.repository.PreferencesRepository
 import com.abk.kernel.data.repository.Result
-import com.abk.kernel.data.model.ManagerSettingItem
-import com.abk.kernel.data.model.ManagerSettingKind
 import com.abk.kernel.data.model.normalizeAppUpdateLine
 import com.abk.kernel.data.model.normalizeAppUpdateStability
 import com.abk.kernel.viewmodel.MainUiState
@@ -1010,75 +1008,29 @@ private fun ManagerInjectedSettingsGroup(
     val showRefreshLoading = refreshPresentation.showLoading
     if (!hasInjectedSettings && !state.managerSettingsLoading && state.managerSettingsError == null) return
 
-    SettingsGroup(title = state.managerSettingsTitle.ifBlank { stringResource(R.string.settings_manager_settings) }) {
-        when {
-            state.managerSettingsLoading && !hasInjectedSettings -> {
-                AbkInlineLoadingPill(
-                    text = stringResource(R.string.settings_manager_loading_title),
-                    modifier = Modifier.fillMaxWidth(),
-                    compact = false
-                )
+    SettingsManagerCard(
+        title = state.managerSettingsTitle.ifBlank { stringResource(R.string.settings_manager_settings) },
+        items = state.managerSettingsItems,
+        loading = state.managerSettingsLoading,
+        showRefreshLoading = showRefreshLoading,
+        error = state.managerSettingsError,
+        actionId = state.managerSettingActionId,
+        onRetry = {
+            refreshPresentation.beginRefresh()
+            vm.refreshManagerSettings(force = true)
+        },
+        onNavigate = { id ->
+            when (id) {
+                "app_profile_templates" -> onOpenAppProfileTemplates()
+                "manager_tools" -> onOpenManagerTools()
+                "kernel_capabilities" -> onOpenKernelCapabilities()
+                "susfs_control" -> onOpenSusfsControl()
+                "kpm" -> onOpenInstalledModules()
             }
-            state.managerSettingsError != null -> {
-                ExpressiveListItem(
-                    title = stringResource(R.string.settings_manager_load_failed),
-                    subtitle = state.managerSettingsError,
-                    leadingIcon = Icons.Default.Error,
-                    trailingContent = {
-                        IconButton(onClick = {
-                            refreshPresentation.beginRefresh()
-                            vm.refreshManagerSettings(force = true)
-                        }) {
-                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.retry))
-                        }
-                    }
-                )
-            }
-        }
-
-        if (showRefreshLoading) {
-            AbkInlineLoadingPill(
-                text = stringResource(R.string.settings_manager_loading_title),
-                modifier = Modifier.fillMaxWidth(),
-                compact = false
-            )
-        } else {
-            state.managerSettingsItems.forEach { item ->
-                val actionInFlight = state.managerSettingActionId == item.id
-                when (item.kind) {
-                    ManagerSettingKind.NAVIGATION -> ExpressiveListItem(
-                        title = item.title,
-                        subtitle = item.subtitle,
-                        leadingIcon = managerSettingIcon(item.id),
-                        enabled = item.enabled && !actionInFlight,
-                        trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_enter)) },
-                        onClick = {
-                            when (item.id) {
-                                "app_profile_templates" -> onOpenAppProfileTemplates()
-                                "manager_tools" -> onOpenManagerTools()
-                                "kernel_capabilities" -> onOpenKernelCapabilities()
-                                "susfs_control" -> onOpenSusfsControl()
-                                "kpm" -> onOpenInstalledModules()
-                            }
-                        }
-                    )
-                    ManagerSettingKind.MODE -> ManagerModeSettingItem(
-                        item = item,
-                        actionInFlight = actionInFlight,
-                        onSelected = { index -> vm.setManagerSettingMode(item.id, index) }
-                    )
-                    ManagerSettingKind.SWITCH -> SwitchSettingsItem(
-                        icon = managerSettingIcon(item.id),
-                        title = item.title,
-                        subtitle = item.subtitle,
-                        checked = item.checked,
-                        enabled = item.enabled && !actionInFlight,
-                        onCheckedChange = { checked -> vm.setManagerSettingChecked(item.id, checked) }
-                    )
-                }
-            }
-        }
-    }
+        },
+        onModeChange = { id, index -> vm.setManagerSettingMode(id, index) },
+        onCheckedChange = { id, checked -> vm.setManagerSettingChecked(id, checked) },
+    )
 }
 
 @Composable
@@ -1374,66 +1326,6 @@ private suspend fun readTextFromUri(context: Context, uri: Uri): String = withCo
 }
 
 @Composable
-private fun ManagerModeSettingItem(
-    item: ManagerSettingItem,
-    actionInFlight: Boolean,
-    onSelected: (Int) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val options = remember(item.options) {
-        item.options.map { it.trim() }.filter { it.isNotBlank() }
-    }
-    val selectedIndex = if (options.isNotEmpty()) {
-        item.selectedIndex.coerceIn(0, options.lastIndex)
-    } else {
-        0
-    }
-    val selectedLabel = options.getOrNull(selectedIndex) ?: stringResource(R.string.settings_unknown)
-    val enabled = item.enabled && !actionInFlight && options.isNotEmpty()
-    ExpressiveListItem(
-        title = item.title,
-        subtitle = item.subtitle,
-        leadingIcon = managerSettingIcon(item.id),
-        enabled = enabled,
-        trailingContent = {
-            Box {
-                TextButton(
-                    onClick = { expanded = true },
-                    enabled = enabled
-                ) {
-                    if (actionInFlight) {
-                        LoadingIndicator(Modifier.size(18.dp))
-                    } else {
-                        Text(selectedLabel)
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                    }
-                }
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    options.forEachIndexed { index, option ->
-                        DropdownMenuItem(
-                            text = { Text(option) },
-                            leadingIcon = {
-                                if (index == selectedIndex) {
-                                    Icon(Icons.Default.Check, contentDescription = null)
-                                }
-                            },
-                            onClick = {
-                                expanded = false
-                                if (index != selectedIndex) onSelected(index)
-                            }
-                        )
-                    }
-                }
-            }
-        },
-        onClick = { if (enabled) expanded = true }
-    )
-}
-
-@Composable
 private fun ManagerToolsSettingsScreen(
     topBarHeight: Dp,
     state: MainUiState,
@@ -1703,22 +1595,6 @@ private fun AppProfileTemplateSettingsScreen(
 
         Spacer(Modifier.height(80.dp))
     }
-}
-
-private fun managerSettingIcon(id: String) = when (id) {
-    "app_profile_templates" -> Icons.Default.Apps
-    "manager_tools" -> Icons.Default.Build
-    "kpm" -> Icons.Default.Extension
-    "su_compat" -> Icons.Default.RemoveModerator
-    "kernel_umount" -> Icons.Default.RemoveCircle
-    "adb_root" -> Icons.Default.Adb
-    "sulog" -> Icons.Default.Article
-    "selinux_hide" -> Icons.Default.Shield
-    "default_umount_modules" -> Icons.Default.FolderDelete
-    "webview_debug" -> Icons.Default.Code
-    "susfs_control" -> Icons.Default.Extension
-    "kernel_capabilities" -> Icons.Default.Tune
-    else -> Icons.Default.Settings
 }
 
 private fun defaultAppProfileTemplateJson(): String =
