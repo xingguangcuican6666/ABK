@@ -1219,99 +1219,16 @@ private fun KernelCapabilitiesSettingsScreen(
     onRefresh: () -> Unit,
     onTcpAlgorithmSelected: (String) -> Unit
 ) {
-    val tcp = state.kernelTcpCongestionControl
-    val showInitialLoading = state.kernelCapabilitiesLoading && tcp == null && state.kernelCapabilitiesError == null
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = AbkScreenHorizontalPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Spacer(Modifier.height(topBarHeight + 16.dp))
-        Crossfade(targetState = showRefreshLoading || showInitialLoading, label = "kernel-capabilities-refresh") { refreshing ->
-            if (refreshing) {
-                AbkInlineLoadingPill(
-                    text = stringResource(
-                        if (showRefreshLoading) {
-                            R.string.settings_kernel_capabilities_refreshing
-                        } else {
-                            R.string.loading
-                        }
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    compact = false
-                )
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (tcp != null && tcp.available) {
-                        SettingsGroup(title = stringResource(R.string.settings_tcp_congestion_control)) {
-                            val actionId = state.kernelCapabilityActionId
-                            val actionRunning = actionId != null
-                            tcp.availableAlgorithms.forEach { algorithm ->
-                                val selected = algorithm == tcp.currentAlgorithm
-                                val itemActionId = "tcp_congestion:$algorithm"
-                                ExpressiveListItem(
-                                    title = algorithm,
-                                    subtitle = if (selected) {
-                                        stringResource(R.string.settings_tcp_congestion_selected)
-                                    } else {
-                                        stringResource(R.string.settings_tcp_congestion_available)
-                                    },
-                                    leadingIcon = Icons.Default.Tune,
-                                    selected = selected,
-                                    enabled = !actionRunning && !selected,
-                                    trailingContent = {
-                                        when {
-                                            actionId == itemActionId -> LoadingIndicator(Modifier.size(22.dp))
-                                            selected -> Icon(Icons.Default.Check, contentDescription = null)
-                                        }
-                                    },
-                                    onClick = if (!selected) {
-                                        { onTcpAlgorithmSelected(algorithm) }
-                                    } else {
-                                        null
-                                    }
-                                )
-                            }
-                        }
-                    } else {
-                        SettingsGroup(title = stringResource(R.string.settings_kernel_capabilities)) {
-                            ExpressiveListItem(
-                                title = stringResource(R.string.settings_kernel_capabilities_unavailable),
-                                subtitle = state.kernelCapabilitiesError
-                                    ?: stringResource(R.string.settings_kernel_capabilities_unavailable_desc),
-                                leadingIcon = Icons.Default.Extension,
-                                trailingContent = {
-                                    IconButton(onClick = onRefresh) {
-                                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
-                                    }
-                                }
-                            )
-                        }
-                    }
-
-                    state.kernelCapabilitiesError?.takeIf { it.isNotBlank() && tcp != null }?.let { error ->
-                        SettingsGroup(title = stringResource(R.string.settings_status)) {
-                            ExpressiveListItem(
-                                title = stringResource(R.string.settings_operation_incomplete),
-                                subtitle = error,
-                                leadingIcon = Icons.Default.Error,
-                                trailingContent = {
-                                    IconButton(onClick = onRefresh) {
-                                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(80.dp))
-    }
+    SettingsKernelCapabilitiesContent(
+        topBarHeight = topBarHeight,
+        loading = state.kernelCapabilitiesLoading,
+        showRefreshLoading = showRefreshLoading,
+        tcp = state.kernelTcpCongestionControl,
+        error = state.kernelCapabilitiesError,
+        actionId = state.kernelCapabilityActionId,
+        onRefresh = onRefresh,
+        onTcpAlgorithmSelected = onTcpAlgorithmSelected,
+    )
 }
 
 private suspend fun readTextFromUri(context: Context, uri: Uri): String = withContext(Dispatchers.IO) {
@@ -1339,100 +1256,19 @@ private fun ManagerToolsSettingsScreen(
     ) { uri ->
         if (uri != null) onRestoreAllowlist(uri)
     }
-    val selinuxBusy = state.managerToolActionId == "selinux_mode"
-    val backupBusy = state.managerToolActionId == "backup_allowlist"
-    val restoreBusy = state.managerToolActionId == "restore_allowlist"
-    val showInitialLoading = state.managerToolsLoading && state.umountPaths.isEmpty() && state.managerToolsError == null
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = AbkScreenHorizontalPadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Spacer(Modifier.height(topBarHeight + 16.dp))
-        Crossfade(targetState = showRefreshLoading || showInitialLoading, label = "manager-tools-refresh") { refreshing ->
-            if (refreshing) {
-                AbkInlineLoadingPill(
-                    text = stringResource(
-                        if (showRefreshLoading) {
-                            R.string.settings_tools_refreshing
-                        } else {
-                            R.string.loading
-                        }
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    compact = false
-                )
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SettingsGroup(title = stringResource(R.string.settings_system_tools)) {
-                        SwitchSettingsItem(
-                            icon = Icons.Default.Security,
-                            title = stringResource(R.string.settings_selinux_mode),
-                            subtitle = stringResource(R.string.settings_current_value, selinuxModeLabel(state.selinuxModeText)),
-                            checked = state.selinuxEnforcing,
-                            enabled = !state.managerToolsLoading && !selinuxBusy,
-                            onCheckedChange = onSelinuxChange
-                        )
-                        ExpressiveListItem(
-                            title = stringResource(R.string.settings_umount_paths),
-                            subtitle = if (state.umountPaths.isEmpty()) {
-                                stringResource(R.string.settings_umount_no_paths)
-                            } else {
-                                stringResource(R.string.settings_umount_path_count, state.umountPaths.size)
-                            },
-                            leadingIcon = Icons.Default.FolderDelete,
-                        )
-                    }
-
-                    SettingsGroup(title = stringResource(R.string.settings_allowlist)) {
-                        ExpressiveListItem(
-                            title = stringResource(R.string.settings_backup_allowlist),
-                            subtitle = stringResource(R.string.settings_backup_allowlist_desc),
-                            leadingIcon = Icons.Default.CloudUpload,
-                            enabled = !backupBusy,
-                            trailingContent = {
-                                if (backupBusy) {
-                                    LoadingIndicator(Modifier.size(22.dp))
-                                } else {
-                                    Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_export))
-                                }
-                            },
-                            onClick = { backupLauncher.launch("abk-root-allowlist.json") }
-                        )
-                        ExpressiveListItem(
-                            title = stringResource(R.string.settings_restore_allowlist),
-                            subtitle = stringResource(R.string.settings_restore_allowlist_desc),
-                            leadingIcon = Icons.Default.History,
-                            enabled = !restoreBusy,
-                            trailingContent = {
-                                if (restoreBusy) {
-                                    LoadingIndicator(Modifier.size(22.dp))
-                                } else {
-                                    Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.settings_import))
-                                }
-                            },
-                            onClick = { restoreLauncher.launch(arrayOf("application/json", "text/*", "*/*")) }
-                        )
-                    }
-
-                    if (state.managerToolsError != null) {
-                        SettingsGroup(title = stringResource(R.string.settings_tool_status)) {
-                            ExpressiveListItem(
-                                title = stringResource(R.string.settings_operation_incomplete),
-                                subtitle = state.managerToolsError,
-                                leadingIcon = Icons.Default.Error
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(80.dp))
-    }
+    SettingsManagerToolsContent(
+        topBarHeight = topBarHeight,
+        loading = state.managerToolsLoading,
+        showRefreshLoading = showRefreshLoading,
+        selinuxMode = selinuxModeLabel(state.selinuxModeText),
+        selinuxEnforcing = state.selinuxEnforcing,
+        umountPathCount = state.umountPaths.size,
+        error = state.managerToolsError,
+        actionId = state.managerToolActionId,
+        onSelinuxChange = onSelinuxChange,
+        onBackupAllowlist = { backupLauncher.launch("abk-root-allowlist.json") },
+        onRestoreAllowlist = { restoreLauncher.launch(arrayOf("application/json", "text/*", "*/*")) },
+    )
 }
 
 @Composable

@@ -971,6 +971,7 @@
     <string name="settings_app_profile_templates_full_desc">Управление локальными и онлайн-шаблонами App Profile</string>
     <string name="settings_tools">Инструменты</string>
     <string name="settings_tools_desc">Больше расширенных функций</string>
+    <string name="settings_tools_refreshing">Обновление состояния инструментов</string>
     <string name="settings_manager_settings">Настройки менеджера</string>
     <string name="settings_kernel_capabilities">Возможности ядра</string>
     <string name="settings_kernel_capabilities_summary">TCP сейчас %1$s · алгоритмов: %2$d</string>

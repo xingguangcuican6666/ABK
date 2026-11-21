@@ -971,6 +971,7 @@
     <string name="settings_app_profile_templates_full_desc">Manage local and online App Profile templates</string>
     <string name="settings_tools">Tools</string>
     <string name="settings_tools_desc">More advanced features</string>
+    <string name="settings_tools_refreshing">Refreshing tool status</string>
     <string name="settings_manager_settings">Manager settings</string>
     <string name="settings_kernel_capabilities">Kernel capabilities</string>
     <string name="settings_kernel_capabilities_summary">TCP current %1$s · %2$d algorithms</string>

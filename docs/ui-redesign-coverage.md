@@ -39,8 +39,9 @@
 | 设置主页：账号/退出、更新反馈、诊断导出及主要分组 | 已重铺；两版目标 CI 成功 | 账号头像仍由宿主 Coil 加载，登录/退出/Fork/Runner/下载/分享保持真实入口；7 项假回调 UI 测试已在目标环境编译，设备未执行 |
 | 设置主页：签名/源码凭据安全区 | 已重铺；两版目标 CI 成功 | 独立签名/凭据忙碌条件不变，敏感草稿仅留宿主内存；8 项假回调 UI 测试已在目标环境编译，设备未执行 |
 | 设置主页：能力注入管理器分组 | 已重铺；两版目标 CI 成功 | 普通卡面、独立导航/开关、外置模式选择；8 项假回调 UI 测试在两版 instrumentation 中编译，标准主机测试通过，设备未执行 |
-| 设置子页：主题/背景/透明度/模糊、预测返回偏好 | 已重铺；本批目标 CI 待验证 | 普通卡面、纵向主题/颜色选项、受控开关和透明度滑杆；9 项假回调 UI 测试有界编译，设备未执行；图片选择器、权限与离页同步留在宿主 |
-| 设置子页：管理器工具、内核能力、profile 模板 | 待页面重铺 | 保留能力决定的入口与预测返回 |
+| 设置子页：主题/背景/透明度/模糊、预测返回偏好 | 已重铺；两版目标 CI 成功 | 普通卡面、纵向主题/颜色选项、受控开关和透明度滑杆；9 项假回调 UI 测试在两版 instrumentation 中编译，标准主机测试通过，设备未执行；图片选择器、权限与离页同步留在宿主 |
+| 设置子页：管理器工具、内核能力 | 已重铺；本批目标 CI 待验证 | 普通卡面、受控 SELinux 开关、全宽备份/恢复、纵向 TCP 选择；10 项假回调 UI 测试有界编译，设备未执行；文件选择器、权限与 Root 操作留在原宿主/后端 |
+| 设置子页：profile 模板 | 待页面重铺 | 保留能力决定的入口、草稿、显式保存/删除与预测返回 |
 | 设置子页：扩展管理、关于仓库、贡献者、开源许可 | 待页面重铺 | 第三方头像、许可证及链接不替换为示例数据 |
 | 设置弹层：签名密钥导入、计时安全确认、源码凭据编辑/删除 | 已重铺；两版目标 CI 成功 | 两次独立 5 秒关闭确认及重置计时不变；私钥/PAT 掩码显示，导入/凭据操作中限制编辑与关闭 |
 | 设置弹层：Runner 设置 | 已重铺；两版目标 CI 成功 | 保留 fork/配置快照与保存版本隔离草稿、标签 trim、支持/忙碌门控及显式保存；13 项假回调 UI 测试在两版 instrumentation 中编译，标准主机测试通过，设备未执行 |
@@ -68,10 +69,11 @@
 | 设置安全区批次 `a8a5a31f` | [44922327474](https://github.com/xingguangcuican6666/ABK/actions/runs/44922327474) 成功 | [44922327504](https://github.com/xingguangcuican6666/ABK/actions/runs/44922327504) 成功 | 核对了两版提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后的管理器分组修改 |
 | 设置管理器分组批次 `90504f36` | [44923756158](https://github.com/xingguangcuican6666/ABK/actions/runs/44923756158) 成功 | [44923756140](https://github.com/xingguangcuican6666/ABK/actions/runs/44923756140) 成功 | 核对了两版提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后的 Runner 弹层修改 |
 | 设置 Runner 弹层批次 `ab338923` | [44928063393](https://github.com/xingguangcuican6666/ABK/actions/runs/44928063393) 成功 | [44928063452](https://github.com/xingguangcuican6666/ABK/actions/runs/44928063452) 成功 | 核对了两版完整提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后的外观设置修改 |
+| 设置外观子页批次 `3b1a2d90` | [44929574298](https://github.com/xingguangcuican6666/ABK/actions/runs/44929574298) 成功 | [44929574242](https://github.com/xingguangcuican6666/ABK/actions/runs/44929574242) 成功 | 核对了两版完整提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后的修改 |
 
 标准测试步骤运行 `:app:compileDebugAndroidTestKotlin :app:testDebugUnitTest :abk-ui:testDebugUnitTest`。Dev 的测试步骤只编译 instrumentation，不能写成 Dev 主机测试已通过。上述步骤均未执行设备端 UI 测试。其他自动内核工作流的状态不混入 App CI 结论，也未手工触发内核构建。
 
-- 上表每次 CI 结论仅覆盖对应提交，不覆盖之后的修改。外观设置本批仅完成本地有界编译和下文列明的有限主机测试，仍待目标 CI；所有设备端 UI 测试均未执行。
+- 上表每次 CI 结论仅覆盖对应提交，不覆盖之后的修改。管理器工具/内核能力本批仅完成下文列明的本地检查，仍待目标 CI；所有设备端 UI 测试均未执行。
 
 ## 本地检查与构建命令
 
@@ -173,7 +175,16 @@ SUSFS 控制批次已完成以下本地检查：
 - 全 App 资源经 AAPT2 编译、临时最小 manifest 链接及 `javac --release 11` 资源类生成；新组件/测试引用在中英俄均存在，key 唯一、格式化占位符一致。本批未修改字符串资源；临时资源包不是正式 manifest 合并或可安装 App。
 - 真实库、外观组件、真实外观宿主摘录和新增 9 项 `SettingsAppearanceUiTest` 连同既有 42 项设置 UI 测试，在缓存 Kotlin/Compose 2.2.21、JVM 11 下有界编译通过。blur、Root 槽位类型及页面间距使用仅编译替身，未覆盖完整设置宿主、正式 blur、目标 Kotlin/Material3、ActivityResult 往返或 APK；完整设置临时副本通过 Kotlin formatter 语法解析。
 - 9 项假回调 UI 测试使用 320dp/2×字体/RTL，覆盖宿主主题选择、动态色支持及快照、自定义色搭配和 alpha 匹配、图片/模糊/预测返回门控、显式选择/移除、透明度范围及预览/提交次序、外观宿主离页同步及重开无自动操作。仅验证源码编译，未在设备执行。原 4 项设置文本状态测试通过 JUnitCore 实际执行。
-- ViewModel、偏好仓库、主题/背景/模糊实现、Runner 和工作流与批次起点无差异，Lucide 角色及 `git diff --check` 通过。本机已知目标 Gradle 依赖缓存阻断未解决，本批没有把有界检查当成目标 Gradle 构建；目标 CI 待验证。检查脚本、替身、日志及产物均留在仓库外。
+- ViewModel、偏好仓库、主题/背景/模糊实现、Runner 和工作流与批次起点无差异，Lucide 角色及 `git diff --check` 通过。本机已知目标 Gradle 依赖缓存阻断未解决，本批没有把有界检查当成目标 Gradle 构建；随后 `3b1a2d90` 两版目标 CI 均完成完整编译和 APK 构建，标准主机测试通过，9 项 UI 测试仍未在设备执行。检查脚本、替身、日志及产物均留在仓库外。
+
+设置管理器工具/内核能力子页批次已完成以下本地检查：
+
+- 管理器工具改用普通卡面、受控 SELinux 开关和全宽备份/恢复操作；卸载路径仍只展示数量，不新增路径编辑或执行入口。TCP 使用纵向、至少 48dp 的 radio 语义选项和等宽算法名，当前项不重复提交，任意内核操作进行中禁用所有算法，匹配操作 ID 的条目提供进度。错误保留可见文字并增加图标和错误语义，不以整卡状态色表达。
+- 与外观提交 `3b1a2d90` 逐字核对，两个页面之外的设置宿主、原生管理权限与导航 gate、刷新回调及预测返回均未改变；备份 `CreateDocument("application/json")`、默认文件名、恢复 `OpenDocument` 的 MIME 列表及非空 URI 回调保持原样。SELinux、备份和恢复各自原有的界面忙碌条件、初次加载/刷新隐藏条件，以及 TCP 的 `availableAlgorithms`（而非 `allowedAlgorithms`）与错误呈现条件保持不变。真实 Root 操作及最终权限检查仍由原 ViewModel/工具执行，没有发起实际设备操作。
+- 全 App 资源经 AAPT2 编译、临时最小 manifest 链接和 `javac --release 11` 资源类生成；新组件/测试及两个真实宿主摘录的中英俄引用、唯一 key 和格式化占位符检查通过。首次检查发现既有工具刷新提示缺少英文/俄文，补齐后重跑通过；临时资源包不是正式 manifest 合并或可安装 App。
+- 真实库、两个新页面组件、真实工具/内核/外观宿主摘录、新增 10 项 `SettingsToolsUiTest` 及既有 51 项设置 UI 测试，在缓存 Kotlin/Compose 2.2.21、JVM 11 下有界编译通过。TCP 模型取真实源码，宿主状态字段取真实类型摘录；blur、Root 槽位类型和页面间距使用仅编译替身，不覆盖完整设置宿主、正式 blur、目标 Kotlin/Material3 或 ActivityResult 往返。完整设置临时副本通过 Kotlin formatter 语法解析。
+- 10 项假回调 UI 测试使用 320dp/2×字体/RTL，覆盖受控 SELinux、显式备份/恢复入口、独立忙碌条件、初次加载与刷新隐藏、错误语义、无 TCP 能力、原可用算法列表、宿主选中值更新、全算法忙碌禁用、匹配进度及错误重试与算法选择分离。仅验证源码编译，未在设备执行；原 4 项设置文本状态测试由 JUnitCore 实际执行通过，假回调不证明真实选择器或 Root 执行成功。
+- ViewModel、模型、数据层、Root 工具、主题/背景/模糊实现、外观组件、Runner、组件库和工作流与批次起点无差异，Lucide 角色及 `git diff --check` 通过。本机已知目标 Gradle 依赖缓存阻断未解决，本批没有重试同一离线失败命令，也未把有界检查当成目标 Gradle 构建；目标 CI 待验证。检查脚本、替身、日志及产物均留在仓库外。
 
 ## 未完成的验收
 
