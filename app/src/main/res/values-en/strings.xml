@@ -400,6 +400,8 @@
     <string name="flash_delete_remote_workflow">Also delete remote GitHub Actions workflow record</string>
     <string name="flash_refresh_artifacts">Refresh build artifacts online</string>
     <string name="flash_filter_title">Filter</string>
+    <string name="flash_filter_expanded">Filters expanded</string>
+    <string name="flash_filter_collapsed">Filters collapsed</string>
     <string name="flash_chip_building">Building</string>
     <string name="flash_build_failed_chip">Build failed</string>
     <string name="flash_dismiss_failed">Remove from list</string>

@@ -2,222 +2,34 @@
 
 package com.abk.kernel.ui.screens.flash
 
-import android.content.Intent
-import android.net.Uri
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.widget.Toast
-import androidx.activity.compose.BackHandler
-import androidx.annotation.StringRes
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.FolderSpecial
-import androidx.compose.material.icons.filled.Inbox
-import androidx.compose.material.icons.filled.InsertDriveFile
-import androidx.compose.material.icons.filled.InstallMobile
-import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.RunCircle
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameMillis
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
-import coil.compose.AsyncImage
 import com.abk.kernel.R
-import com.abk.kernel.data.model.ActiveDownloadTask
-import com.abk.kernel.data.model.ArtifactCategory
-import com.abk.kernel.data.model.ArtifactType
-import com.abk.kernel.data.model.BuildArtifact
 import com.abk.kernel.data.model.BuildParameterSummary
-import com.abk.kernel.data.model.BuildProgress
-import com.abk.kernel.utils.BuildProgressUtils
-import com.abk.kernel.data.model.BuildQueueItemStatus
-import com.abk.kernel.data.model.BuildStatus
-import com.abk.kernel.data.model.DownloadedArtifact
-import com.abk.kernel.data.model.KernelBuildConfig
-import com.abk.kernel.data.model.KernelSupport
-import com.abk.kernel.data.model.PREBUILT_GKI_RUN_ID
-import com.abk.kernel.data.model.PrebuiltGkiAsset
 import com.abk.kernel.data.model.PrebuiltGkiRelease
-import com.abk.kernel.data.model.WorkflowJob
-import com.abk.kernel.data.model.WorkflowRun
-import com.abk.kernel.data.model.WorkflowStep
-import com.abk.kernel.data.model.isFailedFlashRun
-import com.abk.kernel.utils.FlashFilter
-import com.abk.kernel.utils.FlashFilterKernelKind
-import com.abk.kernel.utils.FlashFilterManagerKind
-import com.abk.kernel.utils.FlashFilterWorkflowState
-import com.abk.kernel.utils.FlashWorkflowFilter
-import com.abk.kernel.utils.WorkflowPrimary
-import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
-import com.abk.kernel.ui.components.ObserveChildPageVisibility
-import com.abk.kernel.ui.components.childPageOverlayEnterTransition
-import com.abk.kernel.ui.components.childPageOverlayExitTransition
-import com.abk.kernel.ui.components.childPageScrimExitTransition
-import com.abk.kernel.ui.components.rememberChildPageBackController
-import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
-import com.abk.kernel.utils.FailureLogExtractor
-import com.abk.kernel.ui.components.LIVE_DURATION_MINUTE_HAND_PERIOD_MS
-import com.abk.kernel.ui.components.LiveDurationScheduleIcon
-import com.abk.kernel.ui.components.ShimmerLinearProgress
-import com.abk.kernel.ui.components.liveWorkflowShimmerBrush
-import com.abk.kernel.ui.components.rememberLiveWorkflowShimmerPhase
-import com.abk.kernel.ui.components.MinuteHandController
-import com.abk.kernel.ui.components.MinuteHandControllerHost
-import com.abk.kernel.ui.components.MinuteHandPhase
-import com.abk.kernel.ui.components.ExpressiveEmptyState
-import com.abk.kernel.ui.components.ExpressiveHeroCard
-import com.abk.kernel.ui.components.ExpressiveSectionCard
-import com.abk.kernel.ui.components.ExpressiveStatusChip
-import com.abk.kernel.ui.components.ExpressiveTopBar
-import com.abk.kernel.ui.theme.uiSurfaceColor
-import com.abk.kernel.utils.DownloadUtils
-import com.abk.kernel.utils.RootUtils
-import com.abk.kernel.viewmodel.MainViewModel
-import com.abk.kernel.viewmodel.mergeWorkflowActiveDownloads
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-
+import io.github.xingguangcuican6666.abk.ui.components.AbkButton
+import io.github.xingguangcuican6666.abk.ui.components.AbkCheckbox
+import io.github.xingguangcuican6666.abk.ui.components.AbkDialog
+import io.github.xingguangcuican6666.abk.ui.components.AbkPanel
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcon
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
+import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
 
 @Composable
 internal fun BuildParameterSummaryDialog(
@@ -226,118 +38,83 @@ internal fun BuildParameterSummaryDialog(
     loading: Boolean,
     error: String?,
     onDismiss: () -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
 ) {
-    AlertDialog(
+    AbkDialog(
+        title = stringResource(R.string.flash_parameter_details),
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Tune, contentDescription = null) },
-        title = { Text(stringResource(R.string.flash_parameter_details)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                ParameterSection(stringResource(R.string.flash_workflow)) {
-                    ParameterRow(stringResource(R.string.flash_number), if (group.runNumber > 0) "#${group.runNumber}" else "#${group.runId}")
-                    ParameterRow(stringResource(R.string.flash_title_label), group.runTitle)
-                    ParameterRow(
-                        stringResource(R.string.flash_artifacts),
-                        stringResource(R.string.flash_artifact_counts, group.remote.size, group.local.size)
-                    )
-                }
-                when {
-                    summary != null -> {
-                        ParameterSummarySections(summary)
-                    }
-                    loading -> {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            LoadingIndicator(Modifier.size(24.dp))
-                            Text(stringResource(R.string.flash_reading_build_summary))
-                        }
-                    }
-                    error != null -> {
-                        Text(
-                            text = error,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                    else -> {
-                        Text(
-                            text = stringResource(R.string.flash_no_parameter_details),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+        dismissDescription = stringResource(R.string.close),
+        wide = true,
+        actions = {
+            if (error != null && !loading) {
+                FlashAction(stringResource(R.string.retry), AbkIcons.Refresh, onRetry)
             }
+            AbkButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
-        },
-        dismissButton = if (error != null && !loading) {
-            { TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) } }
-        } else {
-            null
+    ) {
+        ParameterSection(stringResource(R.string.flash_workflow)) {
+            ParameterRow(
+                stringResource(R.string.flash_number),
+                if (group.runNumber > 0) "#${group.runNumber}" else "#${group.runId}",
+            )
+            ParameterRow(stringResource(R.string.flash_title_label), group.runTitle)
+            ParameterRow(
+                stringResource(R.string.flash_artifacts),
+                stringResource(R.string.flash_artifact_counts, group.remote.size, group.local.size),
+            )
         }
-    )
+        when {
+            summary != null -> ParameterSummarySections(summary)
+            loading -> LoadingRow(stringResource(R.string.flash_reading_build_summary))
+            error != null ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AbkIcon(AbkIcons.AlertMark, null, tint = AbkTheme.colors.danger.color)
+                    Text(error, Modifier.weight(1f), color = AbkTheme.colors.danger.color)
+                }
+            else ->
+                Text(
+                    stringResource(R.string.flash_no_parameter_details),
+                    color = AbkTheme.colors.inkMuted,
+                )
+        }
+    }
 }
 
 @Composable
 internal fun PrebuiltParameterSummaryDialog(
     release: PrebuiltGkiRelease,
     summary: BuildParameterSummary?,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
-    AlertDialog(
+    AbkDialog(
+        title = stringResource(R.string.flash_parameter_details),
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Tune, contentDescription = null) },
-        title = { Text(stringResource(R.string.flash_parameter_details)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                ParameterSection("Release") {
-                    ParameterRow(stringResource(R.string.flash_name), release.name)
-                    ParameterRow("Tag", release.tagName)
-                    ParameterRow(
-                        stringResource(R.string.flash_published_at),
-                        releaseDateLabel(release.publishedAt, stringResource(R.string.flash_unknown_date))
-                    )
-                    ParameterRow(
-                        stringResource(R.string.flash_assets),
-                        if (release.assetCount > 0) {
-                            stringResource(R.string.flash_asset_count, release.assetCount)
-                        } else {
-                            stringResource(R.string.flash_unknown)
-                        }
-                    )
-                }
-                if (summary != null) {
-                    ParameterSummarySections(summary)
+        dismissDescription = stringResource(R.string.close),
+        wide = true,
+        actions = { AbkButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+    ) {
+        ParameterSection("Release") {
+            ParameterRow(stringResource(R.string.flash_name), release.name)
+            ParameterRow("Tag", release.tagName)
+            ParameterRow(
+                stringResource(R.string.flash_published_at),
+                releaseDateLabel(release.publishedAt, stringResource(R.string.flash_unknown_date)),
+            )
+            ParameterRow(
+                stringResource(R.string.flash_assets),
+                if (release.assetCount > 0) {
+                    stringResource(R.string.flash_asset_count, release.assetCount)
                 } else {
-                    Text(
-                        text = stringResource(R.string.flash_release_no_matrix),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+                    stringResource(R.string.flash_unknown)
+                },
+            )
         }
-    )
+        if (summary != null) {
+            ParameterSummarySections(summary)
+        } else {
+            Text(stringResource(R.string.flash_release_no_matrix), color = AbkTheme.colors.inkMuted)
+        }
+    }
 }
 
 @Composable
@@ -372,56 +149,40 @@ internal fun ParameterSummarySections(summary: BuildParameterSummary) {
     val extraRows = summary.extraRows.orEmpty()
     if (extraRows.isNotEmpty()) {
         ParameterSection(stringResource(R.string.flash_extra_info)) {
-            extraRows.forEach { (label, value) ->
-                ParameterRow(label, value)
-            }
+            extraRows.forEach { (label, value) -> ParameterRow(label, value) }
         }
     }
 }
 
 @Composable
-internal fun ParameterSection(
-    title: String,
-    content: @Composable () -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+internal fun ParameterSection(title: String, content: @Composable () -> Unit) {
+    AbkPanel(Modifier.fillMaxWidth()) {
         Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary
+            title,
+            modifier = Modifier.semantics { heading() },
+            style = MaterialTheme.typography.titleSmall,
         )
-        content()
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
     }
 }
 
 @Composable
 internal fun ParameterRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.Top
-    ) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = AbkTheme.colors.inkMuted)
         Text(
-            text = label,
+            text =
+                parameterDisplayValue(
+                    value = value,
+                    unknown = stringResource(R.string.flash_unknown),
+                    enabled = stringResource(R.string.build_feature_enabled),
+                    disabled = stringResource(R.string.build_virtualization_off),
+                    none = stringResource(R.string.flash_value_none),
+                    defaultValue = stringResource(R.string.flash_value_default),
+                    set = stringResource(R.string.flash_value_set),
+                ),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(96.dp)
-        )
-        Text(
-            text = parameterDisplayValue(
-                value = value,
-                unknown = stringResource(R.string.flash_unknown),
-                enabled = stringResource(R.string.build_feature_enabled),
-                disabled = stringResource(R.string.build_virtualization_off),
-                none = stringResource(R.string.flash_value_none),
-                defaultValue = stringResource(R.string.flash_value_default),
-                set = stringResource(R.string.flash_value_set)
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
+            fontFamily = AbkTheme.monoFont,
         )
     }
 }
@@ -433,7 +194,7 @@ internal fun parameterDisplayValue(
     disabled: String,
     none: String,
     defaultValue: String,
-    set: String
+    set: String,
 ): String {
     val trimmed = value.trim()
     return when (trimmed.lowercase()) {
@@ -468,7 +229,8 @@ internal fun parsePrebuiltGkiParameterSummary(release: PrebuiltGkiRelease): Buil
         runTitle = release.name,
         runCreatedAt = release.publishedAt,
         runHtmlUrl = release.htmlUrl,
-        androidVersion = values["androidVersion"].orEmpty().ifBlank { inferredVersion.androidVersion },
+        androidVersion =
+            values["androidVersion"].orEmpty().ifBlank { inferredVersion.androidVersion },
         kernelVersion = values["kernelVersion"].orEmpty().ifBlank { inferredVersion.kernelVersion },
         subLevel = values["subLevel"].orEmpty().ifBlank { inferredVersion.subLevel },
         osPatchLevel = values["osPatchLevel"].orEmpty(),
@@ -490,13 +252,14 @@ internal fun parsePrebuiltGkiParameterSummary(release: PrebuiltGkiRelease): Buil
         customInjection = values["customInjection"].orEmpty(),
         stockConfig = values["stockConfig"].orEmpty(),
         source = "release_body",
-        extraRows = extraRows
+        extraRows = extraRows,
     )
 }
 
 internal fun parseReleaseBodyParameterRows(body: String): List<Pair<String, String>> {
     if (body.isBlank()) return emptyList()
-    return body.lineSequence()
+    return body
+        .lineSequence()
         .mapNotNull(::parseReleaseBodyParameterRow)
         .filterNot { (label, value) ->
             val normalized = label.replace(Regex("\\s+"), "")
@@ -509,25 +272,20 @@ internal fun parseReleaseBodyParameterRow(line: String): Pair<String, String>? {
     val trimmed = line.trim()
     if (trimmed.isBlank()) return null
     if (trimmed.startsWith("|")) {
-        val cells = trimmed.trim('|')
-            .split('|')
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
+        val cells = trimmed.trim('|').split('|').map { it.trim() }.filter { it.isNotBlank() }
         if (cells.size >= 2 && !cells[0].all { it == '-' || it == ':' }) {
             return cells[0] to cells.drop(1).joinToString(" | ")
         }
     }
     val separated = trimmed.split(Regex("\\t+| {2,}"), limit = 2)
     if (separated.size == 2) return separated[0].trim() to separated[1].trim()
-    val colonIndex = listOf(trimmed.indexOf(':'), trimmed.indexOf('：'))
-        .filter { it >= 0 }
-        .minOrNull()
+    val colonIndex =
+        listOf(trimmed.indexOf(':'), trimmed.indexOf('：')).filter { it >= 0 }.minOrNull()
     if (colonIndex != null) {
         return trimmed.substring(0, colonIndex).trim() to trimmed.substring(colonIndex + 1).trim()
     }
-    return RELEASE_PARAMETER_LABELS.firstOrNull { trimmed.startsWith(it) }?.let { label ->
-        label to trimmed.removePrefix(label).trim().trimStart(':', '：').trim()
-    }
+    return RELEASE_PARAMETER_LABELS.firstOrNull { trimmed.startsWith(it) }
+        ?.let { label -> label to trimmed.removePrefix(label).trim().trimStart(':', '：').trim() }
 }
 
 internal fun normalizeReleaseParameterLabel(label: String): String? {
@@ -547,7 +305,9 @@ internal fun normalizeReleaseParameterLabel(label: String): String? {
         compact.contains("bbg补丁") -> "bbgEnabled"
         compact.contains("ddklsm") -> "ddkLsm"
         compact.contains("ntsync补丁") -> "ntsyncEnabled"
-        compact.contains("网络增强") || compact.contains("networking增强") || compact.contains("networing增强") -> "networkingEnabled"
+        compact.contains("网络增强") ||
+            compact.contains("networking增强") ||
+            compact.contains("networing增强") -> "networkingEnabled"
         compact.contains("kpm功能") -> "kpmEnabled"
         compact.contains("kpm密码") -> "kpmPassword"
         compact.contains("re-kernel") || compact.contains("rekernel") -> "reKernelEnabled"
@@ -575,73 +335,78 @@ internal fun isReleaseExtraParameterLabel(label: String): Boolean {
 
 internal fun inferPrebuiltVersionFields(release: PrebuiltGkiRelease): PrebuiltVersionFields {
     val source = "${release.name}\n${release.tagName}\n${release.body}"
-    val androidKernel = Regex("android\\s*(\\d+)\\s*/\\s*(\\d+\\.\\d+)(?:\\.(\\d+))?", RegexOption.IGNORE_CASE)
-        .find(source)
+    val androidKernel =
+        Regex("android\\s*(\\d+)\\s*/\\s*(\\d+\\.\\d+)(?:\\.(\\d+))?", RegexOption.IGNORE_CASE)
+            .find(source)
     if (androidKernel != null) {
         return PrebuiltVersionFields(
             androidVersion = "android${androidKernel.groupValues[1]}",
             kernelVersion = androidKernel.groupValues[2],
-            subLevel = androidKernel.groupValues.getOrNull(3).orEmpty()
+            subLevel = androidKernel.groupValues.getOrNull(3).orEmpty(),
         )
     }
-    val android = Regex("android\\s*(\\d+)", RegexOption.IGNORE_CASE)
-        .find(source)
-        ?.groupValues
-        ?.getOrNull(1)
-        ?.let { "android$it" }
-        .orEmpty()
+    val android =
+        Regex("android\\s*(\\d+)", RegexOption.IGNORE_CASE)
+            .find(source)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.let { "android$it" }
+            .orEmpty()
     return PrebuiltVersionFields(androidVersion = android)
 }
 
 internal data class PrebuiltVersionFields(
     val androidVersion: String = "",
     val kernelVersion: String = "",
-    val subLevel: String = ""
+    val subLevel: String = "",
 )
 
-internal val RELEASE_PARAMETER_LABELS = listOf(
-    "自定义注入参数列表",
-    "网络增强 (IPSet + BBR)",
-    "Release asset 数",
-    "5.10 修订版本",
-    "自定义版本名",
-    "一加 8E 支持",
-    "Android 版本",
-    "Stock Config",
-    "ZRAM 完整算法",
-    "ZRAM 额外算法",
-    "NTsync 补丁",
-    "虚拟化支持",
-    "自定义注入",
-    "内核版本",
-    "子版本号",
-    "补丁级别",
-    "KSU 变体",
-    "KSU 分支",
-    "构建时间",
-    "SUSFS 状态",
-    "ZRAM 增强",
-    "BBG 补丁",
-    "DDK LSM",
-    "网络增强",
-    "KPM 功能",
-    "KPM 密码",
-    "Re-Kernel",
-    "Artifact 数",
-    "源 commit",
-    "源 run"
-).sortedByDescending { it.length }
+internal val RELEASE_PARAMETER_LABELS =
+    listOf(
+            "自定义注入参数列表",
+            "网络增强 (IPSet + BBR)",
+            "Release asset 数",
+            "5.10 修订版本",
+            "自定义版本名",
+            "一加 8E 支持",
+            "Android 版本",
+            "Stock Config",
+            "ZRAM 完整算法",
+            "ZRAM 额外算法",
+            "NTsync 补丁",
+            "虚拟化支持",
+            "自定义注入",
+            "内核版本",
+            "子版本号",
+            "补丁级别",
+            "KSU 变体",
+            "KSU 分支",
+            "构建时间",
+            "SUSFS 状态",
+            "ZRAM 增强",
+            "BBG 补丁",
+            "DDK LSM",
+            "网络增强",
+            "KPM 功能",
+            "KPM 密码",
+            "Re-Kernel",
+            "Artifact 数",
+            "源 commit",
+            "源 run",
+        )
+        .sortedByDescending { it.length }
 
-internal val RELEASE_EXTRA_PARAMETER_LABELS = setOf(
-    "源run",
-    "源commit",
-    "artifact数",
-    "releaseasset数",
-    "自定义版本名",
-    "5.10修订版本",
-    "一加8e支持",
-    "自定义注入参数列表"
-)
+internal val RELEASE_EXTRA_PARAMETER_LABELS =
+    setOf(
+        "源run",
+        "源commit",
+        "artifact数",
+        "releaseasset数",
+        "自定义版本名",
+        "5.10修订版本",
+        "一加8e支持",
+        "自定义注入参数列表",
+    )
 
 @Composable
 internal fun DismissFailedRunDialog(
@@ -650,50 +415,20 @@ internal fun DismissFailedRunDialog(
     onDismiss: () -> Unit,
 ) {
     var deleteFiles by remember(hasDownloadedFiles) { mutableStateOf(hasDownloadedFiles) }
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Close, contentDescription = null) },
-        title = { Text(stringResource(R.string.flash_dismiss_failed_title)) },
-        text = {
-            Column {
-                Text(stringResource(R.string.flash_dismiss_failed_message))
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(
-                            if (hasDownloadedFiles) {
-                                Modifier.clickable { deleteFiles = !deleteFiles }
-                            } else {
-                                Modifier
-                            }
-                        )
-                        .padding(vertical = 4.dp)
-                ) {
-                    Checkbox(
-                        checked = deleteFiles,
-                        onCheckedChange = { if (hasDownloadedFiles) deleteFiles = it },
-                        enabled = hasDownloadedFiles,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        stringResource(R.string.flash_dismiss_delete_files),
-                        color = if (hasDownloadedFiles) LocalContentColor.current else muted,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(deleteFiles) }) {
-                Text(stringResource(R.string.flash_dismiss_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(android.R.string.cancel))
-            }
-        }
-    )
+    FlashConfirmDialog(
+        title = stringResource(R.string.flash_dismiss_failed_title),
+        message = stringResource(R.string.flash_dismiss_failed_message),
+        confirmLabel = stringResource(R.string.flash_dismiss_confirm),
+        onConfirm = { onConfirm(deleteFiles) },
+        onDismiss = onDismiss,
+        icon = AbkIcons.Close,
+    ) {
+        AbkCheckbox(
+            state = ToggleableState(deleteFiles),
+            onClick = { deleteFiles = !deleteFiles },
+            label = stringResource(R.string.flash_dismiss_delete_files),
+            modifier = Modifier.fillMaxWidth(),
+            enabled = hasDownloadedFiles,
+        )
+    }
 }

@@ -2,223 +2,88 @@
 
 package com.abk.kernel.ui.screens.flash
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.widget.Toast
-import androidx.activity.compose.BackHandler
-import androidx.annotation.StringRes
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.FolderSpecial
-import androidx.compose.material.icons.filled.Inbox
-import androidx.compose.material.icons.filled.InsertDriveFile
-import androidx.compose.material.icons.filled.InstallMobile
-import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.RunCircle
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
-import coil.compose.AsyncImage
 import com.abk.kernel.R
-import com.abk.kernel.data.model.ActiveDownloadTask
 import com.abk.kernel.data.model.ArtifactCategory
-import com.abk.kernel.data.model.ArtifactType
 import com.abk.kernel.data.model.BuildArtifact
 import com.abk.kernel.data.model.BuildParameterSummary
 import com.abk.kernel.data.model.BuildProgress
-import com.abk.kernel.utils.BuildProgressUtils
-import com.abk.kernel.data.model.BuildQueueItemStatus
-import com.abk.kernel.data.model.BuildStatus
 import com.abk.kernel.data.model.DownloadedArtifact
-import com.abk.kernel.data.model.KernelBuildConfig
-import com.abk.kernel.data.model.KernelSupport
 import com.abk.kernel.data.model.PREBUILT_GKI_RUN_ID
-import com.abk.kernel.data.model.PrebuiltGkiAsset
-import com.abk.kernel.data.model.PrebuiltGkiRelease
 import com.abk.kernel.data.model.WorkflowJob
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.WorkflowStep
-import com.abk.kernel.data.model.isFailedFlashRun
-import com.abk.kernel.utils.FlashFilter
-import com.abk.kernel.utils.FlashFilterKernelKind
-import com.abk.kernel.utils.FlashFilterManagerKind
-import com.abk.kernel.utils.FlashFilterWorkflowState
-import com.abk.kernel.utils.FlashWorkflowFilter
-import com.abk.kernel.utils.WorkflowPrimary
-import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
-import com.abk.kernel.ui.components.ObserveChildPageVisibility
-import com.abk.kernel.ui.components.childPageOverlayEnterTransition
-import com.abk.kernel.ui.components.childPageOverlayExitTransition
-import com.abk.kernel.ui.components.childPageScrimExitTransition
-import com.abk.kernel.ui.components.rememberChildPageBackController
-import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
-import com.abk.kernel.utils.FailureLogExtractor
-import com.abk.kernel.ui.components.LIVE_DURATION_MINUTE_HAND_PERIOD_MS
-import com.abk.kernel.ui.components.LiveDurationScheduleIcon
-import com.abk.kernel.ui.components.ShimmerLinearProgress
-import com.abk.kernel.ui.components.liveWorkflowShimmerBrush
-import com.abk.kernel.ui.components.rememberLiveWorkflowShimmerPhase
-import com.abk.kernel.ui.components.MinuteHandController
-import com.abk.kernel.ui.components.MinuteHandControllerHost
-import com.abk.kernel.ui.components.MinuteHandPhase
-import com.abk.kernel.ui.components.ExpressiveEmptyState
-import com.abk.kernel.ui.components.ExpressiveHeroCard
-import com.abk.kernel.ui.components.ExpressiveSectionCard
 import com.abk.kernel.ui.blur.blurredCardBackground
 import com.abk.kernel.ui.blur.blurredCardSurfaceColor
-import com.abk.kernel.ui.components.ExpressiveStatusChip
-import com.abk.kernel.ui.components.ExpressiveTopBar
+import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
+import com.abk.kernel.ui.components.ExpressiveSectionCard
+import com.abk.kernel.ui.components.LIVE_DURATION_MINUTE_HAND_PERIOD_MS
+import com.abk.kernel.ui.components.LiveDurationScheduleIcon
+import com.abk.kernel.ui.components.MinuteHandController
+import com.abk.kernel.ui.components.MinuteHandPhase
+import com.abk.kernel.ui.components.liveWorkflowShimmerBrush
+import com.abk.kernel.ui.components.rememberLiveWorkflowShimmerPhase
 import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.utils.DownloadUtils
-import com.abk.kernel.utils.RootUtils
-import com.abk.kernel.viewmodel.MainViewModel
-import com.abk.kernel.viewmodel.mergeWorkflowActiveDownloads
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-
+import com.abk.kernel.utils.FailureLogExtractor
+import com.abk.kernel.utils.FlashWorkflowFilter
+import io.github.xingguangcuican6666.abk.ui.components.AbkBadge
+import io.github.xingguangcuican6666.abk.ui.components.AbkButtonStyle
+import io.github.xingguangcuican6666.abk.ui.components.AbkCard
+import io.github.xingguangcuican6666.abk.ui.components.AbkCluster
+import io.github.xingguangcuican6666.abk.ui.components.AbkIconButton
+import io.github.xingguangcuican6666.abk.ui.components.AbkLinearProgress
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcon
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
+import io.github.xingguangcuican6666.abk.ui.theme.AbkShapes
+import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
+import io.github.xingguangcuican6666.abk.ui.theme.AbkTone
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun WorkflowRunCard(
@@ -234,174 +99,109 @@ internal fun WorkflowRunCard(
     onClick: () -> Unit,
     onShowParameters: () -> Unit,
     onDelete: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
 ) {
     val sourceCount = group.remote.size
     val downloadedCount = group.local.size
     val categories = artifactCategoryOrder.filter { it in group.categories }
-    val kernelKind = if (showKernelBuildChips) {
-        FlashWorkflowFilter.kernelKind(summary, dispatchedKernelVariant)
-    } else {
-        null
-    }
-    val susfsOn = if (showKernelBuildChips) {
-        val v = summary?.susfsEnabled.orEmpty().lowercase().trim()
-        if (v.isNotBlank()) {
-            v !in setOf("false", "0", "no", "disabled", "off", "未启用", "未開啟", "未开启")
-        } else {
-            // Summary not loaded yet — fall back to the dispatched config so
-            // the SUSFS chip shows during an active build, just like the
-            // kernel-kind chip does.
-            dispatchedSusfsEnabled == true
-        }
-    } else {
-        false
-    }
-    val dateLabel = group.runCreatedAt.take(10)
-    val colorScheme = MaterialTheme.colorScheme
-    val cardContainer = when {
-        failedGhost -> blurredCardSurfaceColor(lerp(colorScheme.surfaceContainer, colorScheme.errorContainer, 0.48f))
-        else -> blurredCardSurfaceColor(colorScheme.surfaceContainer)
-    }
-    val shape = MaterialTheme.shapes.medium
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .blurredCardBackground(shape)
-            .clickable(onClick = onClick),
-        shape = shape,
-        colors = CardDefaults.cardColors(containerColor = cardContainer),
-        border = if (failedGhost) {
-            BorderStroke(1.dp, colorScheme.error.copy(alpha = 0.28f))
+    val kernelKind =
+        if (showKernelBuildChips) {
+            FlashWorkflowFilter.kernelKind(summary, dispatchedKernelVariant)
         } else {
             null
-        },
+        }
+    val susfsOn =
+        if (showKernelBuildChips) {
+            val v = summary?.susfsEnabled.orEmpty().lowercase().trim()
+            if (v.isNotBlank()) {
+                v !in setOf("false", "0", "no", "disabled", "off", "未启用", "未開啟", "未开启")
+            } else {
+                // Summary not loaded yet — fall back to the dispatched config so
+                // the SUSFS chip shows during an active build, just like the
+                // kernel-kind chip does.
+                dispatchedSusfsEnabled == true
+            }
+        } else {
+            false
+        }
+    val dateLabel = group.runCreatedAt.take(10)
+    val title =
+        if (group.runId == PREBUILT_GKI_RUN_ID) {
+            stringResource(R.string.flash_prebuilt_gki)
+        } else {
+            stringResource(
+                R.string.flash_workflow_label,
+                if (group.runNumber > 0) "#${group.runNumber}" else "#${group.runId}",
+            )
+        }
+    AbkCard(
+        modifier = Modifier.fillMaxWidth().blurredCardBackground(AbkShapes.Large),
+        containerColor = blurredCardSurfaceColor(AbkTheme.colors.raised),
+        onClick = onClick,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-                .animateContentSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (active) {
-                    LoadingIndicator(
-                        modifier = Modifier.size(22.dp)
-                    )
-                } else if (failedGhost) {
-                    Icon(
-                        Icons.Default.Error,
-                        null,
-                        tint = colorScheme.error,
-                        modifier = Modifier.size(22.dp)
-                    )
-                } else {
-                    Icon(
-                        Icons.Default.FolderSpecial,
-                        null,
-                        tint = colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = if (group.runId == PREBUILT_GKI_RUN_ID) {
-                            stringResource(R.string.flash_prebuilt_gki)
-                        } else {
-                            stringResource(
-                                R.string.flash_workflow_label,
-                                if (group.runNumber > 0) "#${group.runNumber}" else "#${group.runId}"
-                            )
-                        },
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (failedGhost) {
-                            colorScheme.onErrorContainer
-                        } else {
-                            colorScheme.onSurface
-                        },
-                    )
-                    Text(
-                        text = group.runTitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                // Parameter details come from the kernel build log — manager-only
-                // workflows have nothing meaningful to show. While a build is
-                // still running the log isn't ready either, so hide until finished.
-                if (showParameterDetails && !active && !failedGhost) {
-                    IconButton(onClick = onShowParameters) {
-                        Icon(Icons.Default.Tune, contentDescription = stringResource(R.string.flash_parameter_details))
-                    }
-                }
-                if (active) {
-                    IconButton(onClick = onCancel, enabled = !cancelling) {
-                        if (cancelling) {
-                            // Red while waiting for GitHub to acknowledge the
-                            // cancel — keeps the icon's destructive intent
-                            // visible during the limbo period before the run
-                            // status flips to "completed".
-                            LoadingIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        } else {
-                            Icon(
-                                Icons.Default.Cancel,
-                                contentDescription = stringResource(R.string.flash_cancel_workflow),
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        if (failedGhost) Icons.Default.Close else Icons.Default.Delete,
-                        contentDescription = if (failedGhost) {
-                            stringResource(R.string.flash_dismiss_failed)
-                        } else {
-                            stringResource(R.string.flash_delete_workflow)
-                        },
-                        tint = if (failedGhost) Color.White else colorScheme.onSurfaceVariant
-                    )
-                }
+        ArtifactHeader(
+            icon = if (failedGhost) AbkIcons.AlertMark else AbkIcons.Modules,
+            title = title,
+            subtitle = group.runTitle,
+        )
+        AbkCluster(Modifier.fillMaxWidth()) {
+            if (active) {
+                AbkBadge(
+                    stringResource(
+                        if (cancelling) R.string.status_cancelling
+                        else R.string.flash_filter_workflow_running
+                    ),
+                    tone = if (cancelling) AbkTone.Warning else AbkTone.Info,
+                )
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                // Kernel kind chip only renders once we know the variant —
-                // otherwise it would always say "None" for in-progress builds.
-                if (failedGhost) {
-                    ExpressiveStatusChip(
-                        label = stringResource(R.string.flash_build_failed_chip),
-                        color = colorScheme.error
-                    )
-                }
-                if (kernelKind != null) {
-                    ExpressiveStatusChip(
-                        label = stringResource(kernelKind.shortLabelRes()),
-                        color = MaterialTheme.colorScheme.tertiary
-                    )
-                }
-                if (dateLabel.isNotBlank()) {
-                    ExpressiveStatusChip(label = dateLabel, color = MaterialTheme.colorScheme.primary)
-                }
-                if (susfsOn) {
-                    ExpressiveStatusChip(label = stringResource(R.string.flash_chip_susfs), color = MaterialTheme.colorScheme.primary)
-                }
-                if (!failedGhost) {
-                    ExpressiveStatusChip(label = stringResource(R.string.flash_source_artifacts_count, sourceCount), color = MaterialTheme.colorScheme.primary)
-                    ExpressiveStatusChip(label = stringResource(R.string.flash_downloaded_count, downloadedCount), color = MaterialTheme.colorScheme.secondary)
-                    categories.forEach {
-                        ExpressiveStatusChip(label = stringResource(it.labelRes()), color = MaterialTheme.colorScheme.surfaceTint)
-                    }
-                }
+            if (failedGhost)
+                AbkBadge(stringResource(R.string.flash_build_failed_chip), tone = AbkTone.Danger)
+            if (kernelKind != null)
+                AbkBadge(stringResource(kernelKind.shortLabelRes()), dot = false)
+            if (dateLabel.isNotBlank()) AbkBadge(dateLabel, dot = false)
+            if (susfsOn) AbkBadge(stringResource(R.string.flash_chip_susfs), dot = false)
+            if (!failedGhost) {
+                AbkBadge(
+                    stringResource(R.string.flash_source_artifacts_count, sourceCount),
+                    dot = false,
+                )
+                AbkBadge(
+                    stringResource(R.string.flash_downloaded_count, downloadedCount),
+                    dot = false,
+                )
+                categories.forEach { AbkBadge(stringResource(it.labelRes()), dot = false) }
             }
+        }
+        AbkCluster(Modifier.fillMaxWidth()) {
+            // Only finished kernel workflows have a parameter summary.
+            if (showParameterDetails && !active && !failedGhost) {
+                AbkIconButton(
+                    AbkIcons.Controls,
+                    stringResource(R.string.flash_parameter_details),
+                    onShowParameters,
+                )
+            }
+            if (active) {
+                FlashAction(
+                    label =
+                        stringResource(
+                            if (cancelling) R.string.status_cancelling
+                            else R.string.flash_cancel_workflow
+                        ),
+                    icon = AbkIcons.Close,
+                    onClick = onCancel,
+                    loading = cancelling,
+                    style = AbkButtonStyle.Danger,
+                )
+            }
+            AbkIconButton(
+                if (failedGhost) AbkIcons.Close else AbkIcons.Trash,
+                stringResource(
+                    if (failedGhost) R.string.flash_dismiss_failed
+                    else R.string.flash_delete_workflow
+                ),
+                onDelete,
+            )
         }
     }
 }
@@ -449,10 +249,7 @@ internal fun rememberBuildErrorLogEdgeLock(scrollState: ScrollState): NestedScro
                 }
             }
 
-            override suspend fun onPostFling(
-                consumed: Velocity,
-                available: Velocity,
-            ): Velocity {
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
                 val atTop = scrollState.value == 0
                 val atBottom = scrollState.value >= scrollState.maxValue
                 return when {
@@ -471,25 +268,22 @@ internal fun BuildErrorLogPanel(text: String) {
     val logScrollState = rememberScrollState()
     val edgeLock = rememberBuildErrorLogEdgeLock(logScrollState)
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .blurredCardBackground(RoundedCornerShape(12.dp)),
+        modifier = Modifier.fillMaxWidth().blurredCardBackground(RoundedCornerShape(12.dp)),
         shape = RoundedCornerShape(12.dp),
         color = blurredCardSurfaceColor(colorScheme.surfaceContainerHighest),
     ) {
         SelectionContainer {
             Text(
                 text = displayText,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontFeatureSettings = "tnum,lnum",
-                ),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = AbkTheme.monoFont,
                 color = colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = BuildErrorLogMaxHeight)
-                    .nestedScroll(edgeLock)
-                    .verticalScroll(logScrollState)
-                    .padding(12.dp),
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .heightIn(max = BuildErrorLogMaxHeight)
+                        .nestedScroll(edgeLock)
+                        .verticalScroll(logScrollState)
+                        .padding(12.dp),
             )
         }
     }
@@ -511,59 +305,42 @@ internal fun FailedWorkflowDetail(
     val steps = remember(jobs) { jobs?.let(::flattenFailedWorkflowSteps).orEmpty() }
     val failureIndex = remember(steps) { steps.indexOfFirst { it.conclusion == "failure" } }
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(horizontal = AbkScreenHorizontalPadding),
+        modifier =
+            Modifier.fillMaxSize()
+                .statusBarsPadding()
+                .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(bottom = 32.dp)
+        contentPadding = PaddingValues(bottom = 32.dp),
     ) {
         item {
             ExpressiveSectionCard(
-                title = stringResource(
-                    R.string.flash_workflow_label,
-                    if (run.runNumber > 0) "#${run.runNumber}" else "#${run.id}"
-                ),
+                title =
+                    stringResource(
+                        R.string.flash_workflow_label,
+                        if (run.runNumber > 0) "#${run.runNumber}" else "#${run.id}",
+                    ),
                 subtitle = run.displayTitle ?: run.name.orEmpty(),
-                icon = Icons.Default.Error
+                icon = AbkIcons.AlertMark,
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = stringResource(R.string.flash_back)
-                        )
-                    }
-                    AssistChip(
-                        onClick = {},
-                        enabled = false,
-                        label = { Text(stringResource(R.string.flash_conclusion_failure)) },
-                        colors = AssistChipDefaults.assistChipColors(
-                            disabledContainerColor = colorScheme.errorContainer,
-                            disabledLabelColor = colorScheme.onErrorContainer,
-                        ),
-                        border = AssistChipDefaults.assistChipBorder(
-                            enabled = false,
-                            borderColor = colorScheme.error.copy(alpha = 0.35f),
-                        ),
-                    )
-                    Text(
-                        text = stringResource(R.string.flash_failed_subtitle),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
+                AbkCluster(Modifier.fillMaxWidth()) {
+                    AbkIconButton(AbkIcons.Back, stringResource(R.string.flash_back), onBack)
+                    AbkBadge(
+                        stringResource(R.string.flash_build_failed_chip),
+                        tone = AbkTone.Danger,
                     )
                 }
+                Text(
+                    stringResource(R.string.flash_failed_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AbkTheme.colors.inkMuted,
+                )
             }
         }
 
         item {
             ExpressiveSectionCard(
                 title = stringResource(R.string.flash_failed_step_list_title),
-                icon = Icons.Default.RunCircle
+                icon = AbkIcons.Build,
             ) {
                 when {
                     jobsLoading -> LoadingRow(stringResource(R.string.flash_loading_steps))
@@ -574,9 +351,7 @@ internal fun FailedWorkflowDetail(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colorScheme.error,
                             )
-                            TextButton(onClick = onRetryJobs) {
-                                Text(stringResource(R.string.retry))
-                            }
+                            FlashAction(stringResource(R.string.retry), AbkIcons.Refresh, onRetryJobs)
                         }
                     }
                     steps.isEmpty() -> {
@@ -604,13 +379,14 @@ internal fun FailedWorkflowDetail(
         item {
             ExpressiveSectionCard(
                 title = stringResource(R.string.flash_build_error),
-                icon = Icons.Default.Terminal
+                icon = AbkIcons.Terminal,
             ) {
                 when {
                     logLoading -> LoadingRow(stringResource(R.string.flash_loading_steps))
                     else -> {
-                        val excerpt = logExcerpt?.takeIf { it.isNotBlank() }
-                            ?: stringResource(R.string.flash_build_error_unavailable)
+                        val excerpt =
+                            logExcerpt?.takeIf { it.isNotBlank() }
+                                ?: stringResource(R.string.flash_build_error_unavailable)
                         BuildErrorLogPanel(text = excerpt)
                     }
                 }
@@ -618,93 +394,46 @@ internal fun FailedWorkflowDetail(
         }
 
         item {
-            FilledTonalButton(
-                onClick = onOpenGitHub,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
-            ) {
-                Icon(Icons.Default.RunCircle, contentDescription = null, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.flash_open_github_actions))
-            }
+            FlashAction(
+                stringResource(R.string.flash_open_github_actions),
+                AbkIcons.ArrowRight,
+                onOpenGitHub,
+            )
         }
     }
 }
 
 @Composable
-internal fun FailedWorkflowStepRow(
-    step: WorkflowStep,
-    failed: Boolean,
-    muted: Boolean,
-) {
-    val colorScheme = MaterialTheme.colorScheme
+internal fun FailedWorkflowStepRow(step: WorkflowStep, failed: Boolean, muted: Boolean) {
     val alpha = if (muted) 0.45f else 1f
-    val rowBackground = when {
-        failed -> uiSurfaceColor(lerp(colorScheme.surfaceContainer, colorScheme.errorContainer, 0.55f))
-        else -> uiSurfaceColor(colorScheme.surfaceContainerHighest)
-    }
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .graphicsLayer { this.alpha = alpha }
-            .background(
-                color = rowBackground,
-                shape = RoundedCornerShape(10.dp),
-            )
-            .then(
-                if (failed) {
-                    Modifier.padding(start = 0.dp)
-                } else {
-                    Modifier
-                }
-            ),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (failed) {
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(36.dp)
-                    .background(colorScheme.error, RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp))
-            )
-        }
-        Row(
-            modifier = Modifier
-                .weight(1f)
+        modifier =
+            Modifier.fillMaxWidth()
+                .graphicsLayer { this.alpha = alpha }
+                .background(AbkTheme.colors.sunken, AbkShapes.Medium)
                 .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(
-                imageVector = when {
-                    failed -> Icons.Default.Cancel
-                    step.conclusion == "success" || step.status == "completed" -> Icons.Default.CheckCircle
-                    else -> Icons.Default.Schedule
-                },
-                contentDescription = null,
-                tint = when {
-                    failed -> colorScheme.error
-                    step.conclusion == "success" || step.status == "completed" -> colorScheme.onSurfaceVariant
-                    else -> colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                },
-                modifier = Modifier.size(16.dp),
-            )
-            Column(Modifier.weight(1f)) {
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        val completed = step.conclusion == "success" || step.status == "completed"
+        AbkIcon(
+            when {
+                failed -> AbkIcons.AlertMark
+                completed -> AbkIcons.Check
+                else -> AbkIcons.Pending
+            },
+            contentDescription = if (failed) null else step.conclusion ?: step.status,
+            tint = if (failed) AbkTheme.colors.danger.color else AbkTheme.colors.inkMuted,
+            size = 18.dp,
+        )
+        Column(Modifier.weight(1f)) {
+            Text(step.name, style = MaterialTheme.typography.bodySmall)
+            if (failed && !step.conclusion.isNullOrBlank()) {
                 Text(
-                    text = step.name,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = if (failed) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (failed) colorScheme.onErrorContainer else colorScheme.onSurface,
+                    stringResource(R.string.flash_build_failed_chip),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AbkTheme.colors.danger.color,
                 )
-                if (failed && !step.conclusion.isNullOrBlank()) {
-                    Text(
-                        text = step.conclusion.orEmpty(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colorScheme.error,
-                    )
-                }
             }
         }
     }
@@ -733,14 +462,19 @@ internal fun WorkflowCategorySection(
     onDelete: (DownloadedArtifact) -> Unit,
     allowRootActions: Boolean,
 ) {
-    val remoteInCategory = group.remote.filter {
-        DownloadUtils.classifyCategory(DownloadUtils.classifyArtifact(it.name)) == category
-    }
-    val matchedLocalPaths = remoteInCategory
-        .flatMap { source -> group.local.filter { DownloadUtils.matchesDownloadedArtifact(it, source) } }
-        .map { it.filePath }
-        .toSet()
-    val localOnly = group.local.filter { it.category == category && it.filePath !in matchedLocalPaths }
+    val remoteInCategory =
+        group.remote.filter {
+            DownloadUtils.classifyCategory(DownloadUtils.classifyArtifact(it.name)) == category
+        }
+    val matchedLocalPaths =
+        remoteInCategory
+            .flatMap { source ->
+                group.local.filter { DownloadUtils.matchesDownloadedArtifact(it, source) }
+            }
+            .map { it.filePath }
+            .toSet()
+    val localOnly =
+        group.local.filter { it.category == category && it.filePath !in matchedLocalPaths }
     val hasArtifacts = remoteInCategory.isNotEmpty() || localOnly.isNotEmpty()
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -758,26 +492,30 @@ internal fun WorkflowCategorySection(
             remoteInCategory.forEach { artifact ->
                 ArtifactSourceCard(
                     artifact = artifact,
-                    downloadedFiles = group.local.filter {
-                        DownloadUtils.matchesDownloadedArtifact(it, artifact)
-                    },
+                    downloadedFiles =
+                        group.local.filter {
+                            DownloadUtils.matchesDownloadedArtifact(it, artifact)
+                        },
                     progress = downloadProgress[artifact.id],
-                    autoDownloadEligible = autoDownload &&
-                        pendingAutoDownloadRunId == artifact.runId &&
-                        DownloadUtils.shouldAutoDownload(artifact),
+                    autoDownloadEligible =
+                        autoDownload &&
+                            pendingAutoDownloadRunId == artifact.runId &&
+                            DownloadUtils.shouldAutoDownload(artifact),
                     pendingAutoDownload = pendingAutoDownloadRunId == artifact.runId,
                     showDownloadCancelActions = showDownloadCancelActions,
                     onDownload = { onDownload(artifact) },
-                    onCancelDownload = if (showDownloadCancelActions) {
-                        { onCancelDownload(artifact.id) }
-                    } else {
-                        null
-                    },
-                    onCancelAutoDownload = if (showDownloadCancelActions) {
-                        { onCancelAutoDownload(artifact.runId) }
-                    } else {
-                        null
-                    },
+                    onCancelDownload =
+                        if (showDownloadCancelActions) {
+                            { onCancelDownload(artifact.id) }
+                        } else {
+                            null
+                        },
+                    onCancelAutoDownload =
+                        if (showDownloadCancelActions) {
+                            { onCancelAutoDownload(artifact.runId) }
+                        } else {
+                            null
+                        },
                     onCopyPath = onCopyPath,
                     onInstall = onInstall,
                     onFlash = onFlash,
@@ -824,43 +562,40 @@ internal fun BuildingWorkflowDetail(
     minuteHandController: MinuteHandController? = null,
 ) {
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(horizontal = AbkScreenHorizontalPadding),
+        modifier =
+            Modifier.fillMaxSize()
+                .statusBarsPadding()
+                .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(bottom = 32.dp)
+        contentPadding = PaddingValues(bottom = 32.dp),
     ) {
         item {
             // Header mirrors WorkflowDetailHeader visually (same ExpressiveSectionCard +
             // back-button row), but without artifact-counts / parameters / delete actions.
             ExpressiveSectionCard(
-                title = stringResource(
-                    R.string.flash_workflow_label,
-                    if (run.runNumber > 0) "#${run.runNumber}" else "#${run.id}"
-                ),
+                title =
+                    stringResource(
+                        R.string.flash_workflow_label,
+                        if (run.runNumber > 0) "#${run.runNumber}" else "#${run.id}",
+                    ),
                 subtitle = run.displayTitle ?: run.name.orEmpty(),
-                icon = Icons.Default.FolderSpecial
+                icon = AbkIcons.Modules,
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = stringResource(R.string.flash_back)
-                        )
-                    }
+                    AbkIconButton(AbkIcons.Back, stringResource(R.string.flash_back), onBack)
                     Text(
-                        text = if (cancelling) {
-                            stringResource(R.string.flash_cancelling_subtitle)
-                        } else {
-                            stringResource(R.string.flash_building_subtitle)
-                        },
+                        text =
+                            if (cancelling) {
+                                stringResource(R.string.flash_cancelling_subtitle)
+                            } else {
+                                stringResource(R.string.flash_building_subtitle)
+                            },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
@@ -870,11 +605,12 @@ internal fun BuildingWorkflowDetail(
         // or modules, so only show "Manager artifacts" for it. Kernel / hybrid builds keep
         // all three sections.
         val isPureManager = FlashWorkflowFilter.isPureManagerBuild(run)
-        val visibleCategories = if (isPureManager) {
-            listOf(ArtifactCategory.MANAGER)
-        } else {
-            artifactCategoryOrder
-        }
+        val visibleCategories =
+            if (isPureManager) {
+                listOf(ArtifactCategory.MANAGER)
+            } else {
+                artifactCategoryOrder
+            }
         // The elapsed chip rides above the first visible category tile, right-
         // aligned to mirror the tile's right edge.
         val elapsedAnchorCategory = visibleCategories.first()
@@ -906,39 +642,24 @@ internal fun BuildingWorkflowDetail(
         }
 
         item {
-            Spacer(Modifier.height(8.dp))
-            Button(
+            FlashAction(
+                label =
+                    stringResource(
+                        if (cancelling) R.string.status_cancelling else R.string.flash_cancel_build
+                    ),
+                icon = AbkIcons.Close,
                 onClick = onCancel,
-                enabled = !cancelling,
-                shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-            ) {
-                if (cancelling) {
-                    LoadingIndicator(Modifier.size(20.dp))
-                } else {
-                    Icon(Icons.Default.Cancel, null, modifier = Modifier.size(20.dp))
-                }
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    stringResource(R.string.flash_cancel_build),
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
+                loading = cancelling,
+                style = AbkButtonStyle.Danger,
+            )
         }
     }
 }
 
 /**
- * Workflow duration chip.
- * Running workflows tick in real time from `created_at`.
- * Completed workflows freeze to `updated_at - created_at` so the same timer
- * can be reused on the finished detail screen.
+ * Workflow duration chip. Running workflows tick in real time from `created_at`. Completed
+ * workflows freeze to `updated_at - created_at` so the same timer can be reused on the finished
+ * detail screen.
  */
 @Composable
 internal fun BuildDurationChip(
@@ -952,9 +673,10 @@ internal fun BuildDurationChip(
     val endMillis = remember(finishedAt) { parseIsoMillis(finishedAt.orEmpty()) }
     val isFinished = !live && endMillis > startMillis
     if (!live && !isFinished) return
-    var currentMillis by remember(startMillis, endMillis) {
-        mutableStateOf(if (isFinished) endMillis else System.currentTimeMillis())
-    }
+    var currentMillis by
+        remember(startMillis, endMillis) {
+            mutableStateOf(if (isFinished) endMillis else System.currentTimeMillis())
+        }
     LaunchedEffect(startMillis, endMillis) {
         if (!isFinished) {
             while (true) {
@@ -967,22 +689,25 @@ internal fun BuildDurationChip(
     val h = elapsedSec / 3600
     val m = (elapsedSec % 3600) / 60
     val s = elapsedSec % 60
-    val formatted = if (h > 0) {
-        "%d:%02d:%02d".format(h, m, s)
-    } else {
-        "%02d:%02d".format(m, s)
-    }
+    val formatted =
+        if (h > 0) {
+            "%d:%02d:%02d".format(h, m, s)
+        } else {
+            "%02d:%02d".format(m, s)
+        }
     val chipAccent = MaterialTheme.colorScheme.primary
     val chipShape = RoundedCornerShape(50)
     var localMinuteHandRotationDegrees by remember { mutableFloatStateOf(0f) }
     val controllerPhase = minuteHandController?.phase
-    val useLiveIcon = when {
-        minuteHandController != null ->
-            controllerPhase == MinuteHandPhase.Spinning || controllerPhase == MinuteHandPhase.Settling
-        else -> live
-    }
-    val minuteHandRotationDegrees = minuteHandController?.rotationDegrees
-        ?: localMinuteHandRotationDegrees
+    val useLiveIcon =
+        when {
+            minuteHandController != null ->
+                controllerPhase == MinuteHandPhase.Spinning ||
+                    controllerPhase == MinuteHandPhase.Settling
+            else -> live
+        }
+    val minuteHandRotationDegrees =
+        minuteHandController?.rotationDegrees ?: localMinuteHandRotationDegrees
     if (live && minuteHandController == null) {
         LaunchedEffect(Unit) {
             val startTime = withFrameMillis { it }
@@ -1009,11 +734,7 @@ internal fun BuildDurationChip(
                     tint = chipAccent,
                 )
             } else {
-                Icon(
-                    Icons.Default.Schedule,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                )
+                Icon(AbkIcons.Pending, contentDescription = null, modifier = Modifier.size(14.dp))
             }
             Text(
                 text = formatted,
@@ -1023,17 +744,13 @@ internal fun BuildDurationChip(
         }
     }
     if (live) {
-        Surface(
-            shape = chipShape,
-            color = Color.Transparent,
-            contentColor = chipAccent,
-        ) {
+        Surface(shape = chipShape, color = Color.Transparent, contentColor = chipAccent) {
             Box(
                 Modifier.drawWithCache {
                     val animatedPhase = shimmerPhase
                     val brush = liveWorkflowShimmerBrush(size, animatedPhase, chipAccent)
                     onDrawBehind { drawRect(brush) }
-                },
+                }
             ) {
                 chipContent()
             }
@@ -1049,64 +766,32 @@ internal fun BuildDurationChip(
     }
 }
 
-internal fun parseIsoMillis(value: String): Long = runCatching {
-    if (value.isBlank()) 0L else java.time.Instant.parse(value).toEpochMilli()
-}.getOrDefault(0L)
+internal fun parseIsoMillis(value: String): Long =
+    runCatching { if (value.isBlank()) 0L else java.time.Instant.parse(value).toEpochMilli() }
+        .getOrDefault(0L)
 
 @Composable
 internal fun CategoryProgressCard(progress: BuildProgress?) {
-    val shape = MaterialTheme.shapes.medium
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .blurredCardBackground(shape),
-        shape = shape,
-        colors = CardDefaults.cardColors(
-            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                LoadingIndicator(Modifier.size(20.dp))
-                Text(
-                    text = if (progress != null && progress.totalSteps > 0) {
-                        "${progress.percent}% · ${progress.currentStep}"
-                    } else {
-                        stringResource(R.string.flash_building_subtitle)
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            if (progress != null && progress.totalSteps > 0) {
-                val animatedProgress by animateFloatAsState(
-                    targetValue = (progress.percent / 100f).coerceIn(0f, 1f),
-                    label = "category-progress"
-                )
-                ShimmerLinearProgress(
-                    progress = { animatedProgress },
-                    modifier = Modifier.fillMaxWidth(),
-                    height = 8.dp,
-                )
-            } else {
-                ShimmerLinearProgress(
-                    progress = { null },
-                    modifier = Modifier.fillMaxWidth(),
-                    height = 8.dp,
-                )
-            }
+    val hasProgress = progress != null && progress.totalSteps > 0
+    val label =
+        if (hasProgress && progress != null) {
+            "${progress.percent}% · ${progress.currentStep}"
+        } else {
+            stringResource(R.string.flash_building_subtitle)
         }
+    AbkCard(
+        modifier = Modifier.fillMaxWidth().blurredCardBackground(AbkShapes.Large),
+        containerColor = blurredCardSurfaceColor(AbkTheme.colors.raised),
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        AbkLinearProgress(
+            progress =
+                progress
+                    ?.takeIf { it.totalSteps > 0 }
+                    ?.let { (it.percent / 100f).coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth(),
+            label = label,
+        )
     }
 }
 
@@ -1116,38 +801,36 @@ internal fun WorkflowDetailHeader(
     showParameterDetails: Boolean = true,
     onBack: () -> Unit,
     onShowParameters: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
 ) {
     ExpressiveSectionCard(
-        title = if (group.runId == PREBUILT_GKI_RUN_ID) {
-            stringResource(R.string.flash_prebuilt_gki)
-        } else {
-            stringResource(
-                R.string.flash_workflow_label,
-                if (group.runNumber > 0) "#${group.runNumber}" else "#${group.runId}"
-            )
-        },
+        title =
+            if (group.runId == PREBUILT_GKI_RUN_ID) {
+                stringResource(R.string.flash_prebuilt_gki)
+            } else {
+                stringResource(
+                    R.string.flash_workflow_label,
+                    if (group.runNumber > 0) "#${group.runNumber}" else "#${group.runId}",
+                )
+            },
         subtitle = group.runTitle,
-        icon = Icons.Default.FolderSpecial
+        icon = AbkIcons.Modules,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.flash_back))
-            }
-            Text(
-                text = stringResource(R.string.flash_artifact_counts, group.remote.size, group.local.size),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
+        Text(
+            stringResource(R.string.flash_artifact_counts, group.remote.size, group.local.size),
+            style = MaterialTheme.typography.bodySmall,
+            color = AbkTheme.colors.inkMuted,
+        )
+        AbkCluster(Modifier.fillMaxWidth()) {
+            AbkIconButton(AbkIcons.Back, stringResource(R.string.flash_back), onBack)
             if (showParameterDetails) {
-                IconButton(onClick = onShowParameters) {
-                    Icon(Icons.Default.Tune, contentDescription = stringResource(R.string.flash_parameter_details))
-                }
+                AbkIconButton(
+                    AbkIcons.Controls,
+                    stringResource(R.string.flash_parameter_details),
+                    onShowParameters,
+                )
             }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.flash_delete_workflow))
-            }
+            AbkIconButton(AbkIcons.Trash, stringResource(R.string.flash_delete_workflow), onDelete)
         }
     }
 }
@@ -1157,14 +840,19 @@ internal fun CategoryHeader(category: ArtifactCategory) {
     Row(
         modifier = Modifier.padding(start = 4.dp, top = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(category.icon(), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        Icon(
+            category.icon(),
+            null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp),
+        )
         Text(
             stringResource(category.labelRes()),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -1179,12 +867,8 @@ internal fun CategoryHeaderWithDuration(
     minuteHandController: MinuteHandController? = null,
 ) {
     if (showDuration) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        AbkCluster(Modifier.fillMaxWidth()) {
             CategoryHeader(category)
-            Spacer(Modifier.weight(1f))
             BuildDurationChip(
                 createdAt = createdAt,
                 finishedAt = finishedAt,
@@ -1196,4 +880,3 @@ internal fun CategoryHeaderWithDuration(
         CategoryHeader(category)
     }
 }
-

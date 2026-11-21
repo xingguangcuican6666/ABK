@@ -400,6 +400,8 @@
     <string name="flash_delete_remote_workflow">Также удалить удалённую запись workflow в GitHub Actions</string>
     <string name="flash_refresh_artifacts">Обновить артефакты сборки</string>
     <string name="flash_filter_title">Фильтр</string>
+    <string name="flash_filter_expanded">Фильтры развёрнуты</string>
+    <string name="flash_filter_collapsed">Фильтры свёрнуты</string>
     <string name="flash_chip_building">Сборка идёт</string>
     <string name="flash_build_failed_chip">Ошибка сборки</string>
     <string name="flash_dismiss_failed">Убрать из списка</string>

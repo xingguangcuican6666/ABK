@@ -3,115 +3,39 @@
 package com.abk.kernel.ui.screens
 
 import com.abk.kernel.ui.screens.flash.*
-import android.content.Intent
-import android.net.Uri
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.FolderSpecial
-import androidx.compose.material.icons.filled.Inbox
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.InsertDriveFile
-import androidx.compose.material.icons.filled.InstallMobile
-import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.RunCircle
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
@@ -119,40 +43,22 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameMillis
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -160,35 +66,20 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import coil.compose.AsyncImage
 import com.abk.kernel.R
-import com.abk.kernel.data.model.ActiveDownloadTask
 import com.abk.kernel.data.model.ArtifactCategory
 import com.abk.kernel.data.model.ArtifactType
-import com.abk.kernel.data.model.BuildArtifact
-import com.abk.kernel.data.model.BuildParameterSummary
-import com.abk.kernel.data.model.BuildProgress
 import com.abk.kernel.utils.BuildProgressUtils
 import com.abk.kernel.data.model.BuildQueueItemStatus
-import com.abk.kernel.data.model.BuildStatus
 import com.abk.kernel.data.model.DownloadedArtifact
 import com.google.gson.Gson
-import com.abk.kernel.data.model.KernelBuildConfig
-import com.abk.kernel.data.model.KernelSupport
 import com.abk.kernel.data.model.PREBUILT_GKI_RUN_ID
-import com.abk.kernel.data.model.PrebuiltGkiAsset
 import com.abk.kernel.data.model.PrebuiltGkiRelease
-import com.abk.kernel.data.model.WorkflowJob
-import com.abk.kernel.data.model.WorkflowRun
-import com.abk.kernel.data.model.WorkflowStep
 import com.abk.kernel.data.model.isActive
 import com.abk.kernel.data.model.isKernelBuild
 import com.abk.kernel.data.model.isManagerBuild
 import com.abk.kernel.data.model.isFailedFlashRun
 import com.abk.kernel.utils.FlashFilter
-import com.abk.kernel.utils.FlashFilterKernelKind
-import com.abk.kernel.utils.FlashFilterManagerKind
-import com.abk.kernel.utils.FlashFilterWorkflowState
 import com.abk.kernel.utils.FlashWorkflowFilter
 import com.abk.kernel.utils.WorkflowPrimary
 import com.abk.kernel.ui.blur.BlurScreenScaffold
@@ -200,26 +91,21 @@ import com.abk.kernel.ui.components.childPageOverlayExitTransition
 import com.abk.kernel.ui.components.childPageScrimExitTransition
 import com.abk.kernel.ui.components.rememberChildPageBackController
 import com.abk.kernel.ui.components.rememberChildPageOverlayTransition
-import com.abk.kernel.utils.FailureLogExtractor
-import com.abk.kernel.ui.components.LIVE_DURATION_MINUTE_HAND_PERIOD_MS
-import com.abk.kernel.ui.components.LiveDurationScheduleIcon
-import com.abk.kernel.ui.components.ShimmerLinearProgress
-import com.abk.kernel.ui.components.liveWorkflowShimmerBrush
-import com.abk.kernel.ui.components.rememberLiveWorkflowShimmerPhase
 import com.abk.kernel.ui.components.MinuteHandController
 import com.abk.kernel.ui.components.MinuteHandControllerHost
-import com.abk.kernel.ui.components.MinuteHandPhase
 import com.abk.kernel.ui.components.ExpressiveEmptyState
-import com.abk.kernel.ui.components.ExpressiveHeroCard
-import com.abk.kernel.ui.components.ExpressiveSectionCard
-import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveTopBar
-import com.abk.kernel.ui.theme.uiSurfaceColor
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.RootUtils
 import java.io.File
 import com.abk.kernel.viewmodel.MainViewModel
 import com.abk.kernel.viewmodel.mergeWorkflowActiveDownloads
+import androidx.compose.ui.state.ToggleableState
+import io.github.xingguangcuican6666.abk.ui.components.AbkButton
+import io.github.xingguangcuican6666.abk.ui.components.AbkCheckbox
+import io.github.xingguangcuican6666.abk.ui.components.AbkCluster
+import io.github.xingguangcuican6666.abk.ui.components.AbkDialog
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -850,11 +736,14 @@ fun FlashScreen(
     manifestNoticeItem?.let { item ->
         val source = item.manifestKernelSource?.let { runCatching { Gson().fromJson(it, com.abk.kernel.utils.KernelSourceManifest::class.java) }.getOrNull() }
         val feature = item.manifestFeatureStatus?.let { runCatching { Gson().fromJson(it, com.abk.kernel.utils.FeatureStatusManifest::class.java) }.getOrNull() }
-        AlertDialog(
+        AbkDialog(
             onDismissRequest = { manifestNoticeItem = null },
-            icon = { Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
-            title = { Text(stringResource(R.string.flash_custom_source_notice_title)) },
-            text = {
+            title = stringResource(R.string.flash_custom_source_notice_title),
+            dismissDescription = stringResource(R.string.close),
+            actions = {
+                AbkButton(onClick = { manifestNoticeItem = null }) { Text(stringResource(R.string.confirm)) }
+            },
+        ) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     source?.url?.let { Text(stringResource(R.string.flash_custom_source_url, it)) }
                     if (source?.access == "github_private") {
@@ -896,23 +785,21 @@ fun FlashScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { manifestNoticeItem = null }) { Text(stringResource(R.string.confirm)) }
-            }
-        )
+        }
     }
 
     if (showFlashConfirm) {
-        val item = selectedItem
-        if (item != null) {
-        AlertDialog(
-            onDismissRequest = { showFlashConfirm = false },
-            icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text(stringResource(R.string.flash_confirm)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.flash_confirm_msg))
+        selectedItem?.let { item ->
+            FlashConfirmDialog(
+                title = stringResource(R.string.flash_confirm),
+                message = stringResource(R.string.flash_confirm_msg),
+                confirmLabel = stringResource(R.string.flash_confirm),
+                onConfirm = {
+                    showFlashConfirm = false
+                    startFlash(item, selectedAnyKernelSlotTarget, allowLegacyBundleFallback)
+                },
+                onDismiss = { showFlashConfirm = false },
+            ) {
                     if (item.manifestClientNotice != null) {
                         val source = item.manifestKernelSource?.let { runCatching { Gson().fromJson(it, com.abk.kernel.utils.KernelSourceManifest::class.java) }.getOrNull() }
                         val feature = item.manifestFeatureStatus?.let { runCatching { Gson().fromJson(it, com.abk.kernel.utils.FeatureStatusManifest::class.java) }.getOrNull() }
@@ -945,140 +832,59 @@ fun FlashScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    if (item.type == ArtifactType.ANYKERNEL3 && supportsAnyKernelInactiveSlot) {
-                        Text(
-                            text = stringResource(R.string.root_patch_ak3_slot_title),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.CURRENT.name
-                                },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = selectedAnyKernelSlotTarget == RootUtils.Ak3SlotTarget.CURRENT,
-                                onClick = {
-                                    selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.CURRENT.name
-                                }
-                            )
-                            Text(flashAnyKernelCurrentSlotLabel)
-                        }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.INACTIVE.name
-                                },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = selectedAnyKernelSlotTarget == RootUtils.Ak3SlotTarget.INACTIVE,
-                                onClick = {
-                                    selectedAnyKernelSlotTargetName = RootUtils.Ak3SlotTarget.INACTIVE.name
-                                }
-                            )
-                            Text(flashAnyKernelInactiveSlotLabel)
-                        }
-                    }
+                if (item.type == ArtifactType.ANYKERNEL3 && supportsAnyKernelInactiveSlot) {
+                    FlashSlotOptions(
+                        currentLabel = flashAnyKernelCurrentSlotLabel,
+                        inactiveLabel = flashAnyKernelInactiveSlotLabel,
+                        selected = selectedAnyKernelSlotTarget,
+                        onSelect = { selectedAnyKernelSlotTargetName = it.name },
+                    )
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showFlashConfirm = false
-                        startFlash(item, selectedAnyKernelSlotTarget, allowLegacyBundleFallback)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text(stringResource(R.string.flash_confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showFlashConfirm = false }) { Text(stringResource(R.string.cancel)) }
             }
-        )
         }
     }
 
     flashSecurityPrompt?.let { prompt ->
-        val item = selectedItem
-        if (item != null) {
-            AlertDialog(
-                onDismissRequest = { flashSecurityPrompt = null },
-                icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
-                title = { Text(stringResource(R.string.flash_confirm)) },
-                text = {
-                    Text(prompt.message)
+        if (selectedItem != null) {
+            FlashConfirmDialog(
+                title = stringResource(R.string.flash_confirm),
+                message = prompt.message,
+                confirmLabel = stringResource(R.string.confirm),
+                onConfirm = {
+                    flashSecurityPrompt = null
+                    allowLegacyBundleFallback = true
+                    showFlashConfirm = true
                 },
-                confirmButton = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { flashSecurityPrompt = null }) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                        Button(
-                            onClick = {
-                                flashSecurityPrompt = null
-                                allowLegacyBundleFallback = true
-                                showFlashConfirm = true
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                        ) { Text(stringResource(R.string.flash_confirm)) }
-                    }
-                }
+                onDismiss = { flashSecurityPrompt = null },
             )
         }
     }
 
     if (showInstallManagerConfirm) {
-        val item = selectedItem
-        if (item != null) {
-        AlertDialog(
-            onDismissRequest = { showInstallManagerConfirm = false },
-            icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text(stringResource(R.string.flash_confirm_install_manager)) },
-            text = { Text(stringResource(R.string.flash_confirm_install_manager_msg)) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showInstallManagerConfirm = false
-                        installManager(item)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text(stringResource(R.string.flash_confirm_install_manager)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showInstallManagerConfirm = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
-        )
+        selectedItem?.let { item ->
+            FlashConfirmDialog(
+                title = stringResource(R.string.flash_confirm_install_manager),
+                message = stringResource(R.string.flash_confirm_install_manager_msg),
+                confirmLabel = stringResource(R.string.flash_confirm_install_manager),
+                onConfirm = {
+                    showInstallManagerConfirm = false
+                    installManager(item)
+                },
+                onDismiss = { showInstallManagerConfirm = false },
+            )
         }
     }
 
-    // Cancel-build confirmation dialog. Styled to match the flash confirm
-    // above (Warning icon, error-tinted confirm). Tapping the big cancel
-    // button inside the in-progress workflow detail surfaces this rather
-    // than firing the cancel request immediately.
     cancelConfirmRunId?.let { confirmRunId ->
-        AlertDialog(
-            onDismissRequest = { cancelConfirmRunId = null },
-            icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text(stringResource(R.string.flash_cancel_confirm_title)) },
-            text = { Text(stringResource(R.string.flash_cancel_confirm_msg)) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        cancelConfirmRunId = null
-                        vm.cancelWorkflowRun(confirmRunId)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text(stringResource(R.string.flash_cancel_confirm_yes)) }
+        FlashConfirmDialog(
+            title = stringResource(R.string.flash_cancel_confirm_title),
+            message = stringResource(R.string.flash_cancel_confirm_msg),
+            confirmLabel = stringResource(R.string.flash_cancel_confirm_yes),
+            onConfirm = {
+                cancelConfirmRunId = null
+                vm.cancelWorkflowRun(confirmRunId)
             },
-            dismissButton = {
-                TextButton(onClick = { cancelConfirmRunId = null }) { Text(stringResource(R.string.cancel)) }
-            }
+            onDismiss = { cancelConfirmRunId = null },
         )
     }
 
@@ -1106,87 +912,55 @@ fun FlashScreen(
     }
 
     deleteFileTarget?.let { item ->
-        AlertDialog(
-            onDismissRequest = { deleteFileTarget = null },
-            icon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text(stringResource(R.string.flash_delete_file)) },
-            text = { Text(stringResource(R.string.flash_delete_file_msg, item.name)) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        vm.deleteDownloadedArtifact(item.filePath)
-                        deleteFileTarget = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text(stringResource(R.string.delete)) }
+        FlashConfirmDialog(
+            title = stringResource(R.string.flash_delete_file),
+            message = stringResource(R.string.flash_delete_file_msg, item.name),
+            confirmLabel = stringResource(R.string.delete),
+            icon = AbkIcons.Trash,
+            onConfirm = {
+                vm.deleteDownloadedArtifact(item.filePath)
+                deleteFileTarget = null
             },
-            dismissButton = {
-                TextButton(onClick = { deleteFileTarget = null }) { Text(stringResource(R.string.cancel)) }
-            }
+            onDismiss = { deleteFileTarget = null },
         )
     }
 
     deleteWorkflowTarget?.let { group ->
-        AlertDialog(
-            onDismissRequest = { deleteWorkflowTarget = null },
-            icon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
-            title = {
-                Text(
-                    if (group.runId == PREBUILT_GKI_RUN_ID) {
-                        stringResource(R.string.flash_delete_prebuilt_files)
-                    } else {
-                        stringResource(R.string.flash_delete_workflow_record)
-                    }
+        val isPrebuilt = group.runId == PREBUILT_GKI_RUN_ID
+        FlashConfirmDialog(
+            title = stringResource(if (isPrebuilt) R.string.flash_delete_prebuilt_files else R.string.flash_delete_workflow_record),
+            message = if (isPrebuilt) {
+                stringResource(R.string.flash_delete_prebuilt_msg)
+            } else {
+                stringResource(
+                    R.string.flash_delete_workflow_msg,
+                    if (group.runNumber > 0) "#${group.runNumber}" else "#${group.runId}",
                 )
             },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        if (group.runId == PREBUILT_GKI_RUN_ID) {
-                            stringResource(R.string.flash_delete_prebuilt_msg)
-                        } else {
-                            stringResource(
-                                R.string.flash_delete_workflow_msg,
-                                if (group.runNumber > 0) "#${group.runNumber}" else "#${group.runId}"
-                            )
-                        }
-                    )
-                    if (group.runId > 0) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { deleteRemoteWorkflowRun = !deleteRemoteWorkflowRun },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = deleteRemoteWorkflowRun,
-                                onCheckedChange = { deleteRemoteWorkflowRun = it }
-                            )
-                            Text(stringResource(R.string.flash_delete_remote_workflow))
-                        }
-                    }
-                }
+            confirmLabel = stringResource(R.string.delete),
+            icon = AbkIcons.Trash,
+            onConfirm = {
+                val targetRunId = group.runId
+                val shouldDeleteRemoteRun = deleteRemoteWorkflowRun
+                vm.deleteWorkflowArtifacts(targetRunId, shouldDeleteRemoteRun)
+                if (selectedRunId == targetRunId) returnToTopList()
+                deleteWorkflowTarget = null
+                deleteRemoteWorkflowRun = false
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val targetRunId = group.runId
-                        val shouldDeleteRemoteRun = deleteRemoteWorkflowRun
-                        vm.deleteWorkflowArtifacts(targetRunId, shouldDeleteRemoteRun)
-                        if (selectedRunId == targetRunId) returnToTopList()
-                        deleteWorkflowTarget = null
-                        deleteRemoteWorkflowRun = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text(stringResource(R.string.delete)) }
+            onDismiss = {
+                deleteWorkflowTarget = null
+                deleteRemoteWorkflowRun = false
             },
-            dismissButton = {
-                TextButton(onClick = {
-                    deleteWorkflowTarget = null
-                    deleteRemoteWorkflowRun = false
-                }) { Text(stringResource(R.string.cancel)) }
+        ) {
+            if (group.runId > 0) {
+                AbkCheckbox(
+                    state = ToggleableState(deleteRemoteWorkflowRun),
+                    onClick = { deleteRemoteWorkflowRun = !deleteRemoteWorkflowRun },
+                    label = stringResource(R.string.flash_delete_remote_workflow),
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
-        )
+        }
     }
 
     if (showTerminal) {
@@ -1289,23 +1063,16 @@ fun FlashScreen(
                 when (currentContentTab) {
                     FlashContentTab.Workflows -> {
                         item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                OutlinedButton(
+                            AbkCluster(Modifier.fillMaxWidth()) {
+                                FlashAction(
+                                    label = stringResource(R.string.flash_refresh_artifacts),
+                                    icon = AbkIcons.Refresh,
                                     onClick = {
                                         workflowRefreshPresentation.beginRefresh()
                                         vm.loadRecentRuns()
                                     },
-                                    modifier = Modifier.weight(1f),
-                                    enabled = !state.isRefreshingRecentRuns
-                                ) {
-                                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(17.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(stringResource(R.string.flash_refresh_artifacts))
-                                }
+                                    loading = state.isRefreshingRecentRuns,
+                                )
                                 FlashFilterButton(
                                     expanded = filterMenuExpanded,
                                     onExpandedChange = { filterMenuExpanded = it },
@@ -1407,7 +1174,7 @@ fun FlashScreen(
                                     ExpressiveEmptyState(
                                         title = stringResource(R.string.flash_filter_empty),
                                         subtitle = "",
-                                        icon = Icons.Default.FilterList
+                                        icon = AbkIcons.Controls
                                     )
                                 }
                             }
@@ -1424,7 +1191,7 @@ fun FlashScreen(
                                         } else {
                                             stringResource(R.string.flash_empty_files_desc)
                                         },
-                                        icon = Icons.Default.Inbox
+                                        icon = AbkIcons.Modules
                                     )
                                 }
                             }
@@ -1455,7 +1222,7 @@ fun FlashScreen(
                                         ExpressiveEmptyState(
                                             title = stringResource(R.string.flash_empty_prebuilt_title),
                                             subtitle = stringResource(R.string.flash_empty_prebuilt_desc),
-                                            icon = Icons.Default.CloudDownload
+                                            icon = AbkIcons.Download
                                         )
                                     }
                                 }
@@ -1498,7 +1265,7 @@ fun FlashScreen(
                                 ExpressiveEmptyState(
                                     title = stringResource(R.string.flash_prebuilt_disabled_title),
                                     subtitle = stringResource(R.string.flash_prebuilt_disabled_desc),
-                                    icon = Icons.Default.CloudOff
+                                    icon = AbkIcons.Warning
                                 )
                             }
                         }
@@ -1769,7 +1536,7 @@ fun FlashScreen(
                                 ExpressiveEmptyState(
                                     title = stringResource(R.string.flash_workflow_unavailable),
                                     subtitle = stringResource(R.string.flash_workflow_unavailable_desc),
-                                    icon = Icons.Default.Inbox
+                                    icon = AbkIcons.Modules
                                 )
                             }
                         }
@@ -1870,7 +1637,7 @@ fun FlashScreen(
                                             } else {
                                                 stringResource(R.string.flash_no_recognized_prebuilt_assets)
                                             },
-                                            icon = Icons.Default.Inbox
+                                            icon = AbkIcons.Modules
                                         )
                                     }
                                 }
@@ -1898,7 +1665,7 @@ fun FlashScreen(
                                 ExpressiveEmptyState(
                                     title = stringResource(R.string.flash_release_unavailable),
                                     subtitle = stringResource(R.string.flash_release_unavailable_desc),
-                                    icon = Icons.Default.CloudDownload
+                                    icon = AbkIcons.Download
                                 )
                             }
                         }
