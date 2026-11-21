@@ -34,8 +34,9 @@
 | 已安装模块：搜索/分组/开关/更新/WebUI/action/卸载 | 已重铺；两版目标 CI 成功 | 保留类型、只读、卸载及 WebUI/action 能力边界；4 项纯展示逻辑单测直接 JUnit 执行通过，标准 CI 主机测试通过 |
 | 运行态模块文件权限、安装/更新/卸载确认、变更日志、执行弹层 | 已重铺；两版目标 CI 成功 | 7 项假回调 UI 测试已在目标环境编译，未在设备执行；安装进行中不可关闭，成功结束才可重启；独立 action 输出仍可关闭且不会取消后台任务 |
 | Root 授权：列表、搜索、加载/刷新、应用详情与 profile | 已重铺；两版目标 CI 成功 | 详情入口与授权开关分离，纵向配置选项、外置字段和换行徽标；应用图标加载、模板、保存 payload、隐藏 flags 和既有解析回退保持原边界；6 项假回调 UI 测试已在目标环境编译，设备未执行 |
-| SUSFS 控制：能力、各控制表单及执行反馈 | 已重铺；本批目标 CI 待验证 | 能力条件和配置同步/解析不变，保存期间禁用编辑与操作；5 项纯配置测试实际通过，7 项假回调 UI 测试有界编译通过，设备未执行 |
-| 设置主页面、账号/退出、下载目录、镜像、语言、更新、诊断导出 | 待页面重铺 | 保留文本草稿提交时机与偏好；不展示或记录凭据 |
+| SUSFS 控制：能力、各控制表单及执行反馈 | 已重铺；两版目标 CI 成功 | 能力条件和配置同步/解析不变，保存期间禁用编辑与操作；5 项纯配置测试实际通过，7 项假回调 UI 测试已在目标环境编译，设备未执行 |
+| 设置偏好：下载目录/镜像、下载线程、清理确认、更新线路/稳定性、前台刷新间隔、语言 | 控件已重铺；目标 CI 待验证 | 保留目录选择器与权限、失焦/IME Done 提交及宿主语言切换；4 项纯文本状态测试已执行通过，6 项假回调 UI 测试仅有界编译，设备未执行 |
+| 设置主页面剩余账号/退出、更新反馈、诊断导出及其他分组 | 待页面重铺 | 本批控件迁移不等于设置主页完成；不展示或记录凭据 |
 | 设置子页：主题/背景/透明度/模糊、管理器工具、内核能力、profile 模板 | 待页面重铺 | 保留能力决定的入口与预测返回 |
 | 设置子页：扩展管理、关于仓库、贡献者、开源许可 | 待页面重铺 | 第三方头像、许可证及链接不替换为示例数据 |
 | 设置弹层：Runner、签名密钥导入、计时安全确认及其他设置选择器 | 待迁移 | 保留敏感输入、计时、授权及关闭限制 |
@@ -56,6 +57,7 @@
 | 本地安装/修补批次 `5bbfe961` | [44906681144](https://github.com/xingguangcuican6666/ABK/actions/runs/44906681144) 成功 | [44906681048](https://github.com/xingguangcuican6666/ABK/actions/runs/44906681048) 成功 | 标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
 | 运行态批次 `6e7a94b4` | [44910178872](https://github.com/xingguangcuican6666/ABK/actions/runs/44910178872) 成功 | [44910178821](https://github.com/xingguangcuican6666/ABK/actions/runs/44910178821) 成功 | 标准主机测试、两版完整 App 与 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
 | Root 授权批次 `fb95a93b` | [44912344483](https://github.com/xingguangcuican6666/ABK/actions/runs/44912344483) 成功 | [44912344479](https://github.com/xingguangcuican6666/ABK/actions/runs/44912344479) 成功 | 标准主机测试、两版完整 App 与 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
+| SUSFS 控制批次 `c2415cee` | [44915201214](https://github.com/xingguangcuican6666/ABK/actions/runs/44915201214) 成功 | [44915201208](https://github.com/xingguangcuican6666/ABK/actions/runs/44915201208) 成功 | 核对了两版提交 SHA；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功 |
 
 标准测试步骤运行 `:app:compileDebugAndroidTestKotlin :app:testDebugUnitTest :abk-ui:testDebugUnitTest`。Dev 的测试步骤只编译 instrumentation，不能写成 Dev 主机测试已通过。上述步骤均未执行设备端 UI 测试。其他自动内核工作流的状态不混入 App CI 结论，也未手工触发内核构建。
 
@@ -106,6 +108,16 @@ SUSFS 控制批次已完成以下本地检查：
 - 真实库、页面适配器、表单和测试在缓存 Kotlin/Compose 2.2.21、JVM 11 下有界编译通过。编译用 blur、间距、状态模型及槽位枚举替身，不覆盖完整设置宿主、正式 blur、目标 Kotlin/Material3、manifest 合并或 APK。
 - 5 项 `SusfsFormParsingTest` 已用 JUnitCore 执行通过，检查规则读写、重复项及原有回退。7 项 `SusfsControlUiTest` 使用假状态和回调，覆盖 320dp/2×/RTL、显式操作、格式错误和修正、不支持字段、保存期禁用与配置同步；只验证了源码编译，未在设备执行。
 - `git diff --check` 通过；检查脚本、替身和临时编译产物均留在仓库外。
+
+设置偏好批次已完成以下本地检查：
+
+- 下载目录和镜像改为外置标签、等宽输入，继续使用原草稿比较规则：编辑时不被宿主更新覆盖，失焦或 IME Done 才提交，保留空白字符且不重复提交相同的已保存值。目录选择与重置仍为显式操作，清理仍需确认；未修改下载、偏好仓库、语言工具或 ViewModel。
+- 目录的 `OpenDocumentTree` 回调、持久 URI grant、不可转换提示、全文件权限设置页 fallback，以及语言持久化/通知 ViewModel/重建 Activity 回调均与批次起点核对一致。线程范围仍为 1–64、62 个中间步长，更新选项继续归一化，刷新间隔仍取仓库允许的 10/20/30 秒；语言只由宿主处理真实切换。
+- 全 App 资源经 AAPT2 编译并用临时最小 manifest 链接，`javac --release 11` 生成资源类；组件/测试在中英俄的引用、唯一 key 和格式化占位符通过检查，补齐了下载线程标题及说明的俄文。临时资源包不是可安装 App。
+- 真实库、偏好组件、下载目录/语言工具及 6 项 `SettingsPreferenceUiTest` 在缓存 Kotlin/Compose 2.2.21、JVM 11 下有界编译通过；槽位枚举使用仅编译替身。原有 4 项 `SettingsScreenTextFieldStateTest` 已用 JUnitCore 实际执行通过。6 项 UI 测试覆盖失焦/IME Done、320dp/2×/RTL、目录入口和显式提交、线程语义/范围/回调、受控语言选择以及取消/关闭/确认分离，未在设备执行。
+- 完整设置文件的临时副本通过 Kotlin formatter 语法解析；抽取当前目录宿主、镜像及选项函数，使用真实 Android/Compose API 和库进行额外有界编译。模型 helper 和偏好间隔取自源码的有限摘录，此项不覆盖完整设置宿主、目标依赖、ActivityResult 往返或实际 IME。
+- 本机重试目标 Gradle 的 instrumentation 编译与两模块主机测试，仍在根项目依赖解析阶段失败：离线缓存缺少 AGP 9.1.1 与 analytics protos 32.1.1，未执行到编译或测试任务。目标 App CI 尚未验证此批次；不能沿用前一批 SUSFS 的成功结论。
+- `git diff --check` 通过；临时检查脚本、日志、替身和编译输出留在仓库外。
 
 ## 未完成的验收
 

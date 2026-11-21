@@ -24,8 +24,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -39,7 +37,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
@@ -47,12 +44,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
@@ -98,6 +92,7 @@ import com.abk.kernel.data.model.normalizeAppUpdateStability
 import com.abk.kernel.viewmodel.MainUiState
 import com.abk.kernel.viewmodel.MainViewModel
 import com.abk.kernel.viewmodel.exportDiagnosticBundle
+import io.github.xingguangcuican6666.abk.ui.components.AbkOption
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -913,19 +908,9 @@ private fun SettingsMainContent(
                 value = state.downloadMirrorBaseUrl,
                 onValueChange = { vm.setDownloadMirrorBaseUrl(it) }
             )
-            ExpressiveListItem(
-                title = stringResource(R.string.settings_download_threads),
-                subtitle = stringResource(R.string.settings_download_threads_desc, state.downloadThreadCount),
-                leadingIcon = Icons.Default.Speed,
-                trailingContent = {
-                    Slider(
-                        value = state.downloadThreadCount.toFloat(),
-                        onValueChange = { vm.setDownloadThreadCount(it.toInt()) },
-                        valueRange = 1f..64f,
-                        steps = 62,
-                        modifier = Modifier.width(150.dp)
-                    )
-                }
+            SettingsDownloadThreadControl(
+                count = state.downloadThreadCount,
+                onCountChange = vm::setDownloadThreadCount,
             )
             Spacer(Modifier.height(10.dp))
             val hasArtifacts = state.downloadedArtifacts.isNotEmpty()
@@ -944,24 +929,12 @@ private fun SettingsMainContent(
                 onClick = if (hasArtifacts) {{ showClearArtifactsDialog = true }} else null
             )
             if (showClearArtifactsDialog) {
-                AlertDialog(
-                    onDismissRequest = { showClearArtifactsDialog = false },
-                    icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                    title = { Text(stringResource(R.string.settings_clear_artifacts_title)) },
-                    text = { Text(stringResource(R.string.settings_clear_artifacts_message)) },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            vm.clearAllDownloadedArtifacts()
-                            showClearArtifactsDialog = false
-                        }) {
-                            Text(stringResource(R.string.settings_clear_artifacts_confirm))
-                        }
+                SettingsClearDownloadsDialog(
+                    onDismiss = { showClearArtifactsDialog = false },
+                    onConfirm = {
+                        vm.clearAllDownloadedArtifacts()
+                        showClearArtifactsDialog = false
                     },
-                    dismissButton = {
-                        TextButton(onClick = { showClearArtifactsDialog = false }) {
-                            Text(stringResource(android.R.string.cancel))
-                        }
-                    }
                 )
             }
         }
@@ -3074,77 +3047,29 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
 }
 
 @Composable
-private fun AppUpdateStabilityPicker(
-    selected: String,
-    onSelect: (String) -> Unit
-) {
-    val options = listOf(
-        AbkSegmentedButtonOption(
-            value = APP_UPDATE_STABILITY_STABLE,
-            label = stringResource(R.string.settings_app_update_stable)
+private fun AppUpdateStabilityPicker(selected: String, onSelect: (String) -> Unit) {
+    SettingsPreferenceChoices(
+        title = stringResource(R.string.settings_app_update_stability),
+        options = listOf(
+            AbkOption(APP_UPDATE_STABILITY_STABLE, stringResource(R.string.settings_app_update_stable)),
+            AbkOption(APP_UPDATE_STABILITY_UNSTABLE, stringResource(R.string.settings_app_update_unstable)),
         ),
-        AbkSegmentedButtonOption(
-            value = APP_UPDATE_STABILITY_UNSTABLE,
-            label = stringResource(R.string.settings_app_update_unstable)
-        )
+        selectedId = normalizeAppUpdateStability(selected),
+        onSelect = onSelect,
     )
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 8.dp, end = 8.dp, bottom = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.settings_app_update_stability),
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        AbkSingleChoiceSegmentedButtonRow(
-            options = options,
-            selectedValue = normalizeAppUpdateStability(selected),
-            onSelect = onSelect,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
 }
 
 @Composable
-private fun AppUpdateLinePicker(
-    selected: String,
-    onSelect: (String) -> Unit
-) {
-    val options = listOf(
-        AbkSegmentedButtonOption(
-            value = APP_UPDATE_LINE_NORMAL,
-            label = stringResource(R.string.settings_app_update_line_normal)
+private fun AppUpdateLinePicker(selected: String, onSelect: (String) -> Unit) {
+    SettingsPreferenceChoices(
+        title = stringResource(R.string.settings_app_update_line),
+        options = listOf(
+            AbkOption(APP_UPDATE_LINE_NORMAL, stringResource(R.string.settings_app_update_line_normal)),
+            AbkOption(APP_UPDATE_LINE_DEV, stringResource(R.string.settings_app_update_line_dev)),
         ),
-        AbkSegmentedButtonOption(
-            value = APP_UPDATE_LINE_DEV,
-            label = stringResource(R.string.settings_app_update_line_dev)
-        )
+        selectedId = normalizeAppUpdateLine(selected),
+        onSelect = onSelect,
     )
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 8.dp, end = 8.dp, bottom = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.settings_app_update_line),
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        AbkSingleChoiceSegmentedButtonRow(
-            options = options,
-            selectedValue = normalizeAppUpdateLine(selected),
-            onSelect = onSelect,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
 }
 
 @Composable
@@ -3197,38 +3122,15 @@ private fun appUpdateLineLabel(value: String): String = when (normalizeAppUpdate
 }
 
 @Composable
-private fun WorkflowForegroundRefreshIntervalPicker(
-    selectedSec: Int,
-    onSelect: (Int) -> Unit
-) {
-    val options = PreferencesRepository.WORKFLOW_FOREGROUND_REFRESH_INTERVALS_SEC
-        .sorted()
-        .map { sec ->
-            AbkSegmentedButtonOption(
-                value = sec,
-                label = stringResource(R.string.settings_workflow_foreground_refresh_interval_sec, sec)
-            )
-        }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 8.dp, end = 8.dp, bottom = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.settings_workflow_foreground_refresh_interval),
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        AbkSingleChoiceSegmentedButtonRow(
-            options = options,
-            selectedValue = selectedSec,
-            onSelect = onSelect,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
+private fun WorkflowForegroundRefreshIntervalPicker(selectedSec: Int, onSelect: (Int) -> Unit) {
+    SettingsPreferenceChoices(
+        title = stringResource(R.string.settings_workflow_foreground_refresh_interval),
+        options = PreferencesRepository.WORKFLOW_FOREGROUND_REFRESH_INTERVALS_SEC.sorted().map { sec ->
+            AbkOption(sec.toString(), stringResource(R.string.settings_workflow_foreground_refresh_interval_sec, sec))
+        },
+        selectedId = selectedSec.toString(),
+        onSelect = { onSelect(it.toInt()) },
+    )
 }
 
 @Composable
@@ -3256,104 +3158,45 @@ private fun DownloadDirectorySettingsItem(
     onValueChange: (String) -> Unit
 ) {
     val context = LocalContext.current
-    val focusManager = LocalFocusManager.current
     val defaultDirectory = remember { DownloadDirectoryUtils.defaultDirectoryPath() }
     val needsAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()
     val unsupportedTreeMessage = stringResource(R.string.settings_download_directory_tree_unsupported)
     val restoredMessage = stringResource(R.string.settings_download_directory_default_restored)
-    var draft by rememberSaveable { mutableStateOf(value) }
-    var isEditing by remember { mutableStateOf(false) }
 
-    LaunchedEffect(value, isEditing) {
-        if (shouldSyncSettingsTextDraft(isEditing = isEditing, persistedValue = value, draftValue = draft)) {
-            draft = value
-        }
-    }
-
-    fun commitDraft(newValue: String = draft) {
-        draft = newValue
-        pendingSettingsTextCommit(persistedValue = value, draftValue = newValue)?.let(onValueChange)
-    }
-
-    val folderPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
-            }
-            val selectedPath = DownloadDirectoryUtils.directoryPathFromTreeUri(uri)
-            if (selectedPath == null) {
-                Toast.makeText(context, unsupportedTreeMessage, Toast.LENGTH_SHORT).show()
-            } else {
-                commitDraft(selectedPath)
+    SettingsTextDraftField(
+        value = value,
+        onCommit = onValueChange,
+        label = stringResource(R.string.settings_download_directory),
+        description = stringResource(R.string.settings_download_directory_desc),
+        placeholder = defaultDirectory,
+    ) { commitDraft ->
+        val folderPicker = rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocumentTree()
+        ) { uri ->
+            if (uri != null) {
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                }
+                val selectedPath = DownloadDirectoryUtils.directoryPathFromTreeUri(uri)
+                if (selectedPath == null) {
+                    Toast.makeText(context, unsupportedTreeMessage, Toast.LENGTH_SHORT).show()
+                } else {
+                    commitDraft(selectedPath)
+                }
             }
         }
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        ExpressiveListItem(
-            title = stringResource(R.string.settings_download_directory),
-            subtitle = stringResource(R.string.settings_download_directory_desc),
-            leadingIcon = Icons.Default.FolderOpen
+        SettingsDownloadDirectoryActions(
+            needsAllFilesAccess = needsAllFilesAccess,
+            onChoose = { folderPicker.launch(null) },
+            onReset = {
+                commitDraft(defaultDirectory)
+                Toast.makeText(context, restoredMessage, Toast.LENGTH_SHORT).show()
+            },
+            onOpenAllFilesAccess = { openAllFilesAccessSettings(context) },
         )
-        OutlinedTextField(
-            value = draft,
-            onValueChange = { draft = it },
-            singleLine = true,
-            placeholder = { Text(defaultDirectory) },
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { focusState ->
-                    val wasEditing = isEditing
-                    isEditing = focusState.isFocused
-                    if (wasEditing && !focusState.isFocused) {
-                        commitDraft()
-                    }
-                },
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = { folderPicker.launch(null) },
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.settings_download_directory_choose))
-            }
-            TextButton(
-                onClick = {
-                    commitDraft(defaultDirectory)
-                    Toast.makeText(context, restoredMessage, Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.settings_download_directory_reset))
-            }
-        }
-        AnimatedVisibility(visible = needsAllFilesAccess) {
-            OutlinedButton(
-                onClick = { openAllFilesAccessSettings(context) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.FolderSpecial, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.settings_download_directory_storage_permission))
-            }
-        }
     }
 }
 
@@ -3368,85 +3211,12 @@ private fun openAllFilesAccessSettings(context: android.content.Context) {
 }
 
 @Composable
-private fun MirrorSettingsItem(
-    value: String,
-    onValueChange: (String) -> Unit
-) {
-    val focusManager = LocalFocusManager.current
-    var draft by rememberSaveable { mutableStateOf(value) }
-    var isEditing by remember { mutableStateOf(false) }
-
-    LaunchedEffect(value, isEditing) {
-        if (shouldSyncSettingsTextDraft(isEditing = isEditing, persistedValue = value, draftValue = draft)) {
-            draft = value
-        }
-    }
-
-    fun commitDraft(newValue: String = draft) {
-        draft = newValue
-        pendingSettingsTextCommit(persistedValue = value, draftValue = newValue)?.let(onValueChange)
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        ExpressiveListItem(
-            title = stringResource(R.string.settings_download_mirror),
-            subtitle = stringResource(R.string.settings_download_mirror_desc),
-            leadingIcon = Icons.Default.Public
-        )
-        OutlinedTextField(
-            value = draft,
-            onValueChange = { draft = it },
-            singleLine = true,
-            placeholder = { Text("https://hk.gh-proxy.org/") },
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { focusState ->
-                    val wasEditing = isEditing
-                    isEditing = focusState.isFocused
-                    if (wasEditing && !focusState.isFocused) {
-                        commitDraft()
-                    }
-                },
-        )
-    }
-}
-
-internal fun shouldSyncSettingsTextDraft(
-    isEditing: Boolean,
-    persistedValue: String,
-    draftValue: String
-): Boolean = !isEditing && persistedValue != draftValue
-
-internal fun pendingSettingsTextCommit(
-    persistedValue: String,
-    draftValue: String
-): String? = draftValue.takeIf { it != persistedValue }
-
-@Composable
-private fun LanguageSettingsItem(
-    current: String,
-    onSelect: (String) -> Unit
-) {
-    val options = listOf(
-        Triple(LocaleHelper.LANG_ZH, stringResource(R.string.settings_language_zh), Icons.Default.Language),
-        Triple(LocaleHelper.LANG_EN, stringResource(R.string.settings_language_en), Icons.Default.Language),
-        Triple(LocaleHelper.LANG_RU, stringResource(R.string.settings_language_ru), Icons.Default.Language)
+private fun MirrorSettingsItem(value: String, onValueChange: (String) -> Unit) {
+    SettingsTextDraftField(
+        value = value,
+        onCommit = onValueChange,
+        label = stringResource(R.string.settings_download_mirror),
+        description = stringResource(R.string.settings_download_mirror_desc),
+        placeholder = "https://hk.gh-proxy.org/",
     )
-    options.forEach { (lang, label, icon) ->
-        val selected = current == lang
-        ExpressiveListItem(
-            title = label,
-            leadingIcon = icon,
-            selected = selected,
-            trailingContent = {
-                if (selected) Icon(Icons.Default.Check, null)
-            },
-            onClick = { onSelect(lang) }
-        )
-    }
 }

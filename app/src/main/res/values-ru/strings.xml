@@ -768,6 +768,8 @@
     <string name="settings_app_update_error">Ошибка проверки обновления</string>
     <string name="settings_app_update_install_permission">Сначала разрешите ABK устанавливать неизвестные приложения, затем нажмите обновление ещё раз.</string>
     <string name="settings_app_update_install_failed">Не удалось открыть системный установщик.</string>
+    <string name="settings_download_threads">Потоки загрузки</string>
+    <string name="settings_download_threads_desc">Текущее число: %1$d; 1 — одно соединение</string>
     <string name="settings_download_directory">Каталог загрузок по умолчанию</string>
     <string name="settings_download_directory_desc">Артефакты сборки, prebuilt GKI и модули сохраняются в эту папку файловой системы.</string>
     <string name="settings_download_directory_choose">Выбрать папку</string>
