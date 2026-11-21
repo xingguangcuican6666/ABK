@@ -46,7 +46,7 @@
 | 设置子页/独立 Activity：扩展管理 | 已重铺；两版目标 CI 成功 | 设置内嵌页面与独立 Activity 复用受控呈现组件；bootstrap 引导、聚焦条目、安装/服务/OOBE/重置操作仍映射到真实宿主模型及原回调；6 项假回调 UI 测试在两版 instrumentation 编译，设备未执行 |
 | 设置弹层：Runner 设置 | 已重铺；两版目标 CI 成功 | 保留 fork/配置快照与保存版本隔离草稿、标签 trim、支持/忙碌门控及显式保存；13 项假回调 UI 测试在两版 instrumentation 中编译，标准主机测试通过，设备未执行 |
 | 设置选择器：主题模式/颜色、下载目录 | 主题选择已在外观页重铺；下载目录使用原系统流程 | 主题/颜色为页内纵向选择，不新增弹层；系统图片和目录选择器不是 App 自有 UI，继续保留 ActivityResult 与 URI 权限流程 |
-| OOBE：介绍、Root 检查、OAuth/PAT、设备码、Fork 检查/错误 | 待页面重铺 | 不因重组布局重复发起登录、授权、Fork 或同步 |
+| OOBE：可达介绍、GitHub OAuth/设备码、Fork 检查/错误 | 已重铺 | 保留 skip 320ms/280ms 时序、OAuth 确认门、显式复制/打开设备码及 fork 状态；9 项假回调 UI 测试有界编译，未在设备执行。旧 `RootCheckScreen` helper 不在 `AuthStep` 路由且无调用点；Root 检测仍由 `MainActivity` 独立执行，不属于本页迁移 |
 | 宿主：条款、偏好重置、Root 授权恢复、同步提示、通知权限 | 待迁移 | 条款与权限流程保留；不得以关闭弹层绕过条款 |
 | 独立 `AbkExtensionBootstrapActivity` | 待自有 UI 审查/迁移 | 不改扩展执行或启动参数协议 |
 | 独立 `ModuleWebUiActivity` 自有壳、加载/错误/工具栏 | 待迁移 | 第三方 HTML 内容不在重设计范围；桥接权限不扩大 |
