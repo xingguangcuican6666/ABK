@@ -14,6 +14,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.PathNode
@@ -140,6 +146,37 @@ public class AbkComponentsTest {
             .performKeyInput { pressKey(Key.A) }.assertTextEquals("main")
         compose.onNodeWithContentDescription("禁用分支").assertIsNotEnabled()
         compose.runOnIdle { assertEquals(0, edits) }
+    }
+
+    @Test public fun textFieldInputModifierTracksRealFocusAndPreservesCodeTypography() {
+        var value by mutableStateOf("main")
+        var focused = false
+        var focusLosses = 0
+        content {
+            Column {
+                AbkTextField(value, { value = it }, "源码 ref",
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace, fontSize = 22.sp),
+                    inputModifier = Modifier.onFocusChanged {
+                        if (focused && !it.isFocused) focusLosses++
+                        focused = it.isFocused
+                    })
+                AbkTextField("", {}, "下一个字段")
+            }
+        }
+        compose.runOnIdle { assertEquals(0, focusLosses) }
+        val input = compose.onNodeWithContentDescription("源码 ref")
+        input.requestFocus()
+        compose.runOnIdle { assertTrue(focused); assertEquals(0, focusLosses) }
+        val layouts = mutableListOf<TextLayoutResult>()
+        input.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        compose.runOnIdle {
+            assertTrue(layouts.isNotEmpty())
+            assertEquals(FontFamily.Monospace, layouts.single().layoutInput.style.fontFamily)
+            assertEquals(22.sp, layouts.single().layoutInput.style.fontSize)
+        }
+        input.performTextInput("-stable")
+        compose.onNodeWithContentDescription("下一个字段").requestFocus()
+        compose.runOnIdle { assertTrue(!focused); assertEquals(1, focusLosses) }
     }
 
     @Test public fun checkboxHasOneToggleTargetAndCallsBackOnce() {

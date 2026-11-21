@@ -1397,4 +1397,8 @@
     <string name="ui_module_install_failure">Module installation failed</string>
     <string name="ui_module_source_error">Could not load this repository</string>
     <string name="module_repo_refreshing_repository">Refreshing repositories</string>
+    <string name="build_source_ref_placeholder">For example, lineage-23.2 or a full commit SHA</string>
+    <string name="build_dispatch_preview">Workflow input preview</string>
+    <string name="build_dispatch_preview_hint">Uses the same serialization as queued submissions. Private repository details stay in this local preview; passwords are hidden.</string>
+    <string name="build_preview_redacted">Hidden</string>
 </resources>

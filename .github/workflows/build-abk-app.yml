@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "app/**"
+      - "abk-ui/**"
       - "app_dev/**"
       - "build.gradle.kts"
       - "settings.gradle.kts"
@@ -16,6 +17,7 @@ on:
   pull_request:
     paths:
       - "app/**"
+      - "abk-ui/**"
       - "app_dev/**"
       - "build.gradle.kts"
       - "settings.gradle.kts"
@@ -62,7 +64,9 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: |
+            21
+            17
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -469,6 +473,9 @@ jobs:
             echo "- Commit: $run_sha"
             echo "- Files: $count"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Compile UI regression tests and run host tests
+        run: gradle :app:compileDebugAndroidTestKotlin :app:testDebugUnitTest :abk-ui:testDebugUnitTest
 
       - name: Build debug APK
         run: gradle assembleDebug

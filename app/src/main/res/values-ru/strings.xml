@@ -1324,4 +1324,8 @@
     <string name="ui_module_install_failure">Не удалось установить модуль</string>
     <string name="ui_module_source_error">Не удалось загрузить этот репозиторий</string>
     <string name="module_repo_refreshing_repository">Обновление репозиториев</string>
+    <string name="build_source_ref_placeholder">Например, lineage-23.2 или полный SHA коммита</string>
+    <string name="build_dispatch_preview">Параметры рабочего процесса</string>
+    <string name="build_dispatch_preview_hint">Используется та же сериализация, что и при отправке из очереди. Данные частного репозитория показаны только локально; пароли скрыты.</string>
+    <string name="build_preview_redacted">Скрыто</string>
 </resources>

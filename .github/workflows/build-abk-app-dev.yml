@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "app/**"
+      - "abk-ui/**"
       - "app_dev/**"
       - "build.gradle.kts"
       - "settings.gradle.kts"
@@ -16,6 +17,7 @@ on:
   pull_request:
     paths:
       - "app/**"
+      - "abk-ui/**"
       - "app_dev/**"
       - "build.gradle.kts"
       - "settings.gradle.kts"
@@ -473,6 +475,9 @@ jobs:
       - name: Patch for Dev APK
         run: |
           cp -rvf "app_dev/build.gradle.kts" "app/build.gradle.kts"
+
+      - name: Compile UI regression tests
+        run: gradle :app:compileDebugAndroidTestKotlin
 
       - name: Build debug APK
         run: gradle assembleDebug

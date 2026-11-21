@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.xingguangcuican6666.abk.ui.icons.AbkIcon
@@ -95,13 +96,15 @@ public fun AbkTextField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     prefix: (@Composable () -> Unit)? = null,
     suffix: (@Composable () -> Unit)? = null,
+    textStyle: TextStyle = MaterialTheme.typography.bodyLarge,
+    inputModifier: Modifier = Modifier,
 ) {
     val c = AbkTheme.colors
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     AbkField(label, modifier, hint, error, optionalLabel) {
         BasicTextField(
-            value, onValueChange, Modifier.fillMaxWidth().semantics {
+            value, onValueChange, inputModifier.fillMaxWidth().semantics {
                 contentDescription = label
                 if (error != null) this.error(error)
             },
@@ -109,7 +112,7 @@ public fun AbkTextField(
             minLines = minLines, maxLines = maxLines,
             keyboardOptions = keyboardOptions, keyboardActions = keyboardActions,
             visualTransformation = visualTransformation,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = if (enabled) c.ink else c.inkFaint),
+            textStyle = textStyle.copy(color = if (enabled) c.ink else c.inkFaint),
             cursorBrush = SolidColor(c.accent.color),
             decorationBox = { inner ->
                 Surface(
@@ -122,7 +125,7 @@ public fun AbkTextField(
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         prefix?.invoke()
                         Box(Modifier.weight(1f)) {
-                            if (value.isEmpty()) Text(placeholder, color = c.inkFaint, style = MaterialTheme.typography.bodyLarge)
+                            if (value.isEmpty()) Text(placeholder, color = c.inkFaint, style = textStyle)
                             inner()
                         }
                         suffix?.invoke()

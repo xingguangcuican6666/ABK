@@ -1533,4 +1533,8 @@
     <string name="ui_module_install_success">模块安装完成</string>
     <string name="ui_module_install_failure">模块安装失败</string>
     <string name="ui_module_source_error">无法加载此仓库</string>
+    <string name="build_source_ref_placeholder">例如 lineage-23.2 或完整 commit SHA</string>
+    <string name="build_dispatch_preview">实际工作流参数</string>
+    <string name="build_dispatch_preview_hint">与队列提交使用相同的序列化结果；私有仓库信息仅在本机预览，密码已隐藏。</string>
+    <string name="build_preview_redacted">已隐藏</string>
 </resources>
