@@ -6,34 +6,8 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.InstallMobile
-import androidx.compose.material.icons.filled.OpenInNew
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -45,7 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -59,11 +32,10 @@ import com.abk.kernel.R
 import com.abk.kernel.data.repository.PreferencesRepository
 import com.abk.kernel.ui.blur.BlurConfig
 import com.abk.kernel.ui.blur.BlurScreenScaffold
+import io.github.xingguangcuican6666.abk.ui.components.AbkIconButton
+import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
 import com.abk.kernel.ui.components.AbkCenteredLoadingTransition
-import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AppBackgroundHost
-import com.abk.kernel.ui.components.ExpressiveSectionCard
-import com.abk.kernel.ui.components.ExpressiveStatusChip
 import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.ui.theme.AbkTheme
 import com.abk.kernel.utils.DownloadUtils
@@ -185,6 +157,7 @@ fun AbkExtensionManagerScreen(
     val focused = remember(extensions, focusExtensionId) {
         extensions.firstOrNull { it.extensionId == focusExtensionId }
     }
+    val presented = remember(extensions) { extensions.associate { it.toItemState() to it } }
     val dismissLocked = bootstrapMode && focused?.canLaunchOobe == true && focused.needsOobe
 
     if (dismissLocked) {
@@ -317,19 +290,20 @@ fun AbkExtensionManagerScreen(
                     null
                 } else {
                     {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                Icons.Default.ArrowBack,
-                                contentDescription = stringResource(R.string.settings_back)
-                            )
-                        }
+                        AbkIconButton(
+                            icon = AbkIcons.Back,
+                            contentDescription = stringResource(R.string.settings_back),
+                            onClick = onBack
+                        )
                     }
                 },
                 enableBlur = blurEnabled,
                 actions = {
-                    IconButton(onClick = ::requestRefresh) {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
-                    }
+                    AbkIconButton(
+                        icon = AbkIcons.Refresh,
+                        contentDescription = stringResource(R.string.refresh),
+                        onClick = ::requestRefresh
+                    )
                 }
             )
         }
@@ -344,283 +318,48 @@ fun AbkExtensionManagerScreen(
             return@BlurScreenScaffold
         }
 
-        if (extensions.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = topBarHeight + 16.dp)
-                    .padding(horizontal = AbkScreenHorizontalPadding)
-                    .padding(bottom = 16.dp),
-                verticalArrangement = Arrangement.Top
-            ) {
-                ExpressiveSectionCard(
-                    title = stringResource(R.string.extension_manager_empty_title),
-                    subtitle = stringResource(R.string.extension_manager_empty_desc),
-                    icon = Icons.Default.Extension,
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                ) {}
-            }
-            return@BlurScreenScaffold
-        }
-
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = AbkScreenHorizontalPadding,
-                top = topBarHeight + 16.dp,
-                end = AbkScreenHorizontalPadding,
-                bottom = 80.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (bootstrapMode && focused != null) {
-                item("focus-guide-${focused.extensionId}") {
-                    ExtensionBootstrapCard(
-                        extension = focused,
-                        onInstall = { installExtension(focused) },
-                        onOpenOobe = { launchOobe(focused) },
-                        onOpenService = { launchServiceActivity(focused) }
-                    )
-                }
-            }
-
-            focused?.let { extension ->
-                item("focus-${extension.extensionId}") {
-                    ExtensionCard(
-                        extension = extension,
-                        emphasize = true,
-                        onInstall = { installExtension(it) },
-                        onOpenOobe = { launchOobe(it) },
-                        onOpenService = { launchServiceActivity(it) },
-                        onReset = { resetExtension(it) },
-                    )
-                }
-            }
-
-            items(
-                items = extensions.filter { it.extensionId != focused?.extensionId },
-                key = { it.extensionId }
-            ) { extension ->
-                ExtensionCard(
-                    extension = extension,
-                    emphasize = false,
-                    onInstall = { installExtension(it) },
-                    onOpenOobe = { launchOobe(it) },
-                    onOpenService = { launchServiceActivity(it) },
-                    onReset = { resetExtension(it) },
-                )
-            }
-        }
+        ExtensionsContent(
+            topBarHeight = topBarHeight,
+            bootstrapMode = bootstrapMode,
+            focused = focused?.toItemState(),
+            extensions = extensions.map { it.toItemState() },
+            onInstall = { installExtension(it.resolve(presented)) },
+            onOpenOobe = { launchOobe(it.resolve(presented)) },
+            onOpenService = { launchServiceActivity(it.resolve(presented)) },
+            onReset = { resetExtension(it.resolve(presented)) },
+        )
     }
 
     missingCompanionDialog?.let { extension ->
-        AlertDialog(
-            onDismissRequest = { missingCompanionDialog = null },
-            title = { Text(stringResource(R.string.extension_bootstrap_install_dialog_title)) },
-            text = {
-                Text(
-                    stringResource(
-                        R.string.extension_bootstrap_install_dialog_desc,
-                        extension.name,
-                        extension.companionLabel()
-                    )
-                )
+        ExtensionMissingCompanionDialog(
+            extensionName = extension.name,
+            companionLabel = extension.companionLabel(),
+            installEnabled = extension.companionDownloadUrl.isNotBlank(),
+            onDismiss = { missingCompanionDialog = null },
+            onInstall = {
+                missingCompanionDialog = null
+                installExtension(extension)
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        missingCompanionDialog = null
-                        installExtension(extension)
-                    },
-                    enabled = extension.companionDownloadUrl.isNotBlank()
-                ) {
-                    Text(stringResource(R.string.extension_install_action))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { missingCompanionDialog = null }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            }
         )
     }
 }
 
-@Composable
-private fun ExtensionBootstrapCard(
-    extension: AbkManagedExtension,
-    onInstall: () -> Unit,
-    onOpenOobe: () -> Unit,
-    onOpenService: () -> Unit,
-) {
-    val companionLabel = extension.companionLabel()
-    val titleRes = when {
-        !extension.isCompanionInstalled -> R.string.extension_bootstrap_install_title
-        extension.canLaunchServiceActivity -> R.string.extension_bootstrap_service_title
-        extension.canLaunchOobe -> R.string.extension_bootstrap_oobe_required_title
-        else -> R.string.extension_bootstrap_oobe_missing_title
-    }
-    val subtitle = when {
-        !extension.isCompanionInstalled -> stringResource(R.string.extension_bootstrap_install_desc, companionLabel)
-        extension.canLaunchServiceActivity -> stringResource(R.string.extension_bootstrap_service_desc)
-        extension.canLaunchOobe -> stringResource(R.string.extension_bootstrap_oobe_required_desc)
-        else -> stringResource(R.string.extension_bootstrap_oobe_missing_desc, companionLabel)
-    }
-    val containerColor = when {
-        !extension.isCompanionInstalled -> MaterialTheme.colorScheme.secondaryContainer
-        extension.canLaunchServiceActivity -> MaterialTheme.colorScheme.tertiaryContainer
-        extension.canLaunchOobe -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.errorContainer
-    }
+private fun AbkManagedExtension.toItemState() = ExtensionItemState(
+    id = extensionId,
+    name = name,
+    description = description,
+    summary = summary,
+    companionLabel = companionLabel(),
+    companionInstalled = isCompanionInstalled,
+    needsOobe = needsOobe,
+    canLaunchOobe = canLaunchOobe,
+    canLaunchService = canLaunchServiceActivity,
+    canInstall = companionDownloadUrl.isNotBlank(),
+)
 
-    ExpressiveSectionCard(
-        title = stringResource(titleRes),
-        subtitle = subtitle,
-        icon = if (!extension.isCompanionInstalled) Icons.Default.InstallMobile else Icons.Default.Build,
-        containerColor = containerColor,
-    ) {
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            when {
-                !extension.isCompanionInstalled -> {
-                    Button(
-                        onClick = onInstall,
-                        enabled = extension.companionDownloadUrl.isNotBlank()
-                    ) {
-                        Icon(Icons.Default.InstallMobile, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.extension_install_action))
-                    }
-                }
-                extension.canLaunchServiceActivity -> {
-                    Button(onClick = onOpenService) {
-                        Icon(Icons.Default.OpenInNew, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.extension_run_service_action))
-                    }
-                }
-                extension.canLaunchOobe -> {
-                    Button(onClick = onOpenOobe) {
-                        Icon(Icons.Default.Build, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.extension_run_oobe_action))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExtensionCard(
-    extension: AbkManagedExtension,
-    emphasize: Boolean,
-    onInstall: (AbkManagedExtension) -> Unit,
-    onOpenOobe: (AbkManagedExtension) -> Unit,
-    onOpenService: (AbkManagedExtension) -> Unit,
-    onReset: (AbkManagedExtension) -> Unit,
-) {
-    val chipColor = if (extension.needsOobe) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.tertiary
-    }
-
-    ExpressiveSectionCard(
-        title = extension.name,
-        subtitle = extension.description.takeIf { it.isNotBlank() },
-        icon = Icons.Default.Extension,
-        containerColor = if (emphasize) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerHigh
-        }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ExpressiveStatusChip(
-                label = stringResource(
-                    if (extension.needsOobe) {
-                        R.string.extension_status_pending_oobe
-                    } else {
-                        R.string.extension_status_oobe_complete
-                    }
-                ),
-                color = chipColor
-            )
-            ExpressiveStatusChip(
-                label = stringResource(
-                    if (extension.isCompanionInstalled) {
-                        R.string.extension_status_companion_ready
-                    } else {
-                        R.string.extension_status_companion_missing
-                    }
-                ),
-                color = if (extension.isCompanionInstalled) {
-                    MaterialTheme.colorScheme.secondary
-                } else {
-                    MaterialTheme.colorScheme.error
-                }
-            )
-        }
-
-        if (extension.summary.isNotBlank()) {
-            Text(
-                text = extension.summary,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        if (!extension.isCompanionInstalled) {
-            Text(
-                text = stringResource(R.string.extension_missing_companion_desc, extension.companionLabel()),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (!extension.isCompanionInstalled) {
-                Button(
-                    onClick = { onInstall(extension) },
-                    enabled = extension.companionDownloadUrl.isNotBlank()
-                ) {
-                    Icon(Icons.Default.InstallMobile, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.extension_install_action))
-                }
-            } else {
-                if (extension.canLaunchServiceActivity) {
-                    Button(onClick = { onOpenService(extension) }) {
-                        Icon(Icons.Default.OpenInNew, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.extension_run_service_action))
-                    }
-                } else if (extension.canLaunchOobe) {
-                    Button(onClick = { onOpenOobe(extension) }) {
-                        Icon(Icons.Default.Build, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.extension_run_oobe_action))
-                    }
-                }
-            }
-
-            Button(onClick = { onReset(extension) }) {
-                Text(stringResource(R.string.extension_reset_action))
-            }
-        }
-    }
-}
+private fun ExtensionItemState.resolve(
+    presented: Map<ExtensionItemState, AbkManagedExtension>,
+): AbkManagedExtension = presented[this] ?: error("Unknown extension $id")
 
 private suspend fun installExtensionCompanion(
     context: Context,

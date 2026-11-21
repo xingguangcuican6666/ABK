@@ -42,14 +42,12 @@
 | 设置子页：主题/背景/透明度/模糊、预测返回偏好 | 已重铺；两版目标 CI 成功 | 普通卡面、纵向主题/颜色选项、受控开关和透明度滑杆；9 项假回调 UI 测试在两版 instrumentation 中编译，标准主机测试通过，设备未执行；图片选择器、权限与离页同步留在宿主 |
 | 设置子页：管理器工具、内核能力 | 已重铺；两版目标 CI 成功 | 普通卡面、受控 SELinux 开关、全宽备份/恢复、纵向 TCP 选择；10 项假回调 UI 测试在两版 instrumentation 中编译，标准主机测试通过，设备未执行；文件选择器、权限与 Root 操作留在原宿主/后端 |
 | 设置子页：profile 模板 | 已重铺；两版目标 CI 成功 | 普通卡面、带选中语义的模板列表、外置等宽字段与全宽操作；11 项假回调 UI 测试有界编译，设备未执行；原宿主继续持有草稿、内容同步及显式保存/删除 |
-| 设置子页：关于仓库、贡献者、开源许可 | 已重铺；本批目标 CI 待验证 | 普通卡面与 Lucide 图标；6 条仓库链接（后四条字面英文、README 固定 `blob/main`）、28 位贡献者顺序与 `@name`/profile 链接、5 组全部 notice 名称/许可/来源/可空链接及 `" · "` 副标题规则逐字保留；许可分组可折叠但默认收起、可恢复展开状态、无任何条目被删减；6 项假回调 UI 测试有界编译，设备未执行 |
-| 设置子页：扩展管理 | 待页面重铺 | 扩展生命周期、能力授权与缺失伴随应用弹层保持不变 |
-| 设置弹层：签名密钥导入、计时安全确认、源码凭据编辑/删除 | 已重铺；两版目标 CI 成功 | 两次独立 5 秒关闭确认及重置计时不变；私钥/PAT 掩码显示，导入/凭据操作中限制编辑与关闭 |
+| 设置子页：关于仓库、贡献者、开源许可 | 已重铺；两版目标 CI 成功 | 普通卡面与 Lucide 图标；6 条仓库链接（后四条字面英文、README 固定 `blob/main`）、28 位贡献者顺序与 `@name`/profile 链接、5 组全部 notice 名称/许可/来源/可空链接及 `" · "` 副标题规则逐字保留；许可分组可折叠但默认收起、可恢复展开状态、无任何条目被删减；6 项假回调 UI 测试有界编译，设备未执行 |
+| 设置子页/独立 Activity：扩展管理 | 已重铺；本批目标 CI 待验证 | 设置内嵌页面与独立 Activity 复用受控呈现组件；bootstrap 引导、聚焦条目、安装/服务/OOBE/重置操作仍映射到真实宿主模型及原回调；6 项假回调 UI 测试有界编译，设备未执行 |
 | 设置弹层：Runner 设置 | 已重铺；两版目标 CI 成功 | 保留 fork/配置快照与保存版本隔离草稿、标签 trim、支持/忙碌门控及显式保存；13 项假回调 UI 测试在两版 instrumentation 中编译，标准主机测试通过，设备未执行 |
 | 设置选择器：主题模式/颜色、下载目录 | 主题选择已在外观页重铺；下载目录使用原系统流程 | 主题/颜色为页内纵向选择，不新增弹层；系统图片和目录选择器不是 App 自有 UI，继续保留 ActivityResult 与 URI 权限流程 |
 | OOBE：介绍、Root 检查、OAuth/PAT、设备码、Fork 检查/错误 | 待页面重铺 | 不因重组布局重复发起登录、授权、Fork 或同步 |
 | 宿主：条款、偏好重置、Root 授权恢复、同步提示、通知权限 | 待迁移 | 条款与权限流程保留；不得以关闭弹层绕过条款 |
-| 独立 `AbkExtensionManagerActivity` 及嵌入式扩展管理 | 待页面重铺 | 扩展引导、条目、安装/删除/能力确认保持生命周期和授权边界 |
 | 独立 `AbkExtensionBootstrapActivity` | 待自有 UI 审查/迁移 | 不改扩展执行或启动参数协议 |
 | 独立 `ModuleWebUiActivity` 自有壳、加载/错误/工具栏 | 待迁移 | 第三方 HTML 内容不在重设计范围；桥接权限不扩大 |
 
@@ -73,10 +71,11 @@
 | 设置外观子页批次 `3b1a2d90` | [44929574298](https://github.com/xingguangcuican6666/ABK/actions/runs/44929574298) 成功 | [44929574242](https://github.com/xingguangcuican6666/ABK/actions/runs/44929574242) 成功 | 核对了两版完整提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后的修改 |
 | 设置工具/内核能力批次 `391ed263` | [44931628038](https://github.com/xingguangcuican6666/ABK/actions/runs/44931628038) 成功 | [44931627979](https://github.com/xingguangcuican6666/ABK/actions/runs/44931627979) 成功 | 核对了两版完整提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后的模板页修改 |
 | 设置 profile 模板子页批次 `b5648d1e` | [44934125478](https://github.com/xingguangcuican6666/ABK/actions/runs/44934125478) 成功 | [44934125236](https://github.com/xingguangcuican6666/ABK/actions/runs/44934125236) 成功 | 核对了两版完整提交 SHA 与 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证和工件上传均成功，不覆盖之后关于页修改 |
+| 设置关于/许可子页批次 `6f5e0e26` | [44935807024](https://github.com/xingguangcuican6666/ABK/actions/runs/44935807024) 成功 | [44935807039](https://github.com/xingguangcuican6666/ABK/actions/runs/44935807039) 成功 | 核对了两版均对应完整提交 `6f5e0e26158b341de4307d3b7d3a0aa3ea0f29ce` 且 `completed/success`；标准主机测试、两版 instrumentation 编译、Debug/Release APK 构建、签名验证及工件上传均成功；不覆盖后续扩展管理修改 |
 
 标准测试步骤运行 `:app:compileDebugAndroidTestKotlin :app:testDebugUnitTest :abk-ui:testDebugUnitTest`。Dev 的测试步骤只编译 instrumentation，不能写成 Dev 主机测试已通过。上述步骤均未执行设备端 UI 测试。其他自动内核工作流的状态不混入 App CI 结论，也未手工触发内核构建。
 
-- 上表每次 CI 结论仅覆盖对应提交，不覆盖之后的修改。管理器工具/内核能力已在 `391ed263`、profile 模板页已在 `b5648d1e` 两版目标 CI 验证；之后的关于页修改另行验证，不能沿用该结论。所有设备端 UI 测试均未执行。
+- 上表每次 CI 结论仅覆盖对应提交，不覆盖之后的修改。管理器工具/内核能力已在 `391ed263`、profile 模板页已在 `b5648d1e`、关于/许可页已在 `6f5e0e26` 两版目标 CI 验证；关于/许可的验证不覆盖之后的扩展管理修改。所有设备端 UI 测试均未执行。
 
 ## 本地检查与构建命令
 
@@ -205,6 +204,15 @@ SUSFS 控制批次已完成以下本地检查：
 - 许可分组折叠是纯界面状态，宿主用 `rememberSaveable` 保存已展开索引集合；默认全部收起以减少约 180 个条目的长列表噪音，展开/收起带中英俄 `stateDescription`，没有任何 notice 被省略或改写。这不改变任何业务或后端行为。
 - 全 App 资源经 AAPT2 编译、临时最小 manifest 链接和 `javac --release 11` 资源类生成；新组件、测试和真实宿主切片的中英俄引用、唯一 key 与占位符通过，新增两个折叠状态描述字符串已同步三种语言。临时资源包不是正式 manifest 合并或可安装 App。
 - 真实库、关于/模板/工具/外观宿主摘录、新增 6 项 `SettingsAboutUiTest` 与既有 72 项设置 UI 测试在缓存 Kotlin/Compose 2.2.21、JVM 11 下有界编译通过；原 4 项文本状态测试由 JUnitCore 实际执行通过。6 项假回调测试覆盖版本/链接/贡献者顺序与回调、许可入口不误触 URL、折叠隐藏并保留全部条目、可空链接不可点、`" · "` 规则及展开状态恢复，仅验证源码编译，未在设备执行。完整设置临时副本通过 formatter 语法解析；本机已知目标 Gradle 缓存阻断未解决，未把有界检查当成目标构建。检查脚本、替身、日志与产物均留在仓库外。
+
+设置扩展管理页批次已完成以下本地检查：
+
+- 独立 `AbkExtensionManagerActivity` 和设置内嵌入口共用受控的扩展列表呈现组件。空态、bootstrap 引导、聚焦扩展、伴生应用/OOBE 状态、能力操作和缺失伴生应用对话框均使用 `:abk-ui` 控件；按钮宽度适配窄屏，信息状态同时有文字，不依赖颜色区分。
+- 宿主继续持有扩展模型、生命周期刷新、返回锁、bootstrap 自动启动去重、安装下载、安装后 OOBE 检查、服务/OOBE 启动、Toast 和 `RootUtils.clearAbkExtensionState`。以 `ExtensionItemState` 呈现，再通过当前扩展 map 回到原始模型调用原处理函数；没有把安装/Root/启动操作移入 UI 组件。
+- 与批次起点逐字比对，refresh/lifecycle、launch/install/reset/autolaunch 逻辑片段及 `installExtensionCompanion` 下载/安装 helper 保持一致；只替换布局、Material 图标和对话框组件，并增加呈现模型映射。设置内嵌的外部导航和独立 Activity 的 Intent 参数未改。
+- AAPT2 资源编译及临时最小 manifest 链接、Java 11 资源类生成通过；组件和 6 项 UI 测试引用的资源在默认中文、英文、俄文中存在。全 App 现有字符串集合本身未因本批改动。
+- 真实 `:abk-ui` 源码、扩展宿主必要模型切片、Activity 页面切片、受控组件及 6 项 `ExtensionManagerUiTest` 在缓存 Kotlin 2.2.21/Compose 环境有界编译通过；使用测试替身缩减未涉及的宿主依赖，不覆盖目标 Kotlin/Material3、正式完整宿主或 Gradle/APK 构建。测试覆盖空态、缺安装 URL 时按钮禁用、服务优先级、OOBE/重置回调、bootstrap 聚焦条目和对话框门控；使用 320dp/2×字体/RTL，源码已编译但未在设备执行。
+- About/许可边界验证在脚本白名单加入本批宿主 Activity 路径后重新通过；证实既有页面数据与呈现边界未被扩展改动破坏。组件和测试经 ktfmt 检查，扩展业务片段比对通过，`git diff --check` 通过。检查脚本、替身、资源包、日志与编译产物均留在仓库外。本批目标 CI 待验证；设备、Root、安装和扩展启动操作未执行。
 
 ## 未完成的验收
 
