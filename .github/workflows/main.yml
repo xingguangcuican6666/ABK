@@ -108,14 +108,10 @@ on:
         default: false
 
       # ==================== ZRAM 扩展选项 ====================
-      zram_full_algo:
-        description: "启用 ZRAM 完整算法支持（6.12 自动跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS）"
-        type: boolean
-        default: false
-      zram_extra_algos:
-        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；6.12 会忽略 lz4k/lz4kd/lz4k_oplus）"
+      zram_options:
+        description: 'ZRAM 扩展选项 JSON，例如 {"full_algo":true,"extra_algos":"lzo,lz4"}；6.12 会忽略 legacy LZ4K/LZ4KD/LZ4K_OPLUS'
         type: string
-        default: ""
+        default: '{"full_algo":false,"extra_algos":""}'
         required: false
 
       # ==================== KPM 扩展选项 ====================
@@ -135,16 +131,11 @@ on:
         type: string
         default: ""
 
-      ksuhook_modules:
-        description: "KernelSU 补丁模块仓库（用 | 分隔，每项 repo_url[@ref]，按 module.prop depends 分组）"
+      ksuhook_options:
+        description: 'KernelSU hook 模块选项 JSON，例如 {"modules":"repo_url[@ref]|...","sdk_ref":"<commit>"}；空值使用默认 SDK'
         required: false
         type: string
-        default: ""
-      ksuhook_sdk_ref:
-        description: "NyaSU SDK 固定 commit（留空=使用 build.yml 默认值）"
-        required: false
-        type: string
-        default: ""
+        default: '{"modules":"","sdk_ref":""}'
 
       # ==================== 构建版本选择 ====================
       build_a12_5_10:
@@ -202,12 +193,12 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
       virtualization_support: ${{ inputs.virtualization_support }}
-      zram_full_algo: ${{ inputs.zram_full_algo }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
+      zram_full_algo: ${{ fromJSON(inputs.zram_options || '{"full_algo":false,"extra_algos":""}').full_algo || false }}
+      zram_extra_algos: ${{ fromJSON(inputs.zram_options || '{"full_algo":false,"extra_algos":""}').extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
-      ksuhook_modules: ${{ inputs.ksuhook_modules || '' }}
-      ksuhook_sdk_ref: ${{ inputs.ksuhook_sdk_ref || '' }}
+      ksuhook_modules: ${{ fromJSON(inputs.ksuhook_options || '{"modules":"","sdk_ref":""}').modules || '' }}
+      ksuhook_sdk_ref: ${{ fromJSON(inputs.ksuhook_options || '{"modules":"","sdk_ref":""}').sdk_ref || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       called_from_main: true
 
@@ -230,12 +221,12 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
       virtualization_support: ${{ inputs.virtualization_support }}
-      zram_full_algo: ${{ inputs.zram_full_algo }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
+      zram_full_algo: ${{ fromJSON(inputs.zram_options || '{"full_algo":false,"extra_algos":""}').full_algo || false }}
+      zram_extra_algos: ${{ fromJSON(inputs.zram_options || '{"full_algo":false,"extra_algos":""}').extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
-      ksuhook_modules: ${{ inputs.ksuhook_modules || '' }}
-      ksuhook_sdk_ref: ${{ inputs.ksuhook_sdk_ref || '' }}
+      ksuhook_modules: ${{ fromJSON(inputs.ksuhook_options || '{"modules":"","sdk_ref":""}').modules || '' }}
+      ksuhook_sdk_ref: ${{ fromJSON(inputs.ksuhook_options || '{"modules":"","sdk_ref":""}').sdk_ref || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       called_from_main: true
 
@@ -258,12 +249,12 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
       virtualization_support: ${{ inputs.virtualization_support }}
-      zram_full_algo: ${{ inputs.zram_full_algo }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
+      zram_full_algo: ${{ fromJSON(inputs.zram_options || '{"full_algo":false,"extra_algos":""}').full_algo || false }}
+      zram_extra_algos: ${{ fromJSON(inputs.zram_options || '{"full_algo":false,"extra_algos":""}').extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
-      ksuhook_modules: ${{ inputs.ksuhook_modules || '' }}
-      ksuhook_sdk_ref: ${{ inputs.ksuhook_sdk_ref || '' }}
+      ksuhook_modules: ${{ fromJSON(inputs.ksuhook_options || '{"modules":"","sdk_ref":""}').modules || '' }}
+      ksuhook_sdk_ref: ${{ fromJSON(inputs.ksuhook_options || '{"modules":"","sdk_ref":""}').sdk_ref || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       called_from_main: true
 
@@ -286,12 +277,12 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
       virtualization_support: ${{ inputs.virtualization_support }}
-      zram_full_algo: ${{ inputs.zram_full_algo }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
+      zram_full_algo: ${{ fromJSON(inputs.zram_options || '{"full_algo":false,"extra_algos":""}').full_algo || false }}
+      zram_extra_algos: ${{ fromJSON(inputs.zram_options || '{"full_algo":false,"extra_algos":""}').extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
-      ksuhook_modules: ${{ inputs.ksuhook_modules || '' }}
-      ksuhook_sdk_ref: ${{ inputs.ksuhook_sdk_ref || '' }}
+      ksuhook_modules: ${{ fromJSON(inputs.ksuhook_options || '{"modules":"","sdk_ref":""}').modules || '' }}
+      ksuhook_sdk_ref: ${{ fromJSON(inputs.ksuhook_options || '{"modules":"","sdk_ref":""}').sdk_ref || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       called_from_main: true
 
@@ -314,12 +305,12 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
       virtualization_support: ${{ inputs.virtualization_support }}
-      zram_full_algo: ${{ inputs.zram_full_algo }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
+      zram_full_algo: ${{ fromJSON(inputs.zram_options || '{"full_algo":false,"extra_algos":""}').full_algo || false }}
+      zram_extra_algos: ${{ fromJSON(inputs.zram_options || '{"full_algo":false,"extra_algos":""}').extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
-      ksuhook_modules: ${{ inputs.ksuhook_modules || '' }}
-      ksuhook_sdk_ref: ${{ inputs.ksuhook_sdk_ref || '' }}
+      ksuhook_modules: ${{ fromJSON(inputs.ksuhook_options || '{"modules":"","sdk_ref":""}').modules || '' }}
+      ksuhook_sdk_ref: ${{ fromJSON(inputs.ksuhook_options || '{"modules":"","sdk_ref":""}').sdk_ref || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       called_from_main: true
 
@@ -341,12 +332,12 @@ jobs:
       use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
       virtualization_support: ${{ inputs.virtualization_support }}
-      zram_full_algo: ${{ inputs.zram_full_algo }}
-      zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
+      zram_full_algo: ${{ fromJSON(inputs.zram_options || '{"full_algo":false,"extra_algos":""}').full_algo || false }}
+      zram_extra_algos: ${{ fromJSON(inputs.zram_options || '{"full_algo":false,"extra_algos":""}').extra_algos || '' }}
       kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
-      ksuhook_modules: ${{ inputs.ksuhook_modules || '' }}
-      ksuhook_sdk_ref: ${{ inputs.ksuhook_sdk_ref || '' }}
+      ksuhook_modules: ${{ fromJSON(inputs.ksuhook_options || '{"modules":"","sdk_ref":""}').modules || '' }}
+      ksuhook_sdk_ref: ${{ fromJSON(inputs.ksuhook_options || '{"modules":"","sdk_ref":""}').sdk_ref || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       called_from_main: true
 
