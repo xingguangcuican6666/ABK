@@ -961,11 +961,12 @@ class JsonContractTests(unittest.TestCase):
 
         self.assertEqual(1, exit_code)
         self.assertFalse(payload["ok"])
-        self.assertEqual(5, payload["total"])
-        self.assertEqual(5, len(payload["dispatches"]))
+        # --matrix both 展开 a12..a17 共 6 个 target；第 2 个 dispatch 失败，故剩 5 个 run。
+        self.assertEqual(6, payload["total"])
+        self.assertEqual(6, len(payload["dispatches"]))
         self.assertEqual(1, sum(item["status"] == "failed" for item in payload["dispatches"]))
         self.assertIsNone(payload["run"])
-        self.assertEqual(4, len(payload["runs"]))
+        self.assertEqual(5, len(payload["runs"]))
         self.assertNotIn("contract-secret", json.dumps(payload))
         self.assertNotIn("contract-secret", stderr)
 

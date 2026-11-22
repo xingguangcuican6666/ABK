@@ -221,9 +221,18 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
         self.assertIn("#endif // #ifdef CONFIG_KSU_SUSFS", block)
 
     def test_android16_uses_native_ntsync_source(self):
+        # android16-6.12 与 android17-6.18 都自带原生 ntsync.c 与 UAPI，基础补丁不再应用。
         block = self._step_run_block("应用 NTsync 补丁")
-        self.assertIn('if [[ "$ABK_ANDROID_VERSION" != "android16"', block)
-        self.assertIn('NTsync 基础源码已由 android16-6.12 内核提供', block)
+        self.assertIn(
+            'if [[ "$ABK_ANDROID_VERSION" == "android16" && "$ABK_KERNEL_VERSION" == "6.12" ]]',
+            block,
+        )
+        self.assertIn(
+            '|| [[ "$ABK_ANDROID_VERSION" == "android17" && "$ABK_KERNEL_VERSION" == "6.18" ]]',
+            block,
+        )
+        self.assertIn('NATIVE_NTSYNC="true"', block)
+        self.assertIn('NTsync 基础源码已由 $', block)
 
     def test_android14_builtin_ntsync_does_not_require_symbol_export(self):
         block = self._step_run_block("应用 NTsync 补丁")
@@ -334,6 +343,61 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
                         self.assertEqual(sentinel.read_text(encoding="utf-8"), "reuse this entry")
                 if use_xdg:
                     self.assertFalse((home / ".cache/bazel-disk").exists())
+
+    def test_bazel_attribute_cleanup_handles_all_known_forms(self):
+        block = textwrap.dedent(self._step_run_block("配置内核名称"))
+        match = re.search(r"<<'PY'\n(?P<body>.*?)\n^PY$", block, re.S | re.M)
+        self.assertIsNotNone(match, "BUILD.bazel cleanup block not found")
+        script = match.group("body")
+
+        cases = {
+            "quoted-dict": (
+                "define_common_kernels(target_configs = {\n"
+                '    "kernel_aarch64": {\n'
+                '        "kmi_symbol_list_strict_mode": True,\n'
+                '        "protected_exports_list": "android/abi_gki_protected_exports_aarch64",\n'
+                '        "makefile": ":Makefile",\n'
+                "    },\n"
+                "})\n"
+            ),
+            "bare-assignment": (
+                "common_kernel(\n"
+                '    name = "kernel_aarch64",\n'
+                "    kmi_symbol_list_strict_mode = True,\n"
+                '    makefile = ":Makefile",\n'
+                ")\n"
+            ),
+            "multi-line-select": (
+                "common_kernel(\n"
+                '    name = "kernel_aarch64",\n'
+                "    kmi_symbol_list_strict_mode = select({\n"
+                '        "//conditions:default": True,\n'
+                "    }),\n"
+                '    makefile = ":Makefile",\n'
+                ")\n"
+            ),
+        }
+        for label, source in cases.items():
+            with self.subTest(form=label):
+                with tempfile.TemporaryDirectory() as tmp:
+                    common = Path(tmp) / "common"
+                    common.mkdir()
+                    target = common / "BUILD.bazel"
+                    target.write_text(source, encoding="utf-8")
+                    result = subprocess.run(
+                        [sys.executable, "-c", script],
+                        cwd=tmp,
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                    )
+                    self.assertEqual(0, result.returncode, result.stderr)
+                    rewritten = target.read_text(encoding="utf-8")
+                    self.assertNotIn("kmi_symbol_list_strict_mode", rewritten)
+                    self.assertNotIn("protected_exports_list", rewritten)
+                    self.assertIn("kernel_aarch64", rewritten)
 
     def _step_run_block(self, name):
         match = re.search(

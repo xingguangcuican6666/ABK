@@ -112,6 +112,7 @@
   "build_target_a14": "Android 14 (6.1)",
   "build_target_a15": "Android 15 (6.6)",
   "build_target_a16": "Android 16 (6.12)",
+  "build_target_a17": "Android 17 (6.18)",
   "build_target_custom": "Custom-Kernel-Build",
   "build_target_oneplus": "OnePlus/Oplus",
   "build_target_full": "Full-Feature-Matrix",

@@ -36,6 +36,7 @@ App 会检查 Fork 默认分支的工作流是否支持这些变量。如果提�
 | `ONEPLUS_SELF_HOSTED` | OnePlus/Oplus 对应开关 | 使用原标签配置 |
 | `KERNEL_LOCAL_CACHE` | GKI 自托管下载缓存；设为 `off` 可关闭 | 自托管启用、GitHub 托管关闭 |
 | `KERNEL_LOCAL_CACHE_DIR` | 缓存根目录，必须是工作目录之外的绝对路径 | `~/.cache/abk-downloads` |
+| `ABK_DROIDSPACES_REF` | 虚拟化补丁仓库的 tag 或 commit，临时覆盖 `config/config` 的 `droidspaces=` | 使用 `config/config`，其默认值为 `v7.1.0` |
 
 单标签直接填文本；多标签使用以 `[` 开头的非空 JSON 字符串数组，不加外层引号或前导空格。一台 runner 必须同时满足全部标签。开关值填写 `true` 或 `false`，不加引号；未保存机器标签时，即使开关为 `true` 也仍使用默认 GitHub runner。离线或没有匹配标签时任务排队，不会自动回退。变量只影响新提交的构建。
 
@@ -100,4 +101,4 @@ Existing clients can also use runner settings configured through repository Acti
 
 The App uses the repository Variables API rather than workflow dispatch inputs. The existing GKI/custom-source input counts remain 25 each; OnePlus remains 12. OAuth/classic tokens require the `repo` scope and appropriate repository access; fine-grained tokens require Variables read/write permission. Unsupported workflows or failed requests are reported. Variable updates are not atomic across fields, so refresh after a partial failure before retrying.
 
-The persistent download cache applies to GKI AOSP manifests, toolchains, SUSFS, AnyKernel3 and common patch repositories. Set `KERNEL_LOCAL_CACHE=off` to opt out, or provide an absolute `KERNEL_LOCAL_CACHE_DIR` outside the workspace. Each build receives independent source files and Git metadata; only immutable Git packs may be hard-linked. Remote refs are checked on every branch build, fixed SUSFS revisions remain pinned, and errors do not silently reuse stale branch data. Cache directories are repository-isolated and locked during updates.
+The persistent download cache applies to GKI AOSP manifests, toolchains, SUSFS, AnyKernel3 and common patch repositories. Set `KERNEL_LOCAL_CACHE=off` to opt out, or provide an absolute `KERNEL_LOCAL_CACHE_DIR` outside the workspace. Each build receives independent source files and Git metadata; only immutable Git packs may be hard-linked. Remote refs are checked on every branch build, fixed SUSFS revisions remain pinned, and errors do not silently reuse stale branch data. Cache directories are repository-isolated and locked during updates. The same cache covers the Droidspaces virtualization patches, which are always checked out at the tag named by `droidspaces=` in `config/config` (`v7.1.0` by default); `ABK_DROIDSPACES_REF` overrides that pin for individual runs without editing the repository.

@@ -20,6 +20,7 @@ TARGETS = {
     ("android14", "6.1"):  ("2023-06", None,       "2024-09"),
     ("android15", "6.6"):  ("2024-10", None,       ""),
     ("android16", "6.12"): ("2025-06", None,       ""),
+    ("android17", "6.18"): ("2026-04", None,       ""),
 }
 
 import binascii

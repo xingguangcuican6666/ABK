@@ -1708,11 +1708,11 @@ int LZ4_compress_fast(const char* src, char* dest, int srcSize, int dstCapacity,
 }
 EXPORT_SYMBOL(LZ4_compress_fast);
 
-int LZ4_compress_default(const char *src, char *dst, int srcSize,
-			 int dstCapacity, void *wrkmem)
+int LZ4_compress_default(const char *source, char *dest, int inputSize,
+			 int maxOutputSize, void *wrkmem)
 {
-	return LZ4_compress_fast_extState(wrkmem, src, dst, srcSize,
-					  dstCapacity, 1);
+	return LZ4_compress_fast_extState(wrkmem, source, dest, inputSize,
+					  maxOutputSize, 1);
 }
 EXPORT_SYMBOL(LZ4_compress_default);
 

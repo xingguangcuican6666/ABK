@@ -69,6 +69,7 @@
     "修复 6.6 WiFi/蓝牙兼容性（三星 + 小米）": "Фикс совместимости WiFi/BT 6.6 (Samsung + Xiaomi)",
     "修复 Official SUSFS 源码兼容": "Фикс совместимости исходников Official SUSFS",
     "修复 BakaSU SUSFS 源码兼容": "Фикс совместимости исходников BakaSU SUSFS",
+    "修复 SukiSU/BakaSU android16-6.12 / android17-6.18 源码兼容": "Фикс совместимости SukiSU/BakaSU для android16-6.12 / android17-6.18",
     "修复 SukiSU/BakaSU android16-6.12 源码兼容": "Фикс совместимости SukiSU/BakaSU для android16-6.12",
     "修复 SukiSU/BakaSU sulog 兼容": "Фикс совместимости sulog в SukiSU/BakaSU",
     "修复 glibc 2.38 兼容性": "Фикс совместимости с glibc 2.38",

@@ -489,6 +489,35 @@ class CommandBehaviorTests(unittest.TestCase):
                     json.loads(inputs_line)["virtualization_support"],
                 )
 
+    def test_custom_source_618_disables_susfs_and_bbg(self):
+        client = RecordingGitHubClient(fork=None)
+        result, output = self._run_build(
+            client,
+            source_repo="https://github.com/acme/kernel",
+            source_ref="main",
+            source_defconfigs=["gki_defconfig"],
+            source_kernel_version="6.18.21",
+            os_patch_level="2026-06",
+            android_version=None,
+            kernel_version=None,
+            sub_level=None,
+            revision=None,
+            ksu_variant=None,
+            susfs=True,
+            bbg=True,
+            dry_run=True,
+        )
+
+        self.assertEqual(0, result, output)
+        inputs_line = next(
+            line.strip().removeprefix("inputs=")
+            for line in output.splitlines()
+            if line.strip().startswith("inputs=")
+        )
+        inputs = json.loads(inputs_line)
+        self.assertEqual("true", inputs["cancel_susfs"])
+        self.assertEqual("false", inputs["use_bbg"])
+
     def test_private_custom_source_requires_configured_secret(self):
         fork = {"full_name": "alice/ABK", "name": "ABK", "owner": {"login": "alice"}}
         common = {

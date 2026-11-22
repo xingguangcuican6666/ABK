@@ -106,6 +106,9 @@ import com.abk.kernel.ui.components.ExpressiveListItem
 import com.abk.kernel.ui.components.ExpressiveTopBar
 import com.abk.kernel.utils.RootUtils
 import com.abk.kernel.data.model.ArtifactType
+import com.abk.kernel.data.model.KSU_VARIANT_BAKASU
+import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
+import com.abk.kernel.data.model.KernelSupport
 import com.abk.kernel.data.repository.PreferencesRepository
 import com.abk.kernel.utils.ArtifactVerification
 import com.abk.kernel.utils.DownloadUtils
@@ -1336,11 +1339,11 @@ internal fun preferredLkmKmiSelection(
     }
 }
 
-private fun String.defaultLkmVariantId(): String {
-    val lower = lowercase()
-    return when {
-        "bakasu" in lower -> "bakasu"
-        "sukisu" in lower -> "sukisu"
+private fun String.defaultLkmVariantId(): String =
+    // Shared classifier: the retired "ReSukiSU" spelling contains "sukisu" and must
+    // resolve to the BakaSU LKM bundle, not the SukiSU one.
+    when (KernelSupport.inferRuntimeKsuFamily(this)) {
+        KSU_VARIANT_BAKASU -> "bakasu"
+        KSU_VARIANT_SUKISU -> "sukisu"
         else -> "kernelsu"
     }
-}

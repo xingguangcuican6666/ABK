@@ -77,7 +77,9 @@ OnePlus 构建支持 `android12/5.10`、`android13/5.15`、`android14/6.1`、`an
 
 虚拟化支持会为内核启用 Linux 容器运行所需的 IPC、PID namespace、SysV IPC、POSIX mqueue 等能力，便于在 Android 上运行完整 Linux 环境、搭建开发环境或运行服务。
 
-**支持范围：** 5.10 / 5.15 / 6.1 / 6.6 / 6.12
+补丁与配置清单来自上游 [`ravindu644/Droidspaces-OSS`](https://github.com/ravindu644/Droidspaces-OSS)，按 tag 钉版而非跟随 HEAD：默认 `v7.1.0`，可在 [`config/config`](config/config) 用 `droidspaces=` 改成其它 tag 或 commit，也可用仓库变量 `ABK_DROIDSPACES_REF` 临时覆盖（优先级：仓库变量 > `config/config` > 默认值）。构建日志会打印本次使用的 `Droidspaces-OSS@<tag> (<sha>)`。
+
+**支持范围：** 5.10 / 5.15 / 6.1 / 6.6 / 6.12 / 6.18
 
 **使用方式：** 在手动触发构建时，选择 `虚拟化支持` 选项：
 
@@ -88,9 +90,19 @@ OnePlus 构建支持 `android12/5.10`、`android13/5.15`、`android14/6.1`、`an
 | `123` | 使用 1_2_3 槽位补丁（备用） |
 | `345` | 使用 3_4_5 槽位补丁（备用） |
 
-> **提示：** 6.12 内核仅有一个补丁，选择任意非关闭选项即可。
+> **提示：** 6.12 与 6.18 内核仅有一个补丁（`kernel-6.12/` 目录下的 6.12-or-above），选择任意非关闭选项即可，槽位选项会被归一化为 `on`。
+>
+> **关于槽位：** 上游补丁按固定上下文书写，`6_7_8` 在当前全部 ACK 线（5.10/5.15/6.1/6.6/6.12/6.18）都能干净应用；`1_2_3` 与 `3_4_5` 在多数分支会 reject，因为 `task_struct` 的预留槽位已被占用（5.10 占用 1、2；5.15 占用 1；6.1 占用 1、2、3；6.6 占用 1、2）。reject 后工作流会按所选槽位就地改写 `include/linux/sched.h`，因此 `345` 在 5.10/5.15/6.6 上仍然可用（6.12 走独立补丁，不受槽位影响）；若槽位确实被占用，会明确报错并提示改用 `678`，而不是静默产出破坏 kABI 的内核。
 
-**如果构建失败或刷入后 bootloop：** 可尝试切换到其他槽位补丁（如 678 → 123 或 345），不同内核子版本可能适用不同的补丁。
+**启用后写入的内核配置**（上游 v7.1.0 GKI 清单，按内核树实际定义的符号逐项开启，未定义的自动跳过）：
+
+- kABI 必需项：`CONFIG_SYSVIPC`、`CONFIG_POSIX_MQUEUE`、`CONFIG_IPC_NS`、`CONFIG_PID_NS`、`CONFIG_DEVTMPFS`
+- v7.1.0 新增：`CONFIG_USER_NS`（容器内 Docker 的 unsafe procfs 修复）、`CONFIG_IP6_NF_NAT` 与 `CONFIG_IP6_NF_TARGET_MASQUERADE`（NAT66，缺失时 NAT 容器只有 IPv4）、`CONFIG_MACVLAN`（macvlan 网络模式；上游已在 5.15 GKI 树上验证 8423 个导出符号无一变化）
+- 原有可选项：`CONFIG_NETFILTER_XT_MATCH_ADDRTYPE`、`CONFIG_NETFILTER_XT_TARGET_LOG`、`CONFIG_NETFILTER_XT_MATCH_RECENT`、`CONFIG_IP_SET`、`CONFIG_IP_SET_HASH_IP`、`CONFIG_IP_SET_HASH_NET`、`CONFIG_NETFILTER_XT_SET`、`CONFIG_NETFILTER_XT_TARGET_REJECT`/`CONFIG_IP_NF_TARGET_REJECT`、`CONFIG_TMPFS_XATTR`、`CONFIG_TMPFS_POSIX_ACL`
+
+> **不会启用的项：** 上游明确要求 GKI 上保持关闭 `CONFIG_CFS_BANDWIDTH`（`--cpus`）与 `CONFIG_CGROUP_PIDS`（`--pids-limit`）。二者会改变调度器与 cgroup 结构体大小，在 5.15 GKI 树上改动约四千个导出符号的校验和，且没有任何 kABI 补丁可以覆盖；ABK 只产出 `boot.img`，无法同时重刷 `vendor_boot` / `vendor_dlkm` / `system_dlkm`，强行开启会让原厂厂商模块拒绝加载并 bootloop。集成步骤会校验这两项没有被本次构建打开（`android16-6.12` 的 stock `gki_defconfig` 自带 `CONFIG_CFS_BANDWIDTH=y`，属于上游基线，保持原样）。因此容器内 `--cpus` 与 `--pids-limit` 会被跳过并给出警告，内存限制不受影响。
+
+**如果构建失败或刷入后 bootloop：** 可尝试切换到其他槽位补丁（如 678 → 123 或 345），不同内核子版本可能适用不同的补丁。5.10 除 SYSVIPC 补丁外还会应用 `002.5.10_or_lower_use_android_abi_padding_for_posix_mqueue.patch`。
 - 刷写内核属于高风险操作，可能导致无法开机、数据损坏或需要恢复出厂 boot 镜像。
 - 不建议在不确定设备分区、内核版本、Android 版本和安全补丁级别时强行构建或刷写。
 - 一加 ColorOS/OxygenOS 13 / 14 / 15 / 16 等设备兼容性仍需自行验证，异常情况下可能需要清除数据。

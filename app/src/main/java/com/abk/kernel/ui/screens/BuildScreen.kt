@@ -1749,11 +1749,12 @@ fun BuildScreen(
                 if (isOnePlusBuild) {
                     val proxyAllowed = !config.onePlusCpu.startsWith("mt")
                     val onePlusSusfsSupported = KernelSupport.onePlusSusfsSupported(config.androidVersion, config.kernelVersion)
+                    val susfsSelectable = KernelSupport.isSusfsSelectable(config.kernelsuVariant)
                     val onePlusLz4kdSupported = KernelSupport.onePlusLz4kdSupported(config.kernelVersion)
                     SwitchRow(
                         stringResource(R.string.build_enable_susfs),
                         !config.cancelSusfs && onePlusSusfsSupported,
-                        enabled = !noRootScheme && onePlusSusfsSupported
+                        enabled = !noRootScheme && onePlusSusfsSupported && susfsSelectable
                     ) {
                         vm.updateBuildConfig(KernelSupport.normalize(config.copy(cancelSusfs = !it)))
                     }
@@ -1805,13 +1806,20 @@ fun BuildScreen(
                         vm.updateBuildConfig(config.copy(onePlusUseUnicodeBypass = it))
                     }
                 } else {
-                    SwitchRow(stringResource(R.string.build_enable_susfs), !config.cancelSusfs, enabled = !noRootScheme) {
+                    val susfsSelectable = KernelSupport.isSusfsSelectable(config.kernelsuVariant)
+                    val bbgSupported = KernelSupport.bbgSupported(config.androidVersion, config.kernelVersion)
+                    val suppOpSupported = KernelSupport.suppOpSupported(config.androidVersion, config.kernelVersion)
+                    SwitchRow(
+                        stringResource(R.string.build_enable_susfs),
+                        !config.cancelSusfs,
+                        enabled = !noRootScheme && susfsSelectable
+                    ) {
                         vm.updateBuildConfig(KernelSupport.normalize(config.copy(cancelSusfs = !it)))
                     }
                     SwitchRow(stringResource(R.string.build_enable_zram), config.useZram) {
                         vm.updateBuildConfig(config.copy(useZram = it))
                     }
-                    SwitchRow(stringResource(R.string.build_enable_bbg), config.useBbg) {
+                    SwitchRow(stringResource(R.string.build_enable_bbg), config.useBbg && bbgSupported, enabled = bbgSupported) {
                         vm.updateBuildConfig(config.copy(useBbg = it))
                     }
                     SwitchRow(stringResource(R.string.build_enable_ddk), config.useDdk) {
@@ -1835,7 +1843,7 @@ fun BuildScreen(
                         options = virtualizationSupportOptions,
                         onSelect = { vm.updateBuildConfig(config.copy(virtualizationSupport = it)) }
                     )
-                    SwitchRow(stringResource(R.string.build_enable_oneplus_8e), config.suppOp) {
+                    SwitchRow(stringResource(R.string.build_enable_oneplus_8e), config.suppOp && suppOpSupported, enabled = suppOpSupported) {
                         vm.updateBuildConfig(config.copy(suppOp = it))
                     }
                 }

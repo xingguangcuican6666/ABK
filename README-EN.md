@@ -78,7 +78,9 @@ To trigger a full matrix across all manager variants for both GKI and OnePlus in
 
 Virtualization support enables the kernel features needed by Linux container environments, including IPC and PID namespaces, SysV IPC, and POSIX mqueue, so Android devices can run full Linux environments for development or services.
 
-**Supported versions:** 5.10 / 5.15 / 6.1 / 6.6 / 6.12
+The patches and the required defconfig list come from upstream [`ravindu644/Droidspaces-OSS`](https://github.com/ravindu644/Droidspaces-OSS), pinned to a tag instead of tracking HEAD: `v7.1.0` by default, overridable through `droidspaces=` in [`config/config`](config/config) or, temporarily, through the repository variable `ABK_DROIDSPACES_REF` (precedence: repository variable > `config/config` > default). The build log prints the `Droidspaces-OSS@<tag> (<sha>)` checkout actually used.
+
+**Supported versions:** 5.10 / 5.15 / 6.1 / 6.6 / 6.12 / 6.18
 
 **Usage:** When triggering a build manually, select the `Virtualization Support` option:
 
@@ -89,9 +91,19 @@ Virtualization support enables the kernel features needed by Linux container env
 | `123` | Use 1_2_3 slot patch (fallback) |
 | `345` | Use 3_4_5 slot patch (fallback) |
 
-> **Note:** Kernel 6.12 has only one patch — any non-off option will use it.
+> **Note:** Kernels 6.12 and 6.18 have only one patch (the 6.12-or-above one under `kernel-6.12/`); any non-off option uses it and slot choices are normalized to `on`.
+>
+> **About slots:** upstream hunks are written against a fixed context, and `6_7_8` applies cleanly on every current ACK line (5.10/5.15/6.1/6.6/6.12/6.18). `1_2_3` and `3_4_5` reject on most branches because the `task_struct` reserve slots are already taken (5.10 uses 1 and 2; 5.15 uses 1; 6.1 uses 1, 2 and 3; 6.6 uses 1 and 2). When a hunk rejects, the workflow rewrites `include/linux/sched.h` in place for the selected slot, so `345` still works on 5.10/5.15/6.6 (6.12 uses its own patch and ignores the slot); when the slot really is occupied it fails with an explicit message pointing at `678` instead of silently producing a kernel that breaks kABI.
 
-**If the build fails or bootloops after flashing:** Try switching to a different slot patch (e.g. 678 → 123 or 345). Different kernel sub-levels may require different patches.
+**Kernel options written when enabled** (the upstream v7.1.0 GKI list; each symbol is applied only where the kernel tree defines it, and undefined ones are skipped):
+
+- kABI prerequisites: `CONFIG_SYSVIPC`, `CONFIG_POSIX_MQUEUE`, `CONFIG_IPC_NS`, `CONFIG_PID_NS`, `CONFIG_DEVTMPFS`
+- New in v7.1.0: `CONFIG_USER_NS` (the Docker unsafe-procfs fix), `CONFIG_IP6_NF_NAT` and `CONFIG_IP6_NF_TARGET_MASQUERADE` (NAT66; without them NAT containers are IPv4 only), and `CONFIG_MACVLAN` (macvlan mode; upstream measured no change across 8423 exported symbols on a 5.15 GKI tree)
+- Existing optional ones: `CONFIG_NETFILTER_XT_MATCH_ADDRTYPE`, `CONFIG_NETFILTER_XT_TARGET_LOG`, `CONFIG_NETFILTER_XT_MATCH_RECENT`, `CONFIG_IP_SET`, `CONFIG_IP_SET_HASH_IP`, `CONFIG_IP_SET_HASH_NET`, `CONFIG_NETFILTER_XT_SET`, `CONFIG_NETFILTER_XT_TARGET_REJECT`/`CONFIG_IP_NF_TARGET_REJECT`, `CONFIG_TMPFS_XATTR`, `CONFIG_TMPFS_POSIX_ACL`
+
+> **Never enabled:** upstream requires `CONFIG_CFS_BANDWIDTH` (`--cpus`) and `CONFIG_CGROUP_PIDS` (`--pids-limit`) to stay off on GKI. Both resize scheduler and cgroup structures, changing the checksum of roughly four thousand exported symbols on a 5.15 GKI tree, and no kABI patch covers them. ABK only produces `boot.img` and cannot rebuild and reflash `vendor_boot`, `vendor_dlkm` and `system_dlkm` together with it, so enabling them would make stock vendor modules refuse to load and bootloop the device. The integration step verifies neither was turned on by this build (the stock `gki_defconfig` of `android16-6.12` ships `CONFIG_CFS_BANDWIDTH=y` as part of the upstream baseline and is left as is). Containers therefore skip `--cpus` and `--pids-limit` with a warning; memory limits are unaffected.
+
+**If the build fails or bootloops after flashing:** Try switching to a different slot patch (e.g. 678 → 123 or 345). Different kernel sub-levels may require different patches. On 5.10, `002.5.10_or_lower_use_android_abi_padding_for_posix_mqueue.patch` is applied in addition to the SYSVIPC patch.
 - Flashing kernels is high-risk and may cause boot failure, data loss, or require restoring a stock boot image.
 - Do not build or flash if you are unsure about the target partition, kernel version, Android version, or security patch level.
 - OnePlus ColorOS/OxygenOS 13 / 14 / 15 / 16 compatibility still needs device-side validation and may require data wiping in failure cases.

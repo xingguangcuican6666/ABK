@@ -53,17 +53,17 @@ on:
         type: boolean
         default: true
       use_zram:
-        description: "启用 ZRAM 增强算法（6.12 跳过 legacy LZ4K 栈）"
+        description: "启用 ZRAM 增强算法（6.12/6.18 跳过 legacy LZ4K 栈）"
         required: false
         type: boolean
         default: true
       zram_full_algo:
-        description: "启用 ZRAM 完整算法支持（6.12 自动跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS）"
+        description: "启用 ZRAM 完整算法支持（6.12/6.18 自动跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS）"
         required: false
         type: boolean
         default: true
       zram_extra_algos:
-        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；6.12 会忽略 lz4k/lz4kd/lz4k_oplus）"
+        description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；6.12/6.18 会忽略 lz4k/lz4kd/lz4k_oplus）"
         required: false
         type: string
         default: ""
@@ -103,7 +103,7 @@ on:
         type: boolean
         default: true
       virtualization_support:
-        description: "虚拟化支持 (5.10~6.6: 槽位补丁, 6.12: 开/关；on 在 5.10~6.6 自动使用 678)"
+        description: "虚拟化支持 (5.10~6.6: 槽位补丁, 6.12/6.18: 开/关；on 在 5.10~6.6 自动使用 678)"
         required: false
         type: choice
         options:
@@ -295,6 +295,9 @@ jobs:
                   "kernel_version": kernel_version,
                   "sub_level": sub_level,
                   "os_patch_level": os_patch_level,
+                  "line_supported": not (
+                      android_version == "android17" and kernel_version == "6.18"
+                  ),
               }
               key = (android_version, kernel_version, sub_level)
               if key not in latest or os_patch_level > latest[key]["os_patch_level"]:
@@ -306,6 +309,7 @@ jobs:
               "android14": 14,
               "android15": 15,
               "android16": 16,
+              "android17": 17,
           }
 
           def version_key(value):
@@ -342,8 +346,8 @@ jobs:
               summary.write(f"- 修订版本: {env_value('MATRIX_REVISION')}\n")
               summary.write(f"- 构建时间: {env_value('MATRIX_BUILD_TIME', '当前 UTC')}\n")
               summary.write(f"- SUSFS: {env_enabled('MATRIX_ENABLE_SUSFS')}\n")
-              summary.write(f"- ZRAM: {env_enabled('MATRIX_USE_ZRAM')}（6.12 自动 off）\n")
-              summary.write(f"- ZRAM 完整算法: {env_enabled('MATRIX_ZRAM_FULL_ALGO')}（6.12 自动 off）\n")
+              summary.write(f"- ZRAM: {env_enabled('MATRIX_USE_ZRAM')}（6.12/6.18 自动 off）\n")
+              summary.write(f"- ZRAM 完整算法: {env_enabled('MATRIX_ZRAM_FULL_ALGO')}（6.12/6.18 自动 off）\n")
               summary.write(f"- ZRAM 额外算法: {env_value('MATRIX_ZRAM_EXTRA_ALGOS')}\n")
               summary.write(f"- BBG: {env_enabled('MATRIX_USE_BBG')}\n")
               summary.write(f"- DDK LSM: {env_enabled('MATRIX_USE_DDK')}\n")
@@ -357,7 +361,7 @@ jobs:
               summary.write(f"- 自定义外部模块: {'true' if os.environ.get('MATRIX_CUSTOM_EXTERNAL_MODULES', '').strip() else 'false'}\n")
               summary.write(f"- 自定义外部模块参数: {env_value('MATRIX_CUSTOM_EXTERNAL_MODULES')}\n")
               summary.write(f"- 上传辅助产物: {env_enabled('MATRIX_UPLOAD_AUX_ARTIFACTS')}\n")
-              summary.write("- Android16/6.12: ZRAM off\n")
+              summary.write("- Android16/6.12 与 Android17/6.18: 跳过 legacy LZ4K 补丁栈；Android17/6.18 额外关闭 SUSFS/BBG/一加8E\n")
               summary.write("- LTS: 已排除\n\n")
               for combo in sorted(counts):
                   summary.write(f"- {combo}: {counts[combo]}\n")
@@ -386,15 +390,15 @@ jobs:
       revision: ${{ inputs.revision || '' }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
-      use_bbg: ${{ inputs.use_bbg }}
+      use_bbg: ${{ inputs.use_bbg && matrix.line_supported }}
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync }}
       use_networking: ${{ inputs.use_networking }}
       use_kpm: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'BakaSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      enable_susfs: ${{ inputs.enable_susfs }}
-      supp_op: ${{ inputs.supp_op }}
-      virtualization_support: ${{ inputs.virtualization_support == 'off' && 'off' || (matrix.kernel_version == '6.12' && 'on' || (inputs.virtualization_support == 'on' && '678' || inputs.virtualization_support)) }}
+      enable_susfs: ${{ inputs.enable_susfs && matrix.line_supported }}
+      supp_op: ${{ inputs.supp_op && matrix.line_supported }}
+      virtualization_support: ${{ inputs.virtualization_support == 'off' && 'off' || ((matrix.kernel_version == '6.12' || matrix.kernel_version == '6.18') && 'on' || (inputs.virtualization_support == 'on' && '678' || inputs.virtualization_support)) }}
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
       kpm_password: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'BakaSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
@@ -481,7 +485,7 @@ jobs:
           if [ "$VIRTUALIZATION_SUPPORT" = "off" ]; then
             virtualization_support_label="off"
           else
-            virtualization_support_label="${VIRTUALIZATION_SUPPORT}（6.12 自动使用 on）"
+            virtualization_support_label="${VIRTUALIZATION_SUPPORT}（6.12/6.18 自动使用 on）"
           fi
 
           release_metadata="$(
@@ -552,7 +556,7 @@ jobs:
             echo "- Release 标题: ${release_title}"
             echo "- 虚拟化支持: ${VIRTUALIZATION_SUPPORT}"
             echo "- SUSFS: ${ENABLE_SUSFS}"
-            echo "- ZRAM: ${USE_ZRAM}（6.12 自动 off）"
+            echo "- ZRAM: ${USE_ZRAM}（6.12/6.18 自动 off）"
             echo "- BBG: ${USE_BBG}"
             echo "- DDK LSM: ${USE_DDK}"
             echo "- NTsync: ${USE_NTSYNC}"
