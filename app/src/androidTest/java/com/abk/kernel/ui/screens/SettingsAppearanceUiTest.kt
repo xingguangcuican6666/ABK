@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.abk.kernel.R
+import com.abk.kernel.data.model.CustomFontSelection
 import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -81,6 +82,7 @@ class SettingsAppearanceUiTest {
         dynamicColorEnabled: Boolean = true,
         customThemeColorArgb: Int? = null,
         customAccentColorArgb: Int? = null,
+        customFont: CustomFontSelection? = null,
         backgroundUri: String? = null,
         backgroundImageEnabled: Boolean = false,
         blurEnabled: Boolean = false,
@@ -89,6 +91,8 @@ class SettingsAppearanceUiTest {
         onThemeModeChange: (String) -> Unit = {},
         onDynamicColorEnabledChange: (Boolean, Int?, Int?) -> Unit = { _, _, _ -> },
         onCustomThemeColorsChange: (Int, Int) -> Unit = { _, _ -> },
+        onImportFont: () -> Unit = {},
+        onUseSystemFont: () -> Unit = {},
         onChooseBackground: () -> Unit = {},
         onBackgroundImageChange: (String?) -> Unit = {},
         onBackgroundImageEnabledChange: (Boolean) -> Unit = {},
@@ -105,6 +109,7 @@ class SettingsAppearanceUiTest {
             dynamicColorEnabled = dynamicColorEnabled,
             customThemeColorArgb = customThemeColorArgb,
             customAccentColorArgb = customAccentColorArgb,
+            customFont = customFont,
             backgroundUri = backgroundUri,
             backgroundImageEnabled = backgroundImageEnabled,
             uiSurfaceAlpha = 0.5f,
@@ -114,6 +119,8 @@ class SettingsAppearanceUiTest {
             onThemeModeChange = onThemeModeChange,
             onDynamicColorEnabledChange = onDynamicColorEnabledChange,
             onCustomThemeColorsChange = onCustomThemeColorsChange,
+            onImportFont = onImportFont,
+            onUseSystemFont = onUseSystemFont,
             onChooseBackground = onChooseBackground,
             onBackgroundImageChange = onBackgroundImageChange,
             onBackgroundImageEnabledChange = onBackgroundImageEnabledChange,
@@ -123,6 +130,36 @@ class SettingsAppearanceUiTest {
             onBlurBackgroundExpEnabledChange = onBlurBackgroundExpEnabledChange,
             onPredictiveBackEnabledChange = onPredictiveBackEnabledChange,
         )
+    }
+
+    @Test
+    fun fontControlsReflectHostSelectionAndOnlyDispatchExplicitActions() {
+        var selected by mutableStateOf<CustomFontSelection?>(null)
+        val events = mutableListOf<String>()
+        compose.setContent {
+            NarrowContent {
+                Appearance(
+                    customFont = selected,
+                    onImportFont = { events += "import" },
+                    onUseSystemFont = {
+                        events += "system"
+                        selected = null
+                    },
+                )
+            }
+        }
+        compose.onNodeWithText(text(R.string.settings_font_system)).assertExists()
+        compose.runOnIdle { assertEquals(emptyList<String>(), events) }
+        action(R.string.settings_font_import).performScrollTo().performClick()
+        compose.runOnIdle {
+            assertEquals(listOf("import"), events)
+            selected = CustomFontSelection("font-id", "Reader OTF")
+        }
+        compose.onNodeWithText("Reader OTF").assertExists()
+        action(R.string.settings_font_replace).performScrollTo().performClick()
+        action(R.string.settings_font_use_system).performScrollTo().performClick()
+        compose.onNodeWithText(text(R.string.settings_font_system)).assertExists()
+        compose.runOnIdle { assertEquals(listOf("import", "import", "system"), events) }
     }
 
     @Test
@@ -415,6 +452,7 @@ class SettingsAppearanceUiTest {
                         dynamicColorEnabled = true,
                         customThemeColorArgb = null,
                         customAccentColorArgb = null,
+                        customFont = null,
                         backgroundUri = null,
                         backgroundImageEnabled = false,
                         uiSurfaceAlpha = 0.5f,
@@ -424,6 +462,8 @@ class SettingsAppearanceUiTest {
                         onThemeModeChange = { operations++ },
                         onDynamicColorEnabledChange = { _, _, _ -> operations++ },
                         onCustomThemeColorsChange = { _, _ -> operations++ },
+                        onImportFont = { _, _ -> operations++ },
+                        onUseSystemFont = { operations++ },
                         onBackgroundImageChange = { operations++ },
                         onBackgroundImageEnabledChange = { operations++ },
                         onUiSurfaceAlphaChange = { operations++ },

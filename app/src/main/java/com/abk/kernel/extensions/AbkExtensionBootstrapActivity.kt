@@ -28,6 +28,7 @@ class AbkExtensionBootstrapActivity : ComponentActivity() {
             val dynamicColorEnabled by prefs.dynamicColorEnabled.collectAsState(initial = true)
             val customThemeColorArgb by prefs.customThemeColorArgb.collectAsState(initial = null)
             val customAccentColorArgb by prefs.customAccentColorArgb.collectAsState(initial = null)
+            val customFontId by prefs.customFontId.collectAsState(initial = null)
             val customBackgroundUri by prefs.customBackgroundUri.collectAsState(initial = null)
             val backgroundImageEnabled by prefs.backgroundImageEnabled.collectAsState(initial = false)
             val uiSurfaceAlpha by prefs.uiSurfaceAlpha.collectAsState(initial = 1f)
@@ -36,7 +37,8 @@ class AbkExtensionBootstrapActivity : ComponentActivity() {
                 themeMode = themeMode,
                 dynamicColorEnabled = dynamicColorEnabled,
                 customThemeColorArgb = customThemeColorArgb,
-                customAccentColorArgb = customAccentColorArgb
+                customAccentColorArgb = customAccentColorArgb,
+                customFontId = customFontId
             ) {
                 AppBackgroundHost(
                     backgroundUri = customBackgroundUri,

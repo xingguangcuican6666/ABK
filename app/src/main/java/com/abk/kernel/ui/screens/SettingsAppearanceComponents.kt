@@ -60,6 +60,7 @@ internal fun SettingsAppearanceContent(
     dynamicColorEnabled: Boolean,
     customThemeColorArgb: Int?,
     customAccentColorArgb: Int?,
+    customFont: com.abk.kernel.data.model.CustomFontSelection?,
     backgroundUri: String?,
     backgroundImageEnabled: Boolean,
     uiSurfaceAlpha: Float,
@@ -69,6 +70,8 @@ internal fun SettingsAppearanceContent(
     onThemeModeChange: (String) -> Unit,
     onDynamicColorEnabledChange: (Boolean, Int?, Int?) -> Unit,
     onCustomThemeColorsChange: (Int, Int) -> Unit,
+    onImportFont: () -> Unit,
+    onUseSystemFont: () -> Unit,
     onChooseBackground: () -> Unit,
     onBackgroundImageChange: (String?) -> Unit,
     onBackgroundImageEnabledChange: (Boolean) -> Unit,
@@ -103,6 +106,31 @@ internal fun SettingsAppearanceContent(
                     ),
                 selectedId = themeMode,
                 onSelect = onThemeModeChange,
+            )
+        }
+        SettingsMainCard(stringResource(R.string.settings_font_experimental)) {
+            Text(stringResource(R.string.settings_font_experimental_desc), color = AbkTheme.colors.inkMuted)
+            Text(
+                customFont?.displayName ?: stringResource(R.string.settings_font_system),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            if (customFont != null) {
+                FlashAction(
+                    stringResource(R.string.settings_font_use_system),
+                    AbkIcons.Refresh,
+                    onUseSystemFont,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            FlashAction(
+                stringResource(if (customFont == null) R.string.settings_font_import else R.string.settings_font_replace),
+                AbkIcons.Upload,
+                onImportFont,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                stringResource(R.string.settings_font_preview_sample),
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
         SettingsMainCard(stringResource(R.string.settings_color_source)) {

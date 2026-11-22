@@ -172,7 +172,8 @@ class MainActivity : ComponentActivity() {
                 themeMode = state.themeMode,
                 dynamicColorEnabled = state.dynamicColorEnabled,
                 customThemeColorArgb = state.customThemeColorArgb,
-                customAccentColorArgb = state.customAccentColorArgb
+                customAccentColorArgb = state.customAccentColorArgb,
+                customFontId = state.customFont?.id
             ) {
                 AppBackgroundHost(
                     backgroundUri = state.customBackgroundUri,

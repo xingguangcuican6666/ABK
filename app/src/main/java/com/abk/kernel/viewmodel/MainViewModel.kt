@@ -22,8 +22,10 @@ import com.abk.kernel.R
 import com.abk.kernel.data.model.*
 import com.abk.kernel.data.repository.GitHubRepository
 import com.abk.kernel.data.repository.PreferencesRepository
+import com.abk.kernel.data.model.CustomFontSelection
 import com.abk.kernel.data.repository.Result
 import com.abk.kernel.ui.blur.BlurConfig
+import com.abk.kernel.utils.CustomFontStorage
 import com.abk.kernel.utils.BackgroundImageStorage
 import com.abk.kernel.utils.BuildMonitorService
 import com.abk.kernel.utils.BuildProgressUtils
@@ -204,6 +206,7 @@ data class MainUiState(
     val dynamicColorEnabled: Boolean = true,
     val customThemeColorArgb: Int? = null,
     val customAccentColorArgb: Int? = null,
+    val customFont: CustomFontSelection? = null,
     val customBackgroundUri: String? = null,
     val backgroundImageEnabled: Boolean = false,
     val uiSurfaceAlpha: Float = 1f,
@@ -628,16 +631,22 @@ class MainViewModel @JvmOverloads constructor(
                 prefs.themeMode,
                 prefs.dynamicColorEnabled,
                 prefs.customThemeColorArgb,
-                prefs.customAccentColorArgb
-            ) { mode, dynamicColorEnabled, themeColor, accentColor ->
-                ThemePreferences(mode, dynamicColorEnabled, themeColor, accentColor)
+                prefs.customAccentColorArgb,
+                prefs.customFontId.combine(prefs.customFontName) { id, name ->
+                    if (!id.isNullOrBlank() && !name.isNullOrBlank()) {
+                        CustomFontSelection(id, name)
+                    } else null
+                }
+            ) { mode, dynamicColorEnabled, themeColor, accentColor, font ->
+                ThemePreferences(mode, dynamicColorEnabled, themeColor, accentColor, font)
             }.collect { themePrefs ->
                 _uiState.update {
                     it.copy(
                         themeMode = themePrefs.themeMode,
                         dynamicColorEnabled = themePrefs.dynamicColorEnabled,
                         customThemeColorArgb = themePrefs.customThemeColorArgb,
-                        customAccentColorArgb = themePrefs.customAccentColorArgb
+                        customAccentColorArgb = themePrefs.customAccentColorArgb,
+                        customFont = themePrefs.customFont
                     )
                 }
             }
@@ -1032,6 +1041,7 @@ class MainViewModel @JvmOverloads constructor(
                     dynamicColorEnabled = it.dynamicColorEnabled,
                     customThemeColorArgb = it.customThemeColorArgb,
                     customAccentColorArgb = it.customAccentColorArgb,
+                    customFont = it.customFont,
                     customBackgroundUri = it.customBackgroundUri,
                     backgroundImageEnabled = it.backgroundImageEnabled,
                     uiSurfaceAlpha = it.uiSurfaceAlpha,
@@ -3558,6 +3568,49 @@ class MainViewModel @JvmOverloads constructor(
     fun setCustomThemeColors(themeColorArgb: Int, accentColorArgb: Int) = viewModelScope.launch {
         prefs.setCustomThemeColors(themeColorArgb, accentColorArgb)
     }
+
+    fun importCustomFont(uri: Uri, sourceName: String?) = viewModelScope.launch {
+        val previous = prefs.customFontId.first()
+        val imported = try {
+            withContext(Dispatchers.IO) { CustomFontStorage.import(getApplication(), uri, sourceName) }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: CustomFontStorage.ImportException) {
+            val message = when (error.failure) {
+                CustomFontStorage.Failure.READ -> R.string.settings_font_import_read_failed
+                CustomFontStorage.Failure.EMPTY -> R.string.settings_font_import_empty
+                CustomFontStorage.Failure.TOO_LARGE -> R.string.settings_font_import_too_large
+                CustomFontStorage.Failure.INVALID -> R.string.settings_font_import_invalid
+                CustomFontStorage.Failure.STORAGE -> R.string.settings_font_import_failed
+            }
+            showSnackbar(text(message), longDuration = true)
+            return@launch
+        } catch (error: Exception) {
+            showSnackbar(text(R.string.settings_font_import_failed), longDuration = true)
+            return@launch
+        }
+
+        try {
+            prefs.setCustomFont(imported.id, imported.displayName)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            withContext(Dispatchers.IO) { CustomFontStorage.delete(getApplication(), imported.id) }
+            showSnackbar(text(R.string.settings_font_import_failed), longDuration = true)
+            return@launch
+        }
+        if (previous != imported.id) {
+            withContext(Dispatchers.IO) { CustomFontStorage.delete(getApplication(), previous) }
+        }
+        showSnackbar(text(R.string.settings_font_import_success))
+    }
+
+    fun useSystemFont() = viewModelScope.launch {
+        val previous = prefs.customFontId.first()
+        prefs.clearCustomFont()
+        withContext(Dispatchers.IO) { CustomFontStorage.delete(getApplication(), previous) }
+    }
+
     /**
      * Persists the picked background. `content://` picker URIs are first copied into
      * app-private storage ([BackgroundImageStorage]) so cold starts decode a local file
@@ -7020,7 +7073,8 @@ private data class ThemePreferences(
     val themeMode: String,
     val dynamicColorEnabled: Boolean,
     val customThemeColorArgb: Int?,
-    val customAccentColorArgb: Int?
+    val customAccentColorArgb: Int?,
+    val customFont: CustomFontSelection?
 )
 
 private data class SecuritySigningPreferences(

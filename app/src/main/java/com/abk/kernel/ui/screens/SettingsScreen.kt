@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -398,6 +399,7 @@ fun SettingsScreen(
                         dynamicColorEnabled = state.dynamicColorEnabled,
                         customThemeColorArgb = state.customThemeColorArgb,
                         customAccentColorArgb = state.customAccentColorArgb,
+                        customFont = state.customFont,
                         backgroundUri = state.customBackgroundUri,
                         backgroundImageEnabled = state.backgroundImageEnabled,
                         uiSurfaceAlpha = state.uiSurfaceAlpha,
@@ -411,6 +413,8 @@ fun SettingsScreen(
                         onCustomThemeColorsChange = { themeColor, accentColor ->
                             vm.setCustomThemeColors(themeColor, accentColor)
                         },
+                        onImportFont = vm::importCustomFont,
+                        onUseSystemFont = vm::useSystemFont,
                         onBackgroundImageChange = { uri -> vm.setBackgroundImageUri(uri) },
                         onBackgroundImageEnabledChange = { enabled -> vm.setBackgroundImageEnabled(enabled) },
                         onUiSurfaceAlphaChange = { alpha -> vm.setUiSurfaceAlpha(alpha) },
@@ -1347,6 +1351,7 @@ internal fun ThemeSettingsScreen(
     dynamicColorEnabled: Boolean,
     customThemeColorArgb: Int?,
     customAccentColorArgb: Int?,
+    customFont: com.abk.kernel.data.model.CustomFontSelection?,
     backgroundUri: String?,
     backgroundImageEnabled: Boolean,
     uiSurfaceAlpha: Float,
@@ -1356,6 +1361,8 @@ internal fun ThemeSettingsScreen(
     onThemeModeChange: (String) -> Unit,
     onDynamicColorEnabledChange: (Boolean, Int?, Int?) -> Unit,
     onCustomThemeColorsChange: (Int, Int) -> Unit,
+    onImportFont: (Uri, String?) -> Unit,
+    onUseSystemFont: () -> Unit,
     onBackgroundImageChange: (String?) -> Unit,
     onBackgroundImageEnabledChange: (Boolean) -> Unit,
     onUiSurfaceAlphaChange: (Float) -> Unit,
@@ -1386,6 +1393,17 @@ internal fun ThemeSettingsScreen(
             onBackgroundImageChange(uri.toString())
         }
     }
+    val fontPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val name = runCatching {
+                context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                    ?.use { cursor ->
+                        if (cursor.moveToFirst()) cursor.getString(0) else null
+                    }
+            }.getOrNull()
+            onImportFont(uri, name)
+        }
+    }
     SettingsAppearanceContent(
         topBarHeight = topBarHeight,
         themeMode = themeMode,
@@ -1393,6 +1411,7 @@ internal fun ThemeSettingsScreen(
         dynamicColorEnabled = dynamicColorEnabled,
         customThemeColorArgb = customThemeColorArgb,
         customAccentColorArgb = customAccentColorArgb,
+        customFont = customFont,
         backgroundUri = backgroundUri,
         backgroundImageEnabled = backgroundImageEnabled,
         uiSurfaceAlpha = uiSurfaceAlpha,
@@ -1402,6 +1421,19 @@ internal fun ThemeSettingsScreen(
         onThemeModeChange = onThemeModeChange,
         onDynamicColorEnabledChange = onDynamicColorEnabledChange,
         onCustomThemeColorsChange = onCustomThemeColorsChange,
+        onImportFont = {
+            fontPicker.launch(
+                arrayOf(
+                    "font/ttf",
+                    "font/otf",
+                    "application/x-font-ttf",
+                    "application/x-font-otf",
+                    "application/octet-stream",
+                    "*/*",
+                )
+            )
+        },
+        onUseSystemFont = onUseSystemFont,
         onChooseBackground = { backgroundPicker.launch(arrayOf("image/*")) },
         onBackgroundImageChange = onBackgroundImageChange,
         onBackgroundImageEnabledChange = onBackgroundImageEnabledChange,

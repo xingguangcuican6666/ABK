@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.abk.kernel.utils.CustomFontStorage
 import com.abk.kernel.utils.findActivity
 import io.github.xingguangcuican6666.abk.ui.theme.AbkColors
 import io.github.xingguangcuican6666.abk.ui.theme.AbkDefaultSeed
@@ -52,6 +53,7 @@ fun AbkTheme(
     dynamicColorEnabled: Boolean = true,
     customThemeColorArgb: Int? = null,
     customAccentColorArgb: Int? = null,
+    customFontId: String? = null,
     content: @Composable () -> Unit
 ) {
     val darkTheme = when (themeMode) {
@@ -72,6 +74,10 @@ fun AbkTheme(
     }
     val view = LocalView.current
     val activity = context.findActivity()
+    val fontFamily = remember(context, customFontId) {
+        CustomFontStorage.loadFamily(context, customFontId)
+            ?: androidx.compose.ui.text.font.FontFamily.Default
+    }
     if (activity != null && !view.isInEditMode) {
         SideEffect {
             val window = activity.window
@@ -85,6 +91,8 @@ fun AbkTheme(
     ComponentTheme(
         darkTheme = darkTheme,
         colorsOverride = colors,
+        fontFamily = fontFamily,
+        monoFontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
         reduceMotion = rememberReducedMotion(),
     ) {
         CompositionLocalProvider(LocalContentColor provides colors.ink, content = content)

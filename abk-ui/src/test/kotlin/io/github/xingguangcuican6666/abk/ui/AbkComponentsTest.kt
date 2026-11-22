@@ -101,6 +101,21 @@ public class AbkComponentsTest {
         }
     }
 
+    @Test public fun themeDefaultsToSystemTextAndMonospaceTechnicalText() {
+        var bodyFontFamily: FontFamily? = null
+        var monoFontFamily: FontFamily? = null
+        compose.setContent {
+            AbkTheme(colorSource = AbkColorSource.Seed) {
+                bodyFontFamily = MaterialTheme.typography.bodyMedium.fontFamily
+                monoFontFamily = AbkTheme.monoFont
+            }
+        }
+        compose.runOnIdle {
+            assertEquals(FontFamily.Default, bodyFontFamily)
+            assertEquals(FontFamily.Monospace, monoFontFamily)
+        }
+    }
+
     @Test public fun loadingAndDisabledButtonsIgnoreTouchWhileEnabledButtonWorks() {
         var clicks = 0
         content {

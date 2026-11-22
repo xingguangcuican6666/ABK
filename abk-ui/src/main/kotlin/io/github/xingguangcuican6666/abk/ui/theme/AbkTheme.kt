@@ -58,7 +58,7 @@ public object AbkFonts {
     public val Mono: FontFamily = FontFamily(Font(R.font.abk_wenkai_mono_regular))
 }
 
-public fun abkTypography(fontFamily: FontFamily = AbkFonts.Hand): Typography {
+public fun abkTypography(fontFamily: FontFamily = FontFamily.Default): Typography {
     fun style(size: Int, line: Int, bold: Boolean = false) = TextStyle(
         fontFamily = fontFamily, fontSize = size.sp, lineHeight = line.sp,
         fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
@@ -78,7 +78,7 @@ public fun abkTypography(fontFamily: FontFamily = AbkFonts.Hand): Typography {
 @Immutable
 internal data class AbkThemeValues(val colors: AbkColors, val reduceMotion: Boolean, val mono: FontFamily)
 private val LocalAbkTheme = staticCompositionLocalOf {
-    AbkThemeValues(abkSeedColors(), false, AbkFonts.Mono)
+    AbkThemeValues(abkSeedColors(), false, FontFamily.Monospace)
 }
 
 public object AbkTheme {
@@ -93,8 +93,8 @@ public fun AbkTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     colorSource: AbkColorSource = AbkColorSource.System,
     seed: Color = AbkDefaultSeed,
-    fontFamily: FontFamily = AbkFonts.Hand,
-    monoFontFamily: FontFamily = AbkFonts.Mono,
+    fontFamily: FontFamily = FontFamily.Default,
+    monoFontFamily: FontFamily = FontFamily.Monospace,
     reduceMotion: Boolean = false,
     colorsOverride: AbkColors? = null,
     content: @Composable () -> Unit,

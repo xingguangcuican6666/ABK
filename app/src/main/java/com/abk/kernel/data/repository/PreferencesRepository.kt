@@ -50,6 +50,8 @@ class PreferencesRepository(private val context: Context) {
         val KEY_DYNAMIC_COLOR_ENABLED = booleanPreferencesKey("dynamic_color_enabled")
         val KEY_CUSTOM_THEME_COLOR = intPreferencesKey("custom_theme_color_argb")
         val KEY_CUSTOM_ACCENT_COLOR = intPreferencesKey("custom_accent_color_argb")
+        val KEY_CUSTOM_FONT_ID = stringPreferencesKey("custom_font_id")
+        val KEY_CUSTOM_FONT_NAME = stringPreferencesKey("custom_font_name")
         val KEY_CUSTOM_COLORS_USER_SET = booleanPreferencesKey("custom_colors_user_set")
         val KEY_CUSTOM_BACKGROUND_URI = stringPreferencesKey("custom_background_uri")
         val KEY_BACKGROUND_IMAGE_ENABLED = booleanPreferencesKey("background_image_enabled")
@@ -110,6 +112,8 @@ class PreferencesRepository(private val context: Context) {
     val dynamicColorEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_DYNAMIC_COLOR_ENABLED] ?: true }
     val customThemeColorArgb: Flow<Int?> = context.dataStore.data.map { it[KEY_CUSTOM_THEME_COLOR] }
     val customAccentColorArgb: Flow<Int?> = context.dataStore.data.map { it[KEY_CUSTOM_ACCENT_COLOR] }
+    val customFontId: Flow<String?> = context.dataStore.data.map { it[KEY_CUSTOM_FONT_ID] }
+    val customFontName: Flow<String?> = context.dataStore.data.map { it[KEY_CUSTOM_FONT_NAME] }
     val customBackgroundUri: Flow<String?> =
         context.dataStore.data.map { it[KEY_CUSTOM_BACKGROUND_URI] }.distinctUntilChanged()
     val backgroundImageEnabled: Flow<Boolean> =
@@ -246,6 +250,14 @@ class PreferencesRepository(private val context: Context) {
         preferences[KEY_CUSTOM_THEME_COLOR] = themeColorArgb
         preferences[KEY_CUSTOM_ACCENT_COLOR] = accentColorArgb
         preferences[KEY_CUSTOM_COLORS_USER_SET] = true
+    }
+    suspend fun setCustomFont(id: String, displayName: String) = context.dataStore.edit { preferences ->
+        preferences[KEY_CUSTOM_FONT_ID] = id
+        preferences[KEY_CUSTOM_FONT_NAME] = displayName
+    }
+    suspend fun clearCustomFont() = context.dataStore.edit { preferences ->
+        preferences.remove(KEY_CUSTOM_FONT_ID)
+        preferences.remove(KEY_CUSTOM_FONT_NAME)
     }
     suspend fun setBackgroundImageUri(uri: String?) = context.dataStore.edit { preferences ->
         if (uri.isNullOrBlank()) {
