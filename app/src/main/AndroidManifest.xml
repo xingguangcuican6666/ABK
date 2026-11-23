@@ -76,7 +76,7 @@
         </activity>
 
         <activity
-            android:name=".ui.webui.ModuleWebUiActivity"
+            android:name=".webui.ModuleWebUiActivity"
             android:exported="false"
             android:theme="@style/Theme.ABK" />
 

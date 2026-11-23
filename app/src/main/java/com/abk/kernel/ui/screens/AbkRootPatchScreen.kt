@@ -95,6 +95,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.abk.kernel.logic.preferredLkmKmiSelection
 import com.abk.kernel.R
 import com.abk.kernel.ui.blur.BlurConfig
 import com.abk.kernel.ui.blur.BlurScreenScaffold
@@ -1320,24 +1321,6 @@ private fun partitionMenuLabel(
     } else {
         partition
     }
-
-internal fun preferredLkmKmiSelection(
-    currentSelection: String,
-    options: List<String>,
-    recommendedKmi: String?,
-    hasCustomSelection: Boolean
-): String {
-    if (options.isEmpty()) return ""
-
-    val current = currentSelection.takeIf { it in options }
-    val recommended = recommendedKmi?.takeIf { it in options }
-    return when {
-        hasCustomSelection && current != null -> current
-        recommended != null -> recommended
-        current != null -> current
-        else -> options.first()
-    }
-}
 
 private fun String.defaultLkmVariantId(): String =
     // Shared classifier: the retired "ReSukiSU" spelling contains "sukisu" and must

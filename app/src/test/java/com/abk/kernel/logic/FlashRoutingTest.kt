@@ -1,4 +1,4 @@
-package com.abk.kernel.ui.screens.flash
+package com.abk.kernel.logic
 
 import com.abk.kernel.data.model.ArtifactCategory
 import com.abk.kernel.data.model.ArtifactType

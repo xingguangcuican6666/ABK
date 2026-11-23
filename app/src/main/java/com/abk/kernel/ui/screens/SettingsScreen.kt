@@ -58,6 +58,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
 import coil.compose.AsyncImage
 import com.abk.kernel.BuildConfig
+import com.abk.kernel.logic.pendingSettingsTextCommit
+import com.abk.kernel.logic.shouldSyncSettingsTextDraft
+import com.abk.kernel.ui.blur.BlurConfig
 import com.abk.kernel.R
 import com.abk.kernel.extensions.AbkExtensionManagerScreen
 import com.abk.kernel.utils.DownloadDirectoryUtils
@@ -341,7 +344,7 @@ fun SettingsScreen(
             .height(maxHeight + childPageTopInset + childPageBottomInset)
             .offset(y = -childPageTopInset)
         BlurScreenScaffold(
-            blurConfig = state.blurConfig,
+            blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
             containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
             topBar = {
                 ExpressiveTopBar(
@@ -402,7 +405,7 @@ fun SettingsScreen(
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
                 BlurScreenScaffold(
-                    blurConfig = state.blurConfig,
+                    blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
@@ -465,7 +468,7 @@ fun SettingsScreen(
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
                 BlurScreenScaffold(
-                    blurConfig = state.blurConfig,
+                    blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
@@ -549,7 +552,7 @@ fun SettingsScreen(
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
                 BlurScreenScaffold(
-                    blurConfig = state.blurConfig,
+                    blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
@@ -600,7 +603,7 @@ fun SettingsScreen(
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
                 BlurScreenScaffold(
-                    blurConfig = state.blurConfig,
+                    blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
@@ -653,7 +656,7 @@ fun SettingsScreen(
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
                 BlurScreenScaffold(
-                    blurConfig = state.blurConfig,
+                    blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
@@ -706,7 +709,7 @@ fun SettingsScreen(
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
                 BlurScreenScaffold(
-                    blurConfig = state.blurConfig,
+                    blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
@@ -745,7 +748,7 @@ fun SettingsScreen(
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
                 BlurScreenScaffold(
-                    blurConfig = state.blurConfig,
+                    blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
@@ -3412,17 +3415,6 @@ private fun MirrorSettingsItem(
         )
     }
 }
-
-internal fun shouldSyncSettingsTextDraft(
-    isEditing: Boolean,
-    persistedValue: String,
-    draftValue: String
-): Boolean = !isEditing && persistedValue != draftValue
-
-internal fun pendingSettingsTextCommit(
-    persistedValue: String,
-    draftValue: String
-): String? = draftValue.takeIf { it != persistedValue }
 
 @Composable
 private fun LanguageSettingsItem(

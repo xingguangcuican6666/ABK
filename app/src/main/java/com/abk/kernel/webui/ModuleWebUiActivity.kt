@@ -1,4 +1,4 @@
-package com.abk.kernel.ui.webui
+package com.abk.kernel.webui
 
 import android.annotation.SuppressLint
 import android.app.Activity

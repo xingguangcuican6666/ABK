@@ -98,7 +98,6 @@ import com.abk.kernel.ui.blur.blurEffect
 import com.abk.kernel.ui.blur.blurSourceBody
 import com.abk.kernel.ui.blur.isBlurActive
 import com.abk.kernel.ui.blur.rememberBlurBackdrop
-import com.abk.kernel.ui.blur.rememberBlurBackgroundPainter
 import com.abk.kernel.ui.screens.BuildScreen
 import com.abk.kernel.ui.screens.FlashScreen
 import com.abk.kernel.ui.screens.InstalledModulesScreen
@@ -174,7 +173,7 @@ class MainActivity : ComponentActivity() {
                     backgroundUri = state.customBackgroundUri,
                     backgroundEnabled = state.backgroundImageEnabled,
                     uiSurfaceAlpha = uiSurfaceAlphaPreview,
-                    blurBackgroundEnabled = state.blurConfig.wantsBackgroundPainter,
+                    blurBackgroundEnabled = state.backgroundImageEnabled,
                 ) {
                     when {
                         !state.termsLoaded -> Surface(
@@ -622,13 +621,9 @@ private fun AbkMainScaffold(
     // so it is switched off.
     val barBlurOnScreen = !state.showOobe && navProgress > 0.02f
     val blurBackdrop = rememberBlurBackdrop(
-        enableBlur = state.blurConfig.blurEnabled && barBlurOnScreen,
+        enableBlur = barBlurOnScreen,
         surfaceColor = MaterialTheme.colorScheme.surfaceContainer,
-        backgroundPainter = if (barBlurOnScreen) {
-            rememberBlurBackgroundPainter(state.blurConfig)
-        } else {
-            null
-        },
+        backgroundPainter = null,
     )
 
     CompositionLocalProvider(

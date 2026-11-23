@@ -160,6 +160,23 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import coil.compose.AsyncImage
+import com.abk.kernel.logic.MAX_VISIBLE_WORKFLOWS_PER_CATEGORY
+import com.abk.kernel.logic.WorkflowArtifactGroup
+import com.abk.kernel.logic.hasDownloadedFilesForRun
+import com.abk.kernel.logic.hasKernelArtifact
+import com.abk.kernel.logic.hasManagerArtifact
+import com.abk.kernel.logic.hasRemoteKernelArtifact
+import com.abk.kernel.logic.hasRemoteManagerArtifact
+import com.abk.kernel.logic.hasSusfsModuleArtifact
+import com.abk.kernel.logic.isAbkManagerFlashRun
+import com.abk.kernel.logic.isActiveFlashRun
+import com.abk.kernel.logic.isSuccessfulKernelFlashRun
+import com.abk.kernel.logic.limitWorkflowGroupsForDisplay
+import com.abk.kernel.logic.manifestNoticeCandidates
+import com.abk.kernel.logic.shouldAppearInWorkflowList
+import com.abk.kernel.logic.shouldShowParameterDetails
+import com.abk.kernel.logic.titleLooksLikeAbkManager
+import com.abk.kernel.logic.workflowState
 import com.abk.kernel.R
 import com.abk.kernel.data.model.ActiveDownloadTask
 import com.abk.kernel.data.model.ArtifactCategory
@@ -221,8 +238,6 @@ internal val artifactCategoryOrder = listOf(
     ArtifactCategory.MODULE
 )
 
-internal const val MAX_VISIBLE_WORKFLOWS_PER_CATEGORY = 15
-
 internal fun DownloadedArtifact.isInstallableApk(): Boolean =
     type == ArtifactType.KSU_MANAGER || (type != ArtifactType.ABK_MANAGER && name.endsWith(".apk", ignoreCase = true))
 
@@ -267,106 +282,6 @@ internal fun String.toFlashFilterOrNull(): FlashFilter? = runCatching {
     val raw = com.google.gson.Gson().fromJson(this, Map::class.java) as Map<String, String?>
     flashFilterFromMap(raw)
 }.getOrNull()
-
-internal fun WorkflowArtifactGroup.hasRemoteManagerArtifact(): Boolean =
-    cachedHasRemoteManagerArtifact
-
-internal fun WorkflowArtifactGroup.hasManagerArtifact(): Boolean =
-    cachedHasManagerArtifact
-
-internal fun WorkflowArtifactGroup.hasKernelArtifact(): Boolean =
-    cachedHasKernelArtifact
-
-internal fun WorkflowArtifactGroup.shouldShowParameterDetails(run: WorkflowRun?): Boolean =
-    FlashWorkflowFilter.shouldShowParameterDetails(
-        run = run,
-        runTitle = runTitle,
-        hasKernelArtifact = hasKernelArtifact(),
-        hasManagerArtifact = hasManagerArtifact(),
-    )
-
-internal fun WorkflowArtifactGroup.hasRemoteKernelArtifact(): Boolean =
-    cachedHasRemoteKernelArtifact
-
-internal fun WorkflowArtifactGroup.hasSusfsModuleArtifact(): Boolean =
-    cachedHasSusfsModuleArtifact
-
-/** Manifest notices are scoped to an explicitly opened workflow detail page. */
-internal fun manifestNoticeCandidates(
-    flashDetailRouteActive: Boolean,
-    selectedRunId: Long?,
-    workflowGroups: List<WorkflowArtifactGroup>,
-): List<DownloadedArtifact> {
-    if (!flashDetailRouteActive || selectedRunId == null) return emptyList()
-    return workflowGroups
-        .firstOrNull { it.runId == selectedRunId }
-        ?.local
-        ?.filter { it.verified && it.manifestClientNotice != null }
-        .orEmpty()
-}
-
-internal fun WorkflowRun?.workflowState(): FlashFilterWorkflowState? = when {
-    this == null -> null
-    this.isActiveFlashRun() -> FlashFilterWorkflowState.Running
-    else -> FlashFilterWorkflowState.Finished
-}
-
-internal fun hasDownloadedFilesForRun(
-    runId: Long,
-    downloadedArtifacts: List<DownloadedArtifact>,
-    workflowGroups: List<WorkflowArtifactGroup>,
-    activeDownloadTasks: List<ActiveDownloadTask>,
-): Boolean {
-    if (downloadedArtifacts.any { it.runId == runId }) return true
-    if (workflowGroups.any { it.runId == runId && it.local.isNotEmpty() }) return true
-    if (activeDownloadTasks.any { it.runId == runId }) return true
-    return false
-}
-
-internal fun WorkflowArtifactGroup.shouldAppearInWorkflowList(run: WorkflowRun?): Boolean =
-    if (run.isAbkManagerFlashRun(runTitle)) {
-        false
-    } else if (remote.isEmpty() && local.isEmpty()) {
-        run?.isSuccessfulKernelFlashRun() == true
-    } else when (
-        FlashWorkflowFilter.primaryKind(
-            run = run,
-            runTitle = runTitle,
-            hasKernelArtifact = hasKernelArtifact(),
-            hasManagerArtifact = hasManagerArtifact()
-        )
-    ) {
-        WorkflowPrimary.Kernel -> hasRemoteKernelArtifact()
-        else -> true
-    }
-
-internal fun limitWorkflowGroupsForDisplay(
-    groups: List<WorkflowArtifactGroup>,
-    runs: Map<Long, WorkflowRun>
-): List<WorkflowArtifactGroup> {
-    val counts = mutableMapOf<WorkflowPrimary, Int>()
-    return groups.filter { group ->
-        val run = runs[group.runId]
-        val bucket = when (
-            FlashWorkflowFilter.primaryKind(
-                run = run,
-                runTitle = group.runTitle,
-                hasKernelArtifact = group.hasKernelArtifact(),
-                hasManagerArtifact = group.hasManagerArtifact()
-            )
-        ) {
-            WorkflowPrimary.Manager -> WorkflowPrimary.Manager
-            else -> WorkflowPrimary.Kernel
-        }
-        val next = (counts[bucket] ?: 0) + 1
-        if (next > MAX_VISIBLE_WORKFLOWS_PER_CATEGORY) {
-            false
-        } else {
-            counts[bucket] = next
-            true
-        }
-    }
-}
 
 @StringRes
 internal fun FlashFilterKernelKind.labelRes() = when (this) {

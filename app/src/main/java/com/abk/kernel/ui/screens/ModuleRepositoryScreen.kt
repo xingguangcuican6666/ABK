@@ -98,6 +98,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.abk.kernel.ui.blur.BlurConfig
 import com.abk.kernel.R
 import com.abk.kernel.data.model.CustomExternalModuleStage
 import com.abk.kernel.data.model.ExternalModuleMetadata
@@ -349,7 +350,7 @@ fun ModuleRepositoryScreen(
             .offset(y = -childPageTopInset)
 
         BlurScreenScaffold(
-            blurConfig = state.blurConfig,
+            blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
             containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
             topBar = {
                 ExpressiveTopBar(
@@ -429,7 +430,7 @@ fun ModuleRepositoryScreen(
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
                 BlurScreenScaffold(
-                    blurConfig = state.blurConfig,
+                    blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
@@ -817,7 +818,7 @@ private fun BuildModuleRepositoryScreenContent(
             .offset(y = -childPageTopInset)
 
         BlurScreenScaffold(
-            blurConfig = state.blurConfig,
+            blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
             containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
             topBar = {
                 ExpressiveTopBar(
@@ -902,7 +903,7 @@ private fun BuildModuleRepositoryScreenContent(
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
                 BlurScreenScaffold(
-                    blurConfig = state.blurConfig,
+                    blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(

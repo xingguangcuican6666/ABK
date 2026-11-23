@@ -67,6 +67,8 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.abk.kernel.logic.*
+import com.abk.kernel.ui.blur.BlurConfig
 import com.abk.kernel.R
 import com.abk.kernel.data.model.AbkRuntimeBuildInfo
 import com.abk.kernel.data.model.AbkRuntimeModule
@@ -92,7 +94,7 @@ import com.abk.kernel.ui.components.ShimmerLinearProgress
 import com.abk.kernel.ui.components.rememberAbkInteractiveRefreshPresentation
 import com.abk.kernel.ui.theme.appPageBackgroundColor
 import com.abk.kernel.ui.theme.uiSurfaceColor
-import com.abk.kernel.ui.webui.ModuleWebUiActivity
+import com.abk.kernel.webui.ModuleWebUiActivity
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.utils.RootUtils
 import com.abk.kernel.viewmodel.MainViewModel
@@ -167,7 +169,7 @@ fun RuntimeHomeScreen(
             .height(maxHeight + childPageBottomInset)
 
         BlurScreenScaffold(
-            blurConfig = state.blurConfig,
+            blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
             containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
             topBar = {
                 ExpressiveTopBar(
@@ -518,7 +520,7 @@ fun InstalledModulesScreen(
 
     Box(Modifier.fillMaxSize()) {
         BlurScreenScaffold(
-            blurConfig = state.blurConfig,
+            blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
             containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
             topBar = {
                 ExpressiveTopBar(

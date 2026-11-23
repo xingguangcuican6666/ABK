@@ -160,6 +160,19 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import coil.compose.AsyncImage
+import com.abk.kernel.logic.WorkflowArtifactGroup
+import com.abk.kernel.logic.buildWorkflowGroups
+import com.abk.kernel.logic.emptyWorkflowGroupFor
+import com.abk.kernel.logic.isAbkManagerFlashRun
+import com.abk.kernel.logic.isActiveFlashRun
+import com.abk.kernel.logic.isManagerArtifactType
+import com.abk.kernel.logic.isSuccessfulKernelFlashRun
+import com.abk.kernel.logic.shouldHideAbkManagerArtifact
+import com.abk.kernel.logic.shouldHideManagerCertArtifact
+import com.abk.kernel.logic.sortedForWorkflowDisplay
+import com.abk.kernel.logic.titleLooksLikeAbkManager
+import com.abk.kernel.logic.workflowRunLabel
+import com.abk.kernel.logic.workflowTaskLabel
 import com.abk.kernel.R
 import com.abk.kernel.data.model.ActiveDownloadTask
 import com.abk.kernel.data.model.ArtifactCategory
@@ -219,146 +232,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-
-internal fun emptyWorkflowGroupFor(
-    run: WorkflowRun,
-    unlinkedWorkflowTitle: String,
-): WorkflowArtifactGroup {
-    val runTitle = run.displayTitle?.ifBlank { null }
-        ?: run.name?.ifBlank { null }
-        ?: unlinkedWorkflowTitle
-    return WorkflowArtifactGroup(
-        runId = run.id,
-        runTitle = runTitle,
-        runNumber = run.runNumber,
-        runCreatedAt = run.createdAt,
-        runUpdatedAt = run.updatedAt,
-        remote = emptyList(),
-        local = emptyList(),
-        categories = emptySet(),
-        cachedHasRemoteManagerArtifact = false,
-        cachedHasManagerArtifact = false,
-        cachedHasKernelArtifact = false,
-        cachedHasRemoteKernelArtifact = false,
-        cachedHasSusfsModuleArtifact = false,
-    )
-}
-
-internal fun buildWorkflowGroups(
-    remoteArtifacts: List<BuildArtifact>,
-    downloadedArtifacts: List<DownloadedArtifact>,
-    unlinkedWorkflowTitle: String,
-    runs: Map<Long, WorkflowRun> = emptyMap()
-): List<WorkflowArtifactGroup> {
-    val remoteByRunId = remoteArtifacts.groupBy { it.runId }
-    val localByRunId = downloadedArtifacts.groupBy { it.runId }
-    val runIds = (remoteByRunId.keys + localByRunId.keys).distinct()
-    return runIds.map { runId ->
-        val remote = remoteByRunId[runId].orEmpty()
-        val local = localByRunId[runId].orEmpty()
-        val firstRemote = remote.firstOrNull()
-        val firstLocal = local.firstOrNull()
-        val runTitle = firstRemote?.runTitle?.ifBlank { null }
-            ?: firstLocal?.runTitle?.ifBlank { null }
-            ?: runs[runId]?.displayTitle?.ifBlank { null }
-            ?: runs[runId]?.name?.ifBlank { null }
-            ?: unlinkedWorkflowTitle
-        val filteredRemote = remote.filterNot {
-            shouldHideManagerCertArtifact(runTitle, it.name) || shouldHideAbkManagerArtifact(it.name)
-        }
-        val filteredLocal = local.filterNot {
-            shouldHideManagerCertArtifact(runTitle, it.name) || it.type == ArtifactType.ABK_MANAGER
-        }
-        val runCreatedAt = runs[runId]?.createdAt
-            ?: firstRemote?.runCreatedAt
-            ?: ""
-        val runUpdatedAt = runs[runId]?.updatedAt.orEmpty()
-        val remoteTypes = filteredRemote.map { DownloadUtils.classifyArtifact(it.name) }
-        val remoteCategories = remoteTypes.mapNotNull(DownloadUtils::classifyCategory).toSet()
-        val localCategories = filteredLocal.map { it.category }.toSet()
-        val categories = (remoteCategories + localCategories)
-        WorkflowArtifactGroup(
-            runId = runId,
-            runTitle = runTitle,
-            runNumber = firstRemote?.runNumber ?: firstLocal?.runNumber ?: 0,
-            runCreatedAt = runCreatedAt,
-            runUpdatedAt = runUpdatedAt,
-            remote = filteredRemote,
-            local = filteredLocal,
-            categories = categories,
-            cachedHasRemoteManagerArtifact = remoteTypes.any { it.isManagerArtifactType() },
-            cachedHasManagerArtifact = remoteTypes.any { it.isManagerArtifactType() } ||
-                filteredLocal.any { it.type.isManagerArtifactType() },
-            cachedHasKernelArtifact = remoteTypes.any {
-                it == ArtifactType.KERNEL_PACKAGE || it == ArtifactType.KERNEL_IMG || it == ArtifactType.ANYKERNEL3
-            } || filteredLocal.any { it.type in setOf(ArtifactType.KERNEL_PACKAGE, ArtifactType.KERNEL_IMG, ArtifactType.ANYKERNEL3) },
-            cachedHasRemoteKernelArtifact = remoteTypes.any {
-                it == ArtifactType.KERNEL_PACKAGE || it == ArtifactType.KERNEL_IMG || it == ArtifactType.ANYKERNEL3
-            },
-            cachedHasSusfsModuleArtifact = remoteTypes.any { it == ArtifactType.SUSFS_MODULE } ||
-                filteredLocal.any { it.type == ArtifactType.SUSFS_MODULE }
-        )
-    }.sortedForWorkflowDisplay(runs)
-}
-
-internal fun shouldHideManagerCertArtifact(runTitle: String, artifactName: String): Boolean {
-    val lowerArtifact = artifactName.lowercase()
-    if (lowerArtifact != "abk-manager-cert.generated.env") return false
-    val lowerTitle = runTitle.lowercase()
-    return listOf("abk app", "abk-app", "build app", "manager", "管理器", "getmanager")
-        .any { it in lowerTitle }
-}
-
-internal fun shouldHideAbkManagerArtifact(artifactName: String): Boolean =
-    DownloadUtils.classifyArtifact(artifactName) == ArtifactType.ABK_MANAGER
-
-internal data class WorkflowArtifactGroup(
-    val runId: Long,
-    val runTitle: String,
-    val runNumber: Int,
-    val runCreatedAt: String,
-    val runUpdatedAt: String,
-    val remote: List<BuildArtifact>,
-    val local: List<DownloadedArtifact>,
-    val categories: Set<ArtifactCategory>,
-    val cachedHasRemoteManagerArtifact: Boolean,
-    val cachedHasManagerArtifact: Boolean,
-    val cachedHasKernelArtifact: Boolean,
-    val cachedHasRemoteKernelArtifact: Boolean,
-    val cachedHasSusfsModuleArtifact: Boolean
-)
-
-internal fun workflowRunLabel(run: WorkflowRun): String =
-    if (run.runNumber > 0) "#${run.runNumber} · ${run.displayTitle ?: run.name ?: run.id}" else "#${run.id}"
-
-internal fun workflowTaskLabel(task: ActiveDownloadTask): String =
-    if (task.runNumber > 0) "#${task.runNumber} · ${task.runTitle}" else "#${task.runId} · ${task.runTitle}"
-
-internal fun WorkflowRun.isActiveFlashRun(): Boolean =
-    status in setOf("queued", "waiting", "requested", "pending", "in_progress")
-
-/**
- * A successful kernel run should remain visible while GitHub is still
- * indexing its artifacts (or when the artifact request temporarily fails).
- * Manager-only success runs are intentionally excluded from the flash page.
- */
-internal fun WorkflowRun.isSuccessfulKernelFlashRun(): Boolean =
-    status == "completed" && conclusion == "success" && isKernelBuild() && !isManagerBuild()
-
-internal fun List<WorkflowArtifactGroup>.sortedForWorkflowDisplay(
-    runs: Map<Long, WorkflowRun>
-): List<WorkflowArtifactGroup> = sortedWith(
-    compareByDescending<WorkflowArtifactGroup> { runs[it.runId]?.isActiveFlashRun() == true }
-        .thenByDescending { it.runCreatedAt }
-        .thenByDescending { it.runId }
-        .thenByDescending { it.runNumber }
-)
-
-internal fun ArtifactType.isManagerArtifactType(): Boolean =
-    this == ArtifactType.ABK_MANAGER || this == ArtifactType.KSU_MANAGER
-
-internal fun WorkflowRun?.isAbkManagerFlashRun(runTitle: String): Boolean =
-    this?.isAbkManagerBuild() == true || runTitle.titleLooksLikeAbkManager()
 
 internal fun artifactIcon(type: ArtifactType) = when (type) {
     ArtifactType.KERNEL_PACKAGE -> Icons.Default.Inventory2
@@ -432,8 +305,3 @@ internal data class PrebuiltGkiFilter(
     val osPatchLevel: String,
     val onlyMatches: Boolean = true
 )
-
-internal fun String.titleLooksLikeAbkManager(): Boolean {
-    val n = lowercase()
-    return "abk app" in n || "abk-app" in n || "build abk app" in n
-}

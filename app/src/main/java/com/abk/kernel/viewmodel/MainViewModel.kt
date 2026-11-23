@@ -23,7 +23,6 @@ import com.abk.kernel.data.model.*
 import com.abk.kernel.data.repository.GitHubRepository
 import com.abk.kernel.data.repository.PreferencesRepository
 import com.abk.kernel.data.repository.Result
-import com.abk.kernel.ui.blur.BlurConfig
 import com.abk.kernel.utils.BackgroundImageStorage
 import com.abk.kernel.utils.BuildMonitorService
 import com.abk.kernel.utils.BuildProgressUtils
@@ -281,15 +280,6 @@ data class MainUiState(
 ) {
     val isDownloading: Boolean
         get() = activeDownloadTasks.isNotEmpty() || downloadProgress.isNotEmpty()
-
-    /** Blur preferences snapshot for [BlurScreenScaffold]. */
-    val blurConfig: BlurConfig
-        get() = BlurConfig(
-            blurEnabled = blurEnabled,
-            backgroundExpEnabled = blurBackgroundExpEnabled,
-            backgroundUri = customBackgroundUri,
-            backgroundImageEnabled = backgroundImageEnabled,
-        )
 }
 
 class MainViewModel @JvmOverloads constructor(

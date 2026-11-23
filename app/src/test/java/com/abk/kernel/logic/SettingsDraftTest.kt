@@ -1,4 +1,4 @@
-package com.abk.kernel.ui.screens
+package com.abk.kernel.logic
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

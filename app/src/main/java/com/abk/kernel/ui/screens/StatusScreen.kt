@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.abk.kernel.BuildConfig
+import com.abk.kernel.ui.blur.BlurConfig
 import com.abk.kernel.R
 import com.abk.kernel.data.model.BuildStatus
 import com.abk.kernel.data.model.WorkflowRun
@@ -58,7 +59,7 @@ fun StatusScreen(
     LaunchedEffect(Unit) { vm.loadRecentRuns() }
 
     BlurScreenScaffold(
-        blurConfig = state.blurConfig,
+        blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
         containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
         topBar = {
             ExpressiveTopBar(

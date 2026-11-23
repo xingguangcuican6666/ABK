@@ -161,6 +161,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import coil.compose.AsyncImage
+import com.abk.kernel.logic.*
+import com.abk.kernel.ui.blur.BlurConfig
 import com.abk.kernel.R
 import com.abk.kernel.data.model.ActiveDownloadTask
 import com.abk.kernel.data.model.ArtifactCategory
@@ -1249,7 +1251,7 @@ fun FlashScreen(
         val showPrebuiltReleaseRefreshLoading =
             prebuiltReleaseRefreshPresentation.showLoading && state.prebuiltGkiReleases.isNotEmpty()
         BlurScreenScaffold(
-            blurConfig = state.blurConfig,
+            blurConfig = BlurConfig(blurEnabled = state.blurEnabled, backgroundExpEnabled = state.blurBackgroundExpEnabled, backgroundUri = state.customBackgroundUri, backgroundImageEnabled = state.backgroundImageEnabled),
             containerColor = Color.Transparent,
             topBar = {
                 ExpressiveTopBar(
