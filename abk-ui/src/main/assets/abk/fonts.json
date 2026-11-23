@@ -1,0 +1,17 @@
+{
+  "version": "v0.868",
+  "files": {
+    "abk_yozai_regular.ttf": {
+      "url": "https://github.com/lxgw/yozai-font/releases/download/v0.868/Yozai-Regular.ttf",
+      "license": "OFL 1.1 · abk/licenses/OFL-yozai.txt",
+      "subset": "GB2312 level 1 + characters used by the web catalog and the sample app",
+      "bytes": 2072760
+    },
+    "abk_yozai_medium.ttf": {
+      "url": "https://github.com/lxgw/yozai-font/releases/download/v0.868/Yozai-Medium.ttf",
+      "license": "OFL 1.1 · abk/licenses/OFL-yozai.txt",
+      "subset": "GB2312 level 1 + characters used by the web catalog and the sample app",
+      "bytes": 2013376
+    }
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "libraries": {
+    "lucide": {
+      "name": "Lucide",
+      "repository": "lucide-icons/lucide",
+      "revision": "742ea78395b4122e13fd46743caba5140f47fb66",
+      "path": "icons/{name}.svg",
+      "license": "LICENSE"
+    }
+  },
+  "transforms": {
+    "lucide": {
+      "info-mark": {
+        "removePathPrefix": "M12 20V4",
+        "replacementStart": "M12 9v7",
+        "append": "M12 4h.01"
+      }
+    }
+  },
+  "roles": {
+    "home": [
+      "house"
+    ],
+    "search": [
+      "search"
+    ],
+    "edit": [
+      "pencil"
+    ],
+    "plus": [
+      "plus"
+    ],
+    "refresh": [
+      "rotate-ccw"
+    ],
+    "upload": [
+      "upload"
+    ],
+    "download": [
+      "download"
+    ],
+    "settings": [
+      "settings"
+    ],
+    "menu": [
+      "menu"
+    ],
+    "more": [
+      "ellipsis-vertical"
+    ],
+    "check": [
+      "check"
+    ],
+    "close": [
+      "x"
+    ],
+    "back": [
+      "chevron-left"
+    ],
+    "forward": [
+      "chevron-right"
+    ],
+    "moon": [
+      "moon"
+    ],
+    "sun": [
+      "sun"
+    ],
+    "pending": [
+      "hourglass"
+    ],
+    "warning": [
+      "triangle-exclamation-point"
+    ],
+    "arrow-right": [
+      "arrow-right"
+    ],
+    "build": [
+      "package"
+    ],
+    "modules": [
+      "puzzle"
+    ],
+    "copy": [
+      "copy"
+    ],
+    "info": [
+      "info"
+    ],
+    "info-mark": [
+      "letter-i"
+    ],
+    "alert-mark": [
+      "exclamation-mark"
+    ],
+    "dot": [
+      "dot"
+    ],
+    "cpu": [
+      "cpu"
+    ],
+    "terminal": [
+      "terminal"
+    ],
+    "controls": [
+      "sliders-horizontal"
+    ],
+    "trash": [
+      "trash"
+    ]
+  }
+}

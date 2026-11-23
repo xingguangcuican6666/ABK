@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "ABK"
-include(":app")
+include(":app", ":abk-ui")

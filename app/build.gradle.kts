@@ -175,8 +175,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-    implementation(libs.androidx.material.icons.extended)
-    implementation(libs.google.material)
+    implementation(project(":abk-ui"))
     implementation(libs.androidx.navigation.compose)
 
     // Network
@@ -200,9 +199,6 @@ dependencies {
 
     // Preferences
     implementation(libs.datastore.preferences)
-
-    // Blur / glass
-    implementation(libs.miuix.blur)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
