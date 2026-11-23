@@ -33,4 +33,4 @@ RUN chown -R gradle:gradle "${ANDROID_HOME}"
 USER gradle
 WORKDIR /workspace
 
-CMD ["gradle", "--no-daemon", "--stacktrace", ":app:testDebugUnitTest"]
+CMD ["gradle", "--no-daemon", "--stacktrace", ":abk-ui:testDebugUnitTest", ":app:testDebugUnitTest"]

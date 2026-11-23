@@ -1374,4 +1374,8 @@
     <string name="settings_kernel_runner_saved">Saved to GitHub</string>
     <string name="settings_kernel_runner_saving">Saving…</string>
     <string name="settings_kernel_runner_request_failed">The GitHub repository variables request did not complete. Refresh and try again.</string>
+    <string name="settings_app_update_result_short">Remote version %1$s</string>
+    <string name="status_workflows_title">Recent workflows</string>
+    <string name="status_workflow_empty">No workflows to show yet</string>
+    <string name="modules_pending_zip">Module zip received; the install flow arrives in a later update.</string>
 </resources>

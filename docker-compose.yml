@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile.test
     image: abk-unit-tests:local
     working_dir: /workspace
-    command: ["gradle", "--no-daemon", "--stacktrace", ":app:testDebugUnitTest"]
+    command: ["gradle", "--no-daemon", "--stacktrace", ":abk-ui:testDebugUnitTest", ":app:testDebugUnitTest"]
     environment:
       GRADLE_USER_HOME: /home/gradle/.gradle
     volumes:

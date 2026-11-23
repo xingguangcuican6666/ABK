@@ -3,116 +3,44 @@ package com.abk.kernel
 import android.Manifest
 import android.app.Activity
 import android.content.Context
-import com.abk.kernel.utils.LocaleHelper
-import com.abk.kernel.utils.findActivity
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.StringRes
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LibraryBooks
-import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.RocketLaunch
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.NavigationRailItemDefaults
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.zIndex
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.abk.kernel.ui.components.AppBackgroundHost
-import com.abk.kernel.ui.components.AbkSnackbarHost
-import com.abk.kernel.ui.components.animateBottomNavForChildPage
-import com.abk.kernel.ui.components.showAbkSnackbar
+import com.abk.kernel.data.repository.PreferencesRepository
 import com.abk.kernel.extensions.AbkExtensionBootstrapActivity
-import com.abk.kernel.ui.blur.LocalBlurBackgroundAnchor
-import com.abk.kernel.ui.blur.LocalBlurState
-import com.abk.kernel.ui.blur.LocalBlurredCardBackground
-import com.abk.kernel.ui.blur.LocalBlurredCardBackgroundEnabled
-import com.abk.kernel.ui.blur.blurEffect
-import com.abk.kernel.ui.blur.blurSourceBody
-import com.abk.kernel.ui.blur.isBlurActive
-import com.abk.kernel.ui.blur.rememberBlurBackdrop
-import com.abk.kernel.ui.screens.BuildScreen
-import com.abk.kernel.ui.screens.FlashScreen
-import com.abk.kernel.ui.screens.InstalledModulesScreen
-import com.abk.kernel.ui.screens.ModuleRepositoryScreen
-import com.abk.kernel.ui.screens.OobeScreen
-import com.abk.kernel.ui.screens.RootAuthorizationScreen
-import com.abk.kernel.ui.screens.RuntimeHomeScreen
-import com.abk.kernel.ui.screens.SettingsScreen
-import com.abk.kernel.ui.screens.StatusScreen
-import com.abk.kernel.ui.theme.AbkTheme
-import com.abk.kernel.ui.theme.LocalUiSurfaceAlpha
-import com.abk.kernel.ui.theme.appPageBackgroundColor
-import com.abk.kernel.ui.theme.uiSurfaceColor
+import com.abk.kernel.ui.AppShell
+import com.abk.kernel.ui.onboarding.OnboardingScreen
+import com.abk.kernel.ui.onboarding.TermsAgreementDialog
+import com.abk.kernel.ui.theme.AppTheme
+import com.abk.kernel.utils.LocaleHelper
+import com.abk.kernel.viewmodel.MainUiState
 import com.abk.kernel.viewmodel.MainViewModel
-import kotlinx.coroutines.delay
+import io.github.xingguangcuican6666.abk.ui.components.AbkButton
+import io.github.xingguangcuican6666.abk.ui.components.AbkButtonStyle
+import io.github.xingguangcuican6666.abk.ui.components.AbkDialog
+import io.github.xingguangcuican6666.abk.ui.components.AbkText
+import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
+import io.github.xingguangcuican6666.abk.ui.theme.AbkTone
 
 class MainActivity : ComponentActivity() {
 
@@ -129,16 +57,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingModuleInstallUri = extractModuleInstallUri(intent)?.toString()
+        val prefs = PreferencesRepository(applicationContext)
 
         setContent {
             val vm: MainViewModel = viewModel()
             val state by vm.uiState.collectAsState()
-            val uiSurfaceAlphaPreview by vm.uiSurfaceAlphaPreview.collectAsState(initial = state.uiSurfaceAlpha)
             var extensionBootstrapIssued by rememberSaveable { mutableStateOf(false) }
 
-            LaunchedEffect(Unit) {
-                vm.checkRoot()
-            }
+            LaunchedEffect(Unit) { vm.checkRoot() }
 
             LaunchedEffect(state.termsAccepted) {
                 if (state.termsAccepted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -163,75 +89,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            AbkTheme(
-                themeMode = state.themeMode,
-                dynamicColorEnabled = state.dynamicColorEnabled,
-                customThemeColorArgb = state.customThemeColorArgb,
-                customAccentColorArgb = state.customAccentColorArgb
+            AppTheme(
+                prefs = remember { prefs },
+                backgroundUri = state.customBackgroundUri,
+                backgroundEnabled = state.backgroundImageEnabled,
+                uiSurfaceAlpha = state.uiSurfaceAlpha,
             ) {
-                AppBackgroundHost(
-                    backgroundUri = state.customBackgroundUri,
-                    backgroundEnabled = state.backgroundImageEnabled,
-                    uiSurfaceAlpha = uiSurfaceAlphaPreview,
-                    blurBackgroundEnabled = state.backgroundImageEnabled,
-                ) {
-                    when {
-                        !state.termsLoaded -> Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = MaterialTheme.colorScheme.surface
-                        ) {}
-                        state.showPreferencesResetNotice -> PreferencesResetDialog(
-                            onDismiss = vm::dismissPreferencesResetNotice
-                        )
-                        !state.termsAccepted -> TermsAgreementDialog(
-                            onAccept = vm::acceptTerms,
-                            onDecline = { finishAffinity() }
-                        )
-                        else -> Box(modifier = Modifier.fillMaxSize()) {
-                            AbkMainScaffold(
-                                vm = vm,
-                                pendingModuleInstallUri = pendingModuleInstallUri,
-                                onModuleInstallUriConsumed = { pendingModuleInstallUri = null }
-                            )
-                            if (!state.showOobe) {
-                                val rootGrantRecoveryNotice = state.rootGrantRecoveryNotice
-                                if (rootGrantRecoveryNotice != null) {
-                                    RootGrantRecoveryDialog(
-                                        title = rootGrantRecoveryNotice.title,
-                                        message = rootGrantRecoveryNotice.message,
-                                        onDismiss = vm::dismissRootGrantRecoveryNotice
-                                    )
-                                } else if (state.showSyncPrompt) {
-                                    SyncPromptDialog(
-                                        behindBy = state.behindBy,
-                                        onSync = vm::syncFork,
-                                        onDismiss = vm::dismissSyncPrompt
-                                    )
-                                }
-                            }
-                            if (state.showOobe) {
-                                // OOBE is an opaque onboarding screen; clear the blur
-                                // locals so its cards render opaque instead of showing a
-                                // translucent frosted backdrop under the wallpaper.
-                                CompositionLocalProvider(
-                                    LocalUiSurfaceAlpha provides 1f,
-                                    LocalBlurredCardBackground provides null,
-                                    LocalBlurredCardBackgroundEnabled provides false,
-                                    LocalBlurBackgroundAnchor provides null,
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(MaterialTheme.colorScheme.surface)
-                                            .zIndex(4f)
-                                    ) {
-                                        OobeScreen(vm)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                MainRoot(
+                    vm = vm,
+                    state = state,
+                    pendingModuleInstallUri = pendingModuleInstallUri,
+                    onModuleInstallUriConsumed = { pendingModuleInstallUri = null },
+                )
             }
         }
     }
@@ -244,631 +113,88 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun PreferencesResetDialog(
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.preferences_reset_title)) },
-        text = { Text(stringResource(R.string.preferences_reset_message)) },
-        confirmButton = {
-            Button(onClick = onDismiss) {
-                Text(text = stringResource(android.R.string.ok))
-            }
-        }
-    )
-}
-
-@Composable
-private fun RootGrantRecoveryDialog(
-    title: String,
-    message: String,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(message) },
-        confirmButton = {
-            Button(onClick = onDismiss) {
-                Text(text = stringResource(android.R.string.ok))
-            }
-        }
-    )
-}
-
-@Composable
-private fun SyncPromptDialog(
-    behindBy: Int,
-    onSync: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.sync_title)) },
-        text = {
-            Text(
-                "${stringResource(R.string.sync_desc)}\n\n" +
-                    stringResource(R.string.sync_behind_commits, behindBy)
-            )
-        },
-        confirmButton = {
-            Button(onClick = onSync) {
-                Text(stringResource(R.string.sync_action))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.skip))
-            }
-        }
-    )
-}
-
-@Composable
-private fun TermsAgreementDialog(
-    onAccept: () -> Unit,
-    onDecline: () -> Unit
-) {
-    val scrollState = rememberScrollState()
-    val canAccept by remember {
-        derivedStateOf { scrollState.maxValue == 0 || scrollState.value >= scrollState.maxValue }
-    }
-
-    AlertDialog(
-        onDismissRequest = {},
-        title = {
-            Text(
-                text = stringResource(R.string.terms_title),
-                style = MaterialTheme.typography.titleLarge
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(scrollState),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                TermsText(stringResource(R.string.terms_version))
-                TermsText(stringResource(R.string.terms_effective_date))
-                TermsText(stringResource(R.string.terms_intro))
-
-                TermsSection(
-                    stringResource(R.string.terms_section_usage),
-                    stringResource(R.string.terms_usage_1),
-                    stringResource(R.string.terms_usage_2)
-                )
-                TermsSection(
-                    stringResource(R.string.terms_section_risk),
-                    stringResource(R.string.terms_risk_1),
-                    stringResource(R.string.terms_risk_2),
-                    stringResource(R.string.terms_risk_3)
-                )
-                TermsSection(
-                    stringResource(R.string.terms_section_legal),
-                    stringResource(R.string.terms_legal_1),
-                    stringResource(R.string.terms_legal_2),
-                    stringResource(R.string.terms_legal_3)
-                )
-                TermsSection(
-                    stringResource(R.string.terms_section_third_party),
-                    stringResource(R.string.terms_third_party_1),
-                    stringResource(R.string.terms_third_party_2),
-                    stringResource(R.string.terms_third_party_3)
-                )
-                TermsSection(
-                    stringResource(R.string.terms_section_privacy),
-                    stringResource(R.string.terms_privacy_1),
-                    stringResource(R.string.terms_privacy_2),
-                    stringResource(R.string.terms_privacy_3)
-                )
-                TermsSection(
-                    stringResource(R.string.terms_section_disclaimer),
-                    stringResource(R.string.terms_disclaimer_1),
-                    stringResource(R.string.terms_disclaimer_2),
-                    stringResource(R.string.terms_disclaimer_3)
-                )
-                TermsText(stringResource(R.string.terms_accept_hint))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDecline) {
-                Text(stringResource(R.string.terms_decline))
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onAccept,
-                enabled = canAccept
-            ) {
-                Text(
-                    if (canAccept) {
-                        stringResource(R.string.terms_accept)
-                    } else {
-                        stringResource(R.string.terms_scroll_bottom)
-                    }
-                )
-            }
-        }
-    )
-}
-
-@Composable
-private fun TermsSection(title: String, vararg paragraphs: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface
-    )
-    paragraphs.forEach { paragraph ->
-        TermsText(paragraph)
-    }
-}
-
-@Composable
-private fun TermsText(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-}
-
-private enum class AbkTab(@StringRes val labelRes: Int) {
-    Status(R.string.nav_status),
-    Build(R.string.nav_build),
-    Modules(R.string.nav_modules),
-    Flash(R.string.nav_flash),
-    RuntimeHome(R.string.nav_home),
-    InstalledModules(R.string.nav_installed_modules),
-    RootAuth(R.string.nav_root_auth),
-    Settings(R.string.nav_settings)
-}
-
-private val AbkTabletRailWidth = 92.dp
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun AbkMainScaffold(
+private fun MainRoot(
     vm: MainViewModel,
-    pendingModuleInstallUri: String? = null,
-    onModuleInstallUriConsumed: () -> Unit = {}
+    state: MainUiState,
+    pendingModuleInstallUri: String?,
+    onModuleInstallUriConsumed: () -> Unit,
 ) {
-    val state by vm.uiState.collectAsState()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = LocalContext.current as? Activity
+    when {
+        // Preferences are still loading; paint the plain theme surface.
+        !state.termsLoaded -> Box(Modifier.fillMaxSize().background(AbkTheme.colors.background))
 
-    LaunchedEffect(Unit) {
-        vm.markMainUiEntered()
-    }
-
-    var selectedTab by rememberSaveable { mutableStateOf(AbkTab.Status) }
-    var flashDetailPageVisible by rememberSaveable { mutableStateOf(false) }
-    var settingsChildPageVisible by rememberSaveable { mutableStateOf(false) }
-    var buildPlanPageVisible by rememberSaveable { mutableStateOf(false) }
-    var moduleRepositoryPageVisible by rememberSaveable { mutableStateOf(false) }
-    var rootAuthDetailPageVisible by rememberSaveable { mutableStateOf(false) }
-    var managerPatchPageVisible by rememberSaveable { mutableStateOf(false) }
-    var lastBackAt by remember { mutableStateOf(0L) }
-    var exitBackWindowOpen by remember { mutableStateOf(false) }
-    val runtimeNativeManagerActive = state.hasNativeManagerPermission
-    val visibleTabs = remember(state.runtimeNavigationEnabled, state.rootGranted, runtimeNativeManagerActive) {
-        if (state.runtimeNavigationEnabled) {
-            buildList {
-                add(AbkTab.RuntimeHome)
-                if (state.rootGranted) add(AbkTab.InstalledModules)
-                add(AbkTab.Modules)
-                if (runtimeNativeManagerActive) add(AbkTab.RootAuth)
-                add(AbkTab.Settings)
-            }
-        } else {
-            listOf(AbkTab.Status, AbkTab.Build, AbkTab.Modules, AbkTab.Flash, AbkTab.Settings)
-        }
-    }
-    val activeTab = if (selectedTab in visibleTabs) selectedTab else visibleTabs.first()
-    val motionScheme = MaterialTheme.motionScheme
-    val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
-    val isTabletLayout = configuration.smallestScreenWidthDp >= 600
-    var bottomBarHeightPx by remember { mutableIntStateOf(0) }
-    val contentStartPadding = if (isTabletLayout) {
-        AbkTabletRailWidth
-    } else {
-        0.dp
-    }
-    val contentPadding = PaddingValues(
-        bottom = if (isTabletLayout) 0.dp else with(density) { bottomBarHeightPx.toDp() }
-    )
-    val childPageVisible = when (activeTab) {
-        AbkTab.Build -> buildPlanPageVisible
-        AbkTab.Modules -> moduleRepositoryPageVisible
-        AbkTab.Flash -> flashDetailPageVisible
-        AbkTab.Settings -> settingsChildPageVisible
-        AbkTab.RootAuth -> rootAuthDetailPageVisible
-        AbkTab.RuntimeHome -> managerPatchPageVisible
-        else -> false
-    }
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(state.snackbarMessage, state.snackbarLongDuration, state.error) {
-        when (val snackbar = state.snackbarMessage) {
-            null -> {
-                val error = state.error ?: return@LaunchedEffect
-                snackbarHostState.showAbkSnackbar(message = error, longDuration = true)
-                vm.clearError()
-            }
-            else -> {
-                snackbarHostState.showAbkSnackbar(
-                    message = snackbar,
-                    longDuration = state.snackbarLongDuration,
-                )
-                vm.clearSnackbar()
-                if (state.error != null) vm.clearError()
-            }
-        }
-    }
-
-    LaunchedEffect(pendingModuleInstallUri) {
-        if (!pendingModuleInstallUri.isNullOrBlank()) {
-            if (!state.runtimeNavigationEnabled) vm.setRuntimeNavigationEnabled(true)
-            selectedTab = AbkTab.InstalledModules
-        }
-    }
-
-    LaunchedEffect(activeTab) {
-        when (activeTab) {
-            AbkTab.Build -> {
-                moduleRepositoryPageVisible = false
-                flashDetailPageVisible = false
-                settingsChildPageVisible = false
-                rootAuthDetailPageVisible = false
-                managerPatchPageVisible = false
-            }
-            AbkTab.Flash -> {
-                buildPlanPageVisible = false
-                moduleRepositoryPageVisible = false
-                settingsChildPageVisible = false
-                rootAuthDetailPageVisible = false
-                managerPatchPageVisible = false
-                // Flash NavHost is recreated on tab entry — clear stale saveable
-                // state so the bottom bar does not hide until a detail opens.
-                flashDetailPageVisible = false
-            }
-            AbkTab.Modules -> {
-                buildPlanPageVisible = false
-                flashDetailPageVisible = false
-                settingsChildPageVisible = false
-                rootAuthDetailPageVisible = false
-                managerPatchPageVisible = false
-            }
-            AbkTab.Settings -> {
-                buildPlanPageVisible = false
-                moduleRepositoryPageVisible = false
-                flashDetailPageVisible = false
-                rootAuthDetailPageVisible = false
-                managerPatchPageVisible = false
-            }
-            AbkTab.RootAuth -> {
-                buildPlanPageVisible = false
-                moduleRepositoryPageVisible = false
-                flashDetailPageVisible = false
-                settingsChildPageVisible = false
-                managerPatchPageVisible = false
-            }
-            AbkTab.RuntimeHome -> {
-                buildPlanPageVisible = false
-                moduleRepositoryPageVisible = false
-                flashDetailPageVisible = false
-                settingsChildPageVisible = false
-                rootAuthDetailPageVisible = false
-            }
-            else -> {
-                buildPlanPageVisible = false
-                moduleRepositoryPageVisible = false
-                flashDetailPageVisible = false
-                settingsChildPageVisible = false
-                rootAuthDetailPageVisible = false
-                managerPatchPageVisible = false
-            }
-        }
-    }
-
-    LaunchedEffect(visibleTabs, selectedTab, state.runtimeNavigationEnabled) {
-        if (selectedTab !in visibleTabs) {
-            selectedTab = if (state.runtimeNavigationEnabled) AbkTab.RuntimeHome else AbkTab.Status
-        }
-    }
-
-    fun handleTopLevelBack() {
-        val now = System.currentTimeMillis()
-        if (now - lastBackAt > EXIT_BACK_INTERVAL_MS) {
-            lastBackAt = now
-            if (state.predictiveBackEnabled) exitBackWindowOpen = true
-            Toast.makeText(context, context.getString(R.string.press_again_exit), Toast.LENGTH_SHORT).show()
-        } else if (!state.predictiveBackEnabled || exitBackWindowOpen) {
-            context.findActivity()?.finish()
-        }
-    }
-
-    if (!childPageVisible) {
-        BackHandler(
-            enabled = !state.predictiveBackEnabled || !exitBackWindowOpen,
-            onBack = ::handleTopLevelBack
-        )
-    }
-
-    LaunchedEffect(exitBackWindowOpen) {
-        if (exitBackWindowOpen) {
-            delay(EXIT_BACK_INTERVAL_MS)
-            exitBackWindowOpen = false
-        }
-    }
-
-    val navProgressAnim = remember { Animatable(1f) }
-    LaunchedEffect(childPageVisible) {
-        navProgressAnim.animateBottomNavForChildPage(
-            childPageVisible = childPageVisible,
-            motionScheme = motionScheme,
-        )
-    }
-    val navProgress = navProgressAnim.value
-
-    // Bottom-nav progress goes 1f (bar shown) → 0f (a child page slides the bar off).
-    // Only run the bar backdrop and its blur pipeline while the bar is actually on
-    // screen; once it is fully hidden (matches ChildPageMotion's hide epsilon) or the
-    // opaque OOBE overlay covers everything, every recordLayer + blur pass is invisible,
-    // so it is switched off.
-    val barBlurOnScreen = !state.showOobe && navProgress > 0.02f
-    val blurBackdrop = rememberBlurBackdrop(
-        enableBlur = barBlurOnScreen,
-        surfaceColor = MaterialTheme.colorScheme.surfaceContainer,
-        backgroundPainter = null,
-    )
-
-    CompositionLocalProvider(
-        LocalBlurState provides blurBackdrop,
-    ) {
-        // Gate bar transparency on the frosted effect actually rendering (API >= 33),
-        // so pre-Android-13 devices fall back to the opaque surface color.
-        val blurActive = isBlurActive(state.blurEnabled && barBlurOnScreen)
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)))
-    ) {
-        if (isTabletLayout) {
-            val railHideDistancePx = with(density) { AbkTabletRailWidth.toPx() }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .width(AbkTabletRailWidth)
-                    .fillMaxHeight()
-                    .zIndex(if (childPageVisible) 0f else 2f)
-                    .graphicsLayer {
-                        val hidden = 1f - navProgress
-                        translationX = -hidden * railHideDistancePx
-                        alpha = 1f - (hidden * 0.15f)
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                NavigationRail(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .then(if (blurActive) Modifier.blurEffect() else Modifier),
-                    containerColor = if (blurActive) {
-                        Color.Transparent
-                    } else {
-                        uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
-                    }
-                ) {
-                    visibleTabs.forEach { tab ->
-                        NavigationRailItem(
-                            selected = activeTab == tab,
-                            onClick = { selectedTab = tab },
-                            enabled = !childPageVisible,
-                            alwaysShowLabel = false,
-                            colors = NavigationRailItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            icon = {
-                                Icon(
-                                    imageVector = tab.icon(rootGranted = state.rootGranted),
-                                    contentDescription = tab.displayLabel(state.rootGranted)
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = tab.displayLabel(state.rootGranted),
-                                    maxLines = 2,
-                                    softWrap = true,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
-                        )
-                    }
+        state.showPreferencesResetNotice -> AbkDialog(
+            title = stringResource(R.string.preferences_reset_title),
+            onDismissRequest = vm::dismissPreferencesResetNotice,
+            actions = {
+                AbkButton(onClick = vm::dismissPreferencesResetNotice, style = AbkButtonStyle.Primary) {
+                    AbkText(stringResource(android.R.string.ok))
                 }
-            }
-        } else {
-            NavigationBar(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .onSizeChanged { bottomBarHeightPx = it.height }
-                    .zIndex(if (childPageVisible) 0f else 2f)
-                    .graphicsLayer {
-                        val hidden = 1f - navProgress
-                        translationY = hidden * bottomBarHeightPx
-                        alpha = 1f - (hidden * 0.15f)
-                    }
-                    .then(if (blurActive) Modifier.blurEffect() else Modifier),
-                containerColor = if (blurActive) {
-                    Color.Transparent
-                } else {
-                    uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
-                },
-                tonalElevation = 0.dp
-            ) {
-                visibleTabs.forEach { tab ->
-                    NavigationBarItem(
-                        selected = activeTab == tab,
-                        onClick = { selectedTab = tab },
-                        enabled = !childPageVisible,
-                        alwaysShowLabel = false,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        icon = {
-                            Icon(
-                                imageVector = tab.icon(rootGranted = state.rootGranted),
-                                contentDescription = tab.displayLabel(state.rootGranted)
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = tab.displayLabel(state.rootGranted),
-                                maxLines = 2,
-                                softWrap = true,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    )
-                }
-            }
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .zIndex(1f)
-                .blurSourceBody()
+            },
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = contentStartPadding)
-            ) {
-                AnimatedContent(
-                    targetState = activeTab,
-                    transitionSpec = {
-                        val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                        (
-                            fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
-                                slideInHorizontally(
-                                    animationSpec = motionScheme.defaultSpatialSpec()
-                                ) { width -> direction * width / 4 }
-                            ) togetherWith (
-                            fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
-                                slideOutHorizontally(
-                                    animationSpec = motionScheme.fastSpatialSpec()
-                                ) { width -> -direction * width / 6 }
-                            )
-                    },
-                    label = "abk-tab"
-                ) { tab ->
-                    when (tab) {
-                        AbkTab.Status -> StatusScreen(
-                            vm = vm,
-                            outerPadding = contentPadding,
-                            runtimeNavigationEnabled = state.runtimeNavigationEnabled,
-                            onToggleRuntimeNavigation = { vm.setRuntimeNavigationEnabled(true) }
-                        )
-                        AbkTab.Build -> BuildScreen(
-                            vm = vm,
-                            outerPadding = contentPadding,
-                            onPlanPageVisibleChange = { buildPlanPageVisible = it },
-                            onNavigateToStatus = { selectedTab = AbkTab.Status }
-                        )
-                        AbkTab.Modules -> ModuleRepositoryScreen(
-                            vm = vm,
-                            mode = if (state.runtimeNavigationEnabled) {
-                                com.abk.kernel.ui.screens.ModuleRepositoryMode.RUNTIME_STANDARD
-                            } else {
-                                com.abk.kernel.ui.screens.ModuleRepositoryMode.BUILD_ABK
-                            },
-                            outerPadding = contentPadding,
-                            onRepositoryPageVisibleChange = { moduleRepositoryPageVisible = it }
-                        )
-                        AbkTab.Flash -> FlashScreen(
-                            vm = vm,
-                            outerPadding = contentPadding,
-                            onDetailPageVisibleChange = { flashDetailPageVisible = it }
-                        )
-                        AbkTab.RuntimeHome -> RuntimeHomeScreen(
-                            vm = vm,
-                            outerPadding = contentPadding,
-                            onSwitchToClassic = { vm.setRuntimeNavigationEnabled(false) },
-                            onManagerPatchPageVisibleChange = { managerPatchPageVisible = it }
-                        )
-                        AbkTab.InstalledModules -> InstalledModulesScreen(
-                            vm = vm,
-                            outerPadding = contentPadding,
-                            pendingModuleInstallUri = pendingModuleInstallUri,
-                            onPendingModuleInstallUriConsumed = onModuleInstallUriConsumed
-                        )
-                        AbkTab.RootAuth -> RootAuthorizationScreen(
-                            vm = vm,
-                            outerPadding = contentPadding,
-                            onDetailPageVisibleChange = { rootAuthDetailPageVisible = it }
-                        )
-                        AbkTab.Settings -> SettingsScreen(
-                            vm = vm,
-                            outerPadding = contentPadding,
-                            onChildPageVisibleChange = { settingsChildPageVisible = it },
-                            onOpenInstalledModules = {
-                                if (!state.runtimeNavigationEnabled) vm.setRuntimeNavigationEnabled(true)
-                                selectedTab = if (state.rootGranted) {
-                                    AbkTab.InstalledModules
-                                } else {
-                                    AbkTab.RuntimeHome
-                                }
+            AbkText(stringResource(R.string.preferences_reset_message))
+        }
+
+        !state.termsAccepted -> TermsAgreementDialog(
+            onAccept = vm::acceptTerms,
+            onDecline = { activity?.finishAffinity() },
+        )
+
+        else -> Box(Modifier.fillMaxSize()) {
+            AppShell(
+                vm = vm,
+                state = state,
+                pendingModuleInstallUri = pendingModuleInstallUri,
+                onModuleInstallUriConsumed = onModuleInstallUriConsumed,
+            )
+
+            if (!state.showOobe) {
+                val recovery = state.rootGrantRecoveryNotice
+                when {
+                    recovery != null -> AbkDialog(
+                        title = recovery.title,
+                        onDismissRequest = vm::dismissRootGrantRecoveryNotice,
+                        tone = AbkTone.Warning,
+                        actions = {
+                            AbkButton(onClick = vm::dismissRootGrantRecoveryNotice, style = AbkButtonStyle.Primary) {
+                                AbkText(stringResource(android.R.string.ok))
                             }
+                        },
+                    ) { AbkText(recovery.message) }
+
+                    state.showSyncPrompt -> AbkDialog(
+                        title = stringResource(R.string.sync_title),
+                        onDismissRequest = vm::dismissSyncPrompt,
+                        actions = {
+                            AbkButton(onClick = vm::dismissSyncPrompt, style = AbkButtonStyle.Ghost) {
+                                AbkText(stringResource(R.string.skip))
+                            }
+                            AbkButton(onClick = vm::syncFork, style = AbkButtonStyle.Primary) {
+                                AbkText(stringResource(R.string.sync_action))
+                            }
+                        },
+                    ) {
+                        AbkText(
+                            stringResource(R.string.sync_desc) + "\n\n" +
+                                stringResource(R.string.sync_behind_commits, state.behindBy)
                         )
                     }
                 }
             }
+
+            if (state.showOobe) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(AbkTheme.colors.background)
+                        .zIndex(4f)
+                ) {
+                    OnboardingScreen(vm = vm, state = state)
+                }
+            }
         }
-        AbkSnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(
-                    start = contentStartPadding,
-                    bottom = with(density) { (bottomBarHeightPx * navProgress).toDp() } + 10.dp
-                )
-                .zIndex(4f)
-        )
     }
-}
-}
-
-@Composable
-private fun AbkTab.displayLabel(rootGranted: Boolean): String = when (this) {
-    AbkTab.Flash -> stringResource(if (rootGranted) labelRes else R.string.nav_files)
-    else -> stringResource(labelRes)
-}
-
-private fun AbkTab.icon(rootGranted: Boolean) = when (this) {
-    AbkTab.Status -> Icons.Default.Home
-    AbkTab.Build -> Icons.Default.RocketLaunch
-    AbkTab.Modules -> Icons.Default.LibraryBooks
-    AbkTab.Flash -> if (rootGranted) Icons.Default.FlashOn else Icons.Default.FolderOpen
-    AbkTab.RuntimeHome -> Icons.Default.Memory
-    AbkTab.InstalledModules -> Icons.Default.Extension
-    AbkTab.RootAuth -> Icons.Default.AdminPanelSettings
-    AbkTab.Settings -> Icons.Default.Settings
 }
 
 private fun extractModuleInstallUri(intent: Intent?): Uri? {
@@ -907,7 +233,6 @@ private fun isLikelyModuleZipIntent(mimeType: String?, uri: Uri): Boolean {
     return cleanMime in MODULE_ZIP_MIME_TYPES || path.endsWith(".zip")
 }
 
-private const val EXIT_BACK_INTERVAL_MS = 2_000L
 private val MODULE_ZIP_MIME_TYPES = setOf(
     "application/zip",
     "application/x-zip",

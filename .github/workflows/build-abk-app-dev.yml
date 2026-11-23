@@ -6,6 +6,7 @@ on:
     paths:
       - "app/**"
       - "app_dev/**"
+      - "abk-ui/**"
       - "build.gradle.kts"
       - "settings.gradle.kts"
       - "gradle/**"
@@ -17,6 +18,7 @@ on:
     paths:
       - "app/**"
       - "app_dev/**"
+      - "abk-ui/**"
       - "build.gradle.kts"
       - "settings.gradle.kts"
       - "gradle/**"

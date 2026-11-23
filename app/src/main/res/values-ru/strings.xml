@@ -1301,4 +1301,8 @@
     <string name="settings_kernel_runner_saved">Сохранено в GitHub</string>
     <string name="settings_kernel_runner_saving">Сохранение…</string>
     <string name="settings_kernel_runner_request_failed">Не удалось завершить запрос переменных GitHub. Обновите данные и повторите попытку.</string>
+    <string name="settings_app_update_result_short">Версия на сервере %1$s</string>
+    <string name="status_workflows_title">Недавние рабочие процессы</string>
+    <string name="status_workflow_empty">Пока нет рабочих процессов</string>
+    <string name="modules_pending_zip">Архив модуля получен; установка появится в следующем обновлении.</string>
 </resources>
