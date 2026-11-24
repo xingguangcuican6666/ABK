@@ -14,6 +14,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.PathNode
@@ -198,9 +199,97 @@ public class AbkComponentsTest {
         assertEquals("Only the selected destination draws the marker", 1, markerCount())
     }
 
-    /** The 12×2dp selection dash carries a test tag so its count can be asserted. */
     private fun markerCount(): Int =
         compose.onAllNodesWithTag("abkNavMarker", useUnmergedTree = true).fetchSemanticsNodes().size
+
+    private fun markerBounds(): Rect =
+        compose.onAllNodesWithTag("abkNavMarker", useUnmergedTree = true).fetchSemanticsNodes().single().boundsInRoot
+
+    private fun advanceNavigationFrames() {
+        // Publish the click before recomposition, then start the animation on the following frame.
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+    }
+
+    @Test public fun bottomNavigationMarkerSlidesAndRetargetsWithoutDuplicating() {
+        assertBottomNavigationMarkerSlides(LayoutDirection.Ltr)
+    }
+
+    @Test public fun bottomNavigationMarkerSlidesInRtl() {
+        assertBottomNavigationMarkerSlides(LayoutDirection.Rtl)
+    }
+
+    private fun assertBottomNavigationMarkerSlides(direction: LayoutDirection) {
+        var selected by mutableStateOf("one")
+        compose.setContent {
+            AbkTheme(colorSource = AbkColorSource.Seed, reduceMotion = false) {
+                CompositionLocalProvider(LocalLayoutDirection provides direction) {
+                    AbkBottomNavigation(destinations(), selected, { selected = it }, Modifier.width(390.dp),
+                        windowInsets = WindowInsets(0, 0, 0, 0))
+                }
+            }
+        }
+        compose.waitForIdle()
+        val tabs = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+        val centers = tabs.fetchSemanticsNodes().map { it.boundsInRoot.center.x }
+        val initial = markerBounds()
+        assertEquals("Marker starts centered on the selected destination", centers[0], initial.center.x, 1f)
+        with(compose.density) {
+            assertEquals(12.dp.toPx(), initial.width, 1f)
+            assertEquals(2.dp.toPx(), initial.height, 1f)
+        }
+
+        compose.mainClock.autoAdvance = false
+        tabs[2].performClick()
+        advanceNavigationFrames()
+        tabs[2].assertIsSelected()
+        compose.mainClock.advanceTimeBy(96)
+        val moving = markerBounds()
+        assertTrue("Marker travels between destinations instead of disappearing and reappearing",
+            moving.center.x > centers.min() + 1f && moving.center.x < centers.max() - 1f)
+        assertEquals(initial.width, moving.width, 0f)
+        assertEquals(initial.height, moving.height, 0f)
+        assertEquals(initial.top, moving.top, 0f)
+
+        // Reverse before arrival: the same single dash continues from its in-flight position.
+        tabs[0].performClick()
+        advanceNavigationFrames()
+        compose.mainClock.advanceTimeBy(32)
+        val retargeted = markerBounds()
+        assertTrue("Retargeting does not snap to the new destination",
+            retargeted.center.x > centers.min() + 1f && retargeted.center.x < centers.max() - 1f)
+        assertEquals(initial.width, retargeted.width, 0f)
+        assertEquals(initial.height, retargeted.height, 0f)
+        compose.mainClock.advanceTimeBy(300)
+        assertEquals("Marker settles under the latest selection", centers[0], markerBounds().center.x, 1f)
+        tabs[0].assertIsSelected()
+
+        tabs[1].performClick()
+        advanceNavigationFrames()
+        compose.mainClock.advanceTimeBy(300)
+        assertEquals(centers[1], markerBounds().center.x, 1f)
+        assertEquals(1, markerCount())
+    }
+
+    @Test public fun bottomNavigationMarkerSnapsWithReducedMotion() {
+        var selected by mutableStateOf("one")
+        content {
+            AbkBottomNavigation(destinations(), selected, { selected = it }, Modifier.width(390.dp),
+                windowInsets = WindowInsets(0, 0, 0, 0))
+        }
+        compose.waitForIdle()
+        val tabs = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+        val targetCenter = tabs.fetchSemanticsNodes()[2].boundsInRoot.center.x
+        compose.mainClock.autoAdvance = false
+        tabs[2].performClick()
+        advanceNavigationFrames()
+        tabs[2].assertIsSelected()
+        assertEquals("Reduced motion reaches the target without a sliding interval", targetCenter, markerBounds().center.x, 1f)
+        assertEquals(1, markerCount())
+    }
 
     @Test public fun narrowRtlNavigationSupportsDoubleFontScaleWithoutOverlappingTargets() {
         content {

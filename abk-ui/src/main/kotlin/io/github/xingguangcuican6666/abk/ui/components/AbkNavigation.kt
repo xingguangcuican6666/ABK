@@ -1,5 +1,6 @@
 package io.github.xingguangcuican6666.abk.ui.components
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -7,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -44,6 +47,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import io.github.xingguangcuican6666.abk.ui.icons.AbkIcon
 import io.github.xingguangcuican6666.abk.ui.theme.AbkMotion
@@ -118,42 +122,38 @@ public fun AbkBottomNavigation(
     val c = AbkTheme.colors
     Column(modifier.background(c.raised).windowInsetsPadding(windowInsets)) {
         AbkDivider()
-        Row(Modifier.fillMaxWidth().selectableGroup().padding(horizontal = 8.dp, vertical = 4.dp)) {
-            items.forEach { item ->
-                val interactions = remember(item.id) { MutableInteractionSource() }
-                val focused by interactions.collectIsFocusedAsState()
-                val selected = item.id == selectedId
-                val foreground = if (item.enabled) c.inkMuted else c.inkFaint
-                // The marker grows in under the destination that was just picked and shrinks out
-                // of the one that was left, the way the web catalogue's underline does. It never
-                // changes the weight of a destination, and only the current destination carries
-                // one — the others are bare, so the bar reads "you are here" and nothing more.
-                val markerScale by animateFloatAsState(
-                    targetValue = if (selected) 1f else 0f,
-                    animationSpec = abkTween(AbkMotion.Base, AbkMotion.EaseSpring),
-                    label = "abkNavMarker",
-                )
-                Box(
-                    Modifier.weight(1f).abkFocusBorder(focused, foreground)
-                        .selectable(selected, interactions, indication = null, enabled = item.enabled, role = Role.Tab) { onSelect(item.id) },
-                ) {
-                    Column(Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)) {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Row(Modifier.fillMaxWidth().selectableGroup()) {
+                items.forEach { item ->
+                    val interactions = remember(item.id) { MutableInteractionSource() }
+                    val focused by interactions.collectIsFocusedAsState()
+                    val selected = item.id == selectedId
+                    val foreground = if (item.enabled) c.inkMuted else c.inkFaint
+                    Column(
+                        Modifier.weight(1f).abkFocusBorder(focused, foreground)
+                            .selectable(selected, interactions, indication = null, enabled = item.enabled, role = Role.Tab) { onSelect(item.id) }
+                            .defaultMinSize(minHeight = 56.dp).padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+                    ) {
                         AbkIcon(item.icon, null, tint = foreground, size = 22.dp)
                         Text(item.label, style = MaterialTheme.typography.labelSmall, color = foreground)
                     }
-                    // Compose the marker only while it belongs to the current destination or is
-                    // still shrinking out of it. A destination that is not selected never draws.
-                    if (selected || markerScale > 0f) {
-                        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp)
-                            .size(12.dp, 2.dp).background(foreground, AbkShapes.Pill)
-                            .testTag("abkNavMarker")
-                            .graphicsLayer {
-                                scaleX = markerScale
-                                alpha = markerScale
-                            })
-                    }
                 }
+            }
+            val selectedIndex = items.indexOfFirst { it.id == selectedId }
+            if (selectedIndex >= 0) {
+                // One constant-size dash travels between destinations; offset is start-relative for RTL.
+                val markerOffset by animateDpAsState(
+                    targetValue = maxWidth / items.size * (selectedIndex + 0.5f) - 6.dp,
+                    animationSpec = abkTween(AbkMotion.Base, AbkMotion.EaseInOut),
+                    label = "abkNavMarker",
+                )
+                val foreground = if (items[selectedIndex].enabled) c.inkMuted else c.inkFaint
+                Box(Modifier.align(Alignment.BottomStart)
+                    .offset { IntOffset(markerOffset.roundToPx(), 0) }
+                    .padding(bottom = 4.dp).size(12.dp, 2.dp)
+                    .background(foreground, AbkShapes.Pill).testTag("abkNavMarker"))
             }
         }
     }
