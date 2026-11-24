@@ -1,13 +1,15 @@
 package com.abk.kernel.ui
 
 import android.widget.Toast
+import androidx.activity.BackEventCompat
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +18,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,6 +26,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -37,12 +41,15 @@ import com.abk.kernel.utils.findActivity
 import com.abk.kernel.viewmodel.MainViewModel
 import io.github.xingguangcuican6666.abk.ui.components.AbkBottomNavigation
 import io.github.xingguangcuican6666.abk.ui.components.AbkNavigationItem
+import io.github.xingguangcuican6666.abk.ui.components.AbkPageSwitch
 import io.github.xingguangcuican6666.abk.ui.components.AbkSnackbarHost
 import io.github.xingguangcuican6666.abk.ui.components.rememberAbkSnackbarHostState
 import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
 import io.github.xingguangcuican6666.abk.ui.theme.AbkMotion
 import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
 import io.github.xingguangcuican6666.abk.ui.theme.AbkTone
+import io.github.xingguangcuican6666.abk.ui.theme.abkTween
+import kotlinx.coroutines.CancellationException
 
 /** Top-level destinations: equal weight, listed in bottom-bar order. */
 enum class AbkDestination(val labelRes: Int, val icon: ImageVector) {
@@ -61,6 +68,11 @@ private const val EXIT_BACK_INTERVAL_MS = 2_000L
  * second-press-to-exit back handler for top-level pages.
  *
  * Child pages hide the bar by reporting [onChildPageVisibleChange] upwards.
+ *
+ * Switching destinations slides the pages sideways — towards the far end of
+ * the reading direction when moving forward in the bar and towards the near
+ * end when moving back — and the predictive back gesture lifts the whole shell
+ * out of the way while the finger is still down.
  */
 @Composable
 fun AppShell(
@@ -110,7 +122,8 @@ fun AppShell(
     }
 
     var lastBackAt by remember { mutableLongStateOf(0L) }
-    BackHandler(enabled = !childPageVisible) {
+    // The same action the button triggers, so the gesture and the button never disagree.
+    fun exitOrAskToExit() {
         val now = System.currentTimeMillis()
         if (now - lastBackAt > EXIT_BACK_INTERVAL_MS) {
             lastBackAt = now
@@ -120,41 +133,86 @@ fun AppShell(
         }
     }
 
+    BackHandler(enabled = !childPageVisible) { exitOrAskToExit() }
+
+    // The progress of the edge swipe, 0 when the finger is not down. It drives the preview
+    // below and is reset when the gesture ends, whatever the outcome.
+    var backProgress by remember { mutableFloatStateOf(0f) }
+    var backFromLeftEdge by remember { mutableStateOf(true) }
+    PredictiveBackHandler(enabled = state.predictiveBackEnabled && !childPageVisible) { progress ->
+        try {
+            progress.collect { event ->
+                backFromLeftEdge = event.swipeEdge != BackEventCompat.EDGE_RIGHT
+                backProgress = event.progress
+            }
+            // The gesture was let go of, so it commits: the same action the button triggers.
+            exitOrAskToExit()
+        } catch (cancelled: CancellationException) {
+            // The gesture was taken back, so nothing happens.
+        } finally {
+            backProgress = 0f
+        }
+    }
+
+    // The shell lifts away from the finger: it slides towards the far edge and shrinks a
+    // little, so the gesture shows the app leaving before the app actually leaves.
+    val previewProgress by animateFloatAsState(
+        targetValue = backProgress,
+        animationSpec = abkTween(AbkMotion.Fast, AbkMotion.EaseOut),
+        label = "abkBackPreview",
+    )
+
     Box(Modifier.fillMaxSize().background(AbkTheme.colors.background)) {
-        when (selected) {
-            AbkDestination.Status -> StatusDestination(
-                vm = vm,
-                state = state,
-                onChildPageVisibleChange = { childPageVisible = it },
-            )
-            AbkDestination.Build -> BuildDestination(
-                vm = vm,
-                state = state,
-                onChildPageVisibleChange = { childPageVisible = it },
-            )
-            AbkDestination.Flash -> FlashDestination(
-                vm = vm,
-                state = state,
-                onChildPageVisibleChange = { childPageVisible = it },
-            )
-            AbkDestination.Modules -> ModulesDestination(
-                vm = vm,
-                state = state,
-                pendingModuleInstallUri = pendingModuleInstallUri,
-                onPendingModuleInstallUriConsumed = onModuleInstallUriConsumed,
-            )
-            AbkDestination.Settings -> SettingsDestination(
-                vm = vm,
-                state = state,
-                onChildPageVisibleChange = { childPageVisible = it },
-            )
+        Box(
+            Modifier.fillMaxSize().graphicsLayer {
+                val travel = previewProgress * 48.dp.toPx()
+                translationX = if (backFromLeftEdge) travel else -travel
+                scaleX = 1f - previewProgress * 0.04f
+                scaleY = 1f - previewProgress * 0.04f
+                alpha = 1f - previewProgress * 0.2f
+            },
+        ) {
+            AbkPageSwitch(
+                target = selected,
+                modifier = Modifier.fillMaxSize(),
+                forward = { from, to -> to.ordinal > from.ordinal },
+            ) { destination ->
+                when (destination) {
+                    AbkDestination.Status -> StatusDestination(
+                        vm = vm,
+                        state = state,
+                        onChildPageVisibleChange = { childPageVisible = it },
+                    )
+                    AbkDestination.Build -> BuildDestination(
+                        vm = vm,
+                        state = state,
+                        onChildPageVisibleChange = { childPageVisible = it },
+                    )
+                    AbkDestination.Flash -> FlashDestination(
+                        vm = vm,
+                        state = state,
+                        onChildPageVisibleChange = { childPageVisible = it },
+                    )
+                    AbkDestination.Modules -> ModulesDestination(
+                        vm = vm,
+                        state = state,
+                        pendingModuleInstallUri = pendingModuleInstallUri,
+                        onPendingModuleInstallUriConsumed = onModuleInstallUriConsumed,
+                    )
+                    AbkDestination.Settings -> SettingsDestination(
+                        vm = vm,
+                        state = state,
+                        onChildPageVisibleChange = { childPageVisible = it },
+                    )
+                }
+            }
         }
 
         AnimatedVisibility(
             visible = !childPageVisible,
             modifier = Modifier.align(Alignment.BottomCenter),
-            enter = fadeIn(tween(AbkMotion.Base)) + slideInVertically(tween(AbkMotion.Base)) { it },
-            exit = fadeOut(tween(AbkMotion.Fast)) + slideOutVertically(tween(AbkMotion.Fast)) { it },
+            enter = fadeIn(abkTween(AbkMotion.Base)) + slideInVertically(abkTween(AbkMotion.Base)) { it },
+            exit = fadeOut(abkTween(AbkMotion.Fast)) + slideOutVertically(abkTween(AbkMotion.Fast)) { it },
         ) {
             AbkBottomNavigation(
                 items = AbkDestination.entries.map {

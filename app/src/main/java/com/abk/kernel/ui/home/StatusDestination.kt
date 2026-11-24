@@ -68,7 +68,6 @@ fun StatusDestination(
 
     AbkPage(
         title = stringResource(R.string.status_title),
-        eyebrow = stringResource(R.string.app_name),
         description = stringResource(
             if (state.rootGranted) R.string.status_working else R.string.status_partially_active
         ),

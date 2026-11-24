@@ -44,12 +44,6 @@ public object AbkShapes {
     public val Pill = RoundedCornerShape(50)
 }
 
-public object AbkMotion {
-    public const val Fast: Int = 120
-    public const val Base: Int = 220
-    public const val Slow: Int = 360
-}
-
 public object AbkFonts {
     /** 悠哉字体（Yozai）: a softer hand-written Han face than WenKai's brush-flavoured Kai. */
     public val Hand: FontFamily = FontFamily(
@@ -109,9 +103,10 @@ public fun AbkTheme(
         } else abkSeedColors(seed, darkTheme)
     }
     val typography = remember(fontFamily) { abkTypography(fontFamily) }
+    val motionScheme = remember(reduceMotion) { AbkMotionScheme(reduceMotion) }
     CompositionLocalProvider(LocalAbkTheme provides AbkThemeValues(colors, reduceMotion, monoFontFamily)) {
         MaterialTheme(
-            colorScheme = colors.material, typography = typography,
+            colorScheme = colors.material, motionScheme = motionScheme, typography = typography,
             shapes = Shapes(AbkShapes.Small, AbkShapes.Small, AbkShapes.Medium, AbkShapes.Large, AbkShapes.ExtraLarge),
             content = content,
         )

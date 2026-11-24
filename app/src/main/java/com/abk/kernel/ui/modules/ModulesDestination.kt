@@ -68,7 +68,6 @@ fun ModulesDestination(
 
     AbkPage(
         title = stringResource(R.string.module_repo_title),
-        eyebrow = stringResource(R.string.nav_modules),
         description = stringResource(R.string.module_repo_central_desc),
         topBarActions = {
             AbkIconButton(

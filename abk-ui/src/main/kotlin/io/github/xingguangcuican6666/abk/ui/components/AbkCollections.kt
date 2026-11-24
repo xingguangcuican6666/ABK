@@ -1,5 +1,11 @@
 package io.github.xingguangcuican6666.abk.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -31,9 +38,11 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import io.github.xingguangcuican6666.abk.ui.icons.AbkIcon
 import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
+import io.github.xingguangcuican6666.abk.ui.theme.AbkMotion
 import io.github.xingguangcuican6666.abk.ui.theme.AbkShapes
 import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
 import io.github.xingguangcuican6666.abk.ui.theme.AbkTone
+import io.github.xingguangcuican6666.abk.ui.theme.abkTween
 
 public enum class AbkCardStyle { Default, Flat, Sunken }
 
@@ -128,11 +137,26 @@ public fun AbkAccordion(
                 .padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 AbkText(title, Modifier.weight(1f), MaterialTheme.typography.titleSmall,
                     if (enabled) AbkTheme.colors.ink else AbkTheme.colors.inkFaint)
-                AbkIcon(AbkIcons.Plus, null, Modifier.rotate(if (expanded) 45f else 0f),
+                // The marker turns into a cross as the panel opens, the way the web
+                // catalogue's accordion marker does.
+                val rotation by animateFloatAsState(
+                    targetValue = if (expanded) 45f else 0f,
+                    animationSpec = abkTween(AbkMotion.Base, AbkMotion.EaseOut),
+                    label = "abkAccordionMarker",
+                )
+                AbkIcon(AbkIcons.Plus, null, Modifier.rotate(rotation),
                     tint = if (expanded) AbkTheme.colors.accent.color else AbkTheme.colors.inkMuted)
             }
-            if (expanded) Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn(abkTween(AbkMotion.Base, AbkMotion.EaseOut)) +
+                    expandVertically(abkTween(AbkMotion.Base, AbkMotion.EaseOut)),
+                exit = fadeOut(abkTween(AbkMotion.Fast, AbkMotion.EaseOut)) +
+                    shrinkVertically(abkTween(AbkMotion.Fast, AbkMotion.EaseOut)),
+            ) {
+                Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+            }
         }
     }
 }

@@ -3,6 +3,7 @@ package io.github.xingguangcuican6666.abk.ui.components
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -47,9 +48,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.xingguangcuican6666.abk.ui.icons.AbkIcon
 import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
+import io.github.xingguangcuican6666.abk.ui.theme.AbkMotion
 import io.github.xingguangcuican6666.abk.ui.theme.AbkShapes
 import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
 import io.github.xingguangcuican6666.abk.ui.theme.AbkTone
+import io.github.xingguangcuican6666.abk.ui.theme.abkTween
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -86,7 +89,8 @@ public fun AbkAlert(
 ) {
     val c = AbkTheme.colors.status(tone)
     Surface(modifier.semantics { liveRegion = LiveRegionMode.Polite }, shape = AbkShapes.Medium,
-        color = c.container, border = BorderStroke(1.dp, c.color.copy(alpha = 0.3f))) {
+        color = c.container, contentColor = c.onContainer,
+        border = BorderStroke(1.dp, c.color.copy(alpha = 0.3f))) {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             // The outlined glyph marks the state on top of the tone container, so the tray stays quiet.
             AbkStatusGlyph(tone, Modifier.padding(top = 2.dp), size = 20.dp)
@@ -109,12 +113,19 @@ public fun AbkLinearProgress(
     require(progress == null || progress.isFinite()) { "Progress must be finite or null" }
     val c = AbkTheme.colors
     val phase = loopingPhase(1400, progress == null || striped)
+    // The filled part grows to its new length over the slow duration, the way the web
+    // catalogue's `.progress__bar` transitions its width.
+    val filled by animateFloatAsState(
+        targetValue = value ?: 0f,
+        animationSpec = abkTween(AbkMotion.Slow, AbkMotion.EaseOut),
+        label = "abkProgressFill",
+    )
     Canvas(modifier.fillMaxWidth().height(8.dp).clip(AbkShapes.Pill).semantics {
         contentDescription = label
         progressBarRangeInfo = if (value == null) ProgressBarRangeInfo.Indeterminate else ProgressBarRangeInfo(value, 0f..1f)
     }) {
         drawRect(c.sunken)
-        val segment = if (value == null) size.width * 0.35f else size.width * value
+        val segment = if (value == null) size.width * 0.35f else size.width * filled
         val start = if (value == null) (size.width - segment) * phase else 0f
         val rtl = layoutDirection == androidx.compose.ui.unit.LayoutDirection.Rtl
         val left = if (rtl) size.width - start - segment else start
@@ -154,7 +165,12 @@ public fun AbkRingProgress(progress: Float, modifier: Modifier = Modifier, label
 }
 
 @Composable
-public fun AbkSpinner(modifier: Modifier = Modifier, size: AbkSize = AbkSize.Medium, label: String = "加载中") {
+public fun AbkSpinner(
+    modifier: Modifier = Modifier,
+    size: AbkSize = AbkSize.Medium,
+    label: String = "加载中",
+    color: Color = AbkTheme.colors.accent.color,
+) {
     val diameter = when (size) { AbkSize.Small -> 14.dp; AbkSize.Medium -> 20.dp; AbkSize.Large -> 32.dp }
     val c = AbkTheme.colors
     val phase = loopingPhase(800)
@@ -162,7 +178,7 @@ public fun AbkSpinner(modifier: Modifier = Modifier, size: AbkSize = AbkSize.Med
         val width = if (size == AbkSize.Large) 3.dp.toPx() else 2.dp.toPx()
         val bounds = Size((this.size.width - width).coerceAtLeast(0f), (this.size.height - width).coerceAtLeast(0f))
         drawArc(c.line, 0f, 360f, false, Offset(width / 2, width / 2), bounds, style = Stroke(width))
-        drawArc(c.accent.color, phase * 360f - 90f, 100f, false, Offset(width / 2, width / 2), bounds, style = Stroke(width, cap = StrokeCap.Round))
+        drawArc(color, phase * 360f - 90f, 100f, false, Offset(width / 2, width / 2), bounds, style = Stroke(width, cap = StrokeCap.Round))
     }
 }
 

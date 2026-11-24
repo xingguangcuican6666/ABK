@@ -1,5 +1,7 @@
 package io.github.xingguangcuican6666.abk.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
@@ -55,8 +58,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.xingguangcuican6666.abk.ui.icons.AbkIcon
 import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
+import io.github.xingguangcuican6666.abk.ui.theme.AbkMotion
 import io.github.xingguangcuican6666.abk.ui.theme.AbkShapes
 import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
+import io.github.xingguangcuican6666.abk.ui.theme.abkTween
 
 @Composable
 public fun AbkField(
@@ -102,6 +107,23 @@ public fun AbkTextField(
     val c = AbkTheme.colors
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
+    // The border colour, the border width and the fill all cross-fade into the focused state
+    // over the fast duration, the way the web catalogue's `.input` does.
+    val borderColor by animateColorAsState(
+        targetValue = if (error != null) c.danger.color else if (focused) c.accent.color else c.lineStrong,
+        animationSpec = abkTween(AbkMotion.Fast, AbkMotion.EaseOut),
+        label = "abkFieldBorder",
+    )
+    val borderWidth by animateDpAsState(
+        targetValue = if (focused) 2.dp else 1.dp,
+        animationSpec = abkTween(AbkMotion.Fast, AbkMotion.EaseOut),
+        label = "abkFieldBorderWidth",
+    )
+    val fill by animateColorAsState(
+        targetValue = if (error != null) c.danger.container else if (focused) c.raised else c.input,
+        animationSpec = abkTween(AbkMotion.Fast, AbkMotion.EaseOut),
+        label = "abkFieldFill",
+    )
     AbkField(label, modifier, hint, error, optionalLabel) {
         BasicTextField(
             value, onValueChange, Modifier.fillMaxWidth().semantics {
@@ -116,10 +138,9 @@ public fun AbkTextField(
             cursorBrush = SolidColor(c.accent.color),
             decorationBox = { inner ->
                 Surface(
-                    color = if (error != null) c.danger.container else c.input,
+                    color = fill,
                     contentColor = c.inkSoft, shape = AbkShapes.Medium,
-                    border = BorderStroke(if (focused) 2.dp else 1.dp,
-                        if (error != null) c.danger.color else if (focused) c.accent.color else c.lineStrong),
+                    border = BorderStroke(borderWidth, borderColor),
                 ) {
                     Row(Modifier.defaultMinSize(minHeight = 48.dp).padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -278,10 +299,30 @@ public fun AbkSwitch(
 internal fun SwitchTrack(checked: Boolean, enabled: Boolean, size: AbkSize) {
     val c = AbkTheme.colors
     val small = size == AbkSize.Small
-    Box(Modifier.size(if (small) 40.dp else 48.dp, if (small) 24.dp else 28.dp)
-        .background(if (!enabled) c.sunken else if (checked) c.accent.color else c.lineStrong, AbkShapes.Pill)
-        .padding(4.dp), contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart) {
-        Box(Modifier.size(if (small) 16.dp else 20.dp).background(if (checked && enabled) c.accent.onColor else c.raised, CircleShape))
+    val trackWidth = if (small) 40.dp else 48.dp
+    val thumbSize = if (small) 16.dp else 20.dp
+    val padding = 4.dp
+    // The thumb slides to the other end of the track, the way the web catalogue's thumb
+    // does with `translateX(20px)` on a spring curve.
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) trackWidth - padding * 2 - thumbSize else 0.dp,
+        animationSpec = abkTween(AbkMotion.Base, AbkMotion.EaseSpring),
+        label = "abkSwitchThumb",
+    )
+    val trackColor by animateColorAsState(
+        targetValue = if (!enabled) c.sunken else if (checked) c.accent.color else c.lineStrong,
+        animationSpec = abkTween(AbkMotion.Base, AbkMotion.EaseOut),
+        label = "abkSwitchTrack",
+    )
+    val thumbColor by animateColorAsState(
+        targetValue = if (checked && enabled) c.accent.onColor else c.raised,
+        animationSpec = abkTween(AbkMotion.Base, AbkMotion.EaseOut),
+        label = "abkSwitchThumbColor",
+    )
+    Box(Modifier.size(trackWidth, if (small) 24.dp else 28.dp)
+        .background(trackColor, AbkShapes.Pill)
+        .padding(padding)) {
+        Box(Modifier.offset(x = thumbOffset).size(thumbSize).background(thumbColor, CircleShape))
     }
 }
 
@@ -337,12 +378,25 @@ public fun AbkSegmented(
         Row(Modifier.padding(4.dp).selectableGroup()) {
             options.forEach { option ->
                 val selected = option.id == selectedId
-                Surface(Modifier.weight(1f), shape = AbkShapes.Pill, color = if (selected) AbkTheme.colors.raised else androidx.compose.ui.graphics.Color.Transparent) {
+                // The pill and the label cross-fade into the selected state, the way the web
+                // catalogue's segmented control does over its fast duration.
+                val fill by animateColorAsState(
+                    targetValue = if (selected) AbkTheme.colors.raised else androidx.compose.ui.graphics.Color.Transparent,
+                    animationSpec = abkTween(AbkMotion.Fast, AbkMotion.EaseOut),
+                    label = "abkSegmentedFill",
+                )
+                val label by animateColorAsState(
+                    targetValue = if (!option.enabled) AbkTheme.colors.inkFaint
+                    else if (selected) AbkTheme.colors.ink else AbkTheme.colors.inkMuted,
+                    animationSpec = abkTween(AbkMotion.Fast, AbkMotion.EaseOut),
+                    label = "abkSegmentedLabel",
+                )
+                Surface(Modifier.weight(1f), shape = AbkShapes.Pill, color = fill) {
                     Box(Modifier.defaultMinSize(minHeight = 48.dp)
                         .selectable(selected, enabled = option.enabled, role = Role.RadioButton) { onSelect(option.id) }
                         .padding(horizontal = 8.dp, vertical = if (size == AbkSize.Small) 6.dp else 10.dp), contentAlignment = Alignment.Center) {
                         Text(option.label, style = if (size == AbkSize.Small) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
-                            color = if (!option.enabled) AbkTheme.colors.inkFaint else if (selected) AbkTheme.colors.ink else AbkTheme.colors.inkMuted)
+                            color = label)
                     }
                 }
             }

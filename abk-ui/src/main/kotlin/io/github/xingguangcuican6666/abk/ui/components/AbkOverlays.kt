@@ -1,5 +1,8 @@
 package io.github.xingguangcuican6666.abk.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,9 +46,11 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import io.github.xingguangcuican6666.abk.ui.icons.AbkIcon
 import io.github.xingguangcuican6666.abk.ui.icons.AbkIcons
+import io.github.xingguangcuican6666.abk.ui.theme.AbkMotion
 import io.github.xingguangcuican6666.abk.ui.theme.AbkShapes
 import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
 import io.github.xingguangcuican6666.abk.ui.theme.AbkTone
+import io.github.xingguangcuican6666.abk.ui.theme.abkTween
 
 @Composable
 public fun AbkDialog(
@@ -65,21 +70,29 @@ public fun AbkDialog(
         val window = (LocalView.current.parent as? DialogWindowProvider)?.window
         SideEffect { window?.setDimAmount(c.scrim.alpha) }
         BoxWithConstraints(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-            Surface(modifier.widthIn(max = if (wide) 640.dp else 420.dp).fillMaxWidth().heightIn(max = maxHeight * 0.85f)
-                .semantics { paneTitle = title }, shape = AbkShapes.ExtraLarge, color = c.raised,
-                contentColor = c.ink, border = BorderStroke(1.dp, c.line)) {
-                Column {
-                    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        // The mark sits beside the title, not above it, so long titles wrap under themselves.
-                        // It is outlined rather than a filled disc so the glyph, not a coloured badge, names the state.
-                        if (tone != null) AbkStatusGlyph(tone, Modifier.padding(end = 10.dp), size = 24.dp)
-                        AbkText(title, Modifier.weight(1f).semantics { heading() }, MaterialTheme.typography.titleLarge)
-                        AbkIconButton(AbkIcons.Close, dismissDescription, onDismissRequest)
+            // The dialog lifts and grows into place, the way the web catalogue's `.dialog`
+            // moves up and scales up from `translateY(8px) scale(.97)`.
+            AnimatedVisibility(
+                visible = true,
+                enter = fadeIn(abkTween(AbkMotion.Base, AbkMotion.EaseOut)) +
+                    scaleIn(abkTween(AbkMotion.Base, AbkMotion.EaseSpring), initialScale = 0.97f),
+            ) {
+                Surface(modifier.widthIn(max = if (wide) 640.dp else 420.dp).fillMaxWidth().heightIn(max = maxHeight * 0.85f)
+                    .semantics { paneTitle = title }, shape = AbkShapes.ExtraLarge, color = c.raised,
+                    contentColor = c.ink, border = BorderStroke(1.dp, c.line)) {
+                    Column {
+                        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            // The mark sits beside the title, not above it, so long titles wrap under themselves.
+                            // It is outlined rather than a filled disc so the glyph, not a coloured badge, names the state.
+                            if (tone != null) AbkStatusGlyph(tone, Modifier.padding(end = 10.dp), size = 24.dp)
+                            AbkText(title, Modifier.weight(1f).semantics { heading() }, MaterialTheme.typography.titleLarge)
+                            AbkIconButton(AbkIcons.Close, dismissDescription, onDismissRequest)
+                        }
+                        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+                        FlowRow(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)) { actions() }
                     }
-                    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
-                    FlowRow(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)) { actions() }
                 }
             }
         }

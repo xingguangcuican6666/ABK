@@ -266,15 +266,16 @@ fun AbkExtensionManagerScreen(
                 },
             )
         },
-    ) { _ ->
+    ) { padding ->
         when {
-            loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            loading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 AbkSpinner(label = stringResource(R.string.loading))
             }
 
             extensions.isEmpty() -> Box(
                 Modifier
                     .fillMaxSize()
+                    .padding(padding)
                     .padding(horizontal = ContentGutter, vertical = AbkSpacing.Lg),
             ) {
                 AbkEmptyState(
@@ -285,7 +286,7 @@ fun AbkExtensionManagerScreen(
             }
 
             else -> LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(
                     start = ContentGutter,
                     top = AbkSpacing.Lg,

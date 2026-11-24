@@ -1,5 +1,6 @@
 package io.github.xingguangcuican6666.abk.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -37,15 +38,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.xingguangcuican6666.abk.ui.icons.AbkIcon
+import io.github.xingguangcuican6666.abk.ui.theme.AbkMotion
 import io.github.xingguangcuican6666.abk.ui.theme.AbkShapes
 import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
+import io.github.xingguangcuican6666.abk.ui.theme.abkTween
 
 @Composable
 public fun AbkScaffold(
@@ -120,6 +123,14 @@ public fun AbkBottomNavigation(
                 val focused by interactions.collectIsFocusedAsState()
                 val selected = item.id == selectedId
                 val foreground = if (item.enabled) c.inkMuted else c.inkFaint
+                // The marker grows in under the destination that was just picked and shrinks out
+                // of the one that was left, the way the web catalogue's underline does. It never
+                // changes the weight of a destination.
+                val markerScale by animateFloatAsState(
+                    targetValue = if (selected) 1f else 0f,
+                    animationSpec = abkTween(AbkMotion.Base, AbkMotion.EaseSpring),
+                    label = "abkNavMarker",
+                )
                 Box(
                     Modifier.weight(1f).abkFocusBorder(focused, foreground)
                         .selectable(selected, interactions, indication = null, enabled = item.enabled, role = Role.Tab) { onSelect(item.id) },
@@ -129,8 +140,12 @@ public fun AbkBottomNavigation(
                         AbkIcon(item.icon, null, tint = foreground, size = 22.dp)
                         Text(item.label, style = MaterialTheme.typography.labelSmall, color = foreground)
                     }
-                    if (selected) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp)
-                        .size(12.dp, 2.dp).background(foreground, AbkShapes.Pill))
+                    Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp)
+                        .size(12.dp, 2.dp).background(foreground, AbkShapes.Pill)
+                        .graphicsLayer {
+                            scaleX = markerScale
+                            alpha = markerScale
+                        })
                 }
             }
         }
@@ -149,6 +164,14 @@ public fun AbkTabs(
         Row(Modifier.fillMaxWidth().then(if (scrollable) Modifier.horizontalScroll(rememberScrollState()) else Modifier).selectableGroup()) {
             items.forEach { item ->
                 val selected = item.id == selectedId
+                // The underline of the picked tab grows out of nothing, the way the web
+                // catalogue's `tab-in` keyframe does. The label colour already names the
+                // selection, so the underline only repeats it.
+                val underlineScale by animateFloatAsState(
+                    targetValue = if (selected) 1f else 0f,
+                    animationSpec = abkTween(AbkMotion.Base, AbkMotion.EaseOut),
+                    label = "abkTabUnderline",
+                )
                 Column(Modifier.then(if (scrollable) Modifier.width(IntrinsicSize.Max) else Modifier.weight(1f))
                     .selectable(selected, enabled = item.enabled, role = Role.Tab) { onSelect(item.id) },
                     horizontalAlignment = Alignment.CenterHorizontally) {
@@ -158,7 +181,11 @@ public fun AbkTabs(
                             color = if (!item.enabled) AbkTheme.colors.inkFaint else if (selected) AbkTheme.colors.accent.color else AbkTheme.colors.inkMuted)
                         if (item.count != null) AbkBadge(item.count.toString(), dot = false)
                     }
-                    Box(Modifier.fillMaxWidth().height(2.dp).background(if (selected) AbkTheme.colors.accent.color else Color.Transparent))
+                    Box(Modifier.fillMaxWidth().height(2.dp).background(AbkTheme.colors.accent.color, AbkShapes.Pill)
+                        .graphicsLayer {
+                            scaleX = underlineScale
+                            alpha = underlineScale
+                        })
                 }
             }
         }

@@ -150,10 +150,11 @@ fun OnboardingScreen(vm: MainViewModel, state: MainUiState) {
     AbkScaffold(
         topBar = { AbkTopBar(title = stringResource(R.string.app_name), subtitle = stringResource(R.string.oobe_first_launch)) },
         modifier = Modifier.background(AbkTheme.colors.background),
-    ) { _ ->
+    ) { padding ->
         Column(
             Modifier
                 .fillMaxSize()
+                .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(AbkSpacing.Lg),

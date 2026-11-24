@@ -2,6 +2,7 @@ package io.github.xingguangcuican6666.abk.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,14 +22,18 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -43,12 +48,18 @@ import io.github.xingguangcuican6666.abk.ui.theme.AbkTheme
 public enum class AbkButtonStyle { Primary, Secondary, Soft, Outline, Ghost, Danger, Sketch }
 public enum class AbkSize { Small, Medium, Large }
 
+/**
+ * Text inherits [androidx.compose.material3.LocalContentColor] so it stays legible on whatever
+ * surface hosts it — a primary button, a tone container, a raised card. Surfaces that map to a
+ * Material role publish their matching on-colour; surfaces built on the library's own roles fall
+ * back to page ink instead of Material's unspecified black.
+ */
 @Composable
 public fun AbkText(
     text: String,
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.bodyLarge,
-    color: Color = AbkTheme.colors.ink,
+    color: Color = LocalContentColor.current.takeOrElse { AbkTheme.colors.ink },
 ) {
     Text(text, modifier, color = color, style = style)
 }
@@ -137,9 +148,13 @@ public fun AbkButton(
         AbkSize.Medium -> PaddingValues(horizontal = 18.dp, vertical = 10.dp)
         AbkSize.Large -> PaddingValues(horizontal = 24.dp, vertical = 14.dp)
     }
+    val interactions = remember { MutableInteractionSource() }
     Button(
-        onClick, modifier.defaultMinSize(minHeight = 48.dp).then(if (loading) Modifier.semantics { stateDescription = loadingDescription } else Modifier),
+        onClick, modifier.defaultMinSize(minHeight = 48.dp)
+            .abkPressScale(interactions, AbkPressScaleButton)
+            .then(if (loading) Modifier.semantics { stateDescription = loadingDescription } else Modifier),
         enabled = enabled && !loading, shape = shape, contentPadding = padding,
+        interactionSource = interactions,
         colors = ButtonDefaults.buttonColors(
             containerColor = background, contentColor = foreground,
             disabledContainerColor = if (loading) background else c.sunken,
@@ -152,8 +167,15 @@ public fun AbkButton(
             else -> null
         },
     ) {
-        if (loading) AbkSpinner(Modifier.padding(end = 8.dp), size = AbkSize.Small, label = loadingDescription)
-        content()
+        // Hold the button's foreground for the whole row: children that draw or write without an
+        // explicit colour (spinner, ad-hoc Text in a host) must follow the fill, not the page ink.
+        CompositionLocalProvider(LocalContentColor provides foreground) {
+            if (loading) AbkSpinner(
+                Modifier.padding(end = 8.dp), size = AbkSize.Small,
+                label = loadingDescription, color = foreground,
+            )
+            content()
+        }
     }
 }
 
@@ -166,7 +188,9 @@ public fun AbkIconButton(
     enabled: Boolean = true,
     size: AbkSize = AbkSize.Medium,
 ) {
-    IconButton(onClick, modifier.defaultMinSize(48.dp, 48.dp), enabled = enabled) {
+    val interactions = remember { MutableInteractionSource() }
+    IconButton(onClick, modifier.defaultMinSize(48.dp, 48.dp).abkPressScale(interactions, AbkPressScaleIcon),
+        enabled = enabled, interactionSource = interactions) {
         AbkIcon(icon, contentDescription, size = if (size == AbkSize.Small) 18.dp else 22.dp,
             tint = if (enabled) AbkTheme.colors.inkSoft else AbkTheme.colors.inkFaint)
     }

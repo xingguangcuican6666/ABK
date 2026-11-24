@@ -4,17 +4,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.abk.kernel.R
 import io.github.xingguangcuican6666.abk.ui.components.AbkHero
 import io.github.xingguangcuican6666.abk.ui.components.AbkScaffold
 import io.github.xingguangcuican6666.abk.ui.components.AbkTopBar
@@ -27,46 +26,43 @@ val PageGutter = 20.dp
 private val BottomBarClearance = 96.dp
 
 /**
- * A scrolling destination page: standard top bar, hero (eyebrow/title/description)
- * and a body column. Scaffold insets are applied once, here.
+ * A scrolling destination page: brand bar on top, then the page headline and
+ * its body.
  *
- * [scrolls] is forwarded to the top bar so it can draw its divider only while the
- * page is actually scrolled.
+ * The scaffold's [PaddingValues] are applied to the body — Material3 lays
+ * content out from the window origin, so dropping them hides the headline
+ * behind the top bar and the status bar.
  */
 @Composable
 fun AbkPage(
     title: String,
     modifier: Modifier = Modifier,
-    subtitle: String? = null,
-    eyebrow: String? = null,
     description: String? = null,
     heroActions: (@Composable () -> Unit)? = null,
-    topBarActions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
+    topBarActions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val scrollState = rememberScrollState()
-    var scrolled by remember { mutableStateOf(false) }
-    scrolled = scrollState.value > 0
     AbkScaffold(
         modifier = modifier,
         topBar = {
             AbkTopBar(
-                title = title,
-                subtitle = subtitle,
-                scrolled = scrolled,
+                title = stringResource(R.string.app_name),
+                scrolled = scrollState.value > 0,
                 actions = topBarActions,
             )
         },
-    ) { _: PaddingValues ->
+    ) { padding: PaddingValues ->
         Column(
             Modifier
                 .fillMaxSize()
+                .padding(padding)
                 .verticalScroll(scrollState)
                 .padding(horizontal = PageGutter)
                 .padding(top = AbkSpacing.Sm, bottom = BottomBarClearance),
             verticalArrangement = Arrangement.spacedBy(AbkSpacing.Lg),
         ) {
-            AbkHero(title = title, eyebrow = eyebrow, description = description, actions = heroActions)
+            AbkHero(title = title, description = description, actions = heroActions)
             content()
         }
     }

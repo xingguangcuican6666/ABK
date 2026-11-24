@@ -61,7 +61,6 @@ fun FlashDestination(
 
     AbkPage(
         title = stringResource(R.string.flash_title),
-        eyebrow = stringResource(R.string.nav_flash),
         description = stringResource(
             if (state.rootGranted) R.string.flash_artifact_center_desc else R.string.flash_file_center_desc
         ),

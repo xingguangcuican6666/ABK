@@ -75,7 +75,6 @@ fun SettingsDestination(
 
     AbkPage(
         title = stringResource(R.string.settings_title),
-        eyebrow = stringResource(R.string.nav_settings),
         description = stringResource(R.string.settings_center_subtitle),
     ) {
         // ── Appearance ───────────────────────────────────────────────────

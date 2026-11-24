@@ -11,6 +11,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
@@ -58,6 +59,7 @@ import io.github.xingguangcuican6666.abk.ui.components.AbkMenu
 import io.github.xingguangcuican6666.abk.ui.components.AbkMenuEntry
 import io.github.xingguangcuican6666.abk.ui.components.AbkNavigationItem
 import io.github.xingguangcuican6666.abk.ui.components.AbkOption
+import io.github.xingguangcuican6666.abk.ui.components.AbkPageSwitch
 import io.github.xingguangcuican6666.abk.ui.components.AbkRadioGroup
 import io.github.xingguangcuican6666.abk.ui.components.AbkSegmented
 import io.github.xingguangcuican6666.abk.ui.components.AbkSelect
@@ -208,6 +210,28 @@ public class AbkComponentsTest {
         assertTrue("RTL reverses destination positions", bounds[0].left > bounds[1].left && bounds[1].left > bounds[2].left)
         bounds.sortedBy { it.left }.zipWithNext().forEach { (a, b) -> assertTrue(a.right <= b.left + 1f) }
         repeat(3) { tabs[it].assertHeightIsAtLeast(56.dp) }
+    }
+
+    @Test public fun pageSwitchKeepsEachPageStateWhileSwitching() {
+        var target by mutableStateOf("one")
+        content {
+            AbkPageSwitch(target) { page ->
+                if (page == "one") {
+                    var text by rememberSaveable { mutableStateOf("") }
+                    AbkTextField(text, { text = it }, "分支")
+                } else {
+                    Text("第二页")
+                }
+            }
+        }
+        compose.onNodeWithContentDescription("分支").performTextInput("main")
+        compose.onNodeWithText("main").assertExists()
+        compose.runOnIdle { target = "two" }
+        compose.onNodeWithText("第二页").assertExists()
+        compose.runOnIdle { target = "one" }
+        // The half-typed field comes back with the page, because the switch holds the page state.
+        compose.onAllNodesWithContentDescription("分支").assertCountEquals(1)
+        compose.onNodeWithContentDescription("分支").assertTextEquals("main")
     }
 
     @Test public fun accordionOnlyShowsContentWhileExpanded() {

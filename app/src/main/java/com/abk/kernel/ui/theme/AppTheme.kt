@@ -1,5 +1,7 @@
 package com.abk.kernel.ui.theme
 
+import android.content.Context
+import android.provider.Settings
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -30,6 +32,18 @@ val LocalAppBackgroundEnabled = staticCompositionLocalOf { false }
 val LocalUiSurfaceAlpha = staticCompositionLocalOf { 1f }
 
 /**
+ * Whether the system asks for animations to be switched off.
+ *
+ * The animator duration scale is zero when the user has turned animations off in the
+ * system's accessibility settings. The library's own durations collapse to zero in
+ * that case, so nothing travels even though the screens still change.
+ */
+private fun systemReduceMotion(context: Context): Boolean =
+    runCatching {
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+    }.getOrDefault(1f) == 0f
+
+/**
  * Applies the ABK design system from the user's preferences
  * (mode, dynamic colour, custom seed) and optionally paints a background image.
  */
@@ -44,6 +58,8 @@ fun AppTheme(
     val themeMode by prefs.themeMode.collectAsState(initial = "system")
     val dynamicColorEnabled by prefs.dynamicColorEnabled.collectAsState(initial = true)
     val customThemeColorArgb by prefs.customThemeColorArgb.collectAsState(initial = null)
+    val context = LocalContext.current
+    val reduceMotion = remember(context) { systemReduceMotion(context) }
 
     AbkLibraryTheme(
         darkTheme = when (themeMode) {
@@ -53,6 +69,7 @@ fun AppTheme(
         },
         colorSource = if (dynamicColorEnabled) AbkColorSource.System else AbkColorSource.Seed,
         seed = customThemeColorArgb?.let(::colorFromArgb) ?: AbkDefaultSeed,
+        reduceMotion = reduceMotion,
     ) {
         AppBackground(
             backgroundUri = backgroundUri,
@@ -66,6 +83,8 @@ fun AppTheme(
 /** Theme-only wrapper for screens that hold their own background (dialogs, overlays). */
 @Composable
 fun AppTheme(mode: String, dynamicColor: Boolean, themeColorArgb: Int?, content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val reduceMotion = remember(context) { systemReduceMotion(context) }
     AbkLibraryTheme(
         darkTheme = when (mode) {
             "dark" -> true
@@ -74,6 +93,7 @@ fun AppTheme(mode: String, dynamicColor: Boolean, themeColorArgb: Int?, content:
         },
         colorSource = if (dynamicColor) AbkColorSource.System else AbkColorSource.Seed,
         seed = themeColorArgb?.let(::colorFromArgb) ?: AbkDefaultSeed,
+        reduceMotion = reduceMotion,
         content = content,
     )
 }
