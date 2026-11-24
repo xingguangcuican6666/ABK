@@ -39,6 +39,7 @@ import androidx.compose.ui.test.isEditable
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -193,7 +194,13 @@ public class AbkComponentsTest {
         tabs[1].assertHeightIsAtLeast(56.dp).performClick().assertIsSelected()
         tabs[0].assertIsNotSelected()
         compose.runOnIdle { assertEquals("two", selected) }
+        compose.waitForIdle()
+        assertEquals("Only the selected destination draws the marker", 1, markerCount())
     }
+
+    /** The 12×2dp selection dash carries a test tag so its count can be asserted. */
+    private fun markerCount(): Int =
+        compose.onAllNodesWithTag("abkNavMarker", useUnmergedTree = true).fetchSemanticsNodes().size
 
     @Test public fun narrowRtlNavigationSupportsDoubleFontScaleWithoutOverlappingTargets() {
         content {

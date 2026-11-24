@@ -565,6 +565,7 @@
     <string name="status_not_login">Не выполнен вход</string>
     <string name="status_no_fork">Нет Fork</string>
     <string name="status_no_build">Записей о сборках нет</string>
+    <string name="status_recent_empty_desc">Сборок пока нет. Запущенные сборки появятся здесь.</string>
     <string name="status_working">Работает</string>
     <string name="status_partially_active">Частично активен</string>
     <string name="status_build_number">Сборка: #%1$d</string>
@@ -584,11 +585,9 @@
     <string name="status_steps_complete">Шагов выполнено: %1$d/%2$d</string>
     <string name="status_view_details">Подробнее #%1$d</string>
     <string name="status_device_repo_title">Устройство и репозиторий</string>
-    <string name="status_device_repo_subtitle">Используется для генерации параметров сборки по умолчанию и подтверждения источника workflow.</string>
     <string name="status_kernel">Ядро</string>
     <string name="status_fork_behind">Fork отстаёт от upstream на %1$d коммит(ов)</string>
     <string name="status_recent_runs_title">Последние сборки</string>
-    <string name="status_recent_runs_subtitle">Быстрая проверка результатов 5 последних workflow.</string>
     <string name="status_authorized">Авторизован</string>
     <string name="status_pending_check">Ожидает проверки</string>
     <string name="status_synced">Синхронизирован</string>

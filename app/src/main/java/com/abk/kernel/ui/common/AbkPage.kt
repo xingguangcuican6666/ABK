@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -14,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.abk.kernel.R
+import io.github.xingguangcuican6666.abk.ui.components.AbkHeading
 import io.github.xingguangcuican6666.abk.ui.components.AbkHero
 import io.github.xingguangcuican6666.abk.ui.components.AbkScaffold
 import io.github.xingguangcuican6666.abk.ui.components.AbkTopBar
@@ -32,6 +34,11 @@ private val BottomBarClearance = 96.dp
  * The scaffold's [PaddingValues] are applied to the body — Material3 lays
  * content out from the window origin, so dropping them hides the headline
  * behind the top bar and the status bar.
+ *
+ * The body is a list of sections, not a list of loose controls: every child of
+ * [content] is separated by one generous gap ([AbkSpacing.Xxl]), and a heading
+ * travels with the rows it names inside a [PageSection] rather than floating
+ * halfway between the previous block and its own.
  */
 @Composable
 fun AbkPage(
@@ -60,10 +67,39 @@ fun AbkPage(
                 .verticalScroll(scrollState)
                 .padding(horizontal = PageGutter)
                 .padding(top = AbkSpacing.Sm, bottom = BottomBarClearance),
-            verticalArrangement = Arrangement.spacedBy(AbkSpacing.Lg),
+            verticalArrangement = Arrangement.spacedBy(AbkSpacing.Xxl),
         ) {
             AbkHero(title = title, description = description, actions = heroActions)
             content()
         }
+    }
+}
+
+/**
+ * A heading and the rows it names, held together as one block.
+ *
+ * Without this, a heading and a card are siblings and the page has to choose a
+ * single gap for both, which is either too loose between the heading and its
+ * card or too tight between sections. Here the gap inside the block is tight
+ * ([AbkSpacing.Md]) and the page's gap between blocks stays wide.
+ */
+@Composable
+fun PageSection(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(AbkSpacing.Md), content = content)
+}
+
+/** A [PageSection] that opens with a heading. */
+@Composable
+fun PageSection(
+    title: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    PageSection(modifier) {
+        AbkHeading(title)
+        content()
     }
 }

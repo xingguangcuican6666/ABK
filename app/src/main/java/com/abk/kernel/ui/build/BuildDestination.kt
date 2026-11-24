@@ -21,6 +21,7 @@ import com.abk.kernel.data.model.KernelBuildConfig
 import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.ui.common.AbkPage
 import com.abk.kernel.ui.common.MutedText
+import com.abk.kernel.ui.common.PageSection
 import com.abk.kernel.ui.common.StatusBadge
 import com.abk.kernel.ui.common.formatRunTimestamp
 import com.abk.kernel.ui.common.statusLabel
@@ -176,15 +177,16 @@ fun BuildDestination(
             )
         }
 
-        AbkHeading(stringResource(R.string.status_workflows_title))
-        val runs = state.recentRuns
-        if (runs.isEmpty()) {
-            MutedText(stringResource(R.string.status_workflow_empty))
-        } else {
-            AbkList {
-                runs.forEachIndexed { index, run ->
-                    if (index > 0) AbkDivider()
-                    WorkflowRow(run)
+        PageSection(title = stringResource(R.string.status_workflows_title)) {
+            val runs = state.recentRuns
+            if (runs.isEmpty()) {
+                MutedText(stringResource(R.string.status_workflow_empty))
+            } else {
+                AbkList {
+                    runs.forEachIndexed { index, run ->
+                        if (index > 0) AbkDivider()
+                        WorkflowRow(run)
+                    }
                 }
             }
         }

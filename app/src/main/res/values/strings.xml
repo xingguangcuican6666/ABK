@@ -591,6 +591,7 @@
     <string name="status_not_login">未登录</string>
     <string name="status_no_fork">未 Fork</string>
     <string name="status_no_build">暂无构建记录</string>
+    <string name="status_recent_empty_desc">触发一次构建后，结果会显示在这里。</string>
     <string name="status_working">工作中</string>
     <string name="status_partially_active">部分激活</string>
     <string name="status_build_number">构建：#%1$d</string>
@@ -610,11 +611,9 @@
     <string name="status_steps_complete">%1$d/%2$d 个步骤完成</string>
     <string name="status_view_details">查看详情 #%1$d</string>
     <string name="status_device_repo_title">设备与仓库</string>
-    <string name="status_device_repo_subtitle">用于生成默认构建参数和确认工作流来源。</string>
     <string name="status_kernel">内核</string>
     <string name="status_fork_behind">Fork 落后上游 %1$d 个提交</string>
     <string name="status_recent_runs_title">最近构建记录</string>
-    <string name="status_recent_runs_subtitle">快速确认最近 5 次工作流结果。</string>
     <string name="status_authorized">已授权</string>
     <string name="status_pending_check">待检查</string>
     <string name="status_synced">已同步</string>

@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -125,7 +126,8 @@ public fun AbkBottomNavigation(
                 val foreground = if (item.enabled) c.inkMuted else c.inkFaint
                 // The marker grows in under the destination that was just picked and shrinks out
                 // of the one that was left, the way the web catalogue's underline does. It never
-                // changes the weight of a destination.
+                // changes the weight of a destination, and only the current destination carries
+                // one — the others are bare, so the bar reads "you are here" and nothing more.
                 val markerScale by animateFloatAsState(
                     targetValue = if (selected) 1f else 0f,
                     animationSpec = abkTween(AbkMotion.Base, AbkMotion.EaseSpring),
@@ -140,12 +142,17 @@ public fun AbkBottomNavigation(
                         AbkIcon(item.icon, null, tint = foreground, size = 22.dp)
                         Text(item.label, style = MaterialTheme.typography.labelSmall, color = foreground)
                     }
-                    Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp)
-                        .size(12.dp, 2.dp).background(foreground, AbkShapes.Pill)
-                        .graphicsLayer {
-                            scaleX = markerScale
-                            alpha = markerScale
-                        })
+                    // Compose the marker only while it belongs to the current destination or is
+                    // still shrinking out of it. A destination that is not selected never draws.
+                    if (selected || markerScale > 0f) {
+                        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp)
+                            .size(12.dp, 2.dp).background(foreground, AbkShapes.Pill)
+                            .testTag("abkNavMarker")
+                            .graphicsLayer {
+                                scaleX = markerScale
+                                alpha = markerScale
+                            })
+                    }
                 }
             }
         }

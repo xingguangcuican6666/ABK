@@ -17,6 +17,7 @@ import com.abk.kernel.R
 import com.abk.kernel.data.model.PrebuiltGkiRelease
 import com.abk.kernel.ui.common.AbkPage
 import com.abk.kernel.ui.common.MutedText
+import com.abk.kernel.ui.common.PageSection
 import com.abk.kernel.ui.common.StatusBadge
 import com.abk.kernel.utils.DownloadUtils
 import com.abk.kernel.viewmodel.MainUiState
@@ -74,26 +75,29 @@ fun FlashDestination(
             )
         },
     ) {
-        AbkTabs(
-            items = listOf(
-                AbkTabItem(TAB_PREBUILT, stringResource(R.string.flash_prebuilt_gki), state.prebuiltGkiReleases.size),
-                AbkTabItem(TAB_DOWNLOADED, stringResource(R.string.flash_files_title), state.downloadedArtifacts.size),
-            ),
-            selectedId = tab,
-            onSelect = { tab = it },
-        )
-
-        when (tab) {
-            TAB_PREBUILT -> PrebuiltSection(
-                state = state,
-                expandedReleaseId = expandedReleaseId,
-                onToggleRelease = { id, release ->
-                    expandedReleaseId = if (expandedReleaseId == id) null else id
-                    if (expandedReleaseId == id) vm.loadPrebuiltGkiAssets(release)
-                },
-                onDownload = { vm.downloadPrebuiltGki(it) },
+        // The tab bar is the switcher, so the list it shows sits tight under it.
+        PageSection {
+            AbkTabs(
+                items = listOf(
+                    AbkTabItem(TAB_PREBUILT, stringResource(R.string.flash_prebuilt_gki), state.prebuiltGkiReleases.size),
+                    AbkTabItem(TAB_DOWNLOADED, stringResource(R.string.flash_files_title), state.downloadedArtifacts.size),
+                ),
+                selectedId = tab,
+                onSelect = { tab = it },
             )
-            else -> DownloadedSection(state)
+
+            when (tab) {
+                TAB_PREBUILT -> PrebuiltSection(
+                    state = state,
+                    expandedReleaseId = expandedReleaseId,
+                    onToggleRelease = { id, release ->
+                        expandedReleaseId = if (expandedReleaseId == id) null else id
+                        if (expandedReleaseId == id) vm.loadPrebuiltGkiAssets(release)
+                    },
+                    onDownload = { vm.downloadPrebuiltGki(it) },
+                )
+                else -> DownloadedSection(state)
+            }
         }
 
         if (state.activeDownloadTasks.isNotEmpty()) {

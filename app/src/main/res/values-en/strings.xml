@@ -565,6 +565,7 @@
     <string name="status_not_login">Not signed in</string>
     <string name="status_no_fork">No fork</string>
     <string name="status_no_build">No build records</string>
+    <string name="status_recent_empty_desc">No builds yet. Triggered builds show up here.</string>
     <string name="status_working">Working</string>
     <string name="status_partially_active">Partially active</string>
     <string name="status_build_number">Build: #%1$d</string>
@@ -584,11 +585,9 @@
     <string name="status_steps_complete">%1$d/%2$d steps complete</string>
     <string name="status_view_details">View details #%1$d</string>
     <string name="status_device_repo_title">Device and repository</string>
-    <string name="status_device_repo_subtitle">Used to generate default build parameters and confirm workflow source.</string>
     <string name="status_kernel">Kernel</string>
     <string name="status_fork_behind">Fork is %1$d commits behind upstream</string>
     <string name="status_recent_runs_title">Recent builds</string>
-    <string name="status_recent_runs_subtitle">Quickly check the latest 5 workflow results.</string>
     <string name="status_authorized">Authorized</string>
     <string name="status_pending_check">Pending check</string>
     <string name="status_synced">Synced</string>
