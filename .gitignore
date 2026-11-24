@@ -80,6 +80,9 @@ action_build_comparison.md
 build/
 !desktop/flutter_app/lib/src/features/build/
 !desktop/flutter_app/lib/src/features/build/*.dart
+# The build destination is a source package, not a Gradle output directory.
+!app/src/main/java/com/abk/kernel/ui/build/
+!app/src/main/java/com/abk/kernel/ui/build/*.kt
 app/.cxx/
 app/build/
 app/build/generated/
