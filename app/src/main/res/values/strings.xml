@@ -179,7 +179,7 @@
     <string name="build_custom_ksu_ref">自定义 KSU commit/ref</string>
     <string name="build_custom_ksu_ref_placeholder">例如: abc123, branch:5, 或 tag</string>
     <string name="build_no_root_scheme_desc">不注入 Root 授权方案；补丁模块会自动清空。</string>
-    <string name="build_oneplus_no_root_scheme_desc">构建无 Root 的 OnePlus 内核；SUSFS 和 KPM 会自动关闭。</string>
+    <string name="build_oneplus_no_root_scheme_desc">构建无 Root 的 OnePlus 内核；不会集成 NyaSU 驱动。</string>
     <string name="build_oneplus_ksu_branch_desc">OnePlus 构建使用对应 KernelSU 上游默认分支。</string>
     <string name="build_ksu_none">None（无 Root 方案）</string>
     <string name="build_features">功能开关</string>
@@ -344,7 +344,7 @@
     <string name="build_base_config">基础配置</string>
     <string name="build_summary_external_modules">外部模块 %1$d</string>
     <string name="build_summary_kernel_options">内核选项 %1$d</string>
-    <string name="build_hero_desc">触发 GitHub Actions 并自动整理 img、AK3、管理器和 SUSFS 模块。</string>
+    <string name="build_hero_desc">零散参数收进五步引导；触发 GitHub Actions 并自动整理 img、AK3 与模块产物。</string>
     <string name="build_oneplus_hero_desc">使用 OnePlus/Oplus manifest 构建机型专用 AnyKernel3 包。</string>
     <string name="build_virtualization_chip">虚拟化支持 %1$s</string>
     <string name="build_device_recommended">设备推荐</string>

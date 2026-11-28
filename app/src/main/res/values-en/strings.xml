@@ -177,7 +177,7 @@
     <string name="build_custom_ksu_ref">Custom KSU commit/ref</string>
     <string name="build_custom_ksu_ref_placeholder">e.g. abc123, branch:5, or tag</string>
     <string name="build_no_root_scheme_desc">No root scheme is injected; patch modules are cleared automatically.</string>
-    <string name="build_oneplus_no_root_scheme_desc">Build a rootless OnePlus kernel. SUSFS and KPM will be disabled automatically.</string>
+    <string name="build_oneplus_no_root_scheme_desc">Build a rootless OnePlus kernel. The NyaSU driver is not integrated.</string>
     <string name="build_oneplus_ksu_branch_desc">OnePlus builds use the upstream default branch for the selected KernelSU variant.</string>
     <string name="build_ksu_none">None (no root scheme)</string>
     <string name="build_features">Feature switches</string>
@@ -318,7 +318,7 @@
     <string name="build_feature_virtualization">Virtualization %1$s</string>
     <string name="build_base_config">Base config</string>
     <string name="build_summary_external_modules">External modules %1$d</string>
-    <string name="build_hero_desc">Triggers GitHub Actions and automatically organizes img, AK3, manager, and SUSFS modules.</string>
+    <string name="build_hero_desc">Five guided steps, then GitHub Actions organizes the img, AK3, and module artifacts.</string>
     <string name="build_oneplus_hero_desc">Builds a device-specific AnyKernel3 package from the OnePlus/Oplus manifest.</string>
     <string name="build_virtualization_chip">Virtualization support %1$s</string>
     <string name="build_device_recommended">Device recommended</string>

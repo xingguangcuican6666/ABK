@@ -177,7 +177,7 @@
     <string name="build_custom_ksu_ref">Свой KSU commit/ref</string>
     <string name="build_custom_ksu_ref_placeholder">напр. abc123, branch:5 или tag</string>
     <string name="build_no_root_scheme_desc">Схема root не внедряется; патч-модули очищаются автоматически.</string>
-    <string name="build_oneplus_no_root_scheme_desc">Сборка ядра OnePlus без root. SUSFS и KPM будут отключены автоматически.</string>
+    <string name="build_oneplus_no_root_scheme_desc">Сборка ядра OnePlus без root. Драйвер NyaSU не интегрируется.</string>
     <string name="build_oneplus_ksu_branch_desc">Сборки OnePlus используют ветку upstream по умолчанию для выбранного варианта KernelSU.</string>
     <string name="build_ksu_none">None (без root)</string>
     <string name="build_features">Переключатели функций</string>
@@ -318,7 +318,7 @@
     <string name="build_feature_virtualization">Виртуализация %1$s</string>
     <string name="build_base_config">Базовая конфигурация</string>
     <string name="build_summary_external_modules">Внешние модули: %1$d</string>
-    <string name="build_hero_desc">Запускает GitHub Actions и автоматически упорядочивает img, AK3, менеджер и модули SUSFS.</string>
+    <string name="build_hero_desc">Пять шагов мастера, затем GitHub Actions упорядочивает img, AK3 и модули.</string>
     <string name="build_oneplus_hero_desc">Собирает пакет AnyKernel3 под устройство из manifest OnePlus/Oplus.</string>
     <string name="build_virtualization_chip">Поддержка виртуализации %1$s</string>
     <string name="build_device_recommended">Рекомендация для устройства</string>
