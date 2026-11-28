@@ -14,8 +14,8 @@ object BuildProgressUtils {
      * Per-run formatting hint for [merge]. When populated, [merge] uses a
      * compact technical format instead of the old "Объединённый прогресс по
      * N workflow…" wall of text:
-     *   single:   "#42 SukiSU SUSFS 6.6.89-android15-2025-06"
-     *   multiple: "#42 SukiSU SUSFS 6.6.89-… · Manager Dev"
+     *   single:   "#42 NyaSU 6.6.89-android15-2025-06"
+     *   multiple: "#42 NyaSU 6.6.89-… · Manager Dev"
      *
      * Sourced from BuildQueueItem.config in the ViewModel — runs without a
      * descriptor fall back to the older "#N {step.name}" rendering.
@@ -24,7 +24,6 @@ object BuildProgressUtils {
         val isManager: Boolean = false,
         val managerIsDev: Boolean = false,
         val ksuVariant: String = "",
-        val susfs: Boolean = false,
         val kernelLabel: String = ""
     )
 
@@ -138,7 +137,7 @@ object BuildProgressUtils {
                 0
             }
         }
-        // Both branches use the compact "#65 SukiSU SUSFS 6.6.89-…"-style
+        // Both branches use the compact "#65 NyaSU 6.6.89-…"-style
         // chip output. The descriptor map is normally populated from the VM
         // (buildQueue → KernelBuildConfig); when empty (e.g. notification
         // service in a process that lacks queue context) the helper falls
@@ -161,7 +160,7 @@ object BuildProgressUtils {
     }
 
     /**
-     * "#42 SukiSU SUSFS 6.6.89-android15-2025-06" for one run,
+     * "#42 NyaSU 6.6.89-android15-2025-06" for one run,
      * "2 Workflows · #42 SukiSU … · Manager Dev" for many.
      */
     private fun buildCompactMergedStep(
@@ -180,7 +179,6 @@ object BuildProgressUtils {
                 desc != null && desc.kernelLabel.isNotBlank() -> buildString {
                     append(runDisplayLabel(run))
                     if (desc.ksuVariant.isNotBlank()) append(' ').append(desc.ksuVariant)
-                    if (desc.susfs) append(" SUSFS")
                     append(' ').append(desc.kernelLabel)
                 }
                 else -> {

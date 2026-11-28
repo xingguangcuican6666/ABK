@@ -6,9 +6,13 @@ permissions:
 on:
   workflow_call: # This allows this workflow to be called from another workflow
     inputs:
+      # 编译链已收敛为 NyaSU + None：ABK App 自身就是 NyaSU 管理器，
+      # 没有需要另外下载的管理器 APK / SUSFS 模块。此工作流仅保留定义，
+      # get_ksu_manager 的 if 恒为 false，永远不会执行。
       kernelsu_variant:
         required: true
         type: string
+        description: "仅为兼容旧调用方保留；取值为 NyaSU / None，任务始终跳过"
       ksu_branch:
         required: false
         type: string
@@ -27,7 +31,8 @@ on:
 
 jobs:
   get_ksu_manager:
-    # NyaSU Manager artifact/source is not verified; skip instead of using another variant's APK.
+    # 永远不会执行：NyaSU 的管理器就是 ABK 自身 App（证书固定在 app/signing/abk-manager-cert.env），
+    # None 本来就不需要管理器。保留文件只为让旧调用方还能解析到这些输出。
     if: inputs.kernelsu_variant != 'None' && inputs.kernelsu_variant != 'NyaSU'
     runs-on: ubuntu-latest
     outputs:

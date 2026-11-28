@@ -10,7 +10,7 @@
 #   - 需要网络、约 60 GB 磁盘，以及 AOSP repo、clang、ccache 等依赖（--system-deps 可在
 #     Debian/Ubuntu 上用 apt 安装缺失包，需要 sudo）。
 #   - 工作目录默认落在 ~/.cache/abk-kernel-build/workspace，仓库本身不会被写入。
-#   - 这里只跑 clean/ + core/；SUSFS、KPM、ZRAM 等外围拓展补丁属于 patch/ 层，不在其中。
+#   - 这里只跑 clean/ + core/；KPM、ZRAM 等外围拓展补丁属于 patch/ 层，不在其中。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,7 +25,7 @@ SUB_LEVEL=""
 OS_PATCH_LEVEL=""
 REVISION="r11"
 SUPP_OP="false"
-ENABLE_SUSFS="false"
+ENABLE_UNICODE_BYPASS="false"
 WITH_SYSTEM_DEPS=0
 RECREATE=0
 
@@ -43,7 +43,7 @@ usage() {
 可选:
   --revision <rN>              5.10 boot 镜像修订号，默认 r11
   --supp-op                    应用一加 8E 处理器支持
-  --enable-susfs               应用 Unicode 绕过修复（CVE，SUSFS 链路需要）
+  --unicode-bypass             应用 Unicode 绕过修复（CVE）
   --system-deps                先在当前系统上安装编译依赖（sudo apt-get）
   --recreate                   删除已有工作目录后重新同步源码
   -h, --help                   显示本帮助
@@ -61,7 +61,7 @@ while [ $# -gt 0 ]; do
         --os-patch-level) OS_PATCH_LEVEL="${2:?--os-patch-level 需要取值}"; shift 2 ;;
         --revision) REVISION="${2:?--revision 需要取值}"; shift 2 ;;
         --supp-op) SUPP_OP="true"; shift ;;
-        --enable-susfs) ENABLE_SUSFS="true"; shift ;;
+        --unicode-bypass) ENABLE_UNICODE_BYPASS="true"; shift ;;
         --system-deps) WITH_SYSTEM_DEPS=1; shift ;;
         --recreate) RECREATE=1; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -153,26 +153,22 @@ export ABK_INPUT_KSU_VARIANT="None"
 export ABK_INPUT_KSU_BRANCH="Stable(标准)"
 export ABK_INPUT_REVISION="$REVISION"
 export ABK_INPUT_SUPP_OP="$SUPP_OP"
-export ABK_INPUT_ENABLE_SUSFS="$ENABLE_SUSFS"
 export ABK_INPUT_USE_ZRAM="false"
 export ABK_INPUT_USE_BBG="false"
 export ABK_INPUT_USE_DDK="false"
 export ABK_INPUT_USE_NTSYNC="false"
 export ABK_INPUT_USE_NETWORKING="false"
-export ABK_INPUT_USE_KPM="false"
 export ABK_INPUT_USE_REKERNEL="false"
 export ABK_INPUT_VIRTUALIZATION_SUPPORT="off"
 export ABK_INPUT_ZRAM_FULL_ALGO="false"
 export ABK_INPUT_UPLOAD_AUX_ARTIFACTS="false"
 export ABK_RUNNER_ENVIRONMENT
 export KSU_VARIANT="None"
-export ENABLE_SUSFS="$ENABLE_SUSFS"
 export USE_ZRAM="false"
 export USE_BBG="false"
 export USE_DDK="false"
 export USE_NTSYNC="false"
 export USE_NETWORKING="false"
-export USE_KPM="false"
 export USE_REKERNEL="false"
 export VIRTUALIZATION_SUPPORT="off"
 export KERNEL_LOCAL_CACHE="${KERNEL_LOCAL_CACHE:-auto}"
@@ -203,7 +199,7 @@ if [ "$SUPP_OP" = "true" ]; then
 fi
 step core/kernel-specific.sh kernel-specific
 step clean/prepare.sh backup-defconfig
-if [ "$ENABLE_SUSFS" = "true" ]; then
+if [ "$ENABLE_UNICODE_BYPASS" = "true" ]; then
     step core/unicode.sh unicode
 fi
 if [ "$KERNEL_VERSION" = "6.6" ]; then

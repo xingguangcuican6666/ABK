@@ -188,36 +188,15 @@ CUSTOM_REF="${CUSTOM_REF:-}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 
 # Stable / Dev = 静态钉版层（手动维护 SHA）。动态解析会加大维护难度且不可复现，故这两层
-# 只用固定 commit；仅 Latest 层动态追踪 main。选取的 commit 需满足：既有成功的
-# build-manager/Release run（manager APK 从该 run 取），又其内核源码仍匹配 CI 的补丁布局
-# (见 build.yml)。刷新时用一次全矩阵 dispatch 验证。
+# 只用固定 commit；仅 Latest 层动态追踪上游 main HEAD。刷新时用一次 dispatch 验证。
 #
-# 2026-10-05: ReSukiSU/ReSukiSU 上游改名 Baka-SU/BakaSU（同一仓库，未 fork），变体名随之
-# 改为 BakaSU；上游没有 dev 分支，故 BAKASU 的 Stable 与 Dev 同钉 main HEAD
-# 9dbce02e511ea6b6305a238b84e456f6a92e1d0b。旧 SHA 94dd3c93 在改名后的仓库里仍可达，必要时
-# 可作为回退基线。
-#
-# 2026-09-30: 按用户要求 Stable 与 Dev 均钉到各上游 main 的最新 commit（"都最新"），用一次
-# 全矩阵编译确认当前上游能否直接编过。注意：本仓 6 月的兼容 shim (.github/scripts/
-# ensure-ksu-compat.py + build.yml) 与 SUSFS 补丁仍针对 v3.2.x API，与最新 KSU 大概率不匹配
-# (12 处 -Werror + patch reject)，需后续更新补丁"再修"。若全编译失败、需回退到可编译基线，
-# 把下面三行 STABLE 改回 v3.2.5=b0bc817b… 系列，并将 config/config 的 custom 改回 true。
-OFFICIAL_STABLE_REF="08a3b087e49227c8a6731c5f1114998b5e25255b"  # tiann/KernelSU main HEAD (2026-09-30)
-SUKISU_STABLE_REF="cf87e3f4ddd3f6e5464d85acf56aaa6950e70841"    # SukiSU-Ultra main HEAD (2026-09-30)
-BAKASU_STABLE_REF="9dbce02e511ea6b6305a238b84e456f6a92e1d0b"  # Baka-SU/BakaSU main HEAD (2026-10-05)
+# 2026-11-28: 编译链已收敛为 NyaSU + None 两条路径，Official / SukiSU / BakaSU 的钉版全部
+# 移除。NyaSU 没有 build-manager/Release run 可供取管理器 APK —— 管理器就是 ABK 自身 App
+# （证书固定在 app/signing/abk-manager-cert.env）。
 NYASU_STABLE_REF="c6473f97ff516f2b3184b6a2d63753c8591a8edb"    # xingguangcuican6666/NyaSU main HEAD (2026-11-19)
-
-# Dev = 开发层，同为静态钉版；当前与 Stable 同步钉到最新 commit（"都最新"）。
-# Baka-SU/BakaSU 没有 dev 分支（只有 main 与若干 feature 分支），故 BAKASU_DEV_REF 与
-# BAKASU_STABLE_REF 指向同一个 main HEAD；其他变体若有 dev 分支仍可各自独立钉版。
-OFFICIAL_DEV_REF="08a3b087e49227c8a6731c5f1114998b5e25255b"
-SUKISU_DEV_REF="cf87e3f4ddd3f6e5464d85acf56aaa6950e70841"
-BAKASU_DEV_REF="9dbce02e511ea6b6305a238b84e456f6a92e1d0b"
 NYASU_DEV_REF="c6473f97ff516f2b3184b6a2d63753c8591a8edb"
 
-# Latest = 最新层，动态追踪各上游 main 的最新（有成功 build-manager/Release run 的）commit。
-# 解析逻辑见 resolve_tracking / ksu_resolve_branch_sha。
-SUKISU_REPO="SukiSU-Ultra/SukiSU-Ultra"
+# Latest = 最新层，动态追踪上游 main HEAD。解析逻辑见 resolve_tracking。
 NYASU_REPO="xingguangcuican6666/NyaSU"
 
 emit_env() {
@@ -258,18 +237,13 @@ check_ref() {
 
 ksu_variant_repo() {
   case "$1" in
-    Official) printf '%s\n' "tiann/KernelSU" ;;
-    # GKI builds use main; builtin is for OnePlus only (oneplus-build.yml, not resolve-ksu-ref).
-    SukiSU) printf '%s\n' "$SUKISU_REPO" ;;
-    BakaSU) printf '%s\n' "Baka-SU/BakaSU" ;;
     NyaSU) printf '%s\n' "$NYASU_REPO" ;;
     *) return 1 ;;
   esac
 }
 
 # Resolve a tier that tracks a live upstream branch. Only Latest(最新) uses this now
-# (-> always 'main'); Stable/Dev are static pins. The generic branch arg + 'dev'→'main'
-# fallback is kept for any future tier that tracks a non-main branch.
+# (-> always 'main'); Stable/Dev are static pins.
 # Sets RESOLVED_KSU_{REPO,SOURCE_BRANCH,SHA}.
 resolve_tracking() {
   local preferred_branch="$1"
@@ -286,29 +260,16 @@ resolve_tracking() {
     branch="main"
   fi
 
-  if [ "$KSU_VARIANT" = "NyaSU" ]; then
-    RESOLVED_KSU_REPO="$repo"
-    RESOLVED_KSU_SOURCE_BRANCH="$branch"
-    RESOLVED_KSU_SHA="$(ksu_branch_head_sha "$repo" "$branch")" || {
-      echo "::error::Failed to read ${branch} HEAD for ${repo}" >&2
-      return 1
-    }
-    KSU_LATEST_SOURCE="${branch}-head"
-    return 0
-  fi
-
-  if ! ksu_resolve_branch_sha "$repo" "$branch"; then
-    return 1
-  fi
-
+  # NyaSU 没有 build-manager/Release run 可供筛选，直接取分支 HEAD。
   RESOLVED_KSU_REPO="$repo"
   RESOLVED_KSU_SOURCE_BRANCH="$branch"
-  RESOLVED_KSU_SHA="$KSU_RESOLVED_LATEST_SHA"
+  RESOLVED_KSU_SHA="$(ksu_branch_head_sha "$repo" "$branch")" || {
+    echo "::error::Failed to read ${branch} HEAD for ${repo}" >&2
+    return 1
+  }
+  KSU_LATEST_SOURCE="${branch}-head"
 }
 
-OFFICIAL_CUSTOM_REF=""
-SUKISU_CUSTOM_REF=""
-BAKASU_CUSTOM_REF=""
 NYASU_CUSTOM_REF=""
 
 if [ "$KSU_BRANCH" = "Custom(自定义)" ]; then
@@ -316,49 +277,28 @@ if [ "$KSU_BRANCH" = "Custom(自定义)" ]; then
     branch="${BASH_REMATCH[1]}"
     nabe="${BASH_REMATCH[2]}"
     case "$KSU_VARIANT" in
-      Official) OFFICIAL_CUSTOM_REF="$(get_success_action_sha "tiann/KernelSU" "$branch" "$nabe")" ;;
-      SukiSU) SUKISU_CUSTOM_REF="$(get_success_action_sha "$SUKISU_REPO" "$branch" "$nabe")" ;;
-      BakaSU) BAKASU_CUSTOM_REF="$(get_success_action_sha "Baka-SU/BakaSU" "$branch" "$nabe")" ;;
       NyaSU) NYASU_CUSTOM_REF="$(get_success_action_sha "$NYASU_REPO" "$branch" "$nabe")" ;;
     esac
   else
     case "$KSU_VARIANT" in
-      Official) check_ref "tiann/KernelSU" "$CUSTOM_REF" ;;
-      SukiSU) check_ref "$SUKISU_REPO" "$CUSTOM_REF" ;;
-      BakaSU) check_ref "Baka-SU/BakaSU" "$CUSTOM_REF" ;;
       NyaSU) check_ref "$NYASU_REPO" "$CUSTOM_REF" ;;
     esac
-    OFFICIAL_CUSTOM_REF="$CUSTOM_REF"
-    SUKISU_CUSTOM_REF="$CUSTOM_REF"
-    BAKASU_CUSTOM_REF="$CUSTOM_REF"
     NYASU_CUSTOM_REF="$CUSTOM_REF"
   fi
 fi
 
 case "$KSU_BRANCH" in
   "Stable(标准)")
-    OFFICIAL_REF="$OFFICIAL_STABLE_REF"
-    SUKISU_REF="$SUKISU_STABLE_REF"
-    BAKASU_REF="$BAKASU_STABLE_REF"
     NYASU_REF="$NYASU_STABLE_REF"
     ;;
   "Dev(开发)")
-    OFFICIAL_REF="$OFFICIAL_DEV_REF"
-    SUKISU_REF="$SUKISU_DEV_REF"
-    BAKASU_REF="$BAKASU_DEV_REF"
     NYASU_REF="$NYASU_DEV_REF"
     ;;
   "Latest(最新)")
     resolve_tracking "main"
-    OFFICIAL_REF="$RESOLVED_KSU_SHA"
-    SUKISU_REF="$RESOLVED_KSU_SHA"
-    BAKASU_REF="$RESOLVED_KSU_SHA"
     NYASU_REF="$RESOLVED_KSU_SHA"
     ;;
   "Custom(自定义)")
-    OFFICIAL_REF="$OFFICIAL_CUSTOM_REF"
-    SUKISU_REF="$SUKISU_CUSTOM_REF"
-    BAKASU_REF="$BAKASU_CUSTOM_REF"
     NYASU_REF="$NYASU_CUSTOM_REF"
     ;;
   *)
@@ -368,18 +308,6 @@ case "$KSU_BRANCH" in
 esac
 
 case "$KSU_VARIANT" in
-  Official)
-    BRANCH="${OFFICIAL_REF}"
-    RESOLVED_KSU_REPO="${RESOLVED_KSU_REPO:-tiann/KernelSU}"
-    ;;
-  SukiSU)
-    BRANCH="${SUKISU_REF}"
-    RESOLVED_KSU_REPO="${RESOLVED_KSU_REPO:-$SUKISU_REPO}"
-    ;;
-  BakaSU)
-    BRANCH="${BAKASU_REF}"
-    RESOLVED_KSU_REPO="${RESOLVED_KSU_REPO:-Baka-SU/BakaSU}"
-    ;;
   NyaSU)
     BRANCH="${NYASU_REF}"
     RESOLVED_KSU_REPO="${RESOLVED_KSU_REPO:-$NYASU_REPO}"

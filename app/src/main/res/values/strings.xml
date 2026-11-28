@@ -132,8 +132,8 @@
     <string name="build_patch_level_line">补丁级别: %1$s</string>
     <string name="build_feature_enabled">启用</string>
     <string name="build_feature_disabled">禁用</string>
-    <string name="build_feature_line">SUSFS: %1$s · ZRAM: %2$s · KPM: %3$s</string>
-    <string name="build_protection_line">BBG: %1$s · DDK: %2$s</string>
+    <string name="build_features_line">ZRAM: %1$s · BBG: %2$s · DDK: %3$s · NTsync: %4$s</string>
+    <string name="build_rekernel_line">Re-Kernel: %1$s</string>
     <string name="build_sync_network_line">NTsync: %1$s · 网络增强: %2$s</string>
     <string name="build_virtualization_line">虚拟化支持: %1$s</string>
     <string name="build_external_modules_line">外部模块: %1$s</string>
@@ -142,7 +142,6 @@
     <string name="build_kernel_options_count">%1$d 条</string>
     <string name="build_oneplus_device_line">OnePlus 机型: %1$s</string>
     <string name="build_oneplus_kernel_line">OnePlus KMI: %1$s · 内核 %2$s</string>
-    <string name="build_oneplus_feature_line">SUSFS: %1$s · lz4kd: %2$s · KPM: %3$s</string>
     <string name="build_oneplus_network_line">BBR: %1$s · 代理优化: %2$s · Unicode 绕过: %3$s</string>
     <string name="build_active_queue_notice">当前有构建活动，此配置会加入本地队列并按顺序派发。</string>
     <string name="build_plan_saved">方案已保存</string>
@@ -179,22 +178,17 @@
     <string name="build_ksu_branch">KSU 分支</string>
     <string name="build_custom_ksu_ref">自定义 KSU commit/ref</string>
     <string name="build_custom_ksu_ref_placeholder">例如: abc123, branch:5, 或 tag</string>
-    <string name="build_ksu_branch_latest_hint">优先使用 upstream main 的 HEAD（该提交有成功的 Release 或 build-manager CI 时）；否则回退到 main 上最近一次成功的 build-manager。管理器 APK 经 nightly.link 从对应 run 拉取。若管理器下载失败，内核构建仍会继续。</string>
-    <string name="build_no_root_scheme_desc">不注入任何 Root 授权方案；KSU 分支、SUSFS 和 KPM 会自动关闭。</string>
+    <string name="build_no_root_scheme_desc">不注入 Root 授权方案；补丁模块会自动清空。</string>
     <string name="build_oneplus_no_root_scheme_desc">构建无 Root 的 OnePlus 内核；SUSFS 和 KPM 会自动关闭。</string>
     <string name="build_oneplus_ksu_branch_desc">OnePlus 构建使用对应 KernelSU 上游默认分支。</string>
-    <string name="build_ksu_variant_deprecated">ReSukiSU 上游已更名为 BakaSU，当前已按 BakaSU 处理。</string>
     <string name="build_ksu_none">None（无 Root 方案）</string>
-    <string name="build_standard">标准</string>
-    <string name="build_development">开发</string>
     <string name="build_features">功能开关</string>
-    <string name="build_enable_susfs">启用 SUSFS</string>
     <string name="build_enable_zram">启用 ZRAM 增强算法</string>
+    <string name="build_bbg_unsupported">当前版本线不支持 BBG（android17 / 6.18）。</string>
     <string name="build_enable_bbg">启用 BBG 防格机</string>
     <string name="build_enable_ddk">启用 DDK 防格机 LSM</string>
     <string name="build_enable_ntsync">启用 NTsync 补丁</string>
     <string name="build_enable_networking">启用网络增强 (IPSet + BBR)</string>
-    <string name="build_enable_kpm">启用 KPM 功能</string>
     <string name="build_enable_rekernel">启用 Re-Kernel 驱动 (测试)</string>
     <string name="build_virtualization_support">虚拟化支持</string>
     <string name="build_kernel_options_title">自定义内核选项</string>
@@ -239,7 +233,6 @@
     <string name="build_oneplus_bbr">启用 BBR</string>
     <string name="build_oneplus_proxy_optimization">启用代理优化</string>
     <string name="build_oneplus_proxy_mtk_disabled">MTK 分支已强制关闭代理优化。</string>
-    <string name="build_oneplus_susfs_unsupported">当前 OnePlus KMI 没有可用的 SUSFS 上游分支；android12/5.10 和 android13/5.15 会自动关闭。</string>
     <string name="build_oneplus_unicode_bypass">启用 Unicode 零宽绕过修复</string>
     <string name="build_oneplus_proxy_short">代理优化</string>
     <string name="build_oneplus_unicode_short">Unicode 绕过</string>
@@ -247,9 +240,6 @@
     <string name="build_zram_full_algo">启用完整算法支持 (LZO/LZ4/ZSTD 等)</string>
     <string name="build_zram_custom_algo">自定义 ZRAM 算法</string>
     <string name="build_zram_algo_placeholder">如: lzo,lz4,deflate,zstd</string>
-    <string name="build_kpm_options">KPM 扩展选项</string>
-    <string name="build_kpm_password">KPM 超级密码 (可选)</string>
-    <string name="build_kpm_password_placeholder">留空使用默认密码</string>
     <string name="build_custom_modules">自定义外部模块</string>
     <string name="build_enable_custom_modules">启用自定义外部模块</string>
     <string name="extension_invalid_id">扩展 ID 无效</string>
@@ -356,8 +346,6 @@
     <string name="build_summary_kernel_options">内核选项 %1$d</string>
     <string name="build_hero_desc">触发 GitHub Actions 并自动整理 img、AK3、管理器和 SUSFS 模块。</string>
     <string name="build_oneplus_hero_desc">使用 OnePlus/Oplus manifest 构建机型专用 AnyKernel3 包。</string>
-    <string name="build_susfs_on">SUSFS 开启</string>
-    <string name="build_susfs_off">SUSFS 关闭</string>
     <string name="build_virtualization_chip">虚拟化支持 %1$s</string>
     <string name="build_device_recommended">设备推荐</string>
     <string name="build_virtualization_off">关闭</string>
@@ -383,11 +371,9 @@
     <string name="build_stage_none">未选择阶段</string>
     <string name="build_source_list">来源 %1$s</string>
     <string name="build_section_kernel_desc">选择与当前系统匹配的 Android、KMI 和安全补丁日期；不确定时使用设备推荐。</string>
-    <string name="build_section_ksu_desc">选择内核权限方案和对应分支。</string>
     <string name="build_section_features_desc">按需开启模块能力，越少改动越利于排查问题。</string>
     <string name="build_section_kernel_options_desc">逐条覆盖 defconfig。支持 y / m / 关闭 / 忽略 / 原始值，最终优先级高于页面内置开关。</string>
     <string name="build_section_zram_desc">为内存压缩算法加入额外内核支持。</string>
-    <string name="build_section_kpm_desc">用于 KPM 功能的可选安全参数。</string>
     <string name="build_section_custom_modules_desc">按阶段执行外部仓库根目录的 setup.sh。</string>
     <string name="build_section_default_desc">这些字段会被保存，下次打开不会重置。</string>
     <string name="build_status_ready">准备构建</string>
@@ -1514,4 +1500,23 @@
     <string name="status_workflows_title">最近工作流</string>
     <string name="status_workflow_empty">还没有可显示的工作流</string>
     <string name="modules_pending_zip">已收到模块压缩包，安装流程将在后续版本接入。</string>
+    <string name="build_wizard_step_target">选择平台</string>
+    <string name="build_wizard_step_kernel">选择内核</string>
+    <string name="build_wizard_step_features">功能开关</string>
+    <string name="build_wizard_step_root">Root 集成</string>
+    <string name="build_wizard_step_review">确认提交</string>
+    <string name="build_wizard_step_complete">已完成</string>
+    <string name="build_wizard_step_current">当前步骤</string>
+    <string name="build_wizard_step_pending">待处理</string>
+    <string name="build_wizard_back">上一步</string>
+    <string name="build_wizard_next">下一步</string>
+    <string name="build_ksu_nyasu">NyaSU（Root）</string>
+    <string name="build_section_root">Root 集成</string>
+    <string name="build_section_root_desc">NyaSU 是唯一的 Root 方案，管理器就是当前这个 ABK App；选「无 Root」会构建不带 Root 的对照镜像。</string>
+    <string name="build_section_root_line">Root: %1$s · 分支 %2$s</string>
+    <string name="build_patch_modules">KernelSU 补丁模块（可选）</string>
+    <string name="build_patch_modules_hint">留空 = 只集成 NyaSU 驱动，不应用 ksuhook 补丁模块；多个仓库用 | 分隔，每项 repo_url[@ref]，按 module.prop 的 depends 分组。</string>
+    <string name="build_patch_modules_empty">补丁模块：未配置（只集成 NyaSU 驱动）</string>
+    <string name="build_patch_modules_line">补丁模块：%1$s</string>
+    <string name="build_build_workflow_line">工作流：%1$s</string>
 </resources>

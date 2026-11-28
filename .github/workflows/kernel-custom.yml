@@ -48,12 +48,9 @@ on:
         required: true
         type: choice
         options:
-          - None
-          - Official
-          - SukiSU
-          - BakaSU
           - NyaSU
-        default: BakaSU
+          - None
+        default: NyaSU
       kernelsu_branch:
         description: "KSU 分支"
         required: true
@@ -119,19 +116,9 @@ on:
         required: false
         type: boolean
         default: false
-      use_kpm:
-        description: "启用 KPM 功能"
-        required: true
-        type: boolean
-        default: false
       use_rekernel:
         description: "启用 Re-Kernel 驱动"
         required: false
-        type: boolean
-        default: false
-      cancel_susfs:
-        description: "禁用 SUSFS（android17/6.18 会自动禁用：susfs4ksu 暂无 6.18 分支）"
-        required: true
         type: boolean
         default: false
       supp_op:
@@ -152,12 +139,6 @@ on:
         type: string
         default: ""
 
-      # ==================== KPM 扩展选项 ====================
-      kpm_password:
-        description: "自定义 KPM 超级密码（留空=使用默认密码）"
-        required: false
-        type: string
-        default: ""
 
       # ==================== 自定义外部模块 ====================
       custom_external_modules:
@@ -172,24 +153,14 @@ on:
         default: ""
 
       patch_modules:
-        description: "KernelSU 补丁模块仓库（NyaSU 必填；用 | 分隔，每项 repo_url[@ref]，按 module.prop depends 分组）"
+        description: "KernelSU 补丁模块仓库（可选；留空则只集成 NyaSU 驱动，不应用 ksuhook 补丁模块。用 | 分隔，每项 repo_url[@ref]，按 module.prop depends 分组）"
         required: false
         type: string
         default: ""
 
 jobs:
-  validate-custom-kernel:
-    if: inputs.kernelsu_variant == 'NyaSU' && inputs.patch_modules == ''
-    runs-on: ubuntu-latest
-    steps:
-      - name: 拒绝缺少 NyaSU 补丁模块的构建
-        run: |
-          echo "::error::NyaSU 构建必须提供 patch_modules（至少一个兼容模块仓库）。"
-          exit 1
-
   build-custom-kernel:
     name: "${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}"
-    if: inputs.kernelsu_variant != 'NyaSU' || inputs.patch_modules != ''
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
@@ -208,22 +179,11 @@ jobs:
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync || false }}
       use_networking: ${{ inputs.use_networking || false }}
-      use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
       supp_op: ${{ (inputs.supp_op || false) && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}
-      enable_susfs: ${{ inputs.kernelsu_variant != 'NyaSU' && !(inputs.cancel_susfs || (inputs.android_version == 'android17' && inputs.kernel_version == '6.18')) }}
       virtualization_support: ${{ inputs.virtualization_support || 'off' }}
       zram_full_algo: ${{ inputs.zram_full_algo || false }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       patch_modules: ${{ inputs.patch_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
-
-  get-ksu-manager:
-    uses: ./.github/workflows/get-manager.yml
-    secrets: inherit
-    with:
-      kernelsu_variant: ${{ inputs.kernelsu_variant }}
-      ksu_branch: ${{ inputs.kernelsu_branch }}
-      custom_ref: ${{ inputs.custom_ref || '' }}

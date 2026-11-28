@@ -5695,9 +5695,7 @@ class MainViewModel @JvmOverloads constructor(
         logs = logs,
         runId = runId,
         run = run,
-        emptyValue = text(R.string.vm_value_none),
-        defaultValue = text(R.string.vm_value_default),
-        setValue = text(R.string.vm_value_set)
+        emptyValue = text(R.string.vm_value_none)
     )
 
     fun clearError() = _uiState.update { it.copy(error = null) }
@@ -5859,7 +5857,6 @@ internal fun encodeBuildPlanPayload(
     writer.writeString(config.version)
     writer.writeString(config.buildTime)
     writer.writeString(config.zramExtraAlgos)
-    writer.writeString(config.kpmPassword)
     writer.writeString(config.customRef)
     val kernelOptions = config.customKernelOptions
         .mapNotNull { option ->
@@ -6000,7 +5997,10 @@ internal fun decodeBuildPlanPayload(
     val versionName = reader.readString()
     val buildTime = reader.readString()
     val zramExtraAlgos = reader.readString()
-    val kpmPassword = reader.readString()
+    if (version < BUILD_PLAN_NYASU_VERSION) {
+        // 版本 9 起不再有 KPM 密码字段；旧分享码仍保留这一段，读出后丢弃。
+        reader.readString()
+    }
     val customRef = if (version >= BUILD_PLAN_CUSTOM_REF_VERSION) {
         reader.readString()
     } else {
@@ -6061,13 +6061,10 @@ internal fun decodeBuildPlanPayload(
         useDdk = featureMask.hasBuildPlanFlag(2),
         useNtsync = featureMask.hasBuildPlanFlag(3),
         useNetworking = featureMask.hasBuildPlanFlag(4),
-        useKpm = featureMask.hasBuildPlanFlag(5),
         useRekernel = featureMask.hasBuildPlanFlag(6),
-        cancelSusfs = featureMask.hasBuildPlanFlag(7),
         suppOp = featureMask.hasBuildPlanFlag(8),
         zramFullAlgo = featureMask.hasBuildPlanFlag(9),
         zramExtraAlgos = zramExtraAlgos,
-        kpmPassword = kpmPassword,
         customRef = customRef,
         virtualizationSupport = virtualizationSupport,
         customKernelOptions = kernelOptions,
@@ -6167,9 +6164,8 @@ private fun KernelBuildConfig.toBuildPlanFeatureMask(): Int {
     set(2, useDdk)
     set(3, useNtsync)
     set(4, useNetworking)
-    set(5, useKpm)
+    // 位 5（KPM）与位 7（SUSFS）自版本 9 起停用；编号保留，避免高位整体位移。
     set(6, useRekernel)
-    set(7, cancelSusfs)
     set(8, suppOp)
     set(9, zramFullAlgo)
     set(10, useCustomExternalModules)
@@ -6369,7 +6365,7 @@ private const val LATE_FAILED_ARTIFACT_POLL_INTERVAL_MS = 5_000L
 
 private const val BUILD_PLAN_CODE_PREFIX = "ABKP2:"
 private const val BUILD_PLAN_LEGACY_CODE_PREFIX = "ABKP1:"
-private const val BUILD_PLAN_CODE_VERSION = 8
+private const val BUILD_PLAN_CODE_VERSION = 9
 private const val BUILD_PLAN_MIN_SUPPORTED_VERSION = 2
 private const val BUILD_PLAN_CUSTOM_REF_VERSION = 3
 private const val BUILD_PLAN_ONEPLUS_FIELDS_VERSION = 4
@@ -6377,6 +6373,7 @@ private const val BUILD_PLAN_KSU_BRANCH_V5_VERSION = 5
 private const val BUILD_PLAN_MODULE_METADATA_VERSION = 6
 private const val BUILD_PLAN_KERNEL_OPTIONS_VERSION = 7
 private const val BUILD_PLAN_CUSTOM_SOURCE_FIELDS_VERSION = 8
+private const val BUILD_PLAN_NYASU_VERSION = 9
 private const val BUILD_PLAN_NAME_LIMIT = 80
 private const val BUILD_PLAN_MAX_STRING_BYTES = 4096
 private const val BUILD_PLAN_MAX_MODULES = 32
@@ -6385,7 +6382,9 @@ private const val BUILD_PLAN_MAX_DEFCONFIGS = 128
 private const val OFFICIAL_BUILD_MODULE_CATALOG_ID = "official-abk-module-catalog"
 private const val OFFICIAL_BUILD_MODULE_CATALOG_URL = "https://github.com/xingguangcuican6666/ABK_repo"
 
-private val BUILD_PLAN_KSU_VARIANTS = listOf("Official", "SukiSU", "BakaSU", "None")
+// 索引表只追加不改位：旧分享码的 0/1/2 曾代表 Official/SukiSU/BakaSU，解码后由
+// KernelSupport.normalizeKsuVariant() 归一到 NyaSU；编码侧只会写入 None(3) / NyaSU(4)。
+private val BUILD_PLAN_KSU_VARIANTS = listOf("Official", "SukiSU", "BakaSU", "None", "NyaSU")
 private val BUILD_PLAN_KSU_BRANCHES = KSU_BRANCH_BUILD_PLAN_OPTIONS
 private val BUILD_PLAN_VIRTUALIZATION_OPTIONS = listOf("off", "on", "678", "123", "345")
 private val BUILD_PLAN_MODULE_STAGES = listOf(
@@ -6404,7 +6403,6 @@ private const val SUMMARY_LABEL_PATCH_LEVEL = "\u8865\u4e01\u7ea7\u522b"
 private const val SUMMARY_LABEL_KSU_VARIANT = "ksu\u53d8\u4f53"
 private const val SUMMARY_LABEL_KSU_BRANCH = "ksu\u5206\u652f"
 private const val SUMMARY_LABEL_BUILD_TIME = "\u6784\u5efa\u65f6\u95f4"
-private const val SUMMARY_LABEL_SUSFS_STATUS = "susfs\u72b6\u6001"
 private const val SUMMARY_LABEL_ZRAM = "zram\u589e\u5f3a"
 private const val SUMMARY_LABEL_ZRAM_FULL_ALGO = "zram\u5b8c\u6574\u7b97\u6cd5"
 private const val SUMMARY_LABEL_ZRAM_EXTRA_ALGOS = "zram\u989d\u5916\u7b97\u6cd5"
@@ -6412,13 +6410,9 @@ private const val SUMMARY_LABEL_BBG = "bbg\u8865\u4e01"
 private const val SUMMARY_LABEL_NTSYNC = "ntsync\u8865\u4e01"
 private const val SUMMARY_LABEL_NETWORKING = "networking\u589e\u5f3a"
 private const val SUMMARY_LABEL_NETWORKING_TYPO = "networing\u589e\u5f3a"
-private const val SUMMARY_LABEL_KPM = "kpm\u529f\u80fd"
-private const val SUMMARY_LABEL_KPM_PASSWORD = "kpm\u5bc6\u7801"
 private const val SUMMARY_LABEL_VIRTUALIZATION = "\u865a\u62df\u5316\u652f\u6301"
 private const val SUMMARY_LABEL_CUSTOM_INJECTION = "\u81ea\u5b9a\u4e49\u6ce8\u5165"
-private const val SUMMARY_VALUE_DEFAULT_ZH = "\u9ed8\u8ba4"
 private const val SUMMARY_VALUE_NONE_ZH = "\u65e0"
-private const val SUMMARY_VALUE_SET_ZH = "\u5df2\u8bbe\u7f6e"
 private const val PREBUILT_TERM_ZH = "\u9884\u7f16\u8bd1"
 private const val KERNEL_IMAGE_TERM_ZH = "\u5185\u6838\u955c\u50cf"
 private const val FLASH_PACKAGE_TERM_ZH = "\u5237\u5199\u5305"
@@ -6429,9 +6423,7 @@ internal fun parseBuildParameterSummary(
     logs: String,
     runId: Long,
     run: WorkflowRun?,
-    emptyValue: String = SUMMARY_VALUE_NONE_ZH,
-    defaultValue: String = SUMMARY_VALUE_DEFAULT_ZH,
-    setValue: String = SUMMARY_VALUE_SET_ZH
+    emptyValue: String = SUMMARY_VALUE_NONE_ZH
 ): BuildParameterSummary? {
     val values = mutableMapOf<String, String>()
     val extraRows = linkedMapOf<String, String>()
@@ -6453,7 +6445,7 @@ internal fun parseBuildParameterSummary(
             val value = line.substring(separator + 1).trim()
             val key = normalizeBuildSummaryLabel(label)
             if (key != null) {
-                values[key] = sanitizeBuildSummaryValue(key, value, emptyValue, defaultValue, setValue)
+                values[key] = value.ifBlank { emptyValue }
             } else if (isBuildSummaryExtraLabel(label)) {
                 extraRows[label] = value.ifBlank { emptyValue }
             }
@@ -6473,7 +6465,6 @@ internal fun parseBuildParameterSummary(
         ksuVariant = values["ksuVariant"].orEmpty(),
         ksuBranch = values["ksuBranch"].orEmpty(),
         buildTime = values["buildTime"].orEmpty(),
-        susfsEnabled = values["susfsEnabled"].orEmpty(),
         zramEnabled = values["zramEnabled"].orEmpty(),
         zramFullAlgo = values["zramFullAlgo"].orEmpty(),
         zramExtraAlgos = values["zramExtraAlgos"].orEmpty(),
@@ -6481,8 +6472,6 @@ internal fun parseBuildParameterSummary(
         ddkLsm = values["ddkLsm"].orEmpty(),
         ntsyncEnabled = values["ntsyncEnabled"].orEmpty(),
         networkingEnabled = values["networkingEnabled"].orEmpty(),
-        kpmEnabled = values["kpmEnabled"].orEmpty(),
-        kpmPassword = values["kpmPassword"].orEmpty(),
         reKernelEnabled = values["reKernelEnabled"].orEmpty(),
         virtualizationSupport = values["virtualizationSupport"].orEmpty(),
         customInjection = values["customInjection"].orEmpty(),
@@ -6508,7 +6497,6 @@ private fun normalizeBuildSummaryLabel(label: String): String? {
         compact.contains(SUMMARY_LABEL_KSU_VARIANT) -> "ksuVariant"
         compact.contains(SUMMARY_LABEL_KSU_BRANCH) -> "ksuBranch"
         compact.contains(SUMMARY_LABEL_BUILD_TIME) -> "buildTime"
-        compact.contains(SUMMARY_LABEL_SUSFS_STATUS) -> "susfsEnabled"
         compact.contains(SUMMARY_LABEL_ZRAM) -> "zramEnabled"
         compact.contains(SUMMARY_LABEL_ZRAM_FULL_ALGO) -> "zramFullAlgo"
         compact.contains(SUMMARY_LABEL_ZRAM_EXTRA_ALGOS) -> "zramExtraAlgos"
@@ -6516,8 +6504,6 @@ private fun normalizeBuildSummaryLabel(label: String): String? {
         compact.contains("ddklsm") -> "ddkLsm"
         compact.contains(SUMMARY_LABEL_NTSYNC) -> "ntsyncEnabled"
         compact.contains(SUMMARY_LABEL_NETWORKING) || compact.contains(SUMMARY_LABEL_NETWORKING_TYPO) -> "networkingEnabled"
-        compact.contains(SUMMARY_LABEL_KPM) -> "kpmEnabled"
-        compact.contains(SUMMARY_LABEL_KPM_PASSWORD) -> "kpmPassword"
         compact.contains("re-kernel") || compact.contains("rekernel") -> "reKernelEnabled"
         compact.contains(SUMMARY_LABEL_VIRTUALIZATION) -> "virtualizationSupport"
         compact.contains(SUMMARY_LABEL_CUSTOM_INJECTION) -> "customInjection"
@@ -6536,22 +6522,6 @@ private fun isBuildSummaryExtraLabel(label: String): Boolean {
         "上游xml",
         "unicode绕过"
     )
-}
-
-private fun sanitizeBuildSummaryValue(
-    key: String,
-    value: String,
-    emptyValue: String,
-    defaultValue: String,
-    setValue: String
-): String {
-    if (key != "kpmPassword") return value.ifBlank { emptyValue }
-    val normalized = value.trim().lowercase()
-    return when {
-        normalized.isBlank() -> defaultValue
-        normalized in setOf(SUMMARY_VALUE_DEFAULT_ZH, "default", SUMMARY_VALUE_NONE_ZH, "none", "not set") -> defaultValue
-        else -> setValue
-    }
 }
 
 private fun detectRecommendedBuildConfig(): KernelBuildConfig? {
@@ -6701,14 +6671,12 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
             "use_ddk" to config.useDdk.toString(),
             "use_ntsync" to config.useNtsync.toString(),
             "use_networking" to config.useNetworking.toString(),
-            "use_kpm" to config.useKpm.toString(),
             "use_rekernel" to config.useRekernel.toString(),
-            "cancel_susfs" to config.cancelSusfs.toString(),
             "zram_full_algo" to config.zramFullAlgo.toString(),
             "zram_extra_algos" to config.zramExtraAlgos,
-            "kpm_password" to config.kpmPassword,
             "custom_external_modules" to if (config.useCustomExternalModules) config.customExternalModules.toWorkflowInput() else "",
             "custom_kernel_options" to config.customKernelOptions.mapNotNull { it.toWorkflowLine() }.joinToString("\n"),
+            "patch_modules" to config.patchModules.trim(),
         )
     }
     if (config.buildTarget == BUILD_TARGET_ONEPLUS) {
@@ -6718,9 +6686,8 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
             "android_version" to config.androidVersion,
             "kernel_version" to config.kernelVersion,
             "ksu_variant" to config.kernelsuVariant,
-            "enable_susfs" to (!config.cancelSusfs && config.kernelsuVariant != KSU_VARIANT_NONE &&
-                KernelSupport.isSusfsSelectable(config.kernelsuVariant)).toString(),
-            "use_kpm" to config.useKpm.toString(),
+            "ksu_branch" to config.kernelsuBranch,
+            "custom_ref" to if (config.kernelsuBranch == KSU_BRANCH_CUSTOM) config.customRef.trim() else "",
             "use_lz4kd" to config.onePlusUseLz4kd.toString(),
             "use_bbg" to config.useBbg.toString(),
             "use_bbr" to config.onePlusUseBbr.toString(),
@@ -6743,13 +6710,11 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
         "use_ddk" to config.useDdk.toString(),
         "use_ntsync" to config.useNtsync.toString(),
         "use_networking" to config.useNetworking.toString(),
-        "use_kpm" to config.useKpm.toString(),
         "use_rekernel" to config.useRekernel.toString(),
-        "cancel_susfs" to config.cancelSusfs.toString(),
         "supp_op" to config.suppOp.toString(),
         "zram_full_algo" to config.zramFullAlgo.toString(),
         "zram_extra_algos" to config.zramExtraAlgos,
-        "kpm_password" to config.kpmPassword,
+        "patch_modules" to config.patchModules.trim(),
         "virtualization_support" to config.virtualizationSupport,
         "custom_kernel_options" to config.customKernelOptions
             .mapNotNull { it.toWorkflowLine() }

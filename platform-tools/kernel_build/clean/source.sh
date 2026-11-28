@@ -201,26 +201,14 @@ custom-baseline() {
     python3 "$GITHUB_WORKSPACE/.github/scripts/custom-source-feature-status.py" init \
       --file "$status_file" \
       --feature "kernelsu=$([ "$KSU_VARIANT" != None ] && echo true || echo false)" \
-      --feature "susfs=$ENABLE_SUSFS" \
       --feature "virtualization=$([ "$VIRTUALIZATION_SUPPORT" != off ] && echo true || echo false)" \
       --feature "zram=$USE_ZRAM" \
       --feature "bbg=$USE_BBG" \
       --feature "ddk=$USE_DDK" \
       --feature "ntsync=$USE_NTSYNC" \
       --feature "networking=$USE_NETWORKING" \
-      --feature "kpm=$USE_KPM" \
       --feature "rekernel=$USE_REKERNEL"
     mkdir -p "$transaction_dir"
-    if [ "$USE_KPM" = "true" ] &&
-      { [ "$KSU_VARIANT" != "SukiSU" ] && [ "$KSU_VARIANT" != "BakaSU" ]; }; then
-      python3 "$GITHUB_WORKSPACE/.github/scripts/custom-source-feature-status.py" mark \
-        --file "$status_file" \
-        --id kpm \
-        --state skipped \
-        --reason-code dependency_skipped \
-        --message "KPM requires the SukiSU or BakaSU KernelSU variant"
-      touch "$transaction_dir/kpm.disabled"
-    fi
     echo "ABK_CUSTOM_SOURCE_FEATURE_STATUS=$status_file" >> "$GITHUB_ENV"
     echo "ABK_CUSTOM_SOURCE_TRANSACTION_DIR=$transaction_dir" >> "$GITHUB_ENV"
     echo "ABK_CUSTOM_SOURCE_FEATURE_STATUS_FILE=$status_file" >> "$GITHUB_STEP_SUMMARY"

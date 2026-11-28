@@ -255,9 +255,6 @@ object KernelSupport {
         onePlusLines.firstOrNull { it.kernelVersion == kernelVersion }?.androidVersion
             ?: onePlusLines.first().androidVersion
 
-    fun onePlusSusfsSupported(androidVersion: String, kernelVersion: String): Boolean =
-        "$androidVersion/$kernelVersion" in setOf("android14/6.1", "android15/6.6", "android16/6.12")
-
     private const val ANDROID17_UNSUPPORTED_LINE = "android17/6.18"
 
 
@@ -310,10 +307,7 @@ object KernelSupport {
             if (isOnePlus || ksuVariant == KSU_VARIANT_NONE) KSU_BRANCH_STABLE else config.kernelsuBranch
         )
         val onePlusIsMtk = onePlusCpu.startsWith("mt")
-        val onePlusKpmSupported = !onePlusIsMtk && ksuVariant == KSU_VARIANT_SUKISU
-        val gkiKpmSupported = isKpmSupported(BUILD_TARGET_GKI, ksuVariant, normalizedKsuBranch)
         val onePlusProxyAllowed = !onePlusIsMtk
-        val onePlusSusfsEnabled = onePlusSusfsSupported(line.androidVersion, line.kernelVersion)
         val onePlusLz4kdEnabled = onePlusLz4kdSupported(line.kernelVersion)
         return config.copy(
             buildTarget = target,
@@ -339,18 +333,7 @@ object KernelSupport {
             useNtsync = if (isOnePlus) false else config.useNtsync,
             useNetworking = if (isOnePlus) false else config.useNetworking,
             useRekernel = if (isOnePlus) false else config.useRekernel,
-            useKpm = when {
-                ksuVariant == KSU_VARIANT_NONE -> false
-                isOnePlus -> onePlusKpmSupported && config.useKpm
-                else -> gkiKpmSupported && config.useKpm
-            },
-            cancelSusfs = when {
-                ksuVariant == KSU_VARIANT_NONE -> true
-                ksuVariant == KSU_VARIANT_BAKASU -> true
-                isOnePlus && !onePlusSusfsEnabled -> true
-                else -> config.cancelSusfs
-            },
-            kpmPassword = if (isOnePlus || ksuVariant == KSU_VARIANT_NONE || !gkiKpmSupported) "" else config.kpmPassword,
+            patchModules = if (ksuVariant == KSU_VARIANT_NONE) "" else config.patchModules.trim(),
             virtualizationSupport = if (isOnePlus) "off" else normalizeVirtualizationSupport(line.kernelVersion, config.virtualizationSupport),
             customKernelOptions = if (isOnePlus) {
                 emptyList()
@@ -506,22 +489,11 @@ object KernelSupport {
 
     fun normalizeKsuVariant(value: String?, buildTarget: String?): String {
         val lower = value.orEmpty().trim().lowercase()
-        // Upstream renamed ReSukiSU/ReSukiSU to Baka-SU/BakaSU; older app builds and
-        // already-saved build records still carry the retired spelling.
-        val isLegacyAlias = lower.isNotBlank() &&
-            KSU_VARIANT_LEGACY_ALIASES.any { it in lower }
-        val normalized = when {
-            lower == KSU_VARIANT_OFFICIAL.lowercase() -> KSU_VARIANT_OFFICIAL
-            lower == KSU_VARIANT_SUKISU.lowercase() -> KSU_VARIANT_SUKISU
-            lower == KSU_VARIANT_BAKASU.lowercase() -> KSU_VARIANT_BAKASU
+        // 编译链已收敛为 NyaSU + None：Official / SukiSU / BakaSU（含旧拼写 ReSukiSU）
+        // 只可能来自旧构建记录或旧分享码，统一归一到 NyaSU，不报错也不静默丢配置。
+        return when {
             lower == KSU_VARIANT_NONE.lowercase() || lower == "无" -> KSU_VARIANT_NONE
-            isLegacyAlias -> KSU_VARIANT_BAKASU
-            else -> KSU_VARIANT_BAKASU
-        }
-        return if (normalizeBuildTarget(buildTarget) == BUILD_TARGET_ONEPLUS) {
-            normalized.takeIf { it in ONEPLUS_KSU_VARIANT_OPTIONS } ?: KSU_VARIANT_SUKISU
-        } else {
-            normalized.takeIf { it in KSU_VARIANT_OPTIONS } ?: KSU_VARIANT_BAKASU
+            else -> KSU_VARIANT_NYASU
         }
     }
 
@@ -530,8 +502,9 @@ object KernelSupport {
     /**
      * Classify a raw runtime string — the control-status `manager.variant`, `ksud --version`
      * output, the kernel `KSU_VERSION_FULL`, or a probe display name — into the canonical
-     * manager family constant ([KSU_VARIANT_BAKASU] / [KSU_VARIANT_SUKISU]), or null when the
-     * string names no SukiSU-family backend.
+     * manager family constant ([KSU_VARIANT_NYASU] / [KSU_VARIANT_BAKASU] /
+     * [KSU_VARIANT_SUKISU]), or null when the string names no known backend. This only
+     * describes an *installed* kernel; it never drives what the build form offers.
      *
      * Match order is significant: the retired `ReSukiSU` spelling contains the substring
      * `sukisu`, and the hyphenated upstream org name `Baka-SU` does not contain `bakasu`, so
@@ -542,6 +515,7 @@ object KernelSupport {
         val lower = value.orEmpty().lowercase()
         if (lower.isBlank()) return null
         return when {
+            "nyasu" in lower -> KSU_VARIANT_NYASU
             "bakasu" in lower || "baka-su" in lower || "baka_su" in lower -> KSU_VARIANT_BAKASU
             KSU_VARIANT_LEGACY_ALIASES.any { it in lower } -> KSU_VARIANT_BAKASU
             // Shorter pre-rename spelling ("ReSuki") that survives in old build logs and
@@ -555,7 +529,7 @@ object KernelSupport {
     /**
      * True when [value] is the retired `ReSukiSU` spelling rather than a current variant.
      * Only reachable from restored build records or plans shared by older app builds, so
-     * [normalizeKsuVariant] has already folded these into [KSU_VARIANT_BAKASU].
+     * [normalizeKsuVariant] has already folded these into [KSU_VARIANT_NYASU].
      */
     fun isDeprecatedKsuVariantAlias(value: String?): Boolean {
         val lower = value.orEmpty().trim().lowercase()
@@ -566,15 +540,6 @@ object KernelSupport {
 
     fun normalizeKsuBranch(value: String): String =
         value.takeIf { it in KSU_BRANCH_STANDARD_OPTIONS } ?: KSU_BRANCH_STABLE
-
-    fun isKpmSupported(buildTarget: String, ksuVariant: String, ksuBranch: String): Boolean {
-        val normalizedTarget = normalizeBuildTarget(buildTarget)
-        val normalizedVariant = normalizeKsuVariant(ksuVariant, normalizedTarget)
-        return normalizedVariant == KSU_VARIANT_SUKISU
-    }
-
-    fun isSusfsSelectable(ksuVariant: String): Boolean =
-        normalizeKsuVariant(ksuVariant, BUILD_TARGET_GKI) != KSU_VARIANT_BAKASU
 
     fun virtualizationSupportOptions(kernelVersion: String): List<String> =
         if (kernelVersion == "6.12" || kernelVersion == "6.18") listOf("off", "on") else listOf("off", "678", "123", "345")

@@ -12,21 +12,24 @@ on:
         required: true
         type: choice
         options:
-          - Official
-          - SukiSU
-          - BakaSU
+          - NyaSU
           - None
-        default: SukiSU
-      enable_susfs:
-        description: "启用 SUSFS（android14/6.1、android15/6.6、android16/6.12）"
+        default: NyaSU
+      kernelsu_branch:
+        description: "KSU 分支"
+        required: true
+        type: choice
+        options:
+          - Stable(标准)
+          - Dev(开发)
+          - Latest(最新)
+          - Custom(自定义)
+        default: Stable(标准)
+      custom_ref:
+        description: "自定义 KSU 引用（仅内核分支=CUSTOM 时使用）"
         required: false
-        type: boolean
-        default: false
-      use_kpm:
-        description: "启用 KPM（仅 SukiSU/BakaSU 生效）"
-        required: false
-        type: boolean
-        default: false
+        type: string
+        default: ""
       use_lz4kd:
         description: "启用 lz4kd"
         required: false
@@ -57,14 +60,14 @@ on:
       kernelsu_variant:
         required: true
         type: string
-      enable_susfs:
+      kernelsu_branch:
         required: false
-        type: boolean
-        default: false
-      use_kpm:
+        type: string
+        default: Stable(标准)
+      custom_ref:
         required: false
-        type: boolean
-        default: false
+        type: string
+        default: ""
       use_lz4kd:
         required: false
         type: boolean
@@ -87,14 +90,6 @@ on:
         default: false
 
 jobs:
-  get-manager:
-    name: 上传管理器和 SUSFS 模块
-    if: ${{ inputs.kernelsu_variant != 'None' }}
-    uses: ./.github/workflows/get-manager.yml
-    secrets: inherit
-    with:
-      kernelsu_variant: ${{ inputs.kernelsu_variant }}
-
   prepare-matrix:
     name: 准备 OnePlus 机型矩阵
     runs-on: ubuntu-latest
@@ -110,8 +105,6 @@ jobs:
         shell: bash
         env:
           MATRIX_KSU_VARIANT: ${{ inputs.kernelsu_variant }}
-          MATRIX_ENABLE_SUSFS: ${{ inputs.enable_susfs }}
-          MATRIX_USE_KPM: ${{ inputs.use_kpm }}
           MATRIX_USE_LZ4KD: ${{ inputs.use_lz4kd }}
           MATRIX_USE_BBG: ${{ inputs.use_bbg }}
           MATRIX_USE_BBR: ${{ inputs.use_bbr }}
@@ -234,11 +227,6 @@ jobs:
           def env_enabled(name):
               return "on" if os.environ.get(name, "").lower() == "true" else "off"
 
-          effective_use_kpm = (
-              os.environ.get("MATRIX_USE_KPM", "").lower() == "true"
-              and os.environ.get("MATRIX_KSU_VARIANT", "") in {"SukiSU", "BakaSU"}
-          )
-
           supported_manifest_set = set(SUPPORTED_MANIFESTS)
           cpu_order = {cpu: index for index, cpu in enumerate(SUPPORTED_CPUS)}
           manifest_order = {manifest: index for index, manifest in enumerate(SUPPORTED_MANIFESTS)}
@@ -286,15 +274,6 @@ jobs:
 
                       android_version, kernel_version = line
                       display_name, system_version = PROFILE_MAP[device_manifest]
-                      enable_susfs = (
-                          os.environ.get("MATRIX_ENABLE_SUSFS", "").lower() == "true"
-                          and os.environ.get("MATRIX_KSU_VARIANT", "") != "None"
-                          and f"{android_version}/{kernel_version}" in {
-                              "android14/6.1",
-                              "android15/6.6",
-                              "android16/6.12",
-                          }
-                      )
                       matrix.append(
                           {
                               "cpu": cpu,
@@ -305,7 +284,6 @@ jobs:
                               ),
                               "android_version": android_version,
                               "kernel_version": kernel_version,
-                              "enable_susfs": enable_susfs,
                           }
                       )
                       found.add(device_manifest)
@@ -334,8 +312,6 @@ jobs:
               summary.write("## OnePlus 全矩阵内核构建\n\n")
               summary.write(f"- 总任务数: {len(matrix)}\n")
               summary.write(f"- KernelSU 变体: {os.environ.get('MATRIX_KSU_VARIANT', '')}\n")
-              summary.write(f"- SUSFS: {env_enabled('MATRIX_ENABLE_SUSFS')}（android14/6.1、android15/6.6、android16/6.12）\n")
-              summary.write(f"- KPM: {'on' if effective_use_kpm else 'off'}（仅 SukiSU/BakaSU 生效）\n")
               summary.write(f"- lz4kd: {env_enabled('MATRIX_USE_LZ4KD')}\n")
               summary.write(f"- BBG: {env_enabled('MATRIX_USE_BBG')}\n")
               summary.write(f"- BBR: {env_enabled('MATRIX_USE_BBR')}\n")
@@ -368,8 +344,8 @@ jobs:
       android_version: ${{ matrix.android_version }}
       kernel_version: ${{ matrix.kernel_version }}
       ksu_variant: ${{ inputs.kernelsu_variant }}
-      enable_susfs: ${{ matrix.enable_susfs }}
-      use_kpm: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'BakaSU') }}
+      ksu_branch: ${{ inputs.kernelsu_branch }}
+      custom_ref: ${{ inputs.custom_ref || '' }}
       use_lz4kd: ${{ inputs.use_lz4kd }}
       use_bbg: ${{ inputs.use_bbg }}
       use_bbr: ${{ inputs.use_bbr }}

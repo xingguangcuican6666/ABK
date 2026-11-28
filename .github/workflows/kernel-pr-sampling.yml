@@ -4,8 +4,8 @@
 # 当 PR 改动内核编译工作流 / 内核源码补丁 / 补丁脚本时，
 # 从与 kernel-a*.yml matrix 一致的候选池中随机抽取 3~6 个
 # (android_version, kernel_version, sub_level, os_patch_level, revision)
-# 组合，功能参数全关（ZRAM/BBG/DDK/NTsync/Networking/KPM/Re-Kernel/
-# SUSFS/虚拟化/一加 8E 均关闭），root 实现（KernelSU 变体）随机，
+# 组合，功能参数全关（ZRAM/BBG/DDK/NTsync/Networking/Re-Kernel/
+# 虚拟化/一加 8E 均关闭），root 实现（NyaSU / None）随机，
 # 走 build.yml 完整编译链路做检查。
 #
 # 随机种子 = PR 号 + head SHA + run_id + run_attempt，
@@ -147,14 +147,11 @@ jobs:
       use_ddk: false
       use_ntsync: false
       use_networking: false
-      use_kpm: false
       use_rekernel: false
-      enable_susfs: false
       supp_op: false
       virtualization_support: "off"
       zram_full_algo: false
       zram_extra_algos: ""
-      kpm_password: ""
       custom_external_modules: ""
       custom_kernel_options: ""
       upload_aux_artifacts: false

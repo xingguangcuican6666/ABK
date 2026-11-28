@@ -9,21 +9,34 @@ import org.junit.Test
 class KernelSupportTest {
 
     @Test
-    fun normalizeKsuVariantFoldsRetiredResukisuAliasesIntoBakasu() {
-        listOf("ReSukiSU", "resukisu", "Re-SukiSU", " re-suki ").forEach { legacy ->
+    fun normalizeKsuVariantFoldsRetiredVariantsIntoNyasu() {
+        // 编译链只剩 NyaSU / None；旧构建记录与旧分享码里的变体一律归一到 NyaSU。
+        listOf(
+            "ReSukiSU", "resukisu", "Re-SukiSU", " re-suki ",
+            KSU_VARIANT_OFFICIAL, KSU_VARIANT_SUKISU, KSU_VARIANT_BAKASU, "  bakasu ", "",
+        ).forEach { legacy ->
             assertEquals(
-                "legacy alias <$legacy> should normalize to BakaSU",
-                KSU_VARIANT_BAKASU,
+                "legacy variant <$legacy> should normalize to NyaSU",
+                KSU_VARIANT_NYASU,
                 KernelSupport.normalizeKsuVariant(legacy, BUILD_TARGET_GKI),
             )
             assertEquals(
-                "legacy alias <$legacy> should normalize to BakaSU on OnePlus",
-                KSU_VARIANT_BAKASU,
+                "legacy variant <$legacy> should normalize to NyaSU on OnePlus",
+                KSU_VARIANT_NYASU,
                 KernelSupport.normalizeKsuVariant(legacy, BUILD_TARGET_ONEPLUS),
             )
         }
-        // The retired spelling must not be mistaken for the current BakaSU option itself.
-        assertFalse(KernelSupport.isDeprecatedKsuVariantAlias(KSU_VARIANT_BAKASU))
+        // None（含中文写法）是唯一保留的第二条路径。
+        assertEquals(KSU_VARIANT_NONE, KernelSupport.normalizeKsuVariant("none"))
+        assertEquals(KSU_VARIANT_NONE, KernelSupport.normalizeKsuVariant(" 无 "))
+        assertEquals(
+            listOf(KSU_VARIANT_NYASU, KSU_VARIANT_NONE),
+            KernelSupport.ksuVariantOptions(),
+        )
+        assertEquals(
+            listOf(KSU_VARIANT_NYASU, KSU_VARIANT_NONE),
+            KernelSupport.onePlusKsuVariantOptions(),
+        )
         assertTrue(KernelSupport.isDeprecatedKsuVariantAlias("ReSukiSU"))
     }
 
@@ -60,6 +73,14 @@ class KernelSupportTest {
         )
         assertNull(KernelSupport.inferRuntimeKsuFamily(null))
         assertNull(KernelSupport.inferRuntimeKsuFamily(""))
+        // 已装机的 NyaSU 内核要能识别出来（只影响运行时展示，不影响可编译选项）。
+        listOf("NyaSU", "nyasu", "v6.6.30@NyaSU-main").forEach { raw ->
+            assertEquals(
+                "<$raw> should classify as NyaSU",
+                KSU_VARIANT_NYASU,
+                KernelSupport.inferRuntimeKsuFamily(raw),
+            )
+        }
         assertNull(KernelSupport.inferRuntimeKsuFamily("KernelSU"))
         assertNull(KernelSupport.inferRuntimeKsuFamily("31500"))
     }
@@ -99,9 +120,7 @@ class KernelSupportTest {
                 osPatchLevel = "2099-01",
                 kernelsuVariant = "none",
                 kernelsuBranch = KSU_BRANCH_DEV,
-                useKpm = true,
-                cancelSusfs = false,
-                kpmPassword = "secret",
+                patchModules = "https://github.com/example/module.git",
                 virtualizationSupport = "678",
                 customExternalModules = listOf(
                     CustomExternalModule("  ", "before_build"),
@@ -117,9 +136,8 @@ class KernelSupportTest {
         assertEquals("2026-03", normalized.osPatchLevel)
         assertEquals(KSU_VARIANT_NONE, normalized.kernelsuVariant)
         assertEquals(KSU_BRANCH_STABLE, normalized.kernelsuBranch)
-        assertFalse(normalized.useKpm)
-        assertTrue(normalized.cancelSusfs)
-        assertEquals("", normalized.kpmPassword)
+        // None 不注入任何补丁模块，输入里残留的模块地址会被清空。
+        assertEquals("", normalized.patchModules)
         assertEquals("on", normalized.virtualizationSupport)
         assertEquals(
             listOf(CustomExternalModule("https://github.com/example/module.git", CustomExternalModuleStage.BEFORE_BUILD)),
@@ -175,11 +193,10 @@ class KernelSupportTest {
                 buildTarget = BUILD_TARGET_ONEPLUS,
                 androidVersion = "android16",
                 kernelVersion = "6.12",
-                kernelsuVariant = KSU_VARIANT_SUKISU,
+                kernelsuVariant = KSU_VARIANT_NYASU,
                 onePlusCpu = "mt6991",
                 onePlusDeviceManifest = "oneplus_ace5_ultra_b",
                 onePlusUseProxyOptimization = true,
-                useKpm = true,
                 useDdk = true,
                 useCustomExternalModules = true,
                 customExternalModules = listOf(CustomExternalModule("https://github.com/example/module"))
@@ -189,11 +206,10 @@ class KernelSupportTest {
         assertEquals(BUILD_TARGET_ONEPLUS, normalized.buildTarget)
         assertEquals("android15", normalized.androidVersion)
         assertEquals("6.6", normalized.kernelVersion)
-        assertEquals(KSU_VARIANT_SUKISU, normalized.kernelsuVariant)
+        assertEquals(KSU_VARIANT_NYASU, normalized.kernelsuVariant)
         assertEquals("mt6991", normalized.onePlusCpu)
         assertEquals("oneplus_ace5_ultra_b", normalized.onePlusDeviceManifest)
         assertFalse(normalized.onePlusUseProxyOptimization)
-        assertFalse(normalized.useKpm)
         assertFalse(normalized.useDdk)
         assertTrue(normalized.customExternalModules.isEmpty())
     }
@@ -207,19 +223,21 @@ class KernelSupportTest {
     }
 
     @Test
-    fun normalizeOnePlusDisablesSusfsWhenNoUpstreamBranchExists() {
+    fun normalizeOnePlusLegacyVariantBecomesNyasuOnStableBranch() {
         val normalized = KernelSupport.normalize(
             KernelBuildConfig(
                 buildTarget = BUILD_TARGET_ONEPLUS,
-                kernelsuVariant = KSU_VARIANT_SUKISU,
-                cancelSusfs = false,
+                kernelsuVariant = KSU_VARIANT_BAKASU,
+                kernelsuBranch = KSU_BRANCH_DEV,
                 onePlusDeviceManifest = "oneplus_10t_v"
             )
         )
 
         assertEquals("android12", normalized.androidVersion)
         assertEquals("5.10", normalized.kernelVersion)
-        assertTrue(normalized.cancelSusfs)
+        assertEquals(KSU_VARIANT_NYASU, normalized.kernelsuVariant)
+        // OnePlus 线固定走 Stable，不吃 GKI 的分支选择。
+        assertEquals(KSU_BRANCH_STABLE, normalized.kernelsuBranch)
     }
 
     @Test
@@ -227,8 +245,7 @@ class KernelSupportTest {
         val normalized = KernelSupport.normalize(
             KernelBuildConfig(
                 buildTarget = BUILD_TARGET_ONEPLUS,
-                kernelsuVariant = KSU_VARIANT_SUKISU,
-                cancelSusfs = false,
+                kernelsuVariant = KSU_VARIANT_NYASU,
                 onePlusDeviceManifest = "oneplus_15t",
                 onePlusUseLz4kd = true
             )
@@ -237,7 +254,6 @@ class KernelSupportTest {
         assertEquals("sm8850", normalized.onePlusCpu)
         assertEquals("android16", normalized.androidVersion)
         assertEquals("6.12", normalized.kernelVersion)
-        assertFalse(normalized.cancelSusfs)
         assertFalse(normalized.onePlusUseLz4kd)
         assertEquals(
             "OnePlus 15T · ColorOS/OxygenOS 16 · android16/6.12 · sm8850",
@@ -246,104 +262,48 @@ class KernelSupportTest {
     }
 
     @Test
-    fun normalizeDisablesKpmForBakasuDevAndLatest() {
-        val dev = KernelSupport.normalize(
-            KernelBuildConfig(
-                kernelsuVariant = KSU_VARIANT_BAKASU,
-                kernelsuBranch = KSU_BRANCH_DEV,
-                useKpm = true,
-                kpmPassword = "secret"
-            )
-        )
-        val latest = KernelSupport.normalize(
-            KernelBuildConfig(
-                kernelsuVariant = KSU_VARIANT_BAKASU,
-                kernelsuBranch = KSU_BRANCH_LATEST,
-                useKpm = true,
-                kpmPassword = "secret"
-            )
-        )
-
-        assertFalse(dev.useKpm)
-        assertEquals("", dev.kpmPassword)
-        assertFalse(latest.useKpm)
-        assertEquals("", latest.kpmPassword)
-    }
-
-    @Test
-    fun normalizeDisablesKpmAndSusfsForBakasuOnAllBranches() {
-        val stable = KernelSupport.normalize(
-            KernelBuildConfig(
-                kernelsuVariant = KSU_VARIANT_BAKASU,
-                kernelsuBranch = KSU_BRANCH_STABLE,
-                useKpm = true,
-                kpmPassword = "secret",
-                cancelSusfs = false
-            )
-        )
-        val custom = KernelSupport.normalize(
-            KernelBuildConfig(
-                kernelsuVariant = KSU_VARIANT_BAKASU,
-                kernelsuBranch = KSU_BRANCH_CUSTOM,
-                useKpm = true,
-                kpmPassword = "secret",
-                cancelSusfs = false
-            )
-        )
-
-        assertFalse(stable.useKpm)
-        assertEquals("", stable.kpmPassword)
-        assertTrue(stable.cancelSusfs)
-        assertFalse(custom.useKpm)
-        assertEquals("", custom.kpmPassword)
-        assertTrue(custom.cancelSusfs)
-        assertFalse(KernelSupport.isKpmSupported(BUILD_TARGET_GKI, KSU_VARIANT_BAKASU, KSU_BRANCH_STABLE))
-        assertFalse(KernelSupport.isSusfsSelectable(KSU_VARIANT_BAKASU))
-    }
-
-    @Test
-    fun normalizeKeepsKpmAndSusfsForSukisu() {
+    fun normalizeTrimsPatchModulesAndKeepsThemForNyasu() {
         val normalized = KernelSupport.normalize(
             KernelBuildConfig(
-                kernelsuVariant = KSU_VARIANT_SUKISU,
-                kernelsuBranch = KSU_BRANCH_STABLE,
-                useKpm = true,
-                kpmPassword = "secret",
-                cancelSusfs = false
+                kernelsuVariant = KSU_VARIANT_NYASU,
+                kernelsuBranch = KSU_BRANCH_DEV,
+                patchModules = "  https://github.com/example/ksu-module.git  "
             )
         )
 
-        assertTrue(normalized.useKpm)
-        assertEquals("secret", normalized.kpmPassword)
-        assertFalse(normalized.cancelSusfs)
-        assertTrue(KernelSupport.isKpmSupported(BUILD_TARGET_GKI, KSU_VARIANT_SUKISU, KSU_BRANCH_STABLE))
-        assertTrue(KernelSupport.isSusfsSelectable(KSU_VARIANT_SUKISU))
-        assertTrue(KernelSupport.isSusfsSelectable(KSU_VARIANT_OFFICIAL))
+        assertEquals(KSU_VARIANT_NYASU, normalized.kernelsuVariant)
+        assertEquals("https://github.com/example/ksu-module.git", normalized.patchModules)
     }
 
     @Test
-    fun normalizeDisablesKpmForOfficialOnStableAndCustom() {
-        val stable = KernelSupport.normalize(
-            KernelBuildConfig(
-                kernelsuVariant = KSU_VARIANT_OFFICIAL,
-                kernelsuBranch = KSU_BRANCH_STABLE,
-                useKpm = true,
-                kpmPassword = "secret"
-            )
-        )
-        val custom = KernelSupport.normalize(
-            KernelBuildConfig(
-                kernelsuVariant = KSU_VARIANT_OFFICIAL,
-                kernelsuBranch = KSU_BRANCH_CUSTOM,
-                useKpm = true,
-                kpmPassword = "secret"
-            )
+    fun normalizeClearsPatchModulesWhenNoRootSchemeIsChosen() {
+        val config = KernelBuildConfig(
+            kernelsuVariant = KSU_VARIANT_NONE,
+            patchModules = "https://github.com/example/ksu-module.git",
         )
 
-        assertFalse(stable.useKpm)
-        assertEquals("", stable.kpmPassword)
-        assertFalse(custom.useKpm)
-        assertEquals("", custom.kpmPassword)
+        assertEquals("", KernelSupport.normalize(config).patchModules)
+        // 切回 NyaSU 时补丁模块重新生效，不会被 normalize 永久吞掉。
+        assertEquals(
+            "https://github.com/example/ksu-module.git",
+            KernelSupport.normalize(config.copy(kernelsuVariant = KSU_VARIANT_NYASU)).patchModules,
+        )
+    }
+
+    @Test
+    fun normalizeFoldsEveryRetiredVariantToNyasuOnEveryTarget() {
+        listOf(BUILD_TARGET_GKI, BUILD_TARGET_ONEPLUS, BUILD_TARGET_CUSTOM_SOURCE).forEach { target ->
+            listOf(KSU_VARIANT_OFFICIAL, KSU_VARIANT_SUKISU, KSU_VARIANT_BAKASU).forEach { legacy ->
+                val normalized = KernelSupport.normalize(
+                    KernelBuildConfig(buildTarget = target, kernelsuVariant = legacy)
+                )
+                assertEquals(
+                    "retired variant <$legacy> on <$target>",
+                    KSU_VARIANT_NYASU,
+                    normalized.kernelsuVariant,
+                )
+            }
+        }
     }
 
     @Test
@@ -398,16 +358,15 @@ class KernelSupportTest {
     }
 
     @Test
-    fun normalizePreservesSusfsPreferenceOnAndroid17Kernel618() {
+    fun normalizePreservesNyasuOnAndroid17Kernel618() {
         val normalized = KernelSupport.normalize(
             KernelBuildConfig(
                 androidVersion = "android17",
                 kernelVersion = "6.18",
                 subLevel = "32",
                 osPatchLevel = "2026-09",
-                kernelsuVariant = KSU_VARIANT_SUKISU,
-                kernelsuBranch = KSU_BRANCH_STABLE,
-                cancelSusfs = false
+                kernelsuVariant = KSU_VARIANT_NYASU,
+                kernelsuBranch = KSU_BRANCH_STABLE
             )
         )
 
@@ -415,13 +374,13 @@ class KernelSupportTest {
         assertEquals("6.18", normalized.kernelVersion)
         assertEquals("32", normalized.subLevel)
         assertEquals("2026-09", normalized.osPatchLevel)
-        assertFalse(normalized.cancelSusfs)
+        assertEquals(KSU_VARIANT_NYASU, normalized.kernelsuVariant)
 
         val back = KernelSupport.normalize(
             normalized.copy(androidVersion = "android16", kernelVersion = "6.12")
         )
         assertEquals("android16", back.androidVersion)
-        assertFalse(back.cancelSusfs)
+        assertEquals(KSU_VARIANT_NYASU, back.kernelsuVariant)
     }
 
     @Test
@@ -433,14 +392,13 @@ class KernelSupportTest {
     }
 
     @Test
-    fun normalizeKeepsSusfsSelectableOnAndroid16Kernel612() {
+    fun normalizeKeepsNyasuOnAndroid16Kernel612() {
         val normalized = KernelSupport.normalize(
             KernelBuildConfig(
                 androidVersion = "android16",
                 kernelVersion = "6.12",
-                kernelsuVariant = KSU_VARIANT_SUKISU,
-                kernelsuBranch = KSU_BRANCH_STABLE,
-                cancelSusfs = false
+                kernelsuVariant = KSU_VARIANT_NYASU,
+                kernelsuBranch = KSU_BRANCH_STABLE
             )
         )
 
@@ -448,8 +406,7 @@ class KernelSupportTest {
         assertEquals("6.12", normalized.kernelVersion)
         assertEquals("69", normalized.subLevel)
         assertEquals("2026-03", normalized.osPatchLevel)
-        // 6.12 不受 6.18 门控影响
-        assertFalse(normalized.cancelSusfs)
+        assertEquals(KSU_VARIANT_NYASU, normalized.kernelsuVariant)
     }
 
     @Test

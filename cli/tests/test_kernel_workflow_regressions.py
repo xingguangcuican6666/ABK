@@ -1,4 +1,3 @@
-import importlib.util
 import json
 import os
 import re
@@ -17,7 +16,6 @@ from cli.tests import kernel_scripts
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = ROOT / ".github" / "workflows" / "build.yml"
 REF_SCRIPT_PATH = ROOT / ".github" / "scripts" / "resolve-ksu-ref.sh"
-KSU_COMPAT_PATH = ROOT / ".github" / "scripts" / "ensure-ksu-compat.py"
 
 
 class KernelWorkflowRegressionTests(unittest.TestCase):
@@ -25,9 +23,6 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
     def setUpClass(cls):
         cls.workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
         cls.ref_script = REF_SCRIPT_PATH.read_text(encoding="utf-8")
-        spec = importlib.util.spec_from_file_location("ensure_ksu_compat", KSU_COMPAT_PATH)
-        cls.ksu_compat = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(cls.ksu_compat)
 
     def test_checkout_precedes_script_steps(self):
         # 被 workflow_call 复用的工作流不会隐式 checkout：任何调用
@@ -100,28 +95,33 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
         self.assertNotIn("nyasu_sdk_ref", self.workflow)
         self.assertNotIn("ABK_INPUT_NYASU_SDK_REF", self.workflow)
 
-    def test_sukisu_setup_accepts_resolved_bare_sha(self):
+    def test_ksu_install_accepts_only_nyasu_pinned_to_a_resolved_sha(self):
         block = self._step_run_block("添加 KernelSU")
-        case = block.split('"SukiSU")', 1)[1].split('"BakaSU")', 1)[0]
 
-        self.assertIn('requested_ref="$BRANCH"', case)
-        self.assertNotIn('${BRANCH#-s }', case)
-        self.assertIn('bash "$setup_script" "$requested_ref"', case)
-        self.assertIn('requested_head="$(git -C KernelSU rev-parse', case)
+        self.assertIn('"NyaSU")', block)
+        for retired in ("SukiSU", "BakaSU", "Official"):
+            self.assertNotIn(f'"{retired}")', block)
+        # 只认 40 位 commit SHA，分支名不能直接进 checkout。
+        self.assertIn('requested_sha="${RESOLVED_KSU_SHA:-$BRANCH}"', block)
+        self.assertIn('^[A-Fa-f0-9]{40}$', block)
+        self.assertIn('git -C KernelSU checkout --detach "$requested_sha"', block)
+        self.assertIn('xingguangcuican6666/NyaSU', block)
+        self.assertIn('abk_die "未知 KSU 变体', block)
 
-    def test_development_refs_are_reachable_successful_main_builds(self):
-        expected = {
-            "OFFICIAL_DEV_REF": "08a3b087e49227c8a6731c5f1114998b5e25255b",
-            "SUKISU_DEV_REF": "cf87e3f4ddd3f6e5464d85acf56aaa6950e70841",
-            # Baka-SU/BakaSU ships no dev branch, so Dev collapses onto the same main HEAD as Stable.
-            "BAKASU_DEV_REF": "9dbce02e511ea6b6305a238b84e456f6a92e1d0b",
-        }
-        for variable, sha in expected.items():
-            with self.subTest(variable=variable):
-                self.assertRegex(
-                    self.ref_script,
-                    rf'(?m)^{variable}="{sha}"$',
-                )
+    def test_only_nyasu_refs_remain_and_they_are_pinned_shas(self):
+        for retired in ("OFFICIAL_STABLE_REF", "SUKISU_STABLE_REF", "BAKASU_STABLE_REF",
+                        "OFFICIAL_DEV_REF", "SUKISU_DEV_REF", "BAKASU_DEV_REF", "RESUKISU"):
+            with self.subTest(retired=retired):
+                self.assertNotIn(retired, self.ref_script)
+        self.assertRegex(
+            self.ref_script,
+            r'(?m)^NYASU_STABLE_REF="[0-9a-f]{40}"',
+        )
+        self.assertRegex(
+            self.ref_script,
+            r'(?m)^NYASU_DEV_REF="[0-9a-f]{40}"',
+        )
+        self.assertIn('NYASU_REPO="xingguangcuican6666/NyaSU"', self.ref_script)
 
     def test_resolved_sha_defaults_to_selected_variant_ref(self):
         self.assertIn(
@@ -129,65 +129,28 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
             self.ref_script,
         )
 
-    def test_susfs_compatibility_step_covers_sukisu_variants(self):
-        step = self.workflow.split("- name: 确保 KernelSU SUSFS ABI 兼容", 1)[1].split("- name: 配置 SukiSU 管理器信息", 1)[0]
-        self.assertIn(
-            "if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU') && inputs.enable_susfs",
-            step,
-        )
-        self.assertIn("custom-source-feature-env.sh", step)
-        self.assertIn("ABK_FEATURE_ID: kernelsu", step)
-
-    def test_sukisu_nested_supercall_gets_susfs_fd_compatibility(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            ksu = root / "KernelSU" / "kernel"
-            supercall = ksu / "supercall"
-            feature = ksu / "feature"
-            supercall.mkdir(parents=True)
-            feature.mkdir()
-            (ksu / "Kbuild").write_text("obj-y += supercall/\n", encoding="utf-8")
-            source = supercall / "supercall.c"
-            header = supercall / "supercall.h"
-            source.write_text(
-                "int ksu_install_fd(void) { return 0; }\n"
-                "void __init ksu_supercalls_init(void) {}\n",
-                encoding="utf-8",
-            )
-            header.write_text("int ksu_install_fd(void);\n", encoding="utf-8")
-            (feature / "kernel_umount.c").write_text(
-                "int ksu_kernel_umount_enabled;\n"
-                "\nstatic const struct ksu_feature_handler kernel_umount_handler = {};\n",
-                encoding="utf-8",
-            )
-
-            self.ksu_compat.main(str(root))
-
-            self.assertIn("int ksu_install_su_fd(void)", source.read_text(encoding="utf-8"))
-            self.assertIn("int ksu_install_su_fd(void);", header.read_text(encoding="utf-8"))
-            self.assertIn(
-                "static int kernel_umount_feature_set(u64 value)",
-                (feature / "kernel_umount.c").read_text(encoding="utf-8"),
-            )
-
-    def test_scoped_su_fd_compatibility_preserves_session_permission(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            ksu = Path(temp_dir)
-            source = ksu / "supercall.c"
-            source.write_text(
-                "#define KSU_DRIVER_PERMISSION_SU_SESSION (1UL << 0)\n"
-                "static int ksu_install_fd_with_permissions(unsigned int flags, unsigned long permissions) { return 0; }\n"
-                "int ksu_install_fd(void) { return ksu_install_fd_with_permissions(O_CLOEXEC, 0); }\n"
-                "void __init ksu_supercalls_init(void) {}\n",
-                encoding="utf-8",
-            )
-
-            self.ksu_compat.ensure_su_fd(ksu)
-
-            self.assertIn(
-                "ksu_install_fd_with_permissions(O_CLOEXEC, KSU_DRIVER_PERMISSION_SU_SESSION)",
-                source.read_text(encoding="utf-8"),
-            )
+    def test_susfs_and_kpm_pipeline_is_gone(self):
+        for retired_step in (
+            "确保 KernelSU SUSFS ABI 兼容",
+            "配置 SukiSU 管理器信息",
+            "应用 SUSFS 补丁",
+            "确保 SUSFS Kconfig 与核心对象",
+            "注入 SukiSU/BakaSU KPM Kconfig",
+            "修复 SukiSU SUSFS 源码兼容",
+            "修复 Official SUSFS 源码兼容",
+            "最终修复 SukiSU/BakaSU 源码兼容",
+        ):
+            with self.subTest(step=retired_step):
+                self.assertNotIn(f"- name: {retired_step}", self.workflow)
+        for retired_input in ("enable_susfs:", "use_kpm:", "kpm_password:"):
+            with self.subTest(input=retired_input):
+                self.assertNotIn(f"      {retired_input}", self.workflow)
+        for retired_script in ("patch/susfs.sh", "patch/susfs_compat.sh", "patch/kpm.sh",
+                               "ensure-ksu-compat.py", "fix_sukisu_susfs.py", "ensure-kernelsu-uapi.sh"):
+            with self.subTest(script=retired_script):
+                self.assertFalse((ROOT / ("platform-tools/kernel_build/" + retired_script)
+                                  if retired_script.startswith("patch/")
+                                  else ROOT / ".github" / "scripts" / retired_script).exists())
 
     def test_android12_ntsync_compat_filters_incompatible_lockdep_hunk(self):
         block = self._step_run_block("应用 NTsync 补丁")
@@ -200,63 +163,6 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
             'if [[ "$ABK_ANDROID_VERSION" == "android12" && "$ABK_KERNEL_VERSION" == "5.10" ]]',
             block,
         )
-
-    def test_android12_statfs_repair_injects_verified_declaration(self):
-        block = self._step_run_block("应用 SUSFS 补丁")
-        self.assertIn(
-            'declaration = "extern int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, '
-            'struct kstatfs *buf, bool *is_fuse);"',
-            block,
-        )
-        self.assertIn("declared > call", block)
-        self.assertIn('#include <linux/security.h>', block)
-        self.assertIn('security_sb_statfs(', block)
-        self.assertNotIn(
-            "android12-5.10 Official fs/statfs.c 缺少 susfs_def.h",
-            block,
-        )
-        statfs_repair = block.split("# Android 12/5.10 的上游补丁", 1)[1].split("# Android 13 - 5.15 修复", 1)[0]
-        self.assertNotIn('[[ "$ABK_KSU_VARIANT" == "Official" ]]', statfs_repair)
-        self.assertIn("fix_fdinfo_declarations", block)
-        self.assertIn('declarations.append("\\tstruct mount *mnt;\\n")', block)
-
-    def test_sukisu_post_exec_wrapper_installs_su_session_fd(self):
-        block = self._step_run_block("最终修复 SukiSU/BakaSU 源码兼容")
-        self.assertIn("ensure_post_execveat_wrapper", block)
-        self.assertIn('#include "supercall/supercall.h"', block)
-        self.assertIn("int ksu_handle_post_execveat_sucompat(", block)
-        self.assertIn("(void)ksu_install_su_fd();", block)
-
-    def test_official_post_exec_wrapper_is_preserved_after_rewrite(self):
-        block = self._step_run_block("修复 Official SUSFS 源码兼容")
-        self.assertIn('int ksu_handle_post_execveat_sucompat(', block)
-        self.assertIn('(void)ksu_install_su_fd();', block)
-        self.assertIn('#include "supercall/supercall.h"', block)
-
-    def test_susfs_common_file_fallbacks_cover_upstream_api_renames(self):
-        block = self._step_run_block("应用 SUSFS 补丁")
-        self.assertIn('mnt_userns', block)
-        self.assertIn('text.replace("mnt_userns", "idmap")', block)
-        self.assertIn('ensure_susfs_super_compat', block)
-        self.assertIn('DEFAULT_KSU_MNT_MINOR_DEV', block)
-        self.assertIn('susfs_get_non_sus_mnt_id_unique_from_mnt', block)
-
-    def test_stat_api_rewrite_is_gated_to_native_idmap_kernels(self):
-        block = self._step_run_block("应用 SUSFS 补丁")
-        self.assertIn("native_new_api = \"struct mnt_idmap\" in text", block)
-        self.assertIn(
-            'if "mnt_userns" in text and native_new_api:',
-            block,
-        )
-
-    def test_namespace_tail_repair_closes_truncated_susfs_hunk(self):
-        block = self._step_run_block("应用 SUSFS 补丁")
-        self.assertIn("ensure_susfs_namespace_tail", block)
-        self.assertIn(
-            'if (!mnt->mnt.mnt_root || IS_ERR(mnt->mnt.mnt_root)) {',
-            block,
-        )
-        self.assertIn("#endif // #ifdef CONFIG_KSU_SUSFS", block)
 
     def test_android16_uses_native_ntsync_source(self):
         # android16-6.12 与 android17-6.18 都自带原生 ntsync.c 与 UAPI，基础补丁不再应用。
@@ -347,10 +253,10 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
                     env.pop(name, None)
                 env.update(
                     HOME=str(home), KERNEL_ROOT=str(kernel), DEFCONFIG=str(config),
-                    KSU_LATEST_COMMIT_DATE="fixture", SUSFS_LATEST_COMMIT_DATE="fixture",
+                    KSU_LATEST_COMMIT_DATE="fixture",
                     BAZEL_ARGV_LOG=str(argv_log), EXPECTED_BAZEL_CACHE=str(disk_cache),
                     ABK_INPUT_ANDROID_VERSION="android15", ABK_INPUT_KERNEL_VERSION="6.6",
-                    ABK_INPUT_SUB_LEVEL="77", ABK_INPUT_KSU_VARIANT="SukiSU",
+                    ABK_INPUT_SUB_LEVEL="77", ABK_INPUT_KSU_VARIANT="NyaSU",
                 )
                 if use_xdg:
                     env["XDG_CACHE_HOME"] = str(cache_base)

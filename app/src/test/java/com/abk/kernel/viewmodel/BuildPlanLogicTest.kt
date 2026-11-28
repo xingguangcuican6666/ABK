@@ -11,12 +11,14 @@ import com.abk.kernel.data.model.BUILD_TARGET_ONEPLUS
 import com.abk.kernel.data.model.KSU_BRANCH_CUSTOM
 import com.abk.kernel.data.model.KSU_BRANCH_STABLE
 import com.abk.kernel.data.model.KSU_VARIANT_NONE
-import com.abk.kernel.data.model.KSU_VARIANT_BAKASU
-import com.abk.kernel.data.model.KSU_VARIANT_SUKISU
+import com.abk.kernel.data.model.KSU_VARIANT_NYASU
 import com.abk.kernel.data.model.SOURCE_ACCESS_GITHUB_PRIVATE
+import com.abk.kernel.data.model.SOURCE_ACCESS_PUBLIC
 import com.abk.kernel.data.model.KernelBuildConfig
 import com.abk.kernel.data.model.KernelSupport
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BuildPlanLogicTest {
@@ -29,7 +31,7 @@ class BuildPlanLogicTest {
                 kernelVersion = "6.1",
                 subLevel = "162",
                 osPatchLevel = "2026-03",
-                kernelsuVariant = KSU_VARIANT_SUKISU,
+                kernelsuVariant = KSU_VARIANT_NYASU,
                 kernelsuBranch = KSU_BRANCH_CUSTOM,
                 customRef = "feature:5",
                 version = "test-build",
@@ -39,13 +41,11 @@ class BuildPlanLogicTest {
                 useDdk = true,
                 useNtsync = true,
                 useNetworking = true,
-                useKpm = true,
                 useRekernel = true,
-                cancelSusfs = true,
                 suppOp = true,
                 zramFullAlgo = true,
                 zramExtraAlgos = "lz4,zstd",
-                kpmPassword = "super-secret",
+                patchModules = "https://github.com/example/ksu-module.git",
                 virtualizationSupport = "678",
                 customKernelOptions = listOf(
                     CustomKernelOption("CONFIG_TMPFS", CustomKernelOptionMode.ENABLED_Y),
@@ -73,7 +73,7 @@ class BuildPlanLogicTest {
         assertEquals(config.version, decoded.config.version)
         assertEquals(config.buildTime, decoded.config.buildTime)
         assertEquals(config.zramExtraAlgos, decoded.config.zramExtraAlgos)
-        assertEquals(config.kpmPassword, decoded.config.kpmPassword)
+        assertEquals(KSU_VARIANT_NYASU, decoded.config.kernelsuVariant)
         assertEquals(config.virtualizationSupport, decoded.config.virtualizationSupport)
         assertEquals(config.customKernelOptions, decoded.config.customKernelOptions)
         assertEquals(
@@ -270,9 +270,7 @@ class BuildPlanLogicTest {
             buildTarget = BUILD_TARGET_ONEPLUS,
             androidVersion = "android14",
             kernelVersion = "6.1",
-            kernelsuVariant = KSU_VARIANT_SUKISU,
-            cancelSusfs = false,
-            useKpm = true,
+            kernelsuVariant = KSU_VARIANT_NYASU,
             useBbg = true,
             onePlusCpu = "sm8650",
             onePlusDeviceManifest = "oneplus_12_b",
@@ -286,9 +284,9 @@ class BuildPlanLogicTest {
         assertEquals("oneplus_12_b", inputs["device_manifest"])
         assertEquals("android14", inputs["android_version"])
         assertEquals("6.1", inputs["kernel_version"])
-        assertEquals(KSU_VARIANT_SUKISU, inputs["ksu_variant"])
-        assertEquals("true", inputs["enable_susfs"])
-        assertEquals("true", inputs["use_kpm"])
+        assertEquals(KSU_VARIANT_NYASU, inputs["ksu_variant"])
+        assertFalse(inputs.containsKey("enable_susfs"))
+        assertFalse(inputs.containsKey("use_kpm"))
         assertEquals("true", inputs["use_lz4kd"])
         assertEquals("true", inputs["use_bbr"])
         assertEquals("true", inputs["use_proxy_optimization"])
@@ -302,7 +300,7 @@ class BuildPlanLogicTest {
                 buildTarget = BUILD_TARGET_ONEPLUS,
                 androidVersion = "android15",
                 kernelVersion = "6.6",
-                kernelsuVariant = KSU_VARIANT_SUKISU,
+                kernelsuVariant = KSU_VARIANT_NYASU,
                 onePlusCpu = "sm8750",
                 onePlusDeviceManifest = "oneplus_13_b",
                 onePlusUseLz4kd = true,
@@ -329,13 +327,13 @@ class BuildPlanLogicTest {
         val baseConfig = KernelSupport.normalize(
             KernelBuildConfig(
                 buildTarget = BUILD_TARGET_GKI,
-                kernelsuVariant = KSU_VARIANT_BAKASU
+                kernelsuVariant = KSU_VARIANT_NONE
             )
         )
         val sharedFeatures = KernelSupport.normalize(
             KernelBuildConfig(
                 buildTarget = BUILD_TARGET_ONEPLUS,
-                kernelsuVariant = KSU_VARIANT_SUKISU,
+                kernelsuVariant = KSU_VARIANT_NYASU,
                 onePlusUseLz4kd = true,
                 onePlusUseBbr = true
             )
@@ -436,5 +434,97 @@ class BuildPlanLogicTest {
             ),
             remaining
         )
+    }
+
+    @Test
+    fun workflowInputMapSendsPatchModulesForNyasuAndDropsThemForNone() {
+        val nyasu = KernelBuildConfig(
+            kernelsuVariant = KSU_VARIANT_NYASU,
+            patchModules = "  https://github.com/example/a.git@main|https://github.com/example/b.git  ",
+        ).toInputMap()
+        assertEquals(
+            "https://github.com/example/a.git@main|https://github.com/example/b.git",
+            nyasu["patch_modules"],
+        )
+        assertEquals(KSU_VARIANT_NYASU, nyasu["kernelsu_variant"])
+        assertFalse(nyasu.keys.any { it in setOf("enable_susfs", "use_kpm", "kpm_password") })
+
+        val none = KernelBuildConfig(
+            kernelsuVariant = KSU_VARIANT_NONE,
+            patchModules = "https://github.com/example/a.git",
+        ).toInputMap()
+        assertEquals("", none["patch_modules"])
+        assertEquals(KSU_VARIANT_NONE, none["kernelsu_variant"])
+    }
+
+    @Test
+    fun legacyVersionEightPlanDecodesEveryRetiredVariantIntoNyasu() {
+        listOf(0, 1, 2).forEach { legacyIndex ->
+            val decoded = decodeBuildPlanPayload(
+                legacyVersionEightPayload(ksuVariantIndex = legacyIndex),
+                KernelBuildConfig(),
+            )
+
+            assertEquals(KSU_VARIANT_NYASU, decoded.config.kernelsuVariant)
+            assertEquals("legacy", decoded.name)
+            assertEquals("android14", decoded.config.androidVersion)
+            assertEquals("6.1", decoded.config.kernelVersion)
+            assertTrue(decoded.config.useZram)
+        }
+        // 索引 3 仍代表 None，不能被折叠成 NyaSU。
+        assertEquals(
+            KSU_VARIANT_NONE,
+            decodeBuildPlanPayload(legacyVersionEightPayload(ksuVariantIndex = 3), KernelBuildConfig())
+                .config.kernelsuVariant,
+        )
+    }
+
+    private fun legacyVersionEightPayload(ksuVariantIndex: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        fun byte(value: Int) = out.write(value and 0xff)
+        fun varInt(value: Int) {
+            var remaining = value
+            do {
+                var b = remaining and 0x7f
+                remaining = remaining ushr 7
+                if (remaining != 0) b = b or 0x80
+                byte(b)
+            } while (remaining != 0)
+        }
+        fun string(value: String) {
+            val bytes = value.toByteArray(Charsets.UTF_8)
+            varInt(bytes.size)
+            out.write(bytes)
+        }
+        // 版本 8：仍带 KPM 密码字符串，变体索引 0/1/2 分别是 Official/SukiSU/BakaSU。
+        byte(8)
+        byte(BuildPlanShareScope.FULL.toWireValue())
+        string("legacy")
+        string("android14")
+        string("6.1")
+        string("162")
+        string("2026-03")
+        string("")
+        string(BUILD_TARGET_GKI)
+        string("sm8650")
+        string("oneplus_12_b")
+        string("https://github.com/example/kernel.git")
+        string("lineage-21")
+        string(SOURCE_ACCESS_PUBLIC)
+        varInt(1)
+        string("gki_defconfig")
+        string("POCO F6")
+        byte(ksuVariantIndex)
+        byte(1) // Stable
+        byte(0) // virtualization off
+        varInt(1 shl 0) // useZram
+        string("")
+        string("")
+        string("")
+        string("") // 旧版 KPM 密码字段
+        string("") // customRef
+        varInt(0) // 无内核选项
+        varInt(0) // 无外部模块
+        return out.toByteArray()
     }
 }

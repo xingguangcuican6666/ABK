@@ -2,7 +2,6 @@
 import importlib.util
 import errno
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -10,8 +9,6 @@ import textwrap
 import unittest
 from pathlib import Path
 from unittest import mock
-
-from cli.tests import kernel_scripts
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -159,31 +156,6 @@ class GitDownloadCacheTests(unittest.TestCase):
     def test_checkout_inside_cache_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "outside the download cache"):
             CACHE.clone(self.url, self.root / "cache/build", "main")
-
-    @unittest.skipUnless(shutil.which("bash"), "requires Bash")
-    def test_workflow_resolves_short_pins_after_upstream_advances(self):
-        branch = "gki-android15-6.6"
-        self.git("-C", str(self.remote), "branch", "-m", branch)
-        self.commit("new upstream source")
-        script = kernel_scripts.step("克隆依赖仓库").body
-        retry = re.search(r"(?ms)^    retry_git_clone\(\) \{.*?^    \}", script).group()
-        block = script.split('if [ "${ABK_INPUT_ENABLE_SUSFS}" == "true" ]; then', 1)[1]
-        block = 'if [ "true" == "true" ]; then' + block.split('echo "准备补丁资源..."', 1)[0]
-        block = block.replace('https://gitlab.com/simonpunk/susfs4ksu.git', self.url)
-        script = 'set -euo pipefail\n' + retry + '\n' + block
-        for index, pin in enumerate((self.sha[:12], self.sha)):
-            work = self.root / f"pinned-build-{index}"
-            (work / "config").mkdir(parents=True)
-            (work / "config/config").write_text(f"custom=true\n{branch}={pin}\n", encoding="utf-8")
-            env = dict(os.environ, ABK_LOCAL_CACHE_ENABLED="true", GITHUB_WORKSPACE=str(ROOT),
-                       SUSFS_BRANCH=branch, GITHUB_ENV=str(work / "env"))
-            result = subprocess.run([shutil.which("bash"), "-c", script], cwd=work, env=env,
-                                    text=True, encoding="utf-8", capture_output=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(self.git("-C", str(work / "susfs4ksu"), "rev-parse", "HEAD"), self.sha)
-            self.assertEqual((work / "susfs4ksu/source").read_text(), "original")
-            self.commit(f"upstream update after build {index}")
-
 
 @unittest.skipUnless(os.name != "nt" and os.environ.get("ABK_TEST_REPO"), "repo integration requires ABK_TEST_REPO")
 class RepoDownloadCacheTests(unittest.TestCase):

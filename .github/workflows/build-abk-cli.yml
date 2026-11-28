@@ -23,7 +23,6 @@ on:
       - ".github/scripts/custom-source-feature-status.py"
       - ".github/scripts/custom-source-feature-env.sh"
       - ".github/scripts/resolve-ksu-ref.sh"
-      - ".github/scripts/ensure-ksu-compat.py"
       - ".github/workflows/kernel-full-feature-matrix.yml"
       - ".github/workflows/all-managers-full-feature-matrix.yml"
       - ".github/workflows/oneplus-custom.yml"
@@ -45,7 +44,6 @@ on:
       - ".github/scripts/custom-source-feature-status.py"
       - ".github/scripts/custom-source-feature-env.sh"
       - ".github/scripts/resolve-ksu-ref.sh"
-      - ".github/scripts/ensure-ksu-compat.py"
       - ".github/workflows/kernel-full-feature-matrix.yml"
       - ".github/workflows/all-managers-full-feature-matrix.yml"
       - ".github/workflows/oneplus-custom.yml"
@@ -443,7 +441,7 @@ jobs:
           set -euo pipefail
           ./dist/abk/abk --help > /dev/null
           ./dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
-          ./dist/abk/abk --json build --dry-run --matrix a14 --ksu Official | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
+          ./dist/abk/abk --json build --dry-run --matrix a14 --ksu None | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
 
       - name: Smoke test linux-armhf
         if: ${{ matrix.target_id == 'linux-armhf' }}
@@ -452,7 +450,7 @@ jobs:
           set -euo pipefail
           docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --help > /dev/null
           docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
-          docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json build --dry-run --matrix a14 --ksu Official | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
+          docker run --rm --platform linux/arm/v7 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json build --dry-run --matrix a14 --ksu None | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
 
       - name: Smoke test linux-x86
         if: ${{ matrix.target_id == 'linux-x86' }}
@@ -461,7 +459,7 @@ jobs:
           set -euo pipefail
           docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --help > /dev/null
           docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json self-test | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["command"] == "self-test" and result["cryptoBackend"] and result["pynacl"] is True and result["caBundle"] is True and result["tlsContext"] is True'
-          docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json build --dry-run --matrix a14 --ksu Official | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
+          docker run --rm --platform linux/386 -v "$PWD/dist:/work/dist" debian:bookworm-slim /work/dist/abk/abk --json build --dry-run --matrix a14 --ksu None | python -c 'import json, sys; result = json.load(sys.stdin); assert result["schemaVersion"] == 1 and result["ok"] is True and result["dispatches"][0]["workflowName"] == "内核构建 - Android 14 (6.1)"'
 
       - name: Smoke test Windows
         if: runner.os == 'Windows'
@@ -474,7 +472,7 @@ jobs:
           if ($result.schemaVersion -ne 1 -or $result.ok -ne $true -or $result.command -ne "self-test" -or -not $result.cryptoBackend -or $result.pynacl -ne $true -or $result.caBundle -ne $true -or $result.tlsContext -ne $true) {
             throw "Unexpected frozen CLI self-test result"
           }
-          $dryRun = & .\dist\abk\abk.exe --json build --dry-run --matrix a14 --ksu Official
+          $dryRun = & .\dist\abk\abk.exe --json build --dry-run --matrix a14 --ksu None
           if ($LASTEXITCODE -ne 0) { throw "Frozen CLI UTF-8 dry-run failed" }
           $plan = $dryRun | ConvertFrom-Json
           if ($plan.schemaVersion -ne 1 -or $plan.ok -ne $true -or $plan.dispatches[0].workflowName -ne "内核构建 - Android 14 (6.1)") {

@@ -12,11 +12,9 @@ on:
         required: true
         type: choice
         options:
-          - Official
-          - BakaSU
-          - SukiSU
+          - NyaSU
           - None
-        default: BakaSU
+        default: NyaSU
       kernelsu_branch:
         description: "KSU 分支"
         required: true
@@ -42,16 +40,6 @@ on:
         required: false
         type: string
         default: "Sun Dec 01 08:10:00 UTC 2024"
-      kpm_password:
-        description: "自定义 KPM 超级密码（留空=使用默认密码）"
-        required: false
-        type: string
-        default: ""
-      enable_susfs:
-        description: "启用 SUSFS"
-        required: false
-        type: boolean
-        default: true
       use_zram:
         description: "启用 ZRAM 增强算法（6.12/6.18 跳过 legacy LZ4K 栈）"
         required: false
@@ -84,11 +72,6 @@ on:
         default: true
       use_networking:
         description: "启用网络增强（IPSet + BBR）"
-        required: false
-        type: boolean
-        default: true
-      use_kpm:
-        description: "启用 KPM 功能"
         required: false
         type: boolean
         default: true
@@ -154,14 +137,6 @@ on:
         required: false
         type: string
         default: "Sun Dec 01 08:10:00 UTC 2024"
-      kpm_password:
-        required: false
-        type: string
-        default: ""
-      enable_susfs:
-        required: false
-        type: boolean
-        default: true
       use_zram:
         required: false
         type: boolean
@@ -187,10 +162,6 @@ on:
         type: boolean
         default: true
       use_networking:
-        required: false
-        type: boolean
-        default: true
-      use_kpm:
         required: false
         type: boolean
         default: true
@@ -241,11 +212,8 @@ jobs:
         env:
           MATRIX_KSU_VARIANT: ${{ inputs.kernelsu_variant }}
           MATRIX_KSU_BRANCH: ${{ inputs.kernelsu_branch }}
-          MATRIX_EFFECTIVE_USE_KPM: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'BakaSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
-          MATRIX_EFFECTIVE_KPM_PASSWORD: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'BakaSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
           MATRIX_REVISION: ${{ inputs.revision || '' }}
           MATRIX_BUILD_TIME: ${{ inputs.build_time || '' }}
-          MATRIX_ENABLE_SUSFS: ${{ inputs.enable_susfs }}
           MATRIX_USE_ZRAM: ${{ inputs.use_zram }}
           MATRIX_ZRAM_FULL_ALGO: ${{ inputs.zram_full_algo }}
           MATRIX_ZRAM_EXTRA_ALGOS: ${{ inputs.zram_extra_algos || '' }}
@@ -254,8 +222,6 @@ jobs:
           MATRIX_VIRTUALIZATION_SUPPORT: ${{ inputs.virtualization_support }}
           MATRIX_USE_NTSYNC: ${{ inputs.use_ntsync }}
           MATRIX_USE_NETWORKING: ${{ inputs.use_networking }}
-          MATRIX_USE_KPM: ${{ inputs.use_kpm }}
-          MATRIX_KPM_PASSWORD: ${{ inputs.kpm_password || '' }}
           MATRIX_USE_REKERNEL: ${{ inputs.use_rekernel }}
           MATRIX_SUPP_OP: ${{ inputs.supp_op }}
           MATRIX_CUSTOM_EXTERNAL_MODULES: ${{ inputs.custom_external_modules || '' }}
@@ -352,7 +318,6 @@ jobs:
               summary.write(f"- KSU 分支: {env_value('MATRIX_KSU_BRANCH')}\n")
               summary.write(f"- 修订版本: {env_value('MATRIX_REVISION')}\n")
               summary.write(f"- 构建时间: {env_value('MATRIX_BUILD_TIME', '当前 UTC')}\n")
-              summary.write(f"- SUSFS: {env_enabled('MATRIX_ENABLE_SUSFS')}\n")
               summary.write(f"- ZRAM: {env_enabled('MATRIX_USE_ZRAM')}（6.12/6.18 自动 off）\n")
               summary.write(f"- ZRAM 完整算法: {env_enabled('MATRIX_ZRAM_FULL_ALGO')}（6.12/6.18 自动 off）\n")
               summary.write(f"- ZRAM 额外算法: {env_value('MATRIX_ZRAM_EXTRA_ALGOS')}\n")
@@ -361,14 +326,12 @@ jobs:
               summary.write(f"- 虚拟化支持: {env_value('MATRIX_VIRTUALIZATION_SUPPORT', 'off')}\n")
               summary.write(f"- NTsync: {env_enabled('MATRIX_USE_NTSYNC')}\n")
               summary.write(f"- Networking: {env_enabled('MATRIX_USE_NETWORKING')}\n")
-              summary.write(f"- KPM: {env_enabled('MATRIX_EFFECTIVE_USE_KPM')}\n")
-              summary.write(f"- KPM 密码: {'已自定义' if os.environ.get('MATRIX_EFFECTIVE_KPM_PASSWORD', '') else '默认'}\n")
               summary.write(f"- Re-Kernel: {env_enabled('MATRIX_USE_REKERNEL')}\n")
               summary.write(f"- 一加 8E: {env_enabled('MATRIX_SUPP_OP')}\n")
               summary.write(f"- 自定义外部模块: {'true' if os.environ.get('MATRIX_CUSTOM_EXTERNAL_MODULES', '').strip() else 'false'}\n")
               summary.write(f"- 自定义外部模块参数: {env_value('MATRIX_CUSTOM_EXTERNAL_MODULES')}\n")
               summary.write(f"- 上传辅助产物: {env_enabled('MATRIX_UPLOAD_AUX_ARTIFACTS')}\n")
-              summary.write("- Android16/6.12 与 Android17/6.18: 跳过 legacy LZ4K 补丁栈；Android17/6.18 额外关闭 SUSFS/BBG/一加8E\n")
+              summary.write("- Android16/6.12 与 Android17/6.18: 跳过 legacy LZ4K 补丁栈；Android17/6.18 额外关闭 BBG/一加8E\n")
               summary.write("- LTS: 已排除\n\n")
               for combo in sorted(counts):
                   summary.write(f"- {combo}: {counts[combo]}\n")
@@ -401,14 +364,11 @@ jobs:
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync }}
       use_networking: ${{ inputs.use_networking }}
-      use_kpm: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'BakaSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      enable_susfs: ${{ inputs.enable_susfs && matrix.line_supported }}
       supp_op: ${{ inputs.supp_op && matrix.line_supported }}
       virtualization_support: ${{ inputs.virtualization_support == 'off' && 'off' || ((matrix.kernel_version == '6.12' || matrix.kernel_version == '6.18') && 'on' || (inputs.virtualization_support == 'on' && '678' || inputs.virtualization_support)) }}
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'BakaSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       upload_aux_artifacts: ${{ inputs.upload_aux_artifacts }}
@@ -431,14 +391,11 @@ jobs:
       VERSION: ${{ inputs.version || '' }}
       REVISION: ${{ inputs.revision || '' }}
       BUILD_TIME: ${{ inputs.build_time || '当前 UTC' }}
-      ENABLE_SUSFS: ${{ inputs.enable_susfs }}
       USE_ZRAM: ${{ inputs.use_zram }}
       ZRAM_FULL_ALGO: ${{ inputs.zram_full_algo }}
       ZRAM_EXTRA_ALGOS: ${{ inputs.zram_extra_algos || '' }}
       USE_BBG: ${{ inputs.use_bbg }}
       USE_DDK: ${{ inputs.use_ddk }}
-      KPM_PASSWORD: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'BakaSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) && inputs.kpm_password || '' }}
-      USE_KPM: ${{ inputs.use_kpm && (inputs.kernelsu_variant == 'SukiSU' || (inputs.kernelsu_variant == 'BakaSU' && (inputs.kernelsu_branch == 'Stable(标准)' || inputs.kernelsu_branch == 'Custom(自定义)'))) }}
       USE_REKERNEL: ${{ inputs.use_rekernel }}
       SUPP_OP: ${{ inputs.supp_op }}
       CUSTOM_EXTERNAL_MODULES: ${{ inputs.custom_external_modules || '' }}
@@ -452,12 +409,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          if [ -n "$KPM_PASSWORD" ]; then
-            kpm_password_label="已自定义"
-          else
-            kpm_password_label="默认"
-          fi
 
           if [ -n "$VERSION" ]; then
             version_label="$VERSION"
@@ -502,14 +453,11 @@ jobs:
               --arg version "$version_label" \
               --arg revision "$revision_label" \
               --arg build_time "$BUILD_TIME" \
-              --arg susfs_enabled "$ENABLE_SUSFS" \
               --arg use_zram "$USE_ZRAM" \
               --arg zram_full_algo "$ZRAM_FULL_ALGO" \
               --arg zram_extra_algos "$zram_extra_algos_label" \
               --arg use_bbg "$USE_BBG" \
               --arg use_ddk "$USE_DDK" \
-              --arg use_kpm "$USE_KPM" \
-              --arg kpm_password "$kpm_password_label" \
               --arg use_rekernel "$USE_REKERNEL" \
               --arg supp_op "$SUPP_OP" \
               --arg custom_external_modules "$custom_modules_label" \
@@ -524,14 +472,11 @@ jobs:
                 version: $version,
                 revision: $revision,
                 build_time: $build_time,
-                susfs_enabled: $susfs_enabled,
                 use_zram: $use_zram,
                 zram_full_algo: $zram_full_algo,
                 zram_extra_algos: $zram_extra_algos,
                 use_bbg: $use_bbg,
                 use_ddk: $use_ddk,
-                use_kpm: $use_kpm,
-                kpm_password: $kpm_password,
                 use_rekernel: $use_rekernel,
                 supp_op: $supp_op,
                 custom_external_modules: $custom_external_modules,
@@ -562,13 +507,11 @@ jobs:
             echo "- 补发工作流: release-existing-full-feature-run.yml"
             echo "- Release 标题: ${release_title}"
             echo "- 虚拟化支持: ${VIRTUALIZATION_SUPPORT}"
-            echo "- SUSFS: ${ENABLE_SUSFS}"
             echo "- ZRAM: ${USE_ZRAM}（6.12/6.18 自动 off）"
             echo "- BBG: ${USE_BBG}"
             echo "- DDK LSM: ${USE_DDK}"
             echo "- NTsync: ${USE_NTSYNC}"
             echo "- Networking: ${USE_NETWORKING}"
-            echo "- KPM: ${USE_KPM}"
             echo "- Re-Kernel: ${USE_REKERNEL}"
             echo "- 一加 8E: ${SUPP_OP}"
             if [ -n "$CUSTOM_EXTERNAL_MODULES" ]; then

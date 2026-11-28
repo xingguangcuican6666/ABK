@@ -30,12 +30,6 @@ summary() {
     esac
 
     if [ "${ABK_INPUT_ANDROID_VERSION}" = "android17" ] && [ "${ABK_INPUT_KERNEL_VERSION}" = "6.18" ] \
-      && [ "${ABK_INPUT_ENABLE_SUSFS}" = "true" ]; then
-      echo "::error::android17/6.18 暂不支持 SUSFS：susfs4ksu 尚未提供 gki-android17-6.18 分支，请关闭 SUSFS 后重试。"
-      exit 1
-    fi
-
-    if [ "${ABK_INPUT_ANDROID_VERSION}" = "android17" ] && [ "${ABK_INPUT_KERNEL_VERSION}" = "6.18" ] \
       && [ "${ABK_INPUT_USE_BBG}" = "true" ]; then
       echo "::error::android17/6.18 暂不支持 BBG：上游 Baseband-guard 仍使用 6.18 已删除的 blkdev_get_no_open/blkdev_put_no_open，请关闭 BBG 后重试。"
       exit 1
@@ -69,16 +63,10 @@ summary() {
       echo "EFFECTIVE_MODERN_GKI=$effective_modern_gki"
     } >> "$GITHUB_ENV"
 
-    effective_ksu_branch="${ABK_INPUT_KSU_BRANCH}"
-    if [ "$effective_ksu_branch" = "SUSFS(自动)" ]; then
-      effective_ksu_branch="Stable(标准)"
-    fi
-    echo "EFFECTIVE_KSU_BRANCH=$effective_ksu_branch" >> "$GITHUB_ENV"
+    echo "EFFECTIVE_KSU_BRANCH=${ABK_INPUT_KSU_BRANCH}" >> "$GITHUB_ENV"
 
     zram_extra_label="${effective_zram_extra_algos:-无}"
 
-    kpm_password_label="默认"
-    [ -n "${ABK_INPUT_KPM_PASSWORD}" ] && kpm_password_label="已自定义"
     custom_modules_label="false"
     [ -n "${ABK_INPUT_CUSTOM_EXTERNAL_MODULES}" ] && custom_modules_label="true"
     custom_options_label="false"
@@ -95,7 +83,6 @@ summary() {
     echo "KSU 分支      : $effective_ksu_branch"
     echo "管理器包名    : ${ABK_INPUT_MANAGER_PACKAGE:-app/signing/abk-manager-cert.env}"
     echo "构建时间      : ${ABK_INPUT_BUILD_TIME}"
-    echo "SUSFS 状态    : ${ABK_INPUT_ENABLE_SUSFS}"
     echo "ZRAM 增强     : $effective_use_zram"
     echo "ZRAM 完整算法 : $effective_zram_full_algo"
     echo "ZRAM 额外算法 : $zram_extra_label"
@@ -103,8 +90,6 @@ summary() {
     echo "DDK LSM       : ${ABK_INPUT_USE_DDK}"
     echo "NTsync 补丁   : ${ABK_INPUT_USE_NTSYNC}"
     echo "Networing 增强: ${ABK_INPUT_USE_NETWORKING}"
-    echo "KPM 功能      : ${ABK_INPUT_USE_KPM}"
-    echo "KPM 密码      : $kpm_password_label"
     echo "Re-Kernel     : ${ABK_INPUT_USE_REKERNEL}"
     echo "虚拟化支持   : ${ABK_INPUT_VIRTUALIZATION_SUPPORT}"
     echo "自定义注入    : $custom_modules_label"
@@ -189,7 +174,6 @@ init() {
 CONFIG=$CONFIG
 KERNEL_ROOT=$KERNEL_ROOT
 DEFCONFIG=$KERNEL_ROOT/common/arch/arm64/configs/gki_defconfig
-SUSFS4KSU=$GITHUB_WORKSPACE/susfs4ksu
 KERNEL_PATCHES=$GITHUB_WORKSPACE/kernel_patches
 SUKISU_PATCHES=$GITHUB_WORKSPACE/SukiSU_patch
 ZZH_PATCHES=$GITHUB_WORKSPACE

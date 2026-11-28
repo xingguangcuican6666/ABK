@@ -12,11 +12,9 @@ on:
         required: true
         type: choice
         options:
+          - NyaSU
           - None
-          - Official
-          - SukiSU
-          - BakaSU
-        default: BakaSU
+        default: NyaSU
       kernelsu_branch:
         description: "KSU 分支"
         required: true
@@ -75,19 +73,9 @@ on:
         required: true
         type: boolean
         default: false
-      use_kpm:
-        description: "启用 KPM 功能"
-        required: true
-        type: boolean
-        default: false
       use_rekernel:
         description: "启用 Re-Kernel 驱动"
         required: false
-        type: boolean
-        default: false
-      cancel_susfs:
-        description: "禁用 SUSFS"
-        required: true
         type: boolean
         default: false
       zram_full_algo:
@@ -97,11 +85,6 @@ on:
         default: false
       zram_extra_algos:
         description: "自定义 ZRAM 算法（逗号分隔，如 lzo,lz4,deflate,zstd；6.12 会忽略 lz4k/lz4kd/lz4k_oplus）"
-        required: false
-        type: string
-        default: ""
-      kpm_password:
-        description: "自定义 KPM 超级密码（留空=使用默认密码）"
         required: false
         type: string
         default: ""
@@ -150,17 +133,10 @@ on:
       use_networking:
         required: true
         type: boolean
-      use_kpm:
-        required: true
-        type: boolean
-        default: false
       use_rekernel:
         required: false
         type: boolean
         default: false
-      cancel_susfs:
-        required: false
-        type: boolean
       virtualization_support:
         required: false
         type: string
@@ -173,10 +149,6 @@ on:
         required: false
         type: string
         default: ""
-      kpm_password:
-        required: false
-        type: string
-        default: ""
       custom_external_modules:
         required: false
         type: string
@@ -185,12 +157,6 @@ on:
         required: false
         type: string
         default: ""
-
-      called_from_main:
-        description: "是否从 main.yml 调用（内部使用）"
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   build-kernels-a13-5-15:
@@ -256,24 +222,11 @@ jobs:
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync }}
       use_networking: ${{ inputs.use_networking }}
-      use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
       supp_op: false
-      enable_susfs: ${{ !inputs.cancel_susfs }}
       virtualization_support: ${{ inputs.virtualization_support || 'off' }}
       zram_full_algo: ${{ inputs.zram_full_algo || false }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
       upload_aux_artifacts: false
-
-  # 仅在直接触发时运行，从 main.yml 调用时跳过
-  get-ksu-manager:
-    if: ${{ !inputs.called_from_main }}
-    uses: ./.github/workflows/get-manager.yml
-    secrets: inherit
-    with:
-      kernelsu_variant: ${{ inputs.kernelsu_variant }}
-      ksu_branch: ${{ inputs.kernelsu_branch }}
-      custom_ref: ${{ inputs.custom_ref || '' }}

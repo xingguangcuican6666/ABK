@@ -2,10 +2,9 @@
 # GKI 内核构建主入口
 # ========================================
 # 此工作流是项目的统一入口点，用于：
-# 1. 构建所有版本的 GKI 内核
-# 2. 获取最新的 KSU 管理器
-# 3. 收集补丁冲突文件用于调试
-# 4. 创建 GitHub Release (可选)
+# 1. 构建所有版本的 GKI 内核（NyaSU / None）
+# 2. 收集补丁冲突文件用于调试
+# 3. 创建 GitHub Release (可选)
 # ========================================
 
 name: 构建内核
@@ -37,10 +36,9 @@ on:
         description: "KernelSU 变体"
         type: choice
         options:
-          - SukiSU
-          - BakaSU
-          - Official
-        default: BakaSU
+          - NyaSU
+          - None
+        default: NyaSU
       kernelsu_branch:
         description: "KSU 分支"
         type: choice
@@ -94,19 +92,10 @@ on:
         description: "启用网络增强（IPSet + BBR）"
         type: boolean
         default: false
-      use_kpm:
-        description: "启用 KPM 功能"
-        type: boolean
-        default: false
       use_rekernel:
         description: "启用 Re-Kernel 驱动"
         type: boolean
         default: false
-      cancel_susfs:
-        description: "禁用 SUSFS"
-        type: boolean
-        default: false
-
       # ==================== ZRAM 扩展选项 ====================
       zram_full_algo:
         description: "启用 ZRAM 完整算法支持（6.12 自动跳过 legacy LZ4K/LZ4KD/LZ4K_OPLUS）"
@@ -118,17 +107,6 @@ on:
         default: ""
         required: false
 
-      # ==================== KPM 扩展选项 ====================
-      kpm_password:
-        description: "自定义 KPM 超级密码（留空=使用默认密码）"
-        type: string
-        default: ""
-        required: false
-      custom_external_modules:
-        description: "自定义外部模块（兼容旧 repo;stage，也支持 module:repo;stage 与 set:repo#child;stage，用 | 分隔）"
-        type: string
-        default: ""
-        required: false
       custom_kernel_options:
         description: "自定义内核选项（每行一条 Kconfig/defconfig 片段）"
         required: false
@@ -164,15 +142,6 @@ on:
         default: true
 
 jobs:
-  # ==================== 获取管理器 ====================
-  # 下载最新的 KernelSU 管理器 APK 和 SUSFS 模块
-  get-manager:
-    uses: ./.github/workflows/get-manager.yml
-    secrets: inherit
-    with:
-      kernelsu_variant: ${{ inputs.kernelsu_variant }}
-      ksu_branch: ${{ inputs.kernelsu_branch }}
-
   # ==================== Android 12 - 5.10 构建 ====================
   build-a12-5-10:
     if: inputs.build_a12_5_10 || inputs.build_all
@@ -188,16 +157,12 @@ jobs:
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync || false }}
       use_networking: ${{ inputs.use_networking || false }}
-      use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      cancel_susfs: ${{ inputs.cancel_susfs }}
       virtualization_support: ${{ inputs.virtualization_support }}
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
-      called_from_main: true
 
   # ==================== Android 13 - 5.15 构建 ====================
   build-a13-5-15:
@@ -214,16 +179,12 @@ jobs:
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync || false }}
       use_networking: ${{ inputs.use_networking || false }}
-      use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      cancel_susfs: ${{ inputs.cancel_susfs }}
       virtualization_support: ${{ inputs.virtualization_support }}
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
-      called_from_main: true
 
   # ==================== Android 14 - 6.1 构建 ====================
   build-a14-6-1:
@@ -240,16 +201,12 @@ jobs:
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync || false }}
       use_networking: ${{ inputs.use_networking || false }}
-      use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      cancel_susfs: ${{ inputs.cancel_susfs }}
       virtualization_support: ${{ inputs.virtualization_support }}
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
-      called_from_main: true
 
   # ==================== Android 15 - 6.6 构建 ====================
   build-a15-6-6:
@@ -266,16 +223,12 @@ jobs:
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync || false }}
       use_networking: ${{ inputs.use_networking || false }}
-      use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      cancel_susfs: ${{ inputs.cancel_susfs }}
       virtualization_support: ${{ inputs.virtualization_support }}
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
-      called_from_main: true
 
   # ==================== Android 16 - 6.12 构建 ====================
   build-a16-6-12:
@@ -292,16 +245,12 @@ jobs:
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync || false }}
       use_networking: ${{ inputs.use_networking || false }}
-      use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      cancel_susfs: ${{ inputs.cancel_susfs }}
       virtualization_support: ${{ inputs.virtualization_support }}
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
-      called_from_main: true
 
   # ==================== Android 17 - 6.18 构建 ====================
   build-a17-6-18:
@@ -318,15 +267,12 @@ jobs:
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync || false }}
       use_networking: ${{ inputs.use_networking || false }}
-      use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
       virtualization_support: ${{ inputs.virtualization_support }}
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos || '' }}
-      kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
-      called_from_main: true
 
   # ==================== 收集补丁冲突文件 ====================
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题
@@ -378,7 +324,6 @@ jobs:
       contents: write
       actions: write
     needs:
-      - get-manager
       - build-a12-5-10
       - build-a13-5-15
       - build-a14-6-1
@@ -397,52 +342,26 @@ jobs:
       # 预计算各种显示名称，简化后续引用
       - name: 设置显示名称
         run: |
-          # KSU 显示名称
+          # 变体显示名称：编译链只剩 NyaSU 与 None（不集成 Root）两条路径
           case "${{ inputs.kernelsu_variant }}" in
-            "Official")  KSU_NAME="KernelSU" ;;
-            "SukiSU")    KSU_NAME="SukiSU" ;;
-            "BakaSU")  KSU_NAME="BakaSU" ;;
+            "NyaSU")  KSU_NAME="NyaSU" ;;
+            "None")   KSU_NAME="None" ;;
+            *) echo "::error::未知 KSU 变体: ${{ inputs.kernelsu_variant }}" >&2; exit 1 ;;
           esac
           echo "KSU_NAME=$KSU_NAME" >> $GITHUB_ENV
-
-          # 版本信息
-          KSU_VER="${{ needs.get-manager.outputs.ksuVer }}"
-          SUS_VER="${{ needs.get-manager.outputs.susVer }}"
-          echo "KSU_VER=$KSU_VER" >> $GITHUB_ENV
-          echo "SUS_VER=$SUS_VER" >> $GITHUB_ENV
 
           # 功能开关显示
           echo "LZ4_STATUS=${{ inputs.use_zram && '开启' || '未开启' }}" >> $GITHUB_ENV
           echo "BBG_STATUS=${{ inputs.use_bbg && '支持' || '不支持' }}" >> $GITHUB_ENV
-          if [[ "${{ inputs.use_kpm }}" == "true" ]]; then
-            echo "KPM_STATUS=支持" >> $GITHUB_ENV
-          else
-            echo "KPM_STATUS=未开启" >> $GITHUB_ENV
-          fi
-
-          # Hook 类型
-          if [ "${{ inputs.kernelsu_variant }}" = "SukiSU" ] || [ "${{ inputs.kernelsu_variant }}" = "BakaSU" ]; then
-            echo "HOOK_TYPE=SUSFS Inline Hooks" >> $GITHUB_ENV
-          else
-            echo "HOOK_TYPE=KPROBE Hooks" >> $GITHUB_ENV
-          fi
-
-          # Mount 类型
-          if [ "${{ inputs.kernelsu_variant }}" = "Official" ]; then
-            echo "MOUNT_TYPE=OVERLAYFS" >> $GITHUB_ENV
-          else
-            echo "MOUNT_TYPE=Magic Mount" >> $GITHUB_ENV
-          fi
 
           # 分支显示
-          if [ "${{ inputs.kernelsu_branch }}" = "Dev(开发)" ]; then
-            echo "BRANCH_INFO=Dev" >> $GITHUB_ENV
-          else
-            echo "BRANCH_INFO=Stable" >> $GITHUB_ENV
-          fi
+          case "${{ inputs.kernelsu_branch }}" in
+            "Dev(开发)") BRANCH_INFO="Dev" ;;
+            "Latest(最新)") BRANCH_INFO="Latest" ;;
+            *) BRANCH_INFO="Stable" ;;
+          esac
+          echo "BRANCH_INFO=$BRANCH_INFO" >> $GITHUB_ENV
 
-          # 发布标题
-          echo "RELEASE_NAME=GKI Kernel: ${KSU_NAME} ${KSU_VER} + SUSFS ${SUS_VER}" >> $GITHUB_ENV
 
       # ==================== 验证构建状态 ====================
       # 确保所有选中的构建任务都成功完成
@@ -468,91 +387,35 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v6
 
-      # ==================== 确定 KSU 分支 ====================
-      # 根据用户选择确定实际的 Git 分支
-      - name: 确定 KSU 分支
-        if: inputs.kernelsu_branch == 'Dev(开发)' || inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'BakaSU'
+      # ==================== 获取 NyaSU 提交信息 ====================
+      # NyaSU 的 Stable / Dev 是静态钉版，Latest 追踪 main HEAD（与 resolve-ksu-ref.sh 一致）。
+      - name: 获取 NyaSU 提交信息
         run: |
-          case "${{ inputs.kernelsu_variant }}" in
-            "Official") BRANCH="main" ;;
-            "SukiSU"|"BakaSU") BRANCH="main" ;;
-            *) echo "错误: 未知变体" >&2; exit 1 ;;
-          esac
-          echo "KSU_BRANCH=$BRANCH" >> $GITHUB_ENV
+          NYASU_REPO_URL="xingguangcuican6666/NyaSU"
+          # 与 .github/scripts/resolve-ksu-ref.sh 的 NYASU_STABLE_REF / NYASU_DEV_REF 保持一致。
+          NYASU_STABLE_REF="c6473f97ff516f2b3184b6a2d63753c8591a8edb"
+          NYASU_DEV_REF="c6473f97ff516f2b3184b6a2d63753c8591a8edb"
 
-      # ==================== 获取 KernelSU 提交信息 ====================
-      # 获取当前使用的 KernelSU 版本的 Git 提交信息
-      - name: 获取 KernelSU 提交信息
-        run: |
-          case "${{ inputs.kernelsu_variant }}" in
-            "Official") REPO_URL="https://github.com/tiann/KernelSU.git"; REPO_URL2="tiann/KernelSU" ;;
-            "SukiSU") REPO_URL="https://github.com/SukiSU-Ultra/SukiSU-Ultra.git"; REPO_URL2="SukiSU-Ultra/SukiSU-Ultra" ;;
-            "BakaSU") REPO_URL="https://github.com/Baka-SU/BakaSU.git"; REPO_URL2="Baka-SU/BakaSU" ;;
+          case "${{ inputs.kernelsu_branch }}" in
+            "Stable(标准)") KSU_REF="$NYASU_STABLE_REF" ;;
+            "Dev(开发)")    KSU_REF="$NYASU_DEV_REF" ;;
+            "Latest(最新)")
+              KSU_REF="$(git ls-remote "https://github.com/${NYASU_REPO_URL}.git" refs/heads/main | awk '{ print $1 }')"
+              ;;
+            *) echo "::error::未知 KSU 分支: ${{ inputs.kernelsu_branch }}" >&2; exit 1 ;;
           esac
-
-          branch_input="${{ inputs.kernelsu_branch }}"
-          if [[ "$branch_input" == "SUSFS(自动)" ]]; then
-            branch_input="Stable(标准)"
+          if [[ ! "$KSU_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::NyaSU 提交解析失败: '${KSU_REF}'" >&2
+            exit 1
           fi
-
-          # 与 .github/scripts/resolve-ksu-ref.sh 的 Stable 层保持一致：同一 commit 在
-          # 两处独立维护，漂移会让 App 构建与发布链路编出不同的内核管理器。
-          OFFICIAL_STABLE_REF="08a3b087e49227c8a6731c5f1114998b5e25255b"
-          SUKISU_STABLE_REF="cf87e3f4ddd3f6e5464d85acf56aaa6950e70841"
-          # Baka-SU/BakaSU 上游（2026-09 由 ReSukiSU/ReSukiSU 改名而来）没有 dev 分支，
-          # 故 BAKASU_DEV_REF 直接继承 BAKASU_STABLE_REF，两者同为 main HEAD。
-          BAKASU_STABLE_REF="9dbce02e511ea6b6305a238b84e456f6a92e1d0b"
-
-          OFFICIAL_DEV_REF="$OFFICIAL_STABLE_REF"
-          SUKISU_DEV_REF="$SUKISU_STABLE_REF"
-          BAKASU_DEV_REF="$BAKASU_STABLE_REF"
-
-          case "$branch_input" in
-            "Stable(标准)")
-              OFFICIAL_REF="$OFFICIAL_STABLE_REF"
-              SUKISU_REF="$SUKISU_STABLE_REF"
-              BAKASU_REF="$BAKASU_STABLE_REF"
-              ;;
-            "Dev(开发)")
-              OFFICIAL_REF="$OFFICIAL_DEV_REF"
-              SUKISU_REF="$SUKISU_DEV_REF"
-              BAKASU_REF="$BAKASU_DEV_REF"
-              ;;
-            *) echo "错误: 未知 KSU 分支 $branch_input" >&2; exit 1 ;;
-          esac
-
-          case "${{ inputs.kernelsu_variant }}" in
-            "Official") KSU_REF="$OFFICIAL_REF"; KSU_URL="https://github.com/$REPO_URL2/commit/$KSU_REF" ;;
-            "SukiSU") KSU_REF="$SUKISU_REF"; KSU_URL="https://github.com/$REPO_URL2/commit/$KSU_REF" ;;
-            "BakaSU") KSU_REF="$BAKASU_REF"; KSU_URL="https://github.com/$REPO_URL2/commit/$KSU_REF" ;;
-            *) echo "错误: 未知变体" >&2; exit 1 ;;
-          esac
-
           echo "KSU_REF=$KSU_REF" >> $GITHUB_ENV
-          echo "KSU_URL=$KSU_URL" >> $GITHUB_ENV
-
-      # ==================== 获取 SUSFS 提交信息 ====================
-      # 获取各版本 SUSFS 的 Git 提交信息
-      - name: 获取 SUSFS 提交信息
-        run: |
-          GITLAB_OWNER="simonpunk"
-          GITLAB_REPO="susfs4ksu"
-          declare -A BRANCH_MAP=(
-            ["gki_android12_5_10"]="gki-android12-5.10"
-            ["gki_android13_5_15"]="gki-android13-5.15"
-            ["gki_android14_6_1"]="gki-android14-6.1"
-            ["gki_android15_6_6"]="gki-android15-6.6"
-            ["gki_android16_6_12"]="gki-android16-6.12"
-          )
-          for var_name in "${!BRANCH_MAP[@]}"; do
-            branch_name="${BRANCH_MAP[$var_name]}"
-            COMMIT_HASH=$(git ls-remote https://gitlab.com/$GITLAB_OWNER/$GITLAB_REPO.git refs/heads/$branch_name | awk '{ print $1 }')
-            if [[ -n "$COMMIT_HASH" ]]; then
-              COMMIT_URL="https://gitlab.com/$GITLAB_OWNER/$GITLAB_REPO/-/commit/$COMMIT_HASH"
-              echo "COMMIT_HASH_${var_name}=$COMMIT_HASH" >> "$GITHUB_ENV"
-              echo "COMMIT_URL_${var_name}=$COMMIT_URL" >> "$GITHUB_ENV"
-            fi
-          done
+          echo "KSU_URL=https://github.com/${NYASU_REPO_URL}/commit/${KSU_REF}" >> $GITHUB_ENV
+          if [ "$KSU_NAME" = "NyaSU" ]; then
+            echo "RELEASE_NAME=GKI Kernel: ${KSU_NAME} ${BRANCH_INFO} (${KSU_REF:0:7})" >> $GITHUB_ENV
+          else
+            echo "RELEASE_NAME=GKI Kernel: ${KSU_NAME} ${BRANCH_INFO}" >> $GITHUB_ENV
+          fi
+          echo "NyaSU 提交: ${KSU_REF}"
 
       # ==================== 生成发布说明 ====================
       # 创建包含详细信息的发布说明文档
@@ -586,26 +449,10 @@ jobs:
             build_targets="未选择"
           fi
 
-          : > susfs_commits.md
-          append_susfs_commit() {
-            local selected="$1" label="$2" hash="$3" url="$4"
-            if [[ "$selected" == "true" && -n "$hash" && -n "$url" ]]; then
-              printf -- '- %s: [`%s`](%s)\n' "$label" "${hash:0:7}" "$url" >> susfs_commits.md
-            fi
-          }
-          append_susfs_commit "${{ inputs.build_a12_5_10 || inputs.build_all }}" "Android 12 / 5.10" "${COMMIT_HASH_gki_android12_5_10}" "${COMMIT_URL_gki_android12_5_10}"
-          append_susfs_commit "${{ inputs.build_a13_5_15 || inputs.build_all }}" "Android 13 / 5.15" "${COMMIT_HASH_gki_android13_5_15}" "${COMMIT_URL_gki_android13_5_15}"
-          append_susfs_commit "${{ inputs.build_a14_6_1 || inputs.build_all }}" "Android 14 / 6.1" "${COMMIT_HASH_gki_android14_6_1}" "${COMMIT_URL_gki_android14_6_1}"
-          append_susfs_commit "${{ inputs.build_a15_6_6 || inputs.build_all }}" "Android 15 / 6.6" "${COMMIT_HASH_gki_android15_6_6}" "${COMMIT_URL_gki_android15_6_6}"
-          append_susfs_commit "${{ inputs.build_a16_6_12 || inputs.build_all }}" "Android 16 / 6.12" "${COMMIT_HASH_gki_android16_6_12}" "${COMMIT_URL_gki_android16_6_12}"
-          if [[ ! -s susfs_commits.md ]]; then
-            echo "- 未获取到本次构建对应的 SUSFS 提交信息" > susfs_commits.md
-          fi
-
           cat > release_body.md << EOF
           ## GKI Kernel Release
 
-          **$KSU_NAME $KSU_VER** + **SUSFS $SUS_VER**
+          **$KSU_NAME** \`$KSU_DISPLAY_REF\`
 
           | 项目 | 内容 |
           |:---|:---|
@@ -619,13 +466,9 @@ jobs:
           |:---|:---|
           | KernelSU 变体 | $KSU_NAME |
           | KernelSU 分支 | $BRANCH_INFO |
-          | SUSFS | $SUS_VER |
-          | Hook 类型 | $HOOK_TYPE |
-          | 挂载方式 | $MOUNT_TYPE |
           | LTO | thin |
           | BBG 安全补丁 | $BBG_STATUS |
           | ZRAM / LZ4KD | $LZ4_STATUS |
-          | KPM | $KPM_STATUS |
 
           ### 下载说明
 
@@ -634,31 +477,27 @@ jobs:
           | 文件类型 | 用途 |
           |:---|:---|
           | \`*.bundle.zip\` | 已签名的 AnyKernel3 / boot 镜像刷入包 |
-          | \`*.apk\` | KernelSU 管理器 |
-          | \`susfs-*.zip\` | SUSFS 配套模块 |
           ---
 
           > [!IMPORTANT]
           > 刷入前请备份原厂 Boot 镜像。
-          > 如果设备无法启动，请先恢复原厂镜像，再提取 KernelSU 日志进行反馈。
+          > 如果设备无法启动，请先恢复原厂镜像，再提取内核日志反馈。
 
           <details>
           <summary>刷入后处理</summary>
 
           ### 正常启动
 
-          安装或更新 KernelSU 管理器后，检查 root、模块和 SUSFS 状态是否正常。
+          安装 ABK App（NyaSU 构建的管理器就是 ABK 自身 App），检查 root 与模块状态是否正常。
 
           ### 无法启动
 
           1. 恢复原厂 Boot 镜像
-          2. 使用 KernelSU 管理器或 recovery 提取日志
-          3. 提交到 [Issues](https://github.com/zzh20188/GKI_KernelSU_SUSFS/issues)，并附上设备型号、Android 版本、内核版本和刷入文件名
-          2. 使用 KernelSU 管理器提取内核日志
-          3. 将日志提交到 [Issues](https://github.com/xingguangcuican6666/ABK/issues) 或咨询专业人士
+          2. 通过 ABK App 或 recovery 提取内核日志
+          3. 将日志提交到 [Issues](https://github.com/xingguangcuican6666/ABK/issues)，并附上设备型号、Android 版本、内核版本和刷入文件名
 
           1. Restore stock boot image
-          2. Extract kernel logs using KernelSU Manager
+          2. Extract kernel logs with the ABK app or recovery
           3. Submit logs to [Issues](https://github.com/xingguangcuican6666/ABK/issues) or consult experts
 
           </details>
@@ -666,47 +505,30 @@ jobs:
           <details>
           <summary>上游提交信息</summary>
 
-          **KernelSU**
+          **NyaSU**
 
-          - $KSU_NAME: [\`$KSU_DISPLAY_REF\`]($KSU_URL)
-
-          **SUSFS4KSU**
-
-          $(cat susfs_commits.md)
+          - NyaSU: [\`$KSU_DISPLAY_REF\`]($KSU_URL)
 
           </details>
-
-          ---
-
-          推荐模块：https://github.com/sidex15/ksu_module_susfs
-
-          Unicode 零宽绕过修复请使用 Xposed 模块：https://t.me/real5ec1cff/268
           EOF
 
       # ==================== 生成版本标签 ====================
-      # 根据 SUSFS 版本生成递增的发布标签
+      # 标签以构建日期 + 变体为前缀（不再依赖 SUSFS 版本），同日多次发布递增 -rN。
       - name: 生成版本标签
         run: |
-          # 获取 SUSFS 版本，如果 get-manager 被跳过则使用默认值
-          SUS_VERSION="${{ needs.get-manager.outputs.susVer }}"
-          if [ -z "$SUS_VERSION" ]; then
-            echo "警告: 未获取到 SUSFS 版本，使用默认版本号"
-            SUS_VERSION="1.0.0"
-          fi
-
-          LATEST_TAG=$(gh api repos/$REPO_OWNER/$REPO_NAME/tags --jq '.[0].name' 2>/dev/null | sed 's/-.*//' || echo "")
-
-          if [ "$SUS_VERSION" = "$LATEST_TAG" ]; then
-            LATEST_TAG=$(gh api repos/$REPO_OWNER/$REPO_NAME/tags --jq '.[0].name')
+          TAG_PREFIX="$(date -u '+%Y.%m.%d')-${KSU_NAME}"
+          LATEST_TAG="$(gh api "repos/$REPO_OWNER/$REPO_NAME/git/matching-refs/tags/${TAG_PREFIX}-r" \
+            --jq '.[].ref | sub("refs/tags/"; "")' 2>/dev/null | sort -V | tail -n1 || true)"
+          if [[ "$LATEST_TAG" =~ -r([0-9]+)$ ]]; then
+            REVISION=$(( BASH_REMATCH[1] + 1 ))
           else
-            LATEST_TAG="$SUS_VERSION-r0"
+            REVISION=0
           fi
-
-          NEW_TAG=$(echo "$LATEST_TAG" | awk -F'-r' '{suffix=$2; if (!suffix) suffix=0; suffix++; printf "%s-r%d", $1, suffix}')
+          NEW_TAG="${TAG_PREFIX}-r${REVISION}"
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
 
           git tag "$NEW_TAG"
-          git push --tags
+          git push origin "refs/tags/$NEW_TAG"
 
       # ==================== 下载构建产物 ====================
       - name: 下载构建产物
@@ -730,52 +552,27 @@ jobs:
       - name: 准备 Release 合规包
         run: |
           set -euo pipefail
-          mkdir -p release-bundles
-
           python3 - <<'PY'
           from pathlib import Path
 
           root = Path("downloaded-artifacts")
-          manager_assets = []
           kernel_assets = []
 
           for file in sorted(root.rglob("*")):
               if not file.is_file():
                   continue
               rel = file.relative_to(root)
-              rel_posix = rel.as_posix()
+              if "-Rejects/" in rel.as_posix():
+                  continue
               top = rel.parts[0] if rel.parts else ""
-              if "-Rejects/" in rel_posix:
-                  continue
-
-              if file.suffix.lower() == ".apk" or top.startswith("susfs-"):
-                  manager_assets.append(str(file))
-                  continue
-
               if "_kernel-" in top and file.name.endswith(".bundle.zip"):
                   kernel_assets.append(str(file))
 
-          Path("release-manager-module-bundles.txt").write_text(
-              "".join(f"{path}\n" for path in manager_assets),
-              encoding="utf-8"
-          )
           Path("release-kernel-bundles.txt").write_text(
               "".join(f"{path}\n" for path in kernel_assets),
               encoding="utf-8"
           )
           PY
-
-      # ==================== 上传管理器和模块 ====================
-      - name: 上传管理器和 SUSFS 模块
-        continue-on-error: true
-        run: |
-          echo "准备上传 APK 与 SUSFS 模块合规包..."
-          bundle_count=$(wc -l < release-manager-module-bundles.txt | tr -d '[:space:]')
-          echo "Bundle files: ${bundle_count}"
-          while IFS= read -r f; do
-            [ -f "$f" ] || continue
-            gh release upload "$NEW_TAG" "$f" || true
-          done < release-manager-module-bundles.txt
 
       # ==================== 上传内核产物 ====================
       - name: 上传内核产物

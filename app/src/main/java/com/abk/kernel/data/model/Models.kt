@@ -117,7 +117,6 @@ data class BuildParameterSummary(
     val ksuVariant: String = "",
     val ksuBranch: String = "",
     val buildTime: String = "",
-    val susfsEnabled: String = "",
     val zramEnabled: String = "",
     val zramFullAlgo: String = "",
     val zramExtraAlgos: String = "",
@@ -125,8 +124,7 @@ data class BuildParameterSummary(
     val ddkLsm: String = "",
     val ntsyncEnabled: String = "",
     val networkingEnabled: String = "",
-    val kpmEnabled: String = "",
-    val kpmPassword: String = "",
+    val patchModules: String = "",
     val reKernelEnabled: String = "",
     val virtualizationSupport: String = "",
     val customInjection: String = "",
@@ -585,6 +583,7 @@ const val KSU_BRANCH_DEV = "Dev(开发)"
 const val KSU_BRANCH_LATEST = "Latest(最新)"
 const val KSU_BRANCH_CUSTOM = "Custom(自定义)"
 const val KSU_VARIANT_NONE = "None"
+const val KSU_VARIANT_NYASU = "NyaSU"
 const val KSU_VARIANT_OFFICIAL = "Official"
 const val KSU_VARIANT_SUKISU = "SukiSU"
 const val KSU_VARIANT_BAKASU = "BakaSU"
@@ -597,7 +596,7 @@ const val SOURCE_ACCESS_GITHUB_PRIVATE = "github_private"
 /**
  * Lowercase spellings of the retired `ReSukiSU` variant that still arrive from older app
  * builds and already-persisted build records. [KernelSupport.normalizeKsuVariant] folds every
- * match into [KSU_VARIANT_BAKASU]; nothing else may treat them as a distinct variant.
+ * match into [KSU_VARIANT_NYASU]; nothing else may treat them as a distinct variant.
  */
 val KSU_VARIANT_LEGACY_ALIASES = listOf("resukisu", "re-suki")
 
@@ -609,15 +608,11 @@ val KSU_BRANCH_STANDARD_OPTIONS = listOf(
 )
 val KSU_BRANCH_BUILD_PLAN_OPTIONS = KSU_BRANCH_STANDARD_OPTIONS
 val KSU_VARIANT_OPTIONS = listOf(
-    KSU_VARIANT_OFFICIAL,
-    KSU_VARIANT_SUKISU,
-    KSU_VARIANT_BAKASU,
+    KSU_VARIANT_NYASU,
     KSU_VARIANT_NONE
 )
 val ONEPLUS_KSU_VARIANT_OPTIONS = listOf(
-    KSU_VARIANT_OFFICIAL,
-    KSU_VARIANT_SUKISU,
-    KSU_VARIANT_BAKASU,
+    KSU_VARIANT_NYASU,
     KSU_VARIANT_NONE
 )
 
@@ -636,7 +631,7 @@ data class KernelBuildConfig(
     val subLevel: String = "66",
     val osPatchLevel: String = "2022-01",
     val revision: String = "r11",
-    val kernelsuVariant: String = KSU_VARIANT_BAKASU,
+    val kernelsuVariant: String = KSU_VARIANT_NYASU,
     val kernelsuBranch: String = KSU_BRANCH_STABLE,
     val customRef: String = "",
     val version: String = "",
@@ -646,13 +641,11 @@ data class KernelBuildConfig(
     val useDdk: Boolean = false,
     val useNtsync: Boolean = false,
     val useNetworking: Boolean = false,
-    val useKpm: Boolean = false,
     val useRekernel: Boolean = false,
-    val cancelSusfs: Boolean = false,
     val suppOp: Boolean = false,
     val zramFullAlgo: Boolean = false,
     val zramExtraAlgos: String = "",
-    val kpmPassword: String = "",
+    val patchModules: String = "",
     val virtualizationSupport: String = "off",
     val customKernelOptions: List<CustomKernelOption> = emptyList(),
     val useCustomExternalModules: Boolean = false,

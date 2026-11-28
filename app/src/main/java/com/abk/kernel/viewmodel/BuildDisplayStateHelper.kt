@@ -206,13 +206,11 @@ internal fun MainUiState.buildRunDescriptors(
             run.isKernelBuild() && item != null -> {
                 val cfg = item.config
                 val variant = cfg.kernelsuVariant.takeIf { it != KSU_VARIANT_NONE }.orEmpty()
-                val susfs = !cfg.cancelSusfs && cfg.kernelsuVariant != KSU_VARIANT_NONE
                 val kernelLabel =
                     "${cfg.kernelVersion}.${cfg.subLevel}-${cfg.androidVersion}-${cfg.osPatchLevel}"
                 run.id to BuildProgressUtils.RunDescriptor(
                     isManager = false,
                     ksuVariant = variant,
-                    susfs = susfs,
                     kernelLabel = kernelLabel,
                 )
             }

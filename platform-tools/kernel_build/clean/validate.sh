@@ -28,22 +28,8 @@ validate() {
         ;;
     esac
 
-    if [ "${ABK_INPUT_USE_KPM}" = "true" ] \
-      && [ "${ABK_INPUT_KSU_VARIANT}" = "Official" ]; then
-      echo "::error::Official / KernelSU 变体不支持 KPM，请关闭 KPM 后重试。"
-      exit 1
-    fi
-
-    if [ "${ABK_INPUT_USE_KPM}" = "true" ] \
-      && [ "${ABK_INPUT_KSU_VARIANT}" = "NyaSU" ]; then
-      echo "::error::NyaSU 当前未验证 KPM 集成，请关闭 KPM 后重试。"
-      exit 1
-    fi
-
-    if [ "${ABK_INPUT_USE_KPM}" = "true" ] \
-      && [ "${ABK_INPUT_KSU_VARIANT}" = "BakaSU" ] \
-      && { [ "${ABK_INPUT_KSU_BRANCH}" = "Dev(开发)" ] || [ "${ABK_INPUT_KSU_BRANCH}" = "Latest(最新)" ]; }; then
-      echo "::error::BakaSU 仅 Stable(标准) / Custom(自定义) 支持 KPM，请切换分支或关闭 KPM。"
+    if [ "${ABK_INPUT_KSU_VARIANT}" != "NyaSU" ] && [ "${ABK_INPUT_KSU_VARIANT}" != "None" ]; then
+      echo "::error::不支持的 KSU 变体: ${ABK_INPUT_KSU_VARIANT}（仅支持 NyaSU / None）"
       exit 1
     fi
 

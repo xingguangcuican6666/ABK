@@ -110,18 +110,10 @@ on:
         required: false
         type: boolean
         default: true
-      use_kpm:
-        required: false
-        type: boolean
-        default: true
       use_rekernel:
         required: false
         type: boolean
         default: false
-      enable_susfs:
-        required: false
-        type: boolean
-        default: true
       supp_op:
         required: false
         type: boolean
@@ -141,11 +133,6 @@ on:
         type: string
         default: ""
 
-      # ==================== KPM 扩展选项 ====================
-      kpm_password:
-        required: false
-        type: string
-        default: ""
 
       # ==================== 自定义外部模块 ====================
       custom_external_modules:
@@ -201,13 +188,11 @@ jobs:
         env:
           ABK_RUNNER_ENVIRONMENT: ${{ runner.environment }}
           KSU_VARIANT: ${{ inputs.ksu_variant }}
-          ENABLE_SUSFS: ${{ inputs.enable_susfs }}
           USE_ZRAM: ${{ inputs.use_zram }}
           USE_BBG: ${{ inputs.use_bbg }}
           USE_DDK: ${{ inputs.use_ddk }}
           USE_NTSYNC: ${{ inputs.use_ntsync }}
           USE_NETWORKING: ${{ inputs.use_networking }}
-          USE_KPM: ${{ inputs.use_kpm }}
           USE_REKERNEL: ${{ inputs.use_rekernel }}
           VIRTUALIZATION_SUPPORT: ${{ inputs.virtualization_support }}
           ABK_INPUT_SOURCE_MODE: ${{ inputs.source_mode }}
@@ -235,14 +220,11 @@ jobs:
           ABK_INPUT_USE_DDK: ${{ inputs.use_ddk }}
           ABK_INPUT_USE_NTSYNC: ${{ inputs.use_ntsync }}
           ABK_INPUT_USE_NETWORKING: ${{ inputs.use_networking }}
-          ABK_INPUT_USE_KPM: ${{ inputs.use_kpm }}
           ABK_INPUT_USE_REKERNEL: ${{ inputs.use_rekernel }}
-          ABK_INPUT_ENABLE_SUSFS: ${{ inputs.enable_susfs }}
           ABK_INPUT_SUPP_OP: ${{ inputs.supp_op }}
           ABK_INPUT_VIRTUALIZATION_SUPPORT: ${{ inputs.virtualization_support }}
           ABK_INPUT_ZRAM_FULL_ALGO: ${{ inputs.zram_full_algo }}
           ABK_INPUT_ZRAM_EXTRA_ALGOS: ${{ inputs.zram_extra_algos }}
-          ABK_INPUT_KPM_PASSWORD: ${{ inputs.kpm_password }}
           ABK_INPUT_CUSTOM_EXTERNAL_MODULES: ${{ inputs.custom_external_modules }}
           ABK_INPUT_CUSTOM_KERNEL_OPTIONS: ${{ inputs.custom_kernel_options }}
           ABK_INPUT_MANAGER_PACKAGE: ${{ inputs.manager_package }}
@@ -406,9 +388,7 @@ jobs:
           USE_DDK: ${{ inputs.use_ddk }}
           USE_NTSYNC: ${{ inputs.use_ntsync }}
           USE_NETWORKING: ${{ inputs.use_networking }}
-          USE_KPM: ${{ inputs.use_kpm }}
           USE_REKERNEL: ${{ inputs.use_rekernel }}
-          ENABLE_SUSFS: ${{ inputs.enable_susfs }}
           VIRTUALIZATION_SUPPORT: ${{ inputs.virtualization_support }}
           KSU_VARIANT: ${{ inputs.ksu_variant }}
         run: bash platform-tools/kernel_build/clean/source.sh custom-baseline
@@ -435,63 +415,6 @@ jobs:
           ABK_FEATURE_END: "true"
           ABK_FEATURE_FAILURE_MESSAGE: "KernelSU integration failed"
         run: bash platform-tools/kernel_build/patch/kernelsu.sh install
-
-      - name: 修复 BakaSU SUSFS 源码兼容
-        if: inputs.ksu_variant == 'BakaSU' && inputs.enable_susfs
-        env:
-          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: susfs
-          ABK_FEATURE_FAILURE_MESSAGE: "BakaSU SUSFS compatibility integration failed"
-        run: bash platform-tools/kernel_build/patch/susfs_compat.sh bakasu
-
-      - name: 确保 KernelSU SUSFS ABI 兼容
-        if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU') && inputs.enable_susfs
-        env:
-          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: kernelsu
-          ABK_FEATURE_FAILURE_MESSAGE: "KernelSU SUSFS ABI compatibility integration failed"
-        run: bash platform-tools/kernel_build/patch/kernelsu.sh abi
-
-      - name: 配置 SukiSU 管理器信息
-        if: inputs.ksu_variant == 'SukiSU'
-        env:
-          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: kernelsu
-          ABK_FEATURE_FAILURE_MESSAGE: "SukiSU manager version integration failed"
-        run: bash platform-tools/kernel_build/patch/kernelsu.sh manager-info
-
-      - name: 应用 SUSFS 补丁
-        if: inputs.enable_susfs && inputs.ksu_variant != 'None'
-        env:
-          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: susfs
-          ABK_FEATURE_END: "false"
-          ABK_FEATURE_FAILURE_MESSAGE: "SUSFS patch failed"
-          ABK_ANDROID_VERSION: ${{ inputs.android_version }}
-          ABK_KERNEL_VERSION: ${{ inputs.kernel_version }}
-          ABK_KSU_VARIANT: ${{ inputs.ksu_variant }}
-          ABK_SUB_LEVEL: ${{ inputs.sub_level }}
-          ABK_OS_PATCH_LEVEL: ${{ inputs.os_patch_level }}
-          ABK_USE_BBG: ${{ inputs.use_bbg }}
-        run: bash platform-tools/kernel_build/patch/susfs.sh apply
-
-      - name: 确保 SUSFS Kconfig 与核心对象
-        if: inputs.enable_susfs && inputs.ksu_variant != 'None'
-        env:
-          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: susfs
-          ABK_FEATURE_END: "true"
-          ABK_FEATURE_FAILURE_MESSAGE: "SUSFS Kconfig integration failed"
-        run: bash platform-tools/kernel_build/patch/susfs.sh kconfig
-
-      - name: 注入 SukiSU/BakaSU KPM Kconfig
-        if: inputs.use_kpm && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU')
-        env:
-          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: kpm
-          ABK_FEATURE_END: "true"
-          ABK_FEATURE_FAILURE_MESSAGE: "KPM Kconfig integration failed"
-        run: bash platform-tools/kernel_build/patch/kpm.sh kconfig
 
       - name: 应用 Kernel 特定补丁
         run: bash platform-tools/kernel_build/core/kernel-specific.sh kernel-specific
@@ -538,11 +461,10 @@ jobs:
         run: bash platform-tools/kernel_build/patch/virtualization.sh apply
 
       - name: 应用 Unicode 绕过修复
-        if: inputs.enable_susfs
         env:
           BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: susfs
-          ABK_FEATURE_FAILURE_MESSAGE: "SUSFS Unicode compatibility integration failed"
+          ABK_FEATURE_ID: unicode
+          ABK_FEATURE_FAILURE_MESSAGE: "Unicode compatibility integration failed"
         run: bash platform-tools/kernel_build/core/unicode.sh unicode
 
       - name: 配置 ZRAM 补丁栈
@@ -614,9 +536,7 @@ jobs:
           ABK_FEATURE_USE_DDK: ${{ inputs.use_ddk }}
           ABK_FEATURE_USE_NTSYNC: ${{ inputs.use_ntsync }}
           ABK_FEATURE_USE_NETWORKING: ${{ inputs.use_networking }}
-          ABK_FEATURE_USE_KPM: ${{ inputs.use_kpm }}
           ABK_FEATURE_USE_REKERNEL: ${{ inputs.use_rekernel }}
-          ABK_FEATURE_ENABLE_SUSFS: ${{ inputs.enable_susfs }}
           ABK_FEATURE_SUPP_OP: ${{ inputs.supp_op }}
           ABK_FEATURE_ZRAM_FULL_ALGO: ${{ inputs.zram_full_algo }}
         run: bash platform-tools/kernel_build/patch/custom.sh after-patch
@@ -631,18 +551,6 @@ jobs:
 
       - name: 配置内核选项
         run: bash platform-tools/kernel_build/patch/kernel_options.sh kernel-options
-
-      - name: 配置 KPM 超级密码
-        if: inputs.use_kpm && inputs.kpm_password != '' && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU')
-        run: bash platform-tools/kernel_build/patch/kpm.sh password
-
-      - name: 添加 SUSFS 配置
-        if: inputs.enable_susfs && inputs.ksu_variant != 'None'
-        env:
-          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: susfs
-          ABK_FEATURE_FAILURE_MESSAGE: "SUSFS defconfig integration failed"
-        run: bash platform-tools/kernel_build/patch/susfs.sh config
 
       - name: 配置内核名称
         run: bash platform-tools/kernel_build/clean/build.sh kernel-name
@@ -671,9 +579,7 @@ jobs:
           ABK_FEATURE_USE_DDK: ${{ inputs.use_ddk }}
           ABK_FEATURE_USE_NTSYNC: ${{ inputs.use_ntsync }}
           ABK_FEATURE_USE_NETWORKING: ${{ inputs.use_networking }}
-          ABK_FEATURE_USE_KPM: ${{ inputs.use_kpm }}
           ABK_FEATURE_USE_REKERNEL: ${{ inputs.use_rekernel }}
-          ABK_FEATURE_ENABLE_SUSFS: ${{ inputs.enable_susfs }}
           ABK_FEATURE_SUPP_OP: ${{ inputs.supp_op }}
           ABK_FEATURE_ZRAM_FULL_ALGO: ${{ inputs.zram_full_algo }}
         run: bash platform-tools/kernel_build/patch/custom.sh before-build
@@ -683,46 +589,6 @@ jobs:
         env:
           CUSTOM_KERNEL_OPTIONS: ${{ inputs.custom_kernel_options }}
         run: bash platform-tools/kernel_build/patch/custom.sh kernel-options-custom
-
-      - name: 修复 Official SUSFS 源码兼容
-        if: inputs.ksu_variant == 'Official' && inputs.enable_susfs
-        env:
-          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: susfs
-          ABK_FEATURE_FAILURE_MESSAGE: "Official SUSFS compatibility integration failed"
-        run: bash platform-tools/kernel_build/patch/susfs_compat.sh official
-
-      - name: 修复 Official SUSFS 6.1-6.18 SELinux 导出
-        if: inputs.ksu_variant == 'Official' && inputs.enable_susfs && (inputs.kernel_version == '6.1' || inputs.kernel_version == '6.6' || inputs.kernel_version == '6.12' || inputs.kernel_version == '6.18')
-        env:
-          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: susfs
-          ABK_FEATURE_FAILURE_MESSAGE: "Official SUSFS SELinux export integration failed"
-        run: bash platform-tools/kernel_build/patch/susfs_compat.sh selinux-export
-
-      - name: 补齐 SukiSU SUSFS 内联 hook 符号
-        if: inputs.ksu_variant == 'SukiSU' && inputs.enable_susfs
-        env:
-          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: susfs
-          ABK_FEATURE_FAILURE_MESSAGE: "SukiSU SUSFS inline hook integration failed"
-        run: bash platform-tools/kernel_build/patch/susfs_compat.sh inline-hooks
-
-      - name: 最终修复 SukiSU/BakaSU 源码兼容
-        if: inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU'
-        env:
-          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: kernelsu
-          ABK_FEATURE_FAILURE_MESSAGE: "KernelSU final compatibility integration failed"
-        run: bash platform-tools/kernel_build/patch/susfs_compat.sh final
-
-      - name: 修复 SukiSU/BakaSU android16-6.12 / android17-6.18 源码兼容
-        if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU') && ((inputs.android_version == 'android16' && inputs.kernel_version == '6.12') || (inputs.android_version == 'android17' && inputs.kernel_version == '6.18'))
-        env:
-          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: kernelsu
-          ABK_FEATURE_FAILURE_MESSAGE: "KernelSU android16/android17 compatibility integration failed"
-        run: bash platform-tools/kernel_build/patch/susfs_compat.sh a16-612
 
       - name: 校验 ABK 管理器桥接
         if: inputs.custom_external_modules != '' && inputs.ksu_variant != 'None'
@@ -735,16 +601,6 @@ jobs:
           max_attempts: 3
           retry_on: timeout
           command: bash platform-tools/kernel_build/clean/build.sh compile
-
-      - name: 应用 KPM 补丁 (SukiSU/BakaSU)
-        if: inputs.use_kpm && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU')
-        env:
-          BASH_ENV: ${{ inputs.source_mode == 'custom_git' && format('{0}/.github/scripts/custom-source-feature-env.sh', github.workspace) || '' }}
-          ABK_FEATURE_ID: kpm
-          ABK_FEATURE_END: "true"
-          ABK_FEATURE_FAILURE_MESSAGE: "KPM image patch failed and the image was restored"
-          KPM_PASSWORD: ${{ inputs.kpm_password }}
-        run: bash platform-tools/kernel_build/patch/kpm.sh image
 
       - name: 准备 Boot 镜像
         run: bash platform-tools/kernel_build/clean/package.sh boot-prep

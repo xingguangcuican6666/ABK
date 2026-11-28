@@ -19,11 +19,6 @@ modules-clone() {
 
     abk_env_add PATCH_MODULE_MANIFEST "$GITHUB_WORKSPACE/patch_modules.tsv"
 
-    if [ "${ABK_INPUT_KSU_VARIANT:-}" = "NyaSU" ] \
-      && [ -z "${ABK_INPUT_PATCH_MODULES//[[:space:]|]/}" ]; then
-        abk_die "NyaSU 构建至少需要一个补丁模块仓库"
-    fi
-
     if [ -z "${ABK_INPUT_PATCH_MODULES:-}" ]; then
         abk_log "未配置 KernelSU 补丁模块，跳过克隆。"
         : > "$PATCH_MODULE_MANIFEST"

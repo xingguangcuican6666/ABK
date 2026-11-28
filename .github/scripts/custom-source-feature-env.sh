@@ -161,11 +161,6 @@ PY
     --message "KernelSU integration was skipped"
 }
 
-if [[ "$feature_id" == "susfs" || "$feature_id" == "kpm" ]] && [[ -f "$state_dir/kernelsu.disabled" ]]; then
-  echo "::warning::Custom source feature $feature_id depends on skipped KernelSU; skipping it."
-  mark_dependency_skipped "$feature_id"
-  exit 0
-fi
 if [[ -f "$disabled_file" ]]; then
   echo "::warning::Custom source feature $feature_id was already skipped; skipping this step."
   exit 0
@@ -189,10 +184,6 @@ abk_custom_source_feature_exit() {
     if [[ -n "$external_start" ]] && git -C "$external_root" rev-parse --git-dir >/dev/null 2>&1; then
       git -C "$external_root" reset --hard "$external_start"
       git -C "$external_root" clean -ffdx
-    fi
-    if [[ "$feature_id" == "kernelsu" ]]; then
-      mark_dependency_skipped kpm || exit "$rc"
-      mark_dependency_skipped susfs || exit "$rc"
     fi
     revert_feature "$feature_id" || exit "$rc"
     : > "$disabled_file"

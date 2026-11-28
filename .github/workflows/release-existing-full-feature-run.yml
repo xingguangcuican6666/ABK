@@ -20,7 +20,7 @@ on:
         description: "KernelSU 变体"
         required: false
         type: string
-        default: "BakaSU"
+        default: "NyaSU"
       release_title:
         description: "Release 标题（留空自动生成）"
         required: false
@@ -142,14 +142,11 @@ jobs:
           version="$(metadata_value version "无")"
           revision="$(metadata_value revision "无")"
           build_time="$(metadata_value build_time "Sun Dec 01 08:10:00 UTC 2024")"
-          susfs_enabled="$(metadata_value susfs_enabled "true")"
           use_zram="$(metadata_value use_zram "true")"
           zram_full_algo="$(metadata_value zram_full_algo "true")"
           zram_extra_algos="$(metadata_value zram_extra_algos "无")"
           use_bbg="$(metadata_value use_bbg "true")"
           use_ddk="$(metadata_value use_ddk "true")"
-          use_kpm="$(metadata_value use_kpm "true")"
-          kpm_password="$(metadata_value kpm_password "默认")"
           use_rekernel="$(metadata_value use_rekernel "true")"
           supp_op="$(metadata_value supp_op "true")"
           custom_external_modules="$(metadata_value custom_external_modules "无")"
@@ -218,7 +215,6 @@ jobs:
           | 自定义版本名 | $version |
           | 5.10 修订版本 | $revision |
           | 构建时间 | $build_time |
-          | SUSFS 状态 | $susfs_enabled |
           | ZRAM 增强 | $use_zram |
           | ZRAM 完整算法 | $zram_full_algo |
           | ZRAM 额外算法 | $zram_extra_algos |
@@ -226,8 +222,6 @@ jobs:
           | DDK LSM | $use_ddk |
           | NTsync 补丁 | $use_ntsync |
           | 网络增强 (IPSet + BBR) | $use_networking |
-          | KPM 功能 | $use_kpm |
-          | KPM 密码 | $kpm_password |
           | Re-Kernel | $use_rekernel |
           | 虚拟化支持 | $virtualization_support |
           | 一加 8E 支持 | $supp_op |

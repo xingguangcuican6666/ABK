@@ -190,21 +190,27 @@ class SamplerBehaviorTests(unittest.TestCase):
             self.assertIn(entry["android_version"], VALID_COMBOS)
 
     def test_cli_variant_restriction_is_honored(self):
-        payload = self.run_cli("variant-seed", "--variants", "Official", "--count-max", "20")
+        payload = self.run_cli("variant-seed", "--variants", "None", "--count-max", "20")
         for entry in payload["include"]:
-            self.assertEqual(entry["ksu_variant"], "Official")
+            self.assertEqual(entry["ksu_variant"], "None")
+
+    def test_default_variant_pool_is_nyasu_and_none(self):
+        # 编译链收敛为 NyaSU + None；抽样池不能再出现已删除的变体。
+        self.assertEqual(("NyaSU", "None"), self.sampler.DEFAULT_VARIANTS)
+        payload = self.run_cli("pool-seed", "--count-max", "20")
+        self.assertLessEqual({e["ksu_variant"] for e in payload["include"]}, {"NyaSU", "None"})
 
     def test_cli_fixed_combos_skip_sampling(self):
         payload = self.run_cli(
             "fixed-seed",
-            "--fixed", "android12 5.10 66 2022-01 r11 BakaSU",
+            "--fixed", "android12 5.10 66 2022-01 r11 None",
             "--fixed", "android16 6.12 23 2025-06",
         )
         self.assertEqual(payload["source"], "fixed")
         self.assertEqual(payload["count"], 2)
-        self.assertEqual(payload["include"][0]["ksu_variant"], "BakaSU")
-        # 未指定变体时默认 BakaSU
-        self.assertEqual(payload["include"][1]["ksu_variant"], "BakaSU")
+        self.assertEqual(payload["include"][0]["ksu_variant"], "None")
+        # 未指定变体时默认 NyaSU
+        self.assertEqual(payload["include"][1]["ksu_variant"], "NyaSU")
 
     def test_cli_rejects_unknown_fixed_combo(self):
         import subprocess
@@ -258,9 +264,7 @@ class WorkflowDefinitionTests(unittest.TestCase):
             ("use_ddk", "false"),
             ("use_ntsync", "false"),
             ("use_networking", "false"),
-            ("use_kpm", "false"),
             ("use_rekernel", "false"),
-            ("enable_susfs", "false"),
             ("supp_op", "false"),
             ("virtualization_support", '"off"'),
             ("zram_full_algo", "false"),
@@ -268,7 +272,7 @@ class WorkflowDefinitionTests(unittest.TestCase):
         ):
             with self.subTest(flag=flag):
                 self.assertIn(f"{flag}: {expected}", build_job)
-        for empty in ("zram_extra_algos", "kpm_password", "custom_external_modules", "custom_kernel_options"):
+        for empty in ("zram_extra_algos", "custom_external_modules", "custom_kernel_options"):
             with self.subTest(empty=empty):
                 self.assertIn(f'{empty}: ""', build_job)
 

@@ -17,7 +17,7 @@ import random
 import sys
 from pathlib import Path
 
-DEFAULT_VARIANTS = ("Official", "SukiSU", "BakaSU")
+DEFAULT_VARIANTS = ("NyaSU", "None")
 
 # (android_version, kernel_version, sub_level, os_patch_level, revision)
 # android12/5.10 必须带 revision（与 kernel-a12-5-10.yml matrix 相同取值）；
@@ -117,7 +117,7 @@ def parse_fixed_combo(line: str) -> dict[str, str]:
         raise SystemExit(f"固定组合格式错误（至少 4 个字段）: {line!r}")
     android, kernel, sub, patch = fields[:4]
     revision = fields[4] if len(fields) > 4 else ""
-    variant = fields[5] if len(fields) > 5 else "BakaSU"
+    variant = fields[5] if len(fields) > 5 else "NyaSU"
     if (android, kernel, sub, patch, revision) not in CANDIDATES:
         known = " ".join((android, kernel, sub, patch, revision))
         raise SystemExit(

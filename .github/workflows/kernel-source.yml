@@ -40,8 +40,8 @@ on:
         description: "KernelSU 变体"
         required: true
         type: choice
-        options: [None, Official, SukiSU, BakaSU]
-        default: None
+        options: [NyaSU, None]
+        default: NyaSU
       kernelsu_branch:
         description: "KernelSU 分支"
         required: true
@@ -94,21 +94,11 @@ on:
         required: true
         type: boolean
         default: false
-      use_kpm:
-        description: "启用 KPM"
-        required: true
-        type: boolean
-        default: false
       use_rekernel:
         description: "启用 Re-Kernel"
         required: true
         type: boolean
         default: false
-      cancel_susfs:
-        description: "禁用 SUSFS"
-        required: true
-        type: boolean
-        default: true
       zram_full_algo:
         description: "启用完整 ZRAM 算法支持"
         required: true
@@ -119,11 +109,6 @@ on:
         required: false
         type: string
         default: ""
-      kpm_password:
-        description: "KPM 超级密码"
-        required: false
-        type: string
-        default: ""
       custom_external_modules:
         description: "自定义外部模块配置（失败将终止构建）"
         required: false
@@ -131,6 +116,11 @@ on:
         default: ""
       custom_kernel_options:
         description: "自定义 Kconfig（失败将终止构建）"
+        required: false
+        type: string
+        default: ""
+      patch_modules:
+        description: "KernelSU 补丁模块仓库（可选；留空则只集成 NyaSU 驱动，不应用 ksuhook 补丁模块。用 | 分隔，每项 repo_url[@ref]，按 module.prop depends 分组）"
         required: false
         type: string
         default: ""
@@ -271,12 +261,10 @@ jobs:
       use_ddk: ${{ inputs.use_ddk }}
       use_ntsync: ${{ inputs.use_ntsync }}
       use_networking: ${{ inputs.use_networking }}
-      use_kpm: ${{ inputs.use_kpm }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      enable_susfs: ${{ !inputs.cancel_susfs && inputs.kernelsu_variant != 'None' && !(needs.preflight.outputs.android_version == 'android17' && needs.preflight.outputs.kernel_version == '6.18') }}
       supp_op: false
       zram_full_algo: ${{ inputs.zram_full_algo }}
       zram_extra_algos: ${{ inputs.zram_extra_algos }}
-      kpm_password: ${{ inputs.kpm_password }}
       custom_external_modules: ${{ inputs.custom_external_modules }}
       custom_kernel_options: ${{ inputs.custom_kernel_options }}
+      patch_modules: ${{ inputs.patch_modules || '' }}
